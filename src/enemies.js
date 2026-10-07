@@ -121,7 +121,7 @@ class Puppet {
       m.matrixWorld.decompose(d.position, d.quaternion, d.scale);
       d.castShadow = true;
       this.sys.scene.add(d);
-      const v = dir.clone().multiplyScalar(3 + Math.random() * 3);
+      const v = dir.clone().multiplyScalar(5 + Math.random() * 5);
       v.x += (Math.random() - 0.5) * 3;
       v.y += 2 + Math.random() * 3;
       v.z += (Math.random() - 0.5) * 3;
@@ -278,12 +278,12 @@ class Puppet {
 }
 
 export class Enemies {
-  constructor({ scene, world, fx, audio }) {
-    Object.assign(this, { scene, world, fx, audio });
+  constructor({ scene, world, fx, audio, juice }) {
+    Object.assign(this, { scene, world, fx, audio, juice });
     this.kills = 0;
     this.bolts = [];
     this.boltGeo = new THREE.CapsuleGeometry(0.06, 0.5, 4, 8).rotateX(Math.PI / 2);
-    this.boltMat = new THREE.MeshBasicMaterial({ color: 0xff6a2a });
+    this.boltMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff6a2a).multiplyScalar(6) });
     this.boltGlow = new THREE.Mesh(
       new THREE.SphereGeometry(0.22, 12, 8),
       new THREE.MeshBasicMaterial({ color: 0xff4010, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }),
@@ -323,7 +323,7 @@ export class Enemies {
       if (!done && cap && segSegDist(from, to, cap.a, cap.b) < cap.r + 0.06) {
         player.damage(7);
         hud.damage(b.vel, rig);
-        rig.shake = 0.08;
+        this.juice.hurt();
         this.audio.thud();
         done = true;
       }

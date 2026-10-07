@@ -16,4 +16,4 @@
 - Sun: directional, shadow map 4096 over ±48m, follows the player (snapped to 2m). Direction `SUN_DIR`.
 - Hemisphere fill, gradient sky dome shader, light fog. ACES tone mapping.
 - Interior: dark albedo, cyan/white/red point lights, emissive strips, flicker via `pointLight(..., { strip })`.
-- Exposure adaptation in `main.js`: 1.0 outside, 1.45 when the camera is inside an `interiorZones` box.
+- Exposure adaptation in `main.js`: 1.0 outside, 1.7 when the camera is inside an `interiorZones` box.

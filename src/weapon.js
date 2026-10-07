@@ -24,8 +24,8 @@ const _dir = new THREE.Vector3();
 const _muz = new THREE.Vector3();
 
 export class Weapon {
-  constructor({ camera, rig, player, world, enemies, fx, hud, audio }) {
-    Object.assign(this, { camera, rig, player, world, enemies, fx, hud, audio });
+  constructor({ camera, rig, player, world, enemies, fx, hud, audio, juice }) {
+    Object.assign(this, { camera, rig, player, world, enemies, fx, hud, audio, juice });
     this.t = TUNING;
     this.ammo = TUNING.mag;
     this.reserve = TUNING.reserve;
@@ -118,6 +118,7 @@ export class Weapon {
     const end = hit ? hit.point : aimPoint;
     this.fx.tracer(_muz, end);
     this.fx.muzzleFlash(_muz, toAim);
+    this.fx.casing(_muz.clone().addScaledVector(toAim, -0.45), this.rig.right);
     this.audio.shot();
     this.rig.kick(t.recoilPitch * (this.player.aiming ? 0.6 : 1), (Math.random() - 0.5) * t.recoilYaw);
     this.bloom = Math.min(t.bloomMax, this.bloom + t.bloomPerShot);
@@ -131,6 +132,8 @@ export class Weapon {
       this.fx.impact(hit.point, toAim.clone().negate(), 0x6fe3ff, 6, false);
       this.fx.number(hit.point, t.damage * mult, zone === 'head');
       this.hud.hitmarker(zone === 'head', killed);
+      if (killed) this.juice.kill(hit.point, toAim);
+      else this.juice.hit(zone === 'head');
       this.audio.tick(zone === 'head');
     } else {
       const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : toAim.clone().negate();

@@ -11,3 +11,4 @@
 - `instructions/gameplay.md` — controls, mechanics, tuning tables
 - `instructions/animation.md` — skeleton, dummy parts, swapping in modeled parts
 - `instructions/level.md` — arena layout, lighting, grid textures
+- `instructions/feel.md` — camera juice, hitstop, post-processing

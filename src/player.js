@@ -152,6 +152,7 @@ export class Player {
       this.pos.y = s.hop ? Math.max(ground, s.from.y) + Math.sin(Math.PI * s.t) * s.hop : ground;
       if (s.t >= 1) {
         this.snap = null;
+        if (this.juice) s.hop ? this.juice.land() : this.juice.coverSlam();
         this.pos.y = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.stepHeight);
       }
       this.sprinting = false;
