@@ -114,6 +114,7 @@ class Puppet {
     this.deadTime = 0;
     this.sys.kills++;
     this.sys.audio.thud();
+    this.sys.pickups?.drop(this.pos);
     this.group.updateMatrixWorld(true);
     // break the dummy apart: every rig mesh becomes a debris chunk
     for (const m of this.hitMeshes) {

@@ -1,4 +1,7 @@
-// Keyboard + mouse state with pointer lock. Edge-triggered presses are consumed per frame.
+import { settings } from './settings.js';
+
+// Keyboard + mouse/trackpad state with pointer lock. Edge-triggered presses are consumed per frame.
+// Game code reads intent through aiming() / firing() / firePressed(), never raw buttons.
 export class Input {
   constructor(canvas) {
     this.canvas = canvas;
@@ -7,11 +10,14 @@ export class Input {
     this.mouse = { dx: 0, dy: 0, left: false, right: false, leftPressed: false };
     this.locked = false;
     this.free = false; // pointer lock unavailable (e.g. sandboxed iframe): use raw mouse while hovering
+    this.aimToggled = false;
 
     addEventListener('keydown', (e) => {
       if (e.repeat) return;
       this.keys.add(e.code);
       this.pressed.add(e.code);
+      if (e.code === 'KeyE') this.aimToggled = !this.aimToggled;
+      if (e.code === 'ShiftLeft') this.aimToggled = false;
       if (['Space', 'Tab'].includes(e.code)) e.preventDefault();
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -27,8 +33,23 @@ export class Input {
     addEventListener('mousedown', (e) => {
       if (!this.locked && !this.free) return;
       if (e.button === 0) { this.mouse.left = true; this.mouse.leftPressed = true; }
-      if (e.button === 2) this.mouse.right = true;
+      if (e.button === 2) {
+        this.mouse.right = true;
+        if (settings.trackpad) this.aimToggled = !this.aimToggled;
+      }
     });
+    // trackpad: two-finger swipe looks around
+    addEventListener(
+      'wheel',
+      (e) => {
+        if (!settings.trackpad || (!this.locked && !this.free)) return;
+        e.preventDefault();
+        const k = e.deltaMode === 1 ? 16 : 1;
+        this.mouse.dx += e.deltaX * k;
+        this.mouse.dy += e.deltaY * k;
+      },
+      { passive: false },
+    );
     addEventListener('mouseup', (e) => {
       if (e.button === 0) this.mouse.left = false;
       if (e.button === 2) this.mouse.right = false;
@@ -36,7 +57,7 @@ export class Input {
     addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
-      if (!this.locked) this.mouse.left = this.mouse.right = false;
+      if (!this.locked) this.mouse.left = this.mouse.right = this.aimToggled = false;
     });
   }
 
@@ -65,6 +86,18 @@ export class Input {
 
   wasPressed(code) {
     return this.pressed.has(code);
+  }
+
+  aiming() {
+    return this.aimToggled || (!settings.trackpad && this.mouse.right);
+  }
+
+  firing() {
+    return this.mouse.left || this.down('KeyF');
+  }
+
+  firePressed() {
+    return this.mouse.leftPressed || this.wasPressed('KeyF');
   }
 
   axis() {

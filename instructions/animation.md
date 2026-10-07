@@ -16,6 +16,9 @@ All characters use `Rig` from `src/rig.js`.
   bone pivot, +Y up toward the parent joint, facing +Z. Meshes get shadows and `userData.bone` automatically.
 - Extra pieces that are not the main part: `rig.attach(bone, object)`.
 - Sockets (`rig.socket(bone, name, x, y, z)`): `gripR`, `gripL`, `muzzle` on `weapon`; `emitter` on puppets' chest.
+- The `weapon` bone is the rifle's stock, sitting in the right shoulder pocket; author guns from the stock forward along +Z.
+  Grips must stay within arm reach (upper 0.30 + fore 0.28): gripR ~0.36m from the right shoulder, gripL ~0.57m from the
+  left one (the left clavicle rolls forward while armed). Too close folds the elbow; too far straightens the arm.
 - Hit zones come from bone names (`HIT_ZONE`): head/neck → head, pelvis/spine/chest → torso, rest → limb.
 
 ## Animator (procedural)
@@ -24,4 +27,5 @@ All characters use `Rig` from `src/rig.js`.
 - Layers: reset to rest → hit spring → legs (walk/run cycle blended with kneel) → spine/chest aim share
   → weapon bone pitch → two-bone arm IK to grip sockets (armed) or swinging arms (unarmed).
 - `animator.impulse(pitch, roll)` kicks the hit-reaction spring.
+- IK pole points elbows down and slightly out. Check arm changes from the side and the front (see project.md testing), not only from behind.
 - To add a clip, add a layer in `Animator.update`; keep it a pure function of `state` + time.

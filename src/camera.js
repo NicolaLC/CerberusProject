@@ -30,7 +30,7 @@ export class CameraRig {
     this.yaw = 0;
     this.pitch = -0.08;
     this.shoulder = 1; // 1 = right shoulder, -1 = left
-    this.side = 0.65;
+    this.side = 0.85;
     this.dist = 3.4;
     this.height = 1.6;
     this.fov = 70;
@@ -69,6 +69,34 @@ export class CameraRig {
     this.pitch = THREE.MathUtils.clamp(this.pitch, -1.25, 1.1);
   }
 
+  // Aim assist: slows the look near a target (friction) and eases toward it (magnetism).
+  // targets: world points (puppet chest/head). Returns the friction multiplier for this frame's look.
+  assist(dt, targets, strength) {
+    const camPos = this.camera.position;
+    let best = null;
+    let bestAng = 0.09 * strength;
+    for (const p of targets) {
+      const d = _dir.copy(p).sub(camPos);
+      const dist = d.length();
+      if (dist > 70) continue;
+      const ang = d.divideScalar(dist).angleTo(this.forward);
+      if (ang < bestAng) {
+        bestAng = ang;
+        best = p;
+      }
+    }
+    if (!best) return 1;
+    const d = _dir.copy(best).sub(camPos).normalize();
+    const wantYaw = Math.atan2(-d.x, -d.z);
+    const wantPitch = Math.asin(THREE.MathUtils.clamp(d.y, -1, 1));
+    let dy = wantYaw - this.yaw;
+    dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    const pull = 1 - Math.exp(-dt * 2.5 * strength);
+    this.yaw += dy * pull;
+    this.pitch += (wantPitch - this.pitch) * pull;
+    return 1 - 0.45 * Math.min(1, strength);
+  }
+
   kick(pitch, yaw) {
     this.pitch = Math.min(1.1, this.pitch + pitch);
     this.yaw += yaw;
@@ -90,7 +118,7 @@ export class CameraRig {
       this.recoilDebt -= r;
     }
 
-    const targetSide = (aiming ? 0.75 : 0.65) * this.shoulder;
+    const targetSide = (aiming ? 0.95 : 0.85) * this.shoulder;
     this.side += (targetSide - this.side) * k;
     this.dist += ((aiming ? 1.9 : player.sprinting ? 3.9 : 3.4) - this.dist) * k;
     this.height += (player.eyeHeight() - this.height) * k;

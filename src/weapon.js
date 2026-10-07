@@ -4,7 +4,8 @@ import * as THREE from 'three';
 const TUNING = {
   rpm: 540,
   mag: 32,
-  reserve: 256,
+  reserve: 192,
+  maxReserve: 384,
   reloadTime: 1.8,
   damage: 18,
   headMult: 2.5,
@@ -39,6 +40,13 @@ export class Weapon {
     return (this.player.aiming ? this.t.spreadAim : this.t.spreadHip) + this.bloom;
   }
 
+  // returns how many rounds were actually taken
+  addAmmo(n) {
+    const got = Math.min(n, this.t.maxReserve - this.reserve);
+    this.reserve += got;
+    return got;
+  }
+
   reload() {
     if (this.reloading > 0 || this.ammo === this.t.mag || this.reserve <= 0) return;
     this.reloading = this.t.reloadTime;
@@ -64,14 +72,14 @@ export class Weapon {
 
     const p = this.player;
     const canFire = !p.dead && !p.snap && !p.sprinting && this.reloading <= 0;
-    if (!input.mouse.left || !canFire) return;
+    if (!input.firing() || !canFire) return;
     // in cover the character needs a moment to pop up before the first round leaves
     if (p.cover && p.cover.type === 'low' && p.crouchBlend > 0.45) {
       p.lastShot = 0;
       return;
     }
     if (this.ammo <= 0) {
-      if (input.mouse.leftPressed) this.audio.click();
+      if (input.firePressed()) this.audio.click();
       this.reload();
       return;
     }
