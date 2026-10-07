@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 // Over-the-shoulder third-person camera: collision, aim zoom and "juice"
-// (smoothed follow, trauma shake, FOV punch, strafe roll, recoil recovery, landing dip, sprint bob).
+// (smoothed follow, trauma shake, FOV punch, strafe roll, recoil recovery, landing dip, walk bob).
 const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
 const _v = new THREE.Vector3();
 const _dir = new THREE.Vector3();
@@ -120,18 +120,18 @@ export class CameraRig {
 
     const targetSide = (aiming ? 0.95 : 0.85) * this.shoulder;
     this.side += (targetSide - this.side) * k;
-    this.dist += ((aiming ? 1.9 : player.sprinting ? 3.9 : 3.4) - this.dist) * k;
+    this.dist += ((aiming ? 1.9 : 3.4) - this.dist) * k;
     this.height += (player.eyeHeight() - this.height) * k;
     this.fovKick = Math.max(0, this.fovKick - dt * 30);
-    this.fov += ((aiming ? 50 : player.sprinting ? 78 : 70) - this.fov) * (1 - Math.exp(-dt * 8));
+    this.fov += ((aiming ? 50 : 70) - this.fov) * (1 - Math.exp(-dt * 8));
 
-    // strafe roll + sprint bob
+    // strafe roll + walk bob
     const v = player.vel;
     const strafe = v.x * Math.cos(this.yaw) - v.z * Math.sin(this.yaw);
     this.roll += (-strafe * 0.004 - this.roll) * (1 - Math.exp(-dt * 6));
     const speed = Math.hypot(v.x, v.z);
     this.bob += dt * speed * 2.2;
-    const bobAmt = player.sprinting ? 0.05 : speed > 0.5 && !aiming ? 0.015 : 0;
+    const bobAmt = speed > 0.5 && !aiming ? 0.025 : 0;
 
     // landing dip spring
     this.dipV += (-this.dipY * 140 - this.dipV * 14) * dt;

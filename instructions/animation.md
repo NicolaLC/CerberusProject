@@ -14,6 +14,12 @@ All characters use `Rig` from `src/rig.js`.
 - `rig.root` is the character origin at the feet; set its position and `rotation.y` (facing).
 - `H` in game toggles `SkeletonHelper`s.
 
+## Player model (`src/soldier.js`)
+- `buildSoldier(rig)` builds a procedural armored sci-fi soldier: several rounded-box / capsule pieces per
+  bone (undersuit, gunmetal plates, light ceramic accents, red stripe, cyan HDR glow strips that feed bloom),
+  plus a backpack attached to Spine2. The player rig is created with `dummy: false`; puppets keep the dummy.
+- Same contract as the dummy: each bone's group is its part, so `rig.setPart` swaps in a modeled piece.
+
 ## Dummy parts (pivots for modeled parts)
 - `rig.buildDummy(materials)` puts one placeholder box per bone (`DUMMY` table), material slots `body` / `plate`.
   Each dummy mesh stores its box size in `userData.size`.
@@ -32,10 +38,10 @@ All characters use `Rig` from `src/rig.js`.
 
 ## Animator (procedural)
 `new Animator(rig, { armed, ground })`, then each frame `animator.update(dt, state)` with
-`{ speed, sprint, crouch 0..1, aimPitch, combat, recoil, lean, lookYaw, lower }`.
+`{ speed, run, crouch 0..1, aimPitch, combat, recoil, lean, lookYaw, lower }`.
 - Layers: reset to rest → hit spring → legs → torso → arms → feet IK.
 - Walk: pendulum legs, small hip twist and bob.
-- Run (sprint, blended in over ~0.15s), deliberately anime: `RUN` table — 0.42 rad forward lean, high knees
+- Run (`run`: player at full walk speed out of combat, blended in over ~0.15s), deliberately anime: `RUN` table — 0.42 rad forward lean, high knees
   (thigh forward 1.25), heel kick (knee 2.1), hang-time bounce, hips twist with shoulders counter-rotating,
   head kept level. The left hand lets go of the gun and pumps; the right hand carries it low.
 - Kneel (low cover) blends over everything with `crouch`.

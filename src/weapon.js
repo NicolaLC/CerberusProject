@@ -184,7 +184,7 @@ export class Weapon {
     const p = this.player;
     const trigger = input.firing();
     this.spin = t.spinUp > 0 ? THREE.MathUtils.clamp(this.spin + (trigger ? dt / t.spinUp : -dt * 2), 0, 1) : 1;
-    const canFire = !p.dead && !p.snap && !p.sprinting && this.reloading <= 0 && this.switching <= 0;
+    const canFire = !p.dead && !p.snap && this.reloading <= 0 && this.switching <= 0;
     if (!trigger || !canFire) {
       this.cooldown = Math.max(this.cooldown, 0);
       return;

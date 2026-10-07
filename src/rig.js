@@ -149,7 +149,7 @@ export class Rig {
 
 // ---------------------------------------------------------------------------
 // Procedural animation. Character state in, bone transforms out.
-// state: { speed, sprint, crouch 0..1, aimPitch, combat, recoil, lean, lookYaw, lower 0..1 }
+// state: { speed, run, crouch 0..1, aimPitch, combat, recoil, lean, lookYaw, lower 0..1 }
 // Layers: rest → hit spring → legs (walk / anime run / kneel) → torso → arms (IK or run pump) → feet IK.
 // ---------------------------------------------------------------------------
 
@@ -207,7 +207,7 @@ export class Animator {
     this.hit.y += this.hitVel.y * dt;
 
     // ----- legs -----
-    this.run = mix(this.run, s.sprint ? 1 : 0, 1 - Math.exp(-dt * 7));
+    this.run = mix(this.run, s.run ? 1 : 0, 1 - Math.exp(-dt * 7));
     const r = this.run;
     const c = s.crouch;
     this.phase += s.speed * dt * mix(2.1, 2.75, r);
@@ -266,7 +266,7 @@ export class Animator {
       rig.root.updateMatrixWorld(true);
       if (rig.sockets.gripR) this.#armIK('Right', rig.sockets.gripR, -1);
       if (rig.sockets.gripL) this.#armIK('Left', rig.sockets.gripL, 1);
-      // sprinting: the left hand lets go of the gun and pumps, anime style
+      // running: the left hand lets go of the gun and pumps, anime style
       const pump = r * amt * (s.combat ? 0 : 1);
       if (pump > 0.01) {
         const ls = Math.sin(ph);

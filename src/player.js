@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Rig, Animator } from './rig.js';
 import { GUNS } from './guns.js';
+import { buildSoldier } from './soldier.js';
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
@@ -15,8 +16,7 @@ const TUNING = {
   standHeight: 1.8,
   crouchHeight: 1.05,
   stepHeight: 0.45,
-  walk: 4.6,
-  sprint: 7.4,
+  walk: 5,
   aimWalk: 2.6,
   coverSlide: 3.2,
   accel: 14,
@@ -42,7 +42,6 @@ export class Player {
     this.crouchBlend = 0;
     this.crouched = false;
     this.aiming = false;
-    this.sprinting = false;
     this.lastShot = 99;
     this.cover = null; // { normal, tangent, type, edgeL, edgeR }
     this.coverCandidate = null;
@@ -138,9 +137,7 @@ export class Player {
     const wish = _w.set(0, 0, 0).addScaledVector(_f, ax.y).addScaledVector(_r, ax.x);
     if (wish.lengthSq() > 1) wish.normalize();
 
-    // in cover you can't sprint, so the sprint key aims (zooms) instead
-    const coverAim = !!this.cover && (input.down('ShiftLeft') || input.down('ShiftRight'));
-    this.aiming = (input.aiming() || coverAim) && !this.snap;
+    this.aiming = input.aiming() && !this.snap;
     if (weapon.firing) this.lastShot = 0;
     const combat = this.aiming || this.lastShot < 0.6;
 
@@ -158,7 +155,6 @@ export class Player {
         if (this.juice) s.hop ? this.juice.land() : this.juice.coverSlam();
         this.pos.y = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.stepHeight);
       }
-      this.sprinting = false;
       this.#animate(dt, rig, 1, weapon.lowered());
       return;
     }
@@ -213,8 +209,7 @@ export class Player {
 
   #updateFree(dt, wish, input, weapon) {
     const t = this.t;
-    this.sprinting = input.down('ShiftLeft') && input.axis().y > 0 && !this.aiming && this.lastShot > 0.4;
-    let speed = this.aiming ? t.aimWalk : this.sprinting ? t.sprint : t.walk;
+    let speed = this.aiming ? t.aimWalk : t.walk;
     // heavy guns slow you down while they fire
     if (this.gun?.fireMoveSpeed && this.lastShot < 0.25) speed = Math.min(speed, this.gun.fireMoveSpeed);
     const k = 1 - Math.exp(-dt * t.accel);
@@ -242,7 +237,6 @@ export class Player {
   #updateCover(dt, wish, rig) {
     const c = this.cover;
     const t = this.t;
-    this.sprinting = false;
     // tangent oriented toward camera right
     c.tangent.set(c.normal.z, 0, -c.normal.x);
     if (c.tangent.dot(rig.right) < 0) c.tangent.negate();
@@ -362,28 +356,17 @@ export class Player {
   // ---------------- model (skeleton + dummy parts) ----------------
 
   #buildModel() {
-    const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.35, ...extra });
-    const materials = { body: mat(0x3d434d), plate: mat(0x8a919c) };
-    const red = mat(0xb3232a, { metalness: 0.1 });
-    const visor = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x6fe3ff, emissiveIntensity: 2.2 });
-    const gunMat = mat(0x1a1c20, { metalness: 0.6, roughness: 0.4 });
-    const glow = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x38d8ff, emissiveIntensity: 2.5 });
     const box = (w, h, d, m, x, y, z) => {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
       mesh.position.set(x, y, z);
       return mesh;
     };
-
-    const rig = new Rig({ materials });
-    // accents on the dummy
-    rig.attach('Spine2', box(0.06, 0.28, 0.02, red, 0.12, 0.12, 0.155)); // N7-ish stripe
-    rig.attach('Spine2', box(0.34, 0.36, 0.13, materials.body, 0, 0.06, -0.21)); // backpack
-    rig.attach('Spine2', box(0.16, 0.1, 0.2, materials.plate, 0.27, 0.24, 0));
-    rig.attach('Spine2', box(0.16, 0.1, 0.2, materials.plate, -0.27, 0.24, 0));
-    rig.attach('Head', box(0.19, 0.06, 0.03, visor, 0, 0.15, 0.13));
+    const rig = new Rig({ dummy: false });
+    const M = buildSoldier(rig);
+    const gunMat = new THREE.MeshStandardMaterial({ color: 0x1a1c20, metalness: 0.6, roughness: 0.4 });
 
     // every gun model hangs on the Weapon bone; only the equipped one is visible
-    const gunMats = { gun: gunMat, plate: materials.plate, glow, glowHot: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff8a2a, emissiveIntensity: 2.5 }) };
+    const gunMats = { gun: gunMat, plate: M.armor, glow: M.glow, glowHot: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff8a2a, emissiveIntensity: 2.5 }) };
     this.gunModels = {};
     for (const [id, def] of Object.entries(GUNS)) {
       const g = def.build(gunMats, box);
@@ -422,9 +405,10 @@ export class Player {
       const a = Math.atan2(c.x - this.pos.x, c.z - this.pos.z) - this.facing;
       lookYaw = THREE.MathUtils.clamp(Math.atan2(Math.sin(a), Math.cos(a)), -1.2, 1.2);
     }
+    const speed = alive ? Math.hypot(this.vel.x, this.vel.z) : 0;
     this.animator.update(dt, {
-      speed: alive ? Math.hypot(this.vel.x, this.vel.z) : 0,
-      sprint: this.sprinting,
+      speed,
+      run: speed > 3.8 && !combat, // full walk speed uses the anime run
       crouch: this.crouchBlend,
       aimPitch: camRig.pitch,
       combat: combat && alive,
