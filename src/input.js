@@ -10,15 +10,12 @@ export class Input {
     this.mouse = { dx: 0, dy: 0, left: false, right: false, leftPressed: false };
     this.locked = false;
     this.free = false; // pointer lock unavailable (e.g. sandboxed iframe): use raw mouse while hovering
-    this.aimToggled = false;
     this.wheelSteps = 0; // mouse wheel notches this frame (weapon switch), outside trackpad mode
 
     addEventListener('keydown', (e) => {
       if (e.repeat) return;
       this.keys.add(e.code);
       this.pressed.add(e.code);
-      if (e.code === 'KeyE') this.aimToggled = !this.aimToggled;
-      if (e.code === 'ShiftLeft') this.aimToggled = false;
       if (['Space', 'Tab'].includes(e.code)) e.preventDefault();
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -34,10 +31,7 @@ export class Input {
     addEventListener('mousedown', (e) => {
       if (!this.locked && !this.free) return;
       if (e.button === 0) { this.mouse.left = true; this.mouse.leftPressed = true; }
-      if (e.button === 2) {
-        this.mouse.right = true;
-        if (settings.trackpad) this.aimToggled = !this.aimToggled;
-      }
+      if (e.button === 2) this.mouse.right = true;
     });
     // trackpad: two-finger swipe looks around
     addEventListener(
@@ -62,7 +56,7 @@ export class Input {
     addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
-      if (!this.locked) this.mouse.left = this.mouse.right = this.aimToggled = false;
+      if (!this.locked) this.mouse.left = this.mouse.right = false;
     });
   }
 
@@ -93,8 +87,9 @@ export class Input {
     return this.pressed.has(code);
   }
 
+  // hold Left Shift to aim (zoom); there is no sprint
   aiming() {
-    return this.aimToggled || (!settings.trackpad && this.mouse.right);
+    return this.down('ShiftLeft');
   }
 
   firing() {

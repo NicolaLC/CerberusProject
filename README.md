@@ -20,9 +20,9 @@ Click **Deploy** to lock the mouse. Add `?debug` to the URL to run without point
 
 | Input | Action |
 | --- | --- |
-| WASD / Shift | move / sprint |
+| WASD | move |
 | Mouse | look |
-| RMB | aim (pops up from low cover, peeks from high cover edges) |
+| Left Shift | hold to aim (pops up from low cover, peeks from high cover edges) |
 | LMB | fire |
 | R | reload |
 | Space | take / leave cover — with W behind low cover: vault |

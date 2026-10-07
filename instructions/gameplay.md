@@ -1,12 +1,12 @@
 # Gameplay
 
 ## Player (`player.js` TUNING)
-- Walk 4.6, sprint 7.4 (Shift + forward, not while aiming/firing), aim walk 2.6 m/s
+- Walk 5 (plays the anime run), aim walk 2.6 m/s. No sprint: Left Shift is the aim key.
 - Shields 100 (regen 45/s after 3.5s), health 100 (regen 12/s after 6s). Death → respawn at spawn after 3s.
 
 ## Input
-- Aim: hold RMB, or E toggles; in cover Shift (sprint) also aims, since you can't sprint there (in trackpad mode a click toggles too). Fire: LMB or F. Arrow keys look.
-- Trackpad mode: two-finger swipe (wheel events) looks; aim is a toggle; aim assist stronger (1.6 vs 0.8).
+- Aim (zoom): hold Left Shift, the only aim input (`input.aiming()`). Fire: LMB or F. Arrow keys look.
+- Trackpad mode: two-finger swipe (wheel events) looks; aim is still Left Shift; aim assist stronger (1.6 vs 0.8).
 - Aim assist (`camRig.assist`): within ~4-8° of a visible puppet's chest the look slows (friction) and eases toward it.
 - Look sensitivity multiplier lives in settings.
 

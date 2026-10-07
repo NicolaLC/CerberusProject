@@ -220,7 +220,7 @@ class Puppet {
     this.mats.plate.emissive.setScalar(e);
     this.weakMat.emissiveIntensity = 2.4 + Math.sin(performance.now() * 0.008) * 1.4; // pulse
 
-    this.animator.update(dt, { speed: speed * 0.5, sprint: false, crouch: 0, aimPitch: 0, combat: false });
+    this.animator.update(dt, { speed: speed * 0.5, run: false, crouch: 0, aimPitch: 0, combat: false });
     this.group.position.copy(this.pos);
     this.rig.root.position.y = this.lift;
     this.rig.root.rotation.y = this.yaw;

@@ -52,7 +52,7 @@ export class Hud {
     const gap = 4 + (weapon.spread() / Math.tan(fovRad / 2)) * (innerHeight / 2);
     e.cross.style.setProperty('--gap', `${gap.toFixed(1)}px`);
     e.cross.classList.toggle('aim', player.aiming);
-    e.cross.style.opacity = player.sprinting || player.snap ? 0.15 : 1;
+    e.cross.style.opacity = player.snap ? 0.15 : 1;
 
     this.hitTime -= dt;
     e.hit.style.opacity = this.hitTime > 0 ? 1 : 0;
@@ -88,7 +88,7 @@ export class Hud {
     let prompt = '';
     if (player.cover) {
       const c = player.cover;
-      prompt = c.type === 'low' ? 'SPACE leave cover · SPACE + W vault · SHIFT / RMB aim to pop up' : (c.edgeL || c.edgeR) ? 'SHIFT / RMB aim to peek from the edge' : 'Move to an edge to peek';
+      prompt = c.type === 'low' ? 'SPACE leave cover · SPACE + W vault · SHIFT aim to pop up' : (c.edgeL || c.edgeR) ? 'SHIFT aim to peek from the edge' : 'Move to an edge to peek';
     } else if (player.coverCandidate) {
       prompt = `SPACE take ${player.coverCandidate.type} cover`;
     }

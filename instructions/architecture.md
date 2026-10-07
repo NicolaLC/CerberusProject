@@ -10,6 +10,7 @@
 - `camera.js` — over-the-shoulder rig (`yaw`, `pitch`, `shoulder`, collision)
 - `player.js` — movement, collision, cover state machine, health, drives the rig animator
 - `rig.js` — humanoid skeleton, dummy parts, procedural animator, two-bone IK
+- `soldier.js` — procedural armored sci-fi soldier parts for the player rig
 - `guns.js` — gun table: stats, hand/muzzle sockets, placeholder models
 - `weapon.js` — weapon controller: switching, per-gun ammo, spin-up, hitscan (camera ray, validated from muzzle)
 - `enemies.js` — puppets (static / mover / shooter) and enemy bolts
