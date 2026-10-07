@@ -137,7 +137,7 @@ export class Player {
     const wish = _w.set(0, 0, 0).addScaledVector(_f, ax.y).addScaledVector(_r, ax.x);
     if (wish.lengthSq() > 1) wish.normalize();
 
-    this.aiming = input.mouse.right && !this.snap;
+    this.aiming = input.aiming() && !this.snap;
     if (weapon.firing) this.lastShot = 0;
     const combat = this.aiming || this.lastShot < 0.6;
 
@@ -379,15 +379,17 @@ export class Player {
 
     // rifle on the weapon bone, sockets for hands + muzzle
     const gun = new THREE.Group();
-    gun.add(box(0.08, 0.14, 0.62, gunMat, 0, 0, 0.12));
-    gun.add(box(0.05, 0.05, 0.28, gunMat, 0, 0.02, 0.56));
-    gun.add(box(0.06, 0.18, 0.08, gunMat, 0, -0.12, -0.02));
-    gun.add(box(0.02, 0.03, 0.4, glow, -0.045, 0.03, 0.12));
-    gun.add(box(0.06, 0.06, 0.14, gunMat, 0, 0.1, 0.05));
+    // authored from the stock (bone pivot, z = 0) forward along +Z
+    gun.add(box(0.06, 0.12, 0.2, gunMat, 0, -0.01, 0.05)); // stock
+    gun.add(box(0.08, 0.14, 0.44, gunMat, 0, 0, 0.36)); // receiver
+    gun.add(box(0.05, 0.05, 0.3, gunMat, 0, 0.02, 0.72)); // barrel
+    gun.add(box(0.06, 0.15, 0.07, gunMat, 0, -0.12, 0.22)); // pistol grip
+    gun.add(box(0.02, 0.03, 0.36, glow, -0.045, 0.03, 0.36));
+    gun.add(box(0.05, 0.05, 0.12, gunMat, 0, 0.1, 0.3)); // sight
     rig.attach('weapon', gun);
-    rig.socket('weapon', 'gripR', 0, -0.1, 0.0);
-    rig.socket('weapon', 'gripL', 0, -0.06, 0.34);
-    this.muzzle = rig.socket('weapon', 'muzzle', 0, 0.02, 0.72);
+    rig.socket('weapon', 'gripR', 0, -0.15, 0.22);
+    rig.socket('weapon', 'gripL', 0, -0.07, 0.44);
+    this.muzzle = rig.socket('weapon', 'muzzle', 0, 0.02, 0.88);
 
     this.scene.add(rig.root);
     this.rigModel = rig;

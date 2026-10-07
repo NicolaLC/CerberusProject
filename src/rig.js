@@ -14,13 +14,13 @@ export const BONES = {
   head: { parent: 'neck', pos: [0, 0.07, 0] },
   clavicleL: { parent: 'chest', pos: [0.08, 0.19, 0] },
   upperArmL: { parent: 'clavicleL', pos: [0.13, 0, 0] },
-  foreArmL: { parent: 'upperArmL', pos: [0, -0.28, 0] },
-  handL: { parent: 'foreArmL', pos: [0, -0.26, 0] },
+  foreArmL: { parent: 'upperArmL', pos: [0, -0.3, 0] },
+  handL: { parent: 'foreArmL', pos: [0, -0.28, 0] },
   clavicleR: { parent: 'chest', pos: [-0.08, 0.19, 0] },
   upperArmR: { parent: 'clavicleR', pos: [-0.13, 0, 0] },
-  foreArmR: { parent: 'upperArmR', pos: [0, -0.28, 0] },
-  handR: { parent: 'foreArmR', pos: [0, -0.26, 0] },
-  weapon: { parent: 'chest', pos: [-0.13, 0.11, 0.2] },
+  foreArmR: { parent: 'upperArmR', pos: [0, -0.3, 0] },
+  handR: { parent: 'foreArmR', pos: [0, -0.28, 0] },
+  weapon: { parent: 'chest', pos: [-0.12, 0.15, 0.1] }, // rifle stock pivot, in the right shoulder pocket
   thighL: { parent: 'pelvis', pos: [0.11, -0.05, 0] },
   shinL: { parent: 'thighL', pos: [0, -0.44, 0] },
   footL: { parent: 'shinL', pos: [0, -0.44, 0] },
@@ -36,11 +36,11 @@ const DUMMY = {
   chest: [0.48, 0.32, 0.3, 0, 0.13, 0, 'plate'],
   neck: [0.1, 0.08, 0.1, 0, 0.03, 0, 'body'],
   head: [0.24, 0.28, 0.26, 0, 0.13, 0, 'body'],
-  upperArmL: [0.11, 0.28, 0.11, 0, -0.14, 0, 'body'],
-  foreArmL: [0.1, 0.26, 0.1, 0, -0.13, 0, 'plate'],
+  upperArmL: [0.11, 0.3, 0.11, 0, -0.15, 0, 'body'],
+  foreArmL: [0.1, 0.28, 0.1, 0, -0.14, 0, 'plate'],
   handL: [0.08, 0.1, 0.08, 0, -0.04, 0, 'body'],
-  upperArmR: [0.11, 0.28, 0.11, 0, -0.14, 0, 'body'],
-  foreArmR: [0.1, 0.26, 0.1, 0, -0.13, 0, 'plate'],
+  upperArmR: [0.11, 0.3, 0.11, 0, -0.15, 0, 'body'],
+  foreArmR: [0.1, 0.28, 0.1, 0, -0.14, 0, 'plate'],
   handR: [0.08, 0.1, 0.08, 0, -0.04, 0, 'body'],
   thighL: [0.17, 0.44, 0.19, 0, -0.22, 0, 'body'],
   shinL: [0.15, 0.44, 0.17, 0, -0.22, 0, 'plate'],
@@ -141,6 +141,7 @@ const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _d = new THREE.Vector3();
+const _e = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _pole = new THREE.Vector3();
 
@@ -205,6 +206,9 @@ export class Animator {
       B.weapon.rotation.x = this.weaponPitch;
       B.weapon.rotation.y = s.combat ? 0 : 0.35;
       if (s.recoil) B.weapon.position.z -= s.recoil * 0.06;
+      // support shoulder rolls forward so the left hand reaches the handguard
+      B.clavicleL.rotation.y = -0.6;
+      B.clavicleR.rotation.y = 0.15;
       rig.root.updateMatrixWorld(true);
       // hands to weapon grips (two-bone IK), elbows out/down
       if (rig.sockets.gripR) this.#ik('R', rig.sockets.gripR, -1);
@@ -236,11 +240,12 @@ export class Animator {
     const cosA = THREE.MathUtils.clamp((l1 * l1 + dist * dist - l2 * l2) / (2 * l1 * dist), -1, 1);
     const sinA = Math.sqrt(1 - cosA * cosA);
     // pole: elbow out to the side and down, in character space
-    _pole.set(out * 0.6, -0.8, -0.2).transformDirection(this.rig.root.matrixWorld);
+    // pole: elbows hang down and slightly out (never backward)
+    _pole.set(out * 0.35, -1, 0.05).transformDirection(this.rig.root.matrixWorld);
     _pole.addScaledVector(toT, -_pole.dot(toT)).normalize();
     const elbow = _d.copy(a).addScaledVector(toT, l1 * cosA).addScaledVector(_pole, l1 * sinA);
     aimBone(upper, elbow);
-    const wrist = _c.copy(a).addScaledVector(toT, dist);
+    const wrist = _e.copy(a).addScaledVector(toT, dist); // not _c: toT aliases it
     aimBone(lower, wrist);
     end.quaternion.identity();
   }

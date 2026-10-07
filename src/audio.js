@@ -80,6 +80,18 @@ export class Audio {
     n.start(t, 0, 0.3);
   }
 
+  pickup() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(600, t);
+    o.frequency.exponentialRampToValueAtTime(1400, t + 0.12);
+    this.#env(o, 0.25, 0.18);
+    o.start(t);
+    o.stop(t + 0.2);
+  }
+
   click() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;

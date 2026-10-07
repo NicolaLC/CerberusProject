@@ -2,7 +2,9 @@
 
 `src/`
 - `main.js` — renderer, frame loop, exposure adaptation, debug hooks
-- `input.js` — keys/mouse, pointer lock; `wasPressed` is edge-triggered and cleared in `endFrame()`
+- `input.js` — keys/mouse/trackpad, pointer lock; `wasPressed` is edge-triggered and cleared in `endFrame()`. Game code reads intent via `aiming()`, `firing()`, `firePressed()`, never raw buttons
+- `settings.js` — sensitivity, trackpad mode, aim assist (localStorage, try/catch) + start-panel bindings
+- `pickups.js` — ammo cases (respawning) and clips dropped by puppets
 - `world.js` — level boxes, colliders, cover meshes, sky, sun, interior lights/zones
 - `textures.js` — procedural grid textures + world-space UVs
 - `camera.js` — over-the-shoulder rig (`yaw`, `pitch`, `shoulder`, collision)

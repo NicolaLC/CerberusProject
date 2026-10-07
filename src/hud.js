@@ -61,10 +61,11 @@ export class Hud {
     let prompt = '';
     if (player.cover) {
       const c = player.cover;
-      prompt = c.type === 'low' ? 'SPACE leave cover · SPACE + W vault · RMB pop up' : (c.edgeL || c.edgeR) ? 'RMB peek from edge' : 'Move to an edge to peek';
+      prompt = c.type === 'low' ? 'SPACE leave cover · SPACE + W vault · aim to pop up' : (c.edgeL || c.edgeR) ? 'Aim to peek from the edge' : 'Move to an edge to peek';
     } else if (player.coverCandidate) {
       prompt = `SPACE take ${player.coverCandidate.type} cover`;
     }
+    if (!prompt && weapon.reserve === 0 && weapon.ammo <= 8) prompt = 'LOW AMMO · grab a glowing cyan ammo case';
     e.prompt.textContent = prompt;
     e.prompt.style.opacity = prompt ? 1 : 0;
 

@@ -10,6 +10,8 @@ import { Hud } from './hud.js';
 import { Audio } from './audio.js';
 import { Post } from './post.js';
 import { Juice } from './juice.js';
+import { Pickups } from './pickups.js';
+import { settings, bindSettingsUI } from './settings.js';
 
 const DEBUG = new URLSearchParams(location.search).has('debug');
 
@@ -36,6 +38,8 @@ const post = new Post(renderer, scene, camera);
 const juice = new Juice({ camRig, post, fx });
 player.juice = juice;
 const enemies = new Enemies({ scene, world, fx, audio, juice });
+const pickups = new Pickups(scene, audio);
+enemies.pickups = pickups;
 const weapon = new Weapon({ camera, rig: camRig, player, world, enemies, fx, hud, audio, juice });
 
 // skeleton debug (H)
@@ -51,6 +55,7 @@ let exposure = 1.0;
 let running = DEBUG;
 const overlay = document.getElementById('overlay');
 if (DEBUG) overlay.style.display = 'none';
+bindSettingsUI();
 document.getElementById('start').addEventListener('click', () => {
   audio.init();
   input.lock();
@@ -95,7 +100,15 @@ function frame() {
   // arrow keys turn too (handy when the mouse can't be locked)
   const turnX = (input.down('ArrowRight') ? 1 : 0) - (input.down('ArrowLeft') ? 1 : 0);
   const turnY = (input.down('ArrowDown') ? 1 : 0) - (input.down('ArrowUp') ? 1 : 0);
-  camRig.look(input.mouse.dx + turnX * 900 * realDt, input.mouse.dy + turnY * 500 * realDt, player.aiming);
+  // aim assist (friction + gentle pull) while aiming, stronger in trackpad mode
+  let friction = 1;
+  if (player.aiming && settings.aimAssist) {
+    const targets = [];
+    for (const p of enemies.puppets) if (p.alive && p.lift > -0.3) targets.push(p.rig.bones.chest.getWorldPosition(new THREE.Vector3()));
+    friction = camRig.assist(dt, targets, settings.trackpad ? 1.6 : 0.8);
+  }
+  const look = settings.sensitivity * friction;
+  camRig.look((input.mouse.dx + turnX * 900 * realDt) * look, (input.mouse.dy + turnY * 500 * realDt) * look, player.aiming);
   if (input.wasPressed('KeyQ')) camRig.shoulder *= -1;
   if (input.wasPressed('KeyH')) helpers.forEach((h) => (h.visible = !h.visible));
 
@@ -104,6 +117,7 @@ function frame() {
   camRig.update(dt, player, realDt);
   weapon.update(dt, input);
   enemies.update(dt, player, hud, camRig);
+  pickups.update(dt, player, weapon);
   fx.update(dt);
   world.update(time);
   world.updateSun(player.pos);

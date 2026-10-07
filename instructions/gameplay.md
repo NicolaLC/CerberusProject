@@ -4,6 +4,17 @@
 - Walk 4.6, sprint 7.4 (Shift + forward, not while aiming/firing), aim walk 2.6 m/s
 - Shields 100 (regen 45/s after 3.5s), health 100 (regen 12/s after 6s). Death → respawn at spawn after 3s.
 
+## Input
+- Aim: hold RMB, or E toggles (in trackpad mode a click toggles too). Fire: LMB or F. Arrow keys look.
+- Trackpad mode: two-finger swipe (wheel events) looks; aim is a toggle; aim assist stronger (1.6 vs 0.8).
+- Aim assist (`camRig.assist`): within ~4-8° of a visible puppet's chest the look slows (friction) and eases toward it.
+- Look sensitivity multiplier lives in settings.
+
+## Ammo
+- Mag 32, reserve starts 192, max 384. Cases at fixed `SPOTS` in `pickups.js` give 96 and respawn after 15s.
+- Broken puppets drop a 32-round clip 45% of the time (vanishes after 25s, blinks at the end).
+- Walk within 1.1m to collect; a full reserve leaves it there ("AMMO FULL").
+
 ## Cover
 - `Space` near a cover box (reach 2.2m, move dir or camera forward, then 8 directions) snaps to it.
 - Cover type from height above feet: < 1.7m = low, else high. Boxes are cover only if created with `{ cover }`.
