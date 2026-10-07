@@ -20,6 +20,8 @@ export class Hud {
       overlay: $('overlay'),
       death: $('death'),
       zone: $('zone'),
+      gunName: $('gun-name'),
+      slots: { rifle: $('slot-rifle'), mg: $('slot-mg') },
     };
     this.hitTime = 0;
     this.dmgTime = 0;
@@ -51,6 +53,8 @@ export class Hud {
     e.hit.style.opacity = this.hitTime > 0 ? 1 : 0;
 
     e.ammo.textContent = weapon.ammo;
+    e.gunName.textContent = weapon.t.name;
+    for (const [id, el] of Object.entries(e.slots)) el.classList.toggle('on', id === (weapon.pending ?? weapon.current));
     e.reserve.textContent = weapon.reserve;
     e.ammo.classList.toggle('low', weapon.ammo <= 6);
     e.reload.style.display = weapon.reloading > 0 ? 'block' : 'none';

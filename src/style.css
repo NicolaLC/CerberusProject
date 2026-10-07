@@ -69,3 +69,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #overlay input[type='checkbox'] { accent-color: #3ac0ff; width: 16px; height: 16px; }
 #overlay output { width: 40px; text-align: right; color: #ffd23a; }
 #overlay .panel { max-height: 100%; overflow-y: auto; max-width: calc(100vw - 32px); }
+#weapon .slots { display: flex; gap: 8px; justify-content: flex-end; font-size: 11px; color: #4f6f88; margin-top: 2px; }
+#weapon .slots .on { color: #7fe8ff; text-shadow: 0 0 6px rgba(56, 216, 255, 0.6); }
+#numbers .dmg.weak { color: #ff6af0; font-size: 22px; text-shadow: 0 0 6px rgba(255, 43, 214, 0.9), 0 0 3px #000; }

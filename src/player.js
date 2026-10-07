@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Rig, Animator } from './rig.js';
+import { GUNS } from './guns.js';
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
@@ -156,7 +157,7 @@ export class Player {
         this.pos.y = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.stepHeight);
       }
       this.sprinting = false;
-      this.#animate(dt, rig, s.hop ? 0 : 1);
+      this.#animate(dt, rig, 1, weapon.lowered());
       return;
     }
 
@@ -175,16 +176,16 @@ export class Player {
     }
 
     if (this.snap) {
-      this.#animate(dt, rig, 1);
+      this.#animate(dt, rig, 1, weapon.lowered());
       return;
     }
     if (this.cover) this.#updateCover(dt, wish, rig);
-    else this.#updateFree(dt, wish, input);
+    else this.#updateFree(dt, wish, input, weapon);
 
     // facing
     let targetFacing = this.facing;
     if (combat) targetFacing = rig.yaw + Math.PI;
-    else if (this.cover) targetFacing = Math.atan2(-this.cover.normal.x, -this.cover.normal.z);
+    else if (this.cover) targetFacing = Math.atan2(this.cover.normal.x, this.cover.normal.z); // back to the wall
     else if (this.vel.lengthSq() > 0.2) targetFacing = Math.atan2(this.vel.x, this.vel.z);
     this.facing = lerpAngle(this.facing, targetFacing, 1 - Math.exp(-dt * (combat ? 25 : 12)));
 
@@ -205,13 +206,15 @@ export class Player {
     }
     this.peek.lerp(peekTarget, 1 - Math.exp(-dt * 14));
 
-    this.#animate(dt, rig, 1);
+    this.#animate(dt, rig, 1, weapon.lowered());
   }
 
-  #updateFree(dt, wish, input) {
+  #updateFree(dt, wish, input, weapon) {
     const t = this.t;
     this.sprinting = input.down('ShiftLeft') && input.axis().y > 0 && !this.aiming && this.lastShot > 0.4;
-    const speed = this.aiming ? t.aimWalk : this.sprinting ? t.sprint : t.walk;
+    let speed = this.aiming ? t.aimWalk : this.sprinting ? t.sprint : t.walk;
+    // heavy guns slow you down while they fire
+    if (this.gun?.fireMoveSpeed && this.lastShot < 0.25) speed = Math.min(speed, this.gun.fireMoveSpeed);
     const k = 1 - Math.exp(-dt * t.accel);
     this.vel.x += (wish.x * speed - this.vel.x) * k;
     this.vel.z += (wish.z * speed - this.vel.z) * k;
@@ -371,38 +374,52 @@ export class Player {
 
     const rig = new Rig({ materials });
     // accents on the dummy
-    rig.attach('chest', box(0.06, 0.3, 0.02, red, 0.12, 0.13, 0.155)); // N7-ish stripe
-    rig.attach('chest', box(0.34, 0.36, 0.13, materials.body, 0, 0.1, -0.21)); // backpack
-    rig.attach('chest', box(0.16, 0.1, 0.2, materials.plate, 0.27, 0.25, 0));
-    rig.attach('chest', box(0.16, 0.1, 0.2, materials.plate, -0.27, 0.25, 0));
-    rig.attach('head', box(0.19, 0.06, 0.03, visor, 0, 0.15, 0.13));
+    rig.attach('Spine2', box(0.06, 0.28, 0.02, red, 0.12, 0.12, 0.155)); // N7-ish stripe
+    rig.attach('Spine2', box(0.34, 0.36, 0.13, materials.body, 0, 0.06, -0.21)); // backpack
+    rig.attach('Spine2', box(0.16, 0.1, 0.2, materials.plate, 0.27, 0.24, 0));
+    rig.attach('Spine2', box(0.16, 0.1, 0.2, materials.plate, -0.27, 0.24, 0));
+    rig.attach('Head', box(0.19, 0.06, 0.03, visor, 0, 0.15, 0.13));
 
-    // rifle on the weapon bone, sockets for hands + muzzle
-    const gun = new THREE.Group();
-    // authored from the stock (bone pivot, z = 0) forward along +Z
-    gun.add(box(0.06, 0.12, 0.2, gunMat, 0, -0.01, 0.05)); // stock
-    gun.add(box(0.08, 0.14, 0.44, gunMat, 0, 0, 0.36)); // receiver
-    gun.add(box(0.05, 0.05, 0.3, gunMat, 0, 0.02, 0.72)); // barrel
-    gun.add(box(0.06, 0.15, 0.07, gunMat, 0, -0.12, 0.22)); // pistol grip
-    gun.add(box(0.02, 0.03, 0.36, glow, -0.045, 0.03, 0.36));
-    gun.add(box(0.05, 0.05, 0.12, gunMat, 0, 0.1, 0.3)); // sight
-    rig.attach('weapon', gun);
-    rig.socket('weapon', 'gripR', 0, -0.15, 0.22);
-    rig.socket('weapon', 'gripL', 0, -0.07, 0.44);
-    this.muzzle = rig.socket('weapon', 'muzzle', 0, 0.02, 0.88);
+    // every gun model hangs on the Weapon bone; only the equipped one is visible
+    const gunMats = { gun: gunMat, plate: materials.plate, glow, glowHot: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff8a2a, emissiveIntensity: 2.5 }) };
+    this.gunModels = {};
+    for (const [id, def] of Object.entries(GUNS)) {
+      const g = def.build(gunMats, box);
+      g.visible = false;
+      rig.attach('Weapon', g);
+      this.gunModels[id] = g;
+    }
 
     this.scene.add(rig.root);
     this.rigModel = rig;
     this.root = rig.root;
-    this.animator = new Animator(rig, { armed: true });
+    this.animator = new Animator(rig, { armed: true, ground: (x, z, maxY) => this.world.groundAt(x, z, maxY) });
   }
 
-  #animate(dt, camRig, alive) {
+  // Show the gun and move hand/muzzle sockets to it.
+  setGun(id) {
+    const def = GUNS[id];
+    this.gun = def;
+    for (const [k, g] of Object.entries(this.gunModels)) g.visible = k === id;
+    const s = def.sockets;
+    this.rigModel.socket('Weapon', 'gripR', ...s.gripR);
+    this.rigModel.socket('Weapon', 'gripL', ...s.gripL);
+    this.muzzle = this.rigModel.socket('Weapon', 'muzzle', ...s.muzzle);
+  }
+
+  #animate(dt, camRig, alive, weaponLower = 0) {
     const k = 1 - Math.exp(-dt * 12);
     const target = this.crouched || (this.snap && !this.snap.hop) ? 1 : this.snap ? 0.5 : 0;
     this.crouchBlend += (target - this.crouchBlend) * k;
     const combat = this.aiming || this.lastShot < 0.6;
     this.recoil = Math.max(0, (this.recoil ?? 0) - dt * 8);
+    // in cover with the back to the wall, the head turns to the camera
+    let lookYaw = 0;
+    if (this.cover && !combat && alive) {
+      const c = camRig.camera.position;
+      const a = Math.atan2(c.x - this.pos.x, c.z - this.pos.z) - this.facing;
+      lookYaw = THREE.MathUtils.clamp(Math.atan2(Math.sin(a), Math.cos(a)), -1.2, 1.2);
+    }
     this.animator.update(dt, {
       speed: alive ? Math.hypot(this.vel.x, this.vel.z) : 0,
       sprint: this.sprinting,
@@ -411,6 +428,8 @@ export class Player {
       combat: combat && alive,
       recoil: this.recoil,
       lean: this.peek.length() > 0.2 ? -camRig.shoulder * 0.25 : 0,
+      lookYaw,
+      lower: weaponLower,
     });
 
     this.root.position.copy(this.visualPos());

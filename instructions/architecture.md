@@ -10,7 +10,8 @@
 - `camera.js` — over-the-shoulder rig (`yaw`, `pitch`, `shoulder`, collision)
 - `player.js` — movement, collision, cover state machine, health, drives the rig animator
 - `rig.js` — humanoid skeleton, dummy parts, procedural animator, two-bone IK
-- `weapon.js` — hitscan rifle (camera ray, validated from muzzle)
+- `guns.js` — gun table: stats, hand/muzzle sockets, placeholder models
+- `weapon.js` — weapon controller: switching, per-gun ammo, spin-up, hitscan (camera ray, validated from muzzle)
 - `enemies.js` — puppets (static / mover / shooter) and enemy bolts
 - `fx.js` — tracers, sparks, decals, muzzle flash, damage numbers
 - `hud.js` — DOM HUD (markup in `index.html`, styles in `src/style.css`)
