@@ -10,6 +10,7 @@ and puppet enemies to shoot.
 npm install
 npm run dev      # http://localhost:5173
 npm run build    # static build in dist/
+npm run build:artifact  # single-file page for hosting (dist/artifact/)
 ```
 
 Click **Deploy** to lock the mouse. Add `?debug` to the URL to run without pointer lock
@@ -37,6 +38,8 @@ Click **Deploy** to lock the mouse. Add `?debug` to the URL to run without point
 - Shared humanoid bone rig with placeholder dummy parts and procedural animation (arm IK on weapon grips)
 - Puppet enemies on posts: static, rail movers and pop-up shooters; they break apart and respawn
 - Sunlit yard with shadows, dark interior with skylight, flickering lights and eye adaptation
+- Post-processing: bloom, color grade, vignette, chromatic aberration, film grain
+- Game feel: trauma camera shake, smoothed follow, FOV punch, recoil recovery, hitstop on kills, shell casings, shockwaves
 
 Project docs for contributors and agents live in [`instructions/`](instructions/), indexed by [`CLAUDE.md`](CLAUDE.md).
 

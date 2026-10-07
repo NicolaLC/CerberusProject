@@ -10,6 +10,8 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 ## Commands
 - `npm run dev` — dev server on :5173
 - `npm run build` — must pass before committing
+- `npm run build:artifact` — single-file page in `dist/artifact/cerberus.html` (game inlined, three.js from jsDelivr via import map). Run it after `npm run build` (vite empties `dist/`). Published as a claude.ai Artifact: https://claude.ai/artifact/2dVW5ms3KtVJpkC6ap5fAL — republish the same file to update it.
+- No pointer lock (sandboxed frames): input falls back to free-mouse mode; arrow keys also turn the camera.
 
 ## Testing
 - `?debug` URL flag: no pointer lock, `window.game` exposes `{ player, camRig, weapon, enemies, world, input, ... }`.

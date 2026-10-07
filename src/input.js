@@ -6,6 +6,7 @@ export class Input {
     this.pressed = new Set();
     this.mouse = { dx: 0, dy: 0, left: false, right: false, leftPressed: false };
     this.locked = false;
+    this.free = false; // pointer lock unavailable (e.g. sandboxed iframe): use raw mouse while hovering
 
     addEventListener('keydown', (e) => {
       if (e.repeat) return;
@@ -19,12 +20,12 @@ export class Input {
       this.mouse.left = this.mouse.right = false;
     });
     addEventListener('mousemove', (e) => {
-      if (!this.locked) return;
+      if (!this.locked && !this.free) return;
       this.mouse.dx += e.movementX;
       this.mouse.dy += e.movementY;
     });
     addEventListener('mousedown', (e) => {
-      if (!this.locked) return;
+      if (!this.locked && !this.free) return;
       if (e.button === 0) { this.mouse.left = true; this.mouse.leftPressed = true; }
       if (e.button === 2) this.mouse.right = true;
     });
@@ -40,7 +41,22 @@ export class Input {
   }
 
   lock() {
-    this.canvas.requestPointerLock?.();
+    // falls back to free-mouse mode when the browser refuses pointer lock
+    const fail = () => {
+      if (!this.locked) {
+        this.free = true;
+        document.dispatchEvent(new Event('pointerlockchange'));
+      }
+    };
+    document.addEventListener('pointerlockerror', fail, { once: true });
+    try {
+      const p = this.canvas.requestPointerLock?.();
+      if (p && p.catch) p.catch(fail);
+      else if (!this.canvas.requestPointerLock) fail();
+    } catch {
+      fail();
+    }
+    setTimeout(fail, 600);
   }
 
   down(code) {
