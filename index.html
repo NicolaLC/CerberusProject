@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cerberus — Training Arena</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud">
+      <div id="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="dot"></i></div>
+      <div id="hitmarker"></div>
+      <div id="dmg-dir"></div>
+      <div id="vignette"></div>
+      <div id="numbers"></div>
+
+      <div id="status">
+        <div class="bar shield"><div id="shield-fill"></div></div>
+        <div class="bar health"><div id="health-fill"></div></div>
+      </div>
+
+      <div id="weapon">
+        <div class="name">M-8 AVENGER (proto)</div>
+        <div><span id="ammo">32</span><span class="sep">/</span><span id="reserve">256</span></div>
+        <div id="reload">RELOADING</div>
+      </div>
+
+      <div id="top">
+        <span id="zone">TRAINING YARD</span>
+        <span>PUPPETS DOWN <b id="kills">0</b></span>
+      </div>
+
+      <div id="prompt"></div>
+    </div>
+
+    <div id="overlay">
+      <div class="panel">
+        <h1>CERBERUS</h1>
+        <h2>combat training arena · prototype</h2>
+        <table>
+          <tr><td>WASD</td><td>move</td></tr>
+          <tr><td>Shift</td><td>sprint</td></tr>
+          <tr><td>Mouse</td><td>look</td></tr>
+          <tr><td>RMB</td><td>aim / pop up from cover</td></tr>
+          <tr><td>LMB</td><td>fire</td></tr>
+          <tr><td>R</td><td>reload</td></tr>
+          <tr><td>Space</td><td>take / leave cover · + W vault low cover</td></tr>
+          <tr><td>Q</td><td>swap shoulder</td></tr>
+          <tr><td>H</td><td>toggle skeleton debug</td></tr>
+        </table>
+        <button id="start">CLICK TO DEPLOY</button>
+      </div>
+    </div>
+
+    <div id="death"><div>SHIELDS DOWN — RESPAWNING</div></div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
