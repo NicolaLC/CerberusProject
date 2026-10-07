@@ -3,6 +3,11 @@ import { GUNS, GUN_ORDER } from './guns.js';
 
 // Hitscan weapons (stats in guns.js). Aim ray comes from the camera; the shot is then validated from the muzzle.
 const SWITCH_TIME = 0.45;
+// Active reload (Gears of War style): press reload again while the marker sweeps the bar.
+const ACTIVE = {
+  jamPenalty: 1.0, // extra seconds when you miss
+  boostMult: 1.25, // damage for the rest of a perfectly reloaded magazine
+};
 
 const _ray = new THREE.Raycaster();
 const _dir = new THREE.Vector3();
@@ -12,7 +17,9 @@ export class Weapon {
   constructor({ camera, rig, player, world, enemies, fx, hud, audio, juice }) {
     Object.assign(this, { camera, rig, player, world, enemies, fx, hud, audio, juice });
     this.state = {};
-    for (const id of GUN_ORDER) this.state[id] = { ammo: GUNS[id].mag, reserve: GUNS[id].reserve };
+    for (const id of GUN_ORDER) this.state[id] = { ammo: GUNS[id].mag, reserve: GUNS[id].reserve, boost: false };
+    this.active = null; // { total, attempted, result } while a reload runs
+    this.result = null; // last active-reload result for the HUD: { kind, time }
     this.current = 'rifle';
     this.cooldown = 0;
     this.reloading = 0;
@@ -72,13 +79,64 @@ export class Weapon {
     this.pending = id;
     this.switching = SWITCH_TIME;
     this.reloading = 0;
+    this.active = null;
     this.audio.click();
+  }
+
+  get boosted() {
+    return this.state[this.current].boost;
+  }
+
+  // 0..1 position of the active-reload marker
+  reloadProgress() {
+    return this.active ? 1 - this.reloading / this.active.total : 0;
   }
 
   reload() {
     if (this.reloading > 0 || this.switching > 0 || this.ammo === this.t.mag || this.reserve <= 0) return;
     this.reloading = this.t.reloadTime;
+    this.active = { total: this.t.reloadTime, attempted: false, result: null };
+    this.state[this.current].boost = false;
     this.audio.click();
+  }
+
+  // Second press during a reload: perfect = instant + damage boost, good = instant, else jam.
+  #tryActiveReload() {
+    const a = this.active;
+    if (!a || a.attempted) return;
+    a.attempted = true;
+    const p = this.reloadProgress();
+    const z = this.t.activeReload;
+    if (p >= z.perfect[0] && p <= z.perfect[1]) {
+      this.#finishReload();
+      this.state[this.current].boost = true;
+      this.#showResult('perfect');
+      this.audio.perfect();
+      this.juice.perfectReload();
+    } else if (p >= z.good[0] && p <= z.good[1]) {
+      this.#finishReload();
+      this.#showResult('good');
+      this.audio.click();
+    } else {
+      a.result = 'jam';
+      this.reloading += ACTIVE.jamPenalty;
+      a.total += ACTIVE.jamPenalty;
+      this.#showResult('jam');
+      this.audio.jam();
+      this.rig.addTrauma(0.15);
+    }
+  }
+
+  #finishReload() {
+    const n = Math.min(this.t.mag - this.ammo, this.reserve);
+    this.ammo += n;
+    this.reserve -= n;
+    this.reloading = 0;
+    this.active = null;
+  }
+
+  #showResult(kind) {
+    this.result = { kind, time: performance.now() };
   }
 
   update(dt, input) {
@@ -98,24 +156,30 @@ export class Weapon {
         this.bloom = 0;
         this.spin = 0;
         this.player.setGun(this.current);
+        if (this.ammo === 0) this.switchedEmpty = true;
       }
     }
 
+    if (this.switchedEmpty && this.switching <= 0) {
+      this.switchedEmpty = false;
+      this.reload();
+    }
     const t = this.t;
     this.cooldown -= dt;
     this.bloom = Math.max(0, this.bloom - t.bloomDecay * dt);
     this.firing = false;
 
+    if (input.wasPressed('KeyR')) {
+      if (this.reloading > 0) this.#tryActiveReload();
+      else this.reload();
+    }
     if (this.reloading > 0) {
       this.reloading -= dt;
       if (this.reloading <= 0) {
-        const n = Math.min(t.mag - this.ammo, this.reserve);
-        this.ammo += n;
-        this.reserve -= n;
+        this.#finishReload();
         this.audio.click();
       }
     }
-    if (input.wasPressed('KeyR')) this.reload();
 
     const p = this.player;
     const trigger = input.firing();
@@ -140,6 +204,8 @@ export class Weapon {
       this.cooldown += 60 / rpm;
       this.#fire();
     }
+    // auto reload the moment the magazine runs dry
+    if (this.ammo === 0) this.reload();
   }
 
   #fire() {
@@ -188,7 +254,8 @@ export class Weapon {
     const enemy = hit.object.userData.enemy;
     if (enemy) {
       const zone = hit.object.userData.zone;
-      const mult = zone === 'weak' ? t.weakMult : zone === 'head' ? t.headMult : zone === 'limb' ? t.limbMult : 1;
+      const boost = this.boosted ? ACTIVE.boostMult : 1;
+      const mult = boost * (zone === 'weak' ? t.weakMult : zone === 'head' ? t.headMult : zone === 'limb' ? t.limbMult : 1);
       const crit = zone === 'head' || zone === 'weak';
       const killed = enemy.damage(t.damage * mult, hit.point, toAim, zone);
       this.fx.impact(hit.point, toAim.clone().negate(), zone === 'weak' ? 0xff2bd6 : 0x6fe3ff, zone === 'weak' ? 14 : 6, false);

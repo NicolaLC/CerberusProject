@@ -72,3 +72,16 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #weapon .slots { display: flex; gap: 8px; justify-content: flex-end; font-size: 11px; color: #4f6f88; margin-top: 2px; }
 #weapon .slots .on { color: #7fe8ff; text-shadow: 0 0 6px rgba(56, 216, 255, 0.6); }
 #numbers .dmg.weak { color: #ff6af0; font-size: 22px; text-shadow: 0 0 6px rgba(255, 43, 214, 0.9), 0 0 3px #000; }
+
+#areload { position: absolute; left: 50%; top: calc(50% + 56px); width: 220px; transform: translateX(-50%); opacity: 0; transition: opacity 0.12s; }
+#areload .track { position: relative; height: 8px; background: rgba(0, 10, 20, 0.6); border: 1px solid rgba(160, 220, 255, 0.4); }
+#areload i { position: absolute; top: 0; bottom: 0; }
+#areload .good { background: rgba(80, 200, 255, 0.45); }
+#areload .perfect { background: #f4fbff; box-shadow: 0 0 8px #bff0ff; }
+#areload .cursor { width: 3px; top: -4px; bottom: -4px; margin-left: -1px; background: #ffd23a; box-shadow: 0 0 6px #ffd23a; }
+#areload .label { margin-top: 6px; text-align: center; font: 700 12px monospace; letter-spacing: 4px; color: #9fc8e8; }
+#areload[data-state='perfect'] .label { color: #f4fbff; text-shadow: 0 0 10px #7fe8ff; font-size: 15px; }
+#areload[data-state='good'] .label { color: #7fe8ff; }
+#areload[data-state='jam'] .label { color: #ff5a4a; }
+#areload[data-state='jam'] .track { border-color: #ff5a4a; background: rgba(80, 0, 0, 0.6); }
+#ammo.boost { color: #f4fbff; text-shadow: 0 0 12px #7fe8ff, 0 0 4px #7fe8ff; }
