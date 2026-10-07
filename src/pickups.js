@@ -3,8 +3,6 @@ import * as THREE from 'three';
 // Ammo pickups ("thermal clips"): fixed crates that respawn, plus clips dropped by destroyed puppets.
 // Walk over one to collect it. Full reserve = not collected.
 const TUNING = {
-  crateAmmo: 96,
-  dropAmmo: 32,
   dropChance: 0.45,
   dropLife: 25,
   respawn: 15,
@@ -46,16 +44,16 @@ export class Pickups {
     this.ringGeo = new THREE.RingGeometry(0.45, 0.55, 32).rotateX(-Math.PI / 2);
     this.ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x38d8ff).multiplyScalar(2), transparent: true, opacity: 0.5, depthWrite: false });
 
-    for (const p of SPOTS) this.#spawn(new THREE.Vector3(...p), { crate: true, ammo: TUNING.crateAmmo });
+    for (const p of SPOTS) this.#spawn(new THREE.Vector3(...p), { crate: true });
   }
 
-  #spawn(pos, { crate, ammo }) {
+  #spawn(pos, { crate }) {
     const model = this.makeModel(crate ? 1.3 : 0.9);
     const ring = new THREE.Mesh(this.ringGeo, this.ringMat);
     ring.position.copy(pos).y += 0.02;
     model.position.copy(pos);
     this.scene.add(model, ring);
-    const item = { pos: pos.clone(), model, ring, crate, ammo, active: true, timer: 0, phase: Math.random() * 6 };
+    const item = { pos: pos.clone(), model, ring, crate, active: true, timer: 0, phase: Math.random() * 6 };
     this.items.push(item);
     return item;
   }
@@ -63,7 +61,7 @@ export class Pickups {
   // called by puppets when they break
   drop(pos) {
     if (Math.random() > this.t.dropChance) return;
-    const item = this.#spawn(new THREE.Vector3(pos.x, pos.y, pos.z), { crate: false, ammo: this.t.dropAmmo });
+    const item = this.#spawn(new THREE.Vector3(pos.x, pos.y, pos.z), { crate: false });
     item.timer = this.t.dropLife;
   }
 
@@ -102,12 +100,12 @@ export class Pickups {
       const dx = player.pos.x - it.pos.x;
       const dz = player.pos.z - it.pos.z;
       if (dx * dx + dz * dz > this.t.radius ** 2 || Math.abs(player.pos.y - it.pos.y) > 1.2) continue;
-      const got = weapon.addAmmo(it.ammo);
-      if (got <= 0) {
+      const got = weapon.addAmmo(it.crate ? 'crate' : 'drop');
+      if (!got) {
         if (this.toastTime <= 0) this.#show('AMMO FULL');
         continue;
       }
-      this.#show(`+${got} AMMO`);
+      this.#show(got);
       this.audio.pickup();
       if (it.crate) {
         it.active = false;

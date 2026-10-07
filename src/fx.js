@@ -116,9 +116,9 @@ export class FX {
     this.#add(m, 0.3, { grow: 9, fadeMat: true });
   }
 
-  number(pos, value, crit) {
+  number(pos, value, crit, weak = false) {
     const el = document.createElement('div');
-    el.className = 'dmg' + (crit ? ' crit' : '');
+    el.className = 'dmg' + (weak ? ' weak' : crit ? ' crit' : '');
     el.textContent = Math.round(value);
     this.numberLayer.appendChild(el);
     this.numbers.push({ el, pos: pos.clone(), life: 0.8, drift: (Math.random() - 0.5) * 0.8 });

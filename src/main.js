@@ -104,7 +104,7 @@ function frame() {
   let friction = 1;
   if (player.aiming && settings.aimAssist) {
     const targets = [];
-    for (const p of enemies.puppets) if (p.alive && p.lift > -0.3) targets.push(p.rig.bones.chest.getWorldPosition(new THREE.Vector3()));
+    for (const p of enemies.puppets) if (p.alive && p.lift > -0.3) targets.push(p.rig.bones.Spine2.getWorldPosition(new THREE.Vector3()));
     friction = camRig.assist(dt, targets, settings.trackpad ? 1.6 : 0.8);
   }
   const look = settings.sensitivity * friction;
@@ -124,7 +124,7 @@ function frame() {
   hud.update(dt, { player, weapon, enemies, camRig, world });
 
   const inside = world.isInterior(camera.position);
-  const target = inside ? 1.7 : 1.0;
+  const target = inside ? 1.9 : 1.0;
   exposure += (target - exposure) * (1 - Math.exp(-dt * 1.2));
   renderer.toneMappingExposure = exposure;
 

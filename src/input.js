@@ -11,6 +11,7 @@ export class Input {
     this.locked = false;
     this.free = false; // pointer lock unavailable (e.g. sandboxed iframe): use raw mouse while hovering
     this.aimToggled = false;
+    this.wheelSteps = 0; // mouse wheel notches this frame (weapon switch), outside trackpad mode
 
     addEventListener('keydown', (e) => {
       if (e.repeat) return;
@@ -42,8 +43,12 @@ export class Input {
     addEventListener(
       'wheel',
       (e) => {
-        if (!settings.trackpad || (!this.locked && !this.free)) return;
+        if (!this.locked && !this.free) return;
         e.preventDefault();
+        if (!settings.trackpad) {
+          if (Math.abs(e.deltaY) > 0) this.wheelSteps += Math.sign(e.deltaY);
+          return;
+        }
         const k = e.deltaMode === 1 ? 16 : 1;
         this.mouse.dx += e.deltaX * k;
         this.mouse.dy += e.deltaY * k;
@@ -110,5 +115,6 @@ export class Input {
     this.pressed.clear();
     this.mouse.dx = this.mouse.dy = 0;
     this.mouse.leftPressed = false;
+    this.wheelSteps = 0;
   }
 }

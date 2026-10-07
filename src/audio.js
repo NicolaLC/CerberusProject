@@ -24,22 +24,22 @@ export class Audio {
     return gainNode;
   }
 
-  shot() {
+  shot(heavy = false) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     const n = this.ctx.createBufferSource();
     n.buffer = this.noise;
     const f = this.ctx.createBiquadFilter();
     f.type = 'bandpass';
-    f.frequency.value = 1400 + Math.random() * 300;
+    f.frequency.value = (heavy ? 900 : 1400) + Math.random() * 300;
     f.Q.value = 0.8;
     n.connect(f);
     this.#env(f, 0.9, 0.12);
     n.start(t, Math.random() * 0.3, 0.15);
     const o = this.ctx.createOscillator();
-    o.frequency.setValueAtTime(160, t);
-    o.frequency.exponentialRampToValueAtTime(45, t + 0.1);
-    this.#env(o, 0.7, 0.12);
+    o.frequency.setValueAtTime(heavy ? 110 : 160, t);
+    o.frequency.exponentialRampToValueAtTime(heavy ? 32 : 45, t + 0.1);
+    this.#env(o, heavy ? 0.95 : 0.7, heavy ? 0.16 : 0.12);
     o.start(t);
     o.stop(t + 0.13);
   }

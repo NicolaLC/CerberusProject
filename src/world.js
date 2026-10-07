@@ -35,10 +35,10 @@ export class World {
       low: std(gridTexture({ base: '#e07a2e', major: 'rgba(255,255,255,0.35)', label: 'LOW' })),
       high: std(gridTexture({ base: '#4f7fb8', major: 'rgba(255,255,255,0.3)', label: 'HIGH' })),
       platform: std(gridTexture({ base: '#9a9ea4' })),
-      inFloor: std(gridTexture({ base: '#2a2d32', minor: 'rgba(255,255,255,0.05)', major: 'rgba(255,255,255,0.12)', label: 'B1', labelColor: 'rgba(255,255,255,0.15)' })),
-      inWall: std(gridTexture({ base: '#33373e', minor: 'rgba(255,255,255,0.04)', major: 'rgba(255,255,255,0.10)' })),
-      inLow: std(gridTexture({ base: '#7a3f1a', major: 'rgba(255,255,255,0.18)', label: 'LOW', labelColor: 'rgba(255,255,255,0.2)' })),
-      inHigh: std(gridTexture({ base: '#253c5a', major: 'rgba(255,255,255,0.15)', label: 'HIGH', labelColor: 'rgba(255,255,255,0.2)' })),
+      inFloor: std(gridTexture({ base: '#4a4f57', minor: 'rgba(255,255,255,0.06)', major: 'rgba(255,255,255,0.12)', label: 'B1', labelColor: 'rgba(255,255,255,0.15)' })),
+      inWall: std(gridTexture({ base: '#565c66', minor: 'rgba(255,255,255,0.04)', major: 'rgba(255,255,255,0.10)' })),
+      inLow: std(gridTexture({ base: '#a8581f', major: 'rgba(255,255,255,0.18)', label: 'LOW', labelColor: 'rgba(255,255,255,0.2)' })),
+      inHigh: std(gridTexture({ base: '#34587f', major: 'rgba(255,255,255,0.15)', label: 'HIGH', labelColor: 'rgba(255,255,255,0.2)' })),
       roof: std(gridTexture({ base: '#5a5e65' })),
       stripCyan: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x38d8ff, emissiveIntensity: 2.5 }),
       stripRed: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2a2a, emissiveIntensity: 2.0 }),
@@ -256,12 +256,15 @@ export class World {
     // interior lights + emissive strips
     for (const z of [-34, -44, -54]) this.strip(-23.55, 5.5, z, 0.08, 0.12, 4, m.stripCyan);
     this.strip(7.7, 5.5, -50, 0.08, 0.12, 6, m.stripCyan);
-    this.pointLight(-18, 5.5, -36, 0x38d8ff, 18, 16);
-    this.pointLight(-16, 5.5, -56, 0x38d8ff, 14, 14);
-    this.pointLight(2, 5.0, -56, 0xfff2d8, 10, 12);
+    this.pointLight(-18, 5.5, -36, 0x38d8ff, 40, 22);
+    this.pointLight(-16, 5.5, -56, 0x38d8ff, 32, 20);
+    this.pointLight(2, 5.0, -56, 0xfff2d8, 30, 18);
+    this.pointLight(-6, 6.2, -46, 0xfff4e6, 30, 22); // hall fill under the skylight
+    this.pointLight(0, 5.5, -35, 0x9fe8ff, 24, 18);
     const red = this.strip(23.55, 5.0, -46, 0.08, 0.15, 8, m.stripRed.clone());
-    this.pointLight(20, 5.0, -46, 0xff2a2a, 30, 18, { strip: red });
-    this.pointLight(13, 4.0, -36, 0xff5a3a, 6, 10);
+    this.pointLight(20, 5.0, -46, 0xff2a2a, 45, 20, { strip: red });
+    this.pointLight(13, 4.0, -36, 0xff7a5a, 18, 14);
+    this.pointLight(15, 5.5, -55, 0xffd8c8, 16, 14); // east room fill, keeps it readable during flicker
     // light strip above doors
     for (const x of [-12, 16]) this.strip(x, 4.1, -29.65, 4, 0.12, 0.08, m.stripWhite);
   }

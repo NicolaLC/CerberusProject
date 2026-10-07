@@ -97,11 +97,11 @@ export class CameraRig {
     return 1 - 0.45 * Math.min(1, strength);
   }
 
-  kick(pitch, yaw) {
+  kick(pitch, yaw, trauma = 0.06) {
     this.pitch = Math.min(1.1, this.pitch + pitch);
     this.yaw += yaw;
     this.recoilDebt += pitch * this.t.recoilRecover;
-    this.addTrauma(0.06);
+    this.addTrauma(trauma);
     this.punch(0.9);
   }
 

@@ -31,7 +31,9 @@ const SPAWNS = [
   { kind: 'mover', pos: [12, 0, -42], to: [21, 0, -42], speed: 2.2, yaw: 0 },
 ];
 
-const HIDE = -0.95; // rig lift when retracted behind low cover
+const HIDE = -0.95;
+const WEAK_COUNT = 2;
+const WEAK_BONES = ['Spine2', 'Spine1', 'Hips', 'LeftArm', 'RightArm', 'LeftForeArm', 'RightForeArm', 'LeftUpLeg', 'RightUpLeg', 'LeftLeg', 'RightLeg']; // rig lift when retracted behind low cover
 const RESPAWN = 6;
 
 const _v = new THREE.Vector3();
@@ -68,9 +70,12 @@ class Puppet {
 
     this.group = new THREE.Group();
     this.rig = new Rig({ materials: mats });
-    this.rig.attach('head', box(0.2, 0.06, 0.03, this.visor, 0, 0.14, 0.13));
-    this.rig.attach('chest', box(0.22, 0.22, 0.02, targetMat(), 0, 0.12, 0.155)); // bullseye
-    this.emitter = this.rig.socket('chest', 'emitter', 0, 0.15, 0.3);
+    this.rig.attach('Head', box(0.2, 0.06, 0.03, this.visor, 0, 0.14, 0.13));
+    this.rig.attach('Spine2', box(0.22, 0.22, 0.02, targetMat(), 0, 0.12, 0.155)); // bullseye
+    this.emitter = this.rig.socket('Spine2', 'emitter', 0, 0.15, 0.3);
+    this.weakMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2bd6, emissiveIntensity: 3 });
+    this.haloMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff2bd6).multiplyScalar(1.5), transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
+    this.weakSpots = [];
     this.animator = new Animator(this.rig, { armed: false });
     this.group.add(this.rig.root);
 
@@ -93,6 +98,34 @@ class Puppet {
       o.userData.zone = HIT_ZONE[o.userData.bone] ?? 'limb';
       this.hitMeshes.push(o);
     });
+    this.#placeWeakSpots();
+  }
+
+  // Glowing weak spots on random body parts (front face). Hits there deal weakMult damage.
+  #placeWeakSpots() {
+    for (const w of this.weakSpots) w.removeFromParent();
+    this.hitMeshes = this.hitMeshes.filter((m) => !this.weakSpots.includes(m));
+    this.weakSpots = [];
+    const pool = [...WEAK_BONES];
+    for (let i = 0; i < WEAK_COUNT; i++) {
+      const bone = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+      const part = this.rig.parts[bone];
+      const [w, h, d] = part.userData.size;
+      const sw = Math.min(w, 0.16) * 0.95;
+      const sh = Math.min(h, 0.2);
+      const spot = new THREE.Mesh(new THREE.BoxGeometry(sw, sh, 0.03), this.weakMat);
+      const halo = new THREE.Mesh(new THREE.PlaneGeometry(sw * 2.2, sh * 2), this.haloMat);
+      halo.position.z = 0.02;
+      halo.raycast = () => {}; // visual only
+      spot.add(halo);
+      spot.position.copy(part.position);
+      spot.position.z += d / 2 + 0.012;
+      if (bone === 'Spine2') spot.position.x += Math.random() < 0.5 ? 0.17 : -0.17; // beside the bullseye
+      spot.userData = { enemy: this, zone: 'weak', bone };
+      this.rig.bones[bone].add(spot);
+      this.weakSpots.push(spot);
+      this.hitMeshes.push(spot);
+    }
   }
 
   damage(amount, point, dir, zone) {
@@ -138,6 +171,7 @@ class Puppet {
     this.alive = true;
     this.health = this.maxHealth;
     this.rig.root.visible = true;
+    this.#placeWeakSpots();
     this.lift = this.kind === 'shooter' ? HIDE : -1.8;
     this.state = 'hidden';
     this.timer = 1.5;
@@ -184,6 +218,7 @@ class Puppet {
     const e = this.flash > 0 ? 0.9 : 0;
     this.mats.body.emissive.setScalar(e);
     this.mats.plate.emissive.setScalar(e);
+    this.weakMat.emissiveIntensity = 2.4 + Math.sin(performance.now() * 0.008) * 1.4; // pulse
 
     this.animator.update(dt, { speed: speed * 0.5, sprint: false, crouch: 0, aimPitch: 0, combat: false });
     this.group.position.copy(this.pos);
