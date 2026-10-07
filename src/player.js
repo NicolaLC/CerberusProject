@@ -138,7 +138,9 @@ export class Player {
     const wish = _w.set(0, 0, 0).addScaledVector(_f, ax.y).addScaledVector(_r, ax.x);
     if (wish.lengthSq() > 1) wish.normalize();
 
-    this.aiming = input.aiming() && !this.snap;
+    // in cover you can't sprint, so the sprint key aims (zooms) instead
+    const coverAim = !!this.cover && (input.down('ShiftLeft') || input.down('ShiftRight'));
+    this.aiming = (input.aiming() || coverAim) && !this.snap;
     if (weapon.firing) this.lastShot = 0;
     const combat = this.aiming || this.lastShot < 0.6;
 

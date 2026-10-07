@@ -92,6 +92,35 @@ export class Audio {
     o.stop(t + 0.2);
   }
 
+  perfect() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    for (const [i, f] of [880, 1320, 1760].entries()) {
+      const o = this.ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = f;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + i * 0.045);
+      g.gain.exponentialRampToValueAtTime(0.22, t + i * 0.045 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.045 + 0.2);
+      o.connect(g).connect(this.master);
+      o.start(t + i * 0.045);
+      o.stop(t + i * 0.045 + 0.22);
+    }
+  }
+
+  jam() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.setValueAtTime(140, t);
+    o.frequency.exponentialRampToValueAtTime(60, t + 0.18);
+    this.#env(o, 0.3, 0.22);
+    o.start(t);
+    o.stop(t + 0.24);
+  }
+
   click() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;

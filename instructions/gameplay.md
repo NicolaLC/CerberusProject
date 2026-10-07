@@ -5,7 +5,7 @@
 - Shields 100 (regen 45/s after 3.5s), health 100 (regen 12/s after 6s). Death → respawn at spawn after 3s.
 
 ## Input
-- Aim: hold RMB, or E toggles (in trackpad mode a click toggles too). Fire: LMB or F. Arrow keys look.
+- Aim: hold RMB, or E toggles; in cover Shift (sprint) also aims, since you can't sprint there (in trackpad mode a click toggles too). Fire: LMB or F. Arrow keys look.
 - Trackpad mode: two-finger swipe (wheel events) looks; aim is a toggle; aim assist stronger (1.6 vs 0.8).
 - Aim assist (`camRig.assist`): within ~4-8° of a visible puppet's chest the look slows (friction) and eases toward it.
 - Look sensitivity multiplier lives in settings.
@@ -25,6 +25,9 @@
 - High: standing; aiming at an edge peeks 0.8m sideways and swaps shoulder to that side.
 
 ## Weapons (`guns.js`, controller in `weapon.js`)
+- Reload (R) is an active reload: a bar with a marker sweeps across `activeReload` zones (fractions of reload time).
+  R again inside `perfect` = instant + ×1.25 damage for that magazine (ammo counter glows); inside `good` = instant;
+  outside = jam, +1s. One try per reload. The magazine auto-reloads when it hits 0 (also after switching to an empty gun).
 - 1 / 2 or mouse wheel switches (0.45s lower/raise, model swaps at the bottom). Ammo is tracked per gun.
 - M-8 Avenger (AR): 540 rpm, mag 32, reserve 192/384, reload 1.8s, 18 dmg, head ×2.5, weak ×3, limbs ×0.8.
   Spread hip 0.022 / aim 0.004 + bloom 0.007 per shot.

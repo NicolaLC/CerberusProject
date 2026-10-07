@@ -21,6 +21,11 @@ export class Hud {
       death: $('death'),
       zone: $('zone'),
       gunName: $('gun-name'),
+      ar: $('areload'),
+      arGood: document.querySelector('#areload .good'),
+      arPerfect: document.querySelector('#areload .perfect'),
+      arCursor: document.querySelector('#areload .cursor'),
+      arLabel: document.querySelector('#areload .label'),
       slots: { rifle: $('slot-rifle'), mg: $('slot-mg') },
     };
     this.hitTime = 0;
@@ -58,6 +63,24 @@ export class Hud {
     e.reserve.textContent = weapon.reserve;
     e.ammo.classList.toggle('low', weapon.ammo <= 6);
     e.reload.style.display = weapon.reloading > 0 ? 'block' : 'none';
+    e.ammo.classList.toggle('boost', weapon.boosted);
+
+    // active reload bar
+    const z = weapon.t.activeReload;
+    const since = weapon.result ? (performance.now() - weapon.result.time) / 1000 : 99;
+    const showBar = !!weapon.active || since < 0.7;
+    e.ar.style.opacity = showBar ? 1 : 0;
+    if (weapon.active) {
+      const pct = (v) => `${(v * 100).toFixed(2)}%`;
+      e.arGood.style.left = pct(z.good[0]);
+      e.arGood.style.width = pct(z.good[1] - z.good[0]);
+      e.arPerfect.style.left = pct(z.perfect[0]);
+      e.arPerfect.style.width = pct(z.perfect[1] - z.perfect[0]);
+      e.arCursor.style.left = pct(Math.min(1, weapon.reloadProgress()));
+    }
+    const kind = since < 0.7 ? weapon.result.kind : weapon.active ? 'pending' : '';
+    e.ar.dataset.state = kind;
+    e.arLabel.textContent = { perfect: 'PERFECT', good: 'GOOD', jam: 'JAMMED', pending: 'R' }[kind] ?? '';
 
     e.shield.style.width = `${player.shields}%`;
     e.health.style.width = `${player.health}%`;
@@ -65,7 +88,7 @@ export class Hud {
     let prompt = '';
     if (player.cover) {
       const c = player.cover;
-      prompt = c.type === 'low' ? 'SPACE leave cover · SPACE + W vault · aim to pop up' : (c.edgeL || c.edgeR) ? 'Aim to peek from the edge' : 'Move to an edge to peek';
+      prompt = c.type === 'low' ? 'SPACE leave cover · SPACE + W vault · SHIFT / RMB aim to pop up' : (c.edgeL || c.edgeR) ? 'SHIFT / RMB aim to peek from the edge' : 'Move to an edge to peek';
     } else if (player.coverCandidate) {
       prompt = `SPACE take ${player.coverCandidate.type} cover`;
     }

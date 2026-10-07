@@ -34,6 +34,12 @@ export class Juice {
     this.fx.impact(point, dir.clone().negate(), 0x6fe3ff, 24, false);
   }
 
+  perfectReload() {
+    this.camRig.punch(2.5);
+    this.camRig.addTrauma(0.1);
+    this.post.flash = Math.max(this.post.flash, 0.4);
+  }
+
   hurt() {
     this.camRig.addTrauma(this.t.hurtTrauma);
     this.post.hit();

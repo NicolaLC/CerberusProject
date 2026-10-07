@@ -14,6 +14,7 @@ export const GUNS = {
     maxReserve: 384,
     pickup: { crate: 96, drop: 32 },
     reloadTime: 1.8,
+    activeReload: { good: [0.32, 0.58], perfect: [0.4, 0.48] }, // fractions of the reload bar
     damage: 18,
     headMult: 2.5,
     limbMult: 0.8,
@@ -50,6 +51,7 @@ export const GUNS = {
     maxReserve: 450,
     pickup: { crate: 135, drop: 45 },
     reloadTime: 3.0,
+    activeReload: { good: [0.42, 0.62], perfect: [0.5, 0.555] },
     damage: 13,
     headMult: 2.0,
     limbMult: 0.8,
