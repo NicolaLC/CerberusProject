@@ -79,3 +79,12 @@
   40% health (retreat farther). Hit while exposed: 50% chance to duck back early. No cover reachable: fight
   in the open and keep looking.
 - Cover spots: 0.65 m off every face of every cover box (low: every 1.2 m; high: near the ends only).
+- Squad tactics:
+  - Spread: a spot on the same bearing from the player as a squadmate (within 25°) costs +5 m, so a squad
+    fans out around the player instead of stacking behind one box.
+  - Flanking (`Enemies` flank director): with 2+ troopers engaged within 35 m, one is sent to flank 5 s
+    after contact and then every 9 s (retry every 2.5 s if no route). The flank spot must protect the
+    flanker, see the player from its firing position, and lie outside ~70° of the player's front: the
+    direction their cover box faces (away from it) if in cover, else where they face. The trooper already
+    most to the side goes first. Flankers sprint (5.4 m/s, up to 30 m) and open fire on arrival; the rest
+    keep the player pinned. HUD: "⚠ ENEMY FLANKING".

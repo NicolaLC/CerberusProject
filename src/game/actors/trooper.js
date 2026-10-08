@@ -12,6 +12,9 @@ import { damp, lerpAngle } from '../../engine/math.js';
 // They relocate when the spot stops protecting them (flanked), the player gets close, after a few
 // bursts, or once when badly hurt (retreat). Getting hit while exposed can suppress them back into cover.
 // No cover reachable: they fight in the open and keep looking.
+// Squad tactics: cover choice fans out around the player (spread), and the Enemies flank director
+// periodically sends one trooper (flank()) to cover on the player's side or rear while the rest keep
+// the player pinned.
 
 const TUNING = {
   health: 150,
@@ -19,6 +22,8 @@ const TUNING = {
   height: 1.8,
   step: 0.45,
   run: 4.6,
+  flankRun: 5.4, // flankers sprint
+  flankTravel: 30, // m: how far a flanker will go
   accel: 10,
   sight: 32, // m: notice the player within this range with line of sight
   engage: 30, // m: shoot within this range
@@ -67,6 +72,7 @@ export class Trooper extends EnemyBody {
     this.noSight = 0;
     this.shotsLeft = 0;
     this.retreated = false;
+    this.flanking = false;
     this.crouch = 0;
     this.recoil = 0;
     this.aimPitch = 0;
@@ -83,6 +89,10 @@ export class Trooper extends EnemyBody {
     this.muzzle = this.rig.socket('Weapon', 'muzzle', ...s.muzzle);
     this.finishBody();
     this.#place();
+  }
+
+  get speed() {
+    return this.flanking ? this.t.flankRun : this.t.run;
   }
 
   get alerted() {
@@ -161,10 +171,11 @@ export class Trooper extends EnemyBody {
           this.pos.x = goal.x;
           this.pos.z = goal.z;
           this.vel.set(0, 0, 0);
-          this.#enterCover(rand([0.4, 0.8]));
+          this.#enterCover(this.flanking ? 0.2 : rand([0.4, 0.8])); // a flanker opens fire right away
+          this.flanking = false;
           break;
         }
-        _d.divideScalar(left).multiplyScalar(Math.min(t.run, left * 4));
+        _d.divideScalar(left).multiplyScalar(Math.min(this.speed, left * 4));
         const k = damp(t.accel, dt);
         this.vel.x += (_d.x - this.vel.x) * k;
         this.vel.z += (_d.z - this.vel.z) * k;
@@ -283,14 +294,42 @@ export class Trooper extends EnemyBody {
     this.timer = time;
   }
 
+  // Squadmates' positions for spreading out (reused array).
+  #squad() {
+    const out = (this._squad ??= []);
+    out.length = 0;
+    for (const e of this.sys.puppets) if (e !== this && e.alive && e.kind === 'trooper' && e.alerted) out.push(e.spot ? e.spot.pos : e.pos);
+    return out;
+  }
+
+  // Flank: run to cover beside or behind the player (outside the side they defend or face) from which
+  // the player is in sight. Returns false if there is no such spot; the trooper then carries on as before.
+  flank(front, eye) {
+    if (!this.alive || !this.alerted || this.flanking) return false;
+    const found = this.sys.cover.find(this, this.pos, this.sys.player.pos, this.sys.time, {
+      avoid: this.spot,
+      flank: { front },
+      needSight: { eye },
+      spread: this.#squad(),
+      maxTravel: this.t.flankTravel,
+    });
+    if (!found) return false;
+    this.flanking = true;
+    this.#take(found);
+    return true;
+  }
+
   // Pick a (new) cover spot and run there; none reachable: fight from here.
   #relocate(retreat = false) {
+    const found = this.sys.cover.find(this, this.pos, this.sys.player.pos, this.sys.time, { avoid: this.spot, retreat, spread: this.#squad() });
+    this.flanking = false;
+    this.#take(found);
+  }
+
+  #take(found) {
     const cover = this.sys.cover;
-    const threat = this.sys.player.pos;
-    const prev = this.spot;
-    const found = cover.find(this, this.pos, threat, this.sys.time, { avoid: prev, retreat });
     const next = found?.spot ?? null;
-    cover.release(prev, this);
+    cover.release(this.spot, this);
     this.spot = next;
     this.path = found?.path ?? [];
     this.bursts = 0;
@@ -299,7 +338,7 @@ export class Trooper extends EnemyBody {
     if (next) {
       cover.claim(next, this);
       this.state = 'move';
-      this.timer = (this.path.length ? 1.4 : 1) * (next.pos.distanceTo(this.pos) / this.t.run) + 2.5; // give up if it takes much longer
+      this.timer = (this.path.length ? 1.4 : 1) * (next.pos.distanceTo(this.pos) / this.speed) + 2.5; // give up if it takes much longer
     } else {
       this.state = 'peek'; // in the open: shoot, then look again
       this.timer = 0.3;

@@ -62,6 +62,7 @@ export class Hud {
     events.on('pickup:collected', (msg) => this.toast(msg));
     events.on('pickup:full', () => this.toast('AMMO FULL'));
     events.on('arena:clear', () => this.toast('ARENA CLEAR · reload the page to reset', 6));
+    events.on('trooper:flank', () => this.toast('⚠ ENEMY FLANKING', 2));
     return this;
   }
 

@@ -19,7 +19,12 @@ const TUNING = {
 
 const _a = new THREE.Vector3();
 const _c = new THREE.Vector3();
+const _d = new THREE.Vector3();
+const _ray = new THREE.Raycaster();
 const CORNER_PAD = 0.8; // detour corners sit this far outside the cover box
+const FLANK_CONE = 0.35; // flank spots: bearing from the threat at least ~70° away from its front
+const SPREAD_COS = Math.cos(THREE.MathUtils.degToRad(25)); // squadmates closer than this in bearing...
+const SPREAD_COST = 5; // ...make a spot cost this much more (meters of travel)
 
 export class CoverMap {
   constructor(world) {
@@ -105,33 +110,67 @@ export class CoverMap {
     return best;
   }
 
-  // Best free spot for `ai` (at from) against `threat`: protected, reachable (straight or around its box),
-  // at a useful range. Returns { spot, path } or null. opts.avoid: a spot not to pick again;
-  // opts.retreat: prefer distance from the threat.
+  // Best free spot for `ai` (at from) against `threat` (the player's position). Returns { spot, path } or null.
+  // Always: protected, reachable (straight or around its box), 6+ m from the threat, near the ideal range.
+  // opts.avoid      a spot not to pick again
+  // opts.retreat    prefer more distance from the threat
+  // opts.spread     positions of squadmates: spots on the same bearing from the threat cost more (fan out)
+  // opts.flank      { front }: only spots outside ~70° of `front` (the side the player is defended or
+  //                 looking toward), seen from the threat: attack from the side or behind
+  // opts.needSight  { eye }: the firing position must see `eye` (the player's chest); checked lazily
+  // Branch and bound: cheap score first, routing and line-of-sight only for candidates that can still win.
   find(ai, from, threat, now, opts = {}) {
     const t = this.t;
-    let best = null;
-    let bestScore = Infinity;
+    const maxTravel = opts.maxTravel ?? t.maxTravel;
+    const ideal = opts.retreat ? t.idealRange + 8 : t.idealRange;
+    const cands = [];
     for (const s of this.spots) {
       if ((s.owner && s.owner !== ai) || s === opts.avoid || s.badUntil > now) continue;
       if (Math.abs(s.pos.y - from.y) > 0.5) continue; // same floor level only (no pathfinding)
-      if (s.pos.distanceTo(from) > t.maxTravel) continue;
+      const straight = s.pos.distanceTo(from);
+      if (straight > maxTravel) continue;
       const range = s.pos.distanceTo(threat);
       if (range < t.minRange) continue;
       if (!this.protects(s, threat)) continue;
-      const ideal = opts.retreat ? t.idealRange + 8 : t.idealRange;
-      // cheap part of the score first: routing (several segment tests) only for candidates that can win
-      const base = Math.abs(range - ideal) * 0.6 + Math.random() * 1.5;
-      if (base + s.pos.distanceTo(from) >= bestScore) continue;
-      const r = this.route(from, s);
-      if (!r || r.length > t.maxTravel * 1.3) continue;
-      const score = r.length + base;
-      if (score < bestScore) {
-        bestScore = score;
-        best = { spot: s, path: r.path };
+      const bx = (s.pos.x - threat.x) / range;
+      const bz = (s.pos.z - threat.z) / range;
+      if (opts.flank && bx * opts.flank.front.x + bz * opts.flank.front.z > FLANK_CONE) continue;
+      let cost = Math.abs(range - ideal) * 0.6 + Math.random() * 1.5;
+      if (opts.spread) {
+        for (const o of opts.spread) {
+          const ox = o.x - threat.x;
+          const oz = o.z - threat.z;
+          const ol = Math.hypot(ox, oz) || 1;
+          if ((bx * ox + bz * oz) / ol > SPREAD_COS) cost += SPREAD_COST; // same bearing as a squadmate
+        }
       }
+      cands.push({ s, bound: cost + straight, cost });
+    }
+    cands.sort((a, b) => a.bound - b.bound);
+    let best = null;
+    let bestScore = Infinity;
+    for (const c of cands) {
+      if (c.bound >= bestScore) break; // nothing further down can win
+      const r = this.route(from, c.s);
+      if (!r || r.length > maxTravel * 1.3) continue;
+      const score = r.length + c.cost;
+      if (score >= bestScore) continue;
+      if (opts.needSight && !this.#sees(c.s, opts.needSight.eye)) continue;
+      bestScore = score;
+      best = { spot: c.s, path: r.path };
     }
     return best;
+  }
+
+  // Line of sight from a spot's firing position (standing chest height) to a point.
+  #sees(spot, eye) {
+    this.firingPos(spot, _c);
+    _c.y += 1.45;
+    _d.subVectors(eye, _c);
+    const len = _d.length();
+    _ray.set(_c, _d.divideScalar(len));
+    _ray.far = Math.max(0.01, len - 0.4);
+    return _ray.intersectObjects(this.world.meshes, false).length === 0;
   }
 
   claim(spot, ai) {
