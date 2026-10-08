@@ -6,7 +6,6 @@ import * as THREE from 'three';
 export const GUNS = {
   rifle: {
     name: 'M-8 AVENGER',
-    key: 'Digit1',
     rpm: 540,
     spinUp: 0, // seconds to reach full rpm
     mag: 32,
@@ -43,7 +42,6 @@ export const GUNS = {
   },
   mg: {
     name: 'M-76 REVENANT',
-    key: 'Digit2',
     rpm: 780,
     spinUp: 0.4,
     mag: 90,

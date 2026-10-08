@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 // Ammo pickups ("thermal clips"): fixed crates that respawn, plus clips dropped by destroyed puppets.
-// Walk over one to collect it. Full reserve = not collected.
+// Walk over one to collect it. Full reserve = not collected. Emits 'pickup:collected' / 'pickup:full'.
 const TUNING = {
   dropChance: 0.45,
   dropLife: 25,
@@ -21,14 +21,13 @@ const SPOTS = [
 ];
 
 export class Pickups {
-  constructor(scene, audio) {
+  constructor({ scene, events }) {
     this.scene = scene;
-    this.audio = audio;
+    this.events = events;
     this.t = TUNING;
     this.items = [];
     this.time = 0;
-    this.toast = document.getElementById('toast');
-    this.toastTime = 0;
+    this.fullCooldown = 0;
 
     const caseMat = new THREE.MeshStandardMaterial({ color: 0x2a2e35, metalness: 0.6, roughness: 0.4 });
     const glowMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x38d8ff, emissiveIntensity: 3 });
@@ -58,22 +57,16 @@ export class Pickups {
     return item;
   }
 
-  // called by puppets when they break
+  // a broken puppet may leave a clip behind
   drop(pos) {
     if (Math.random() > this.t.dropChance) return;
     const item = this.#spawn(new THREE.Vector3(pos.x, pos.y, pos.z), { crate: false });
     item.timer = this.t.dropLife;
   }
 
-  #show(text) {
-    this.toast.textContent = text;
-    this.toastTime = 1.4;
-  }
-
   update(dt, player, weapon) {
     this.time += dt;
-    this.toastTime -= dt;
-    this.toast.style.opacity = this.toastTime > 0 ? Math.min(1, this.toastTime * 3) : 0;
+    this.fullCooldown -= dt;
 
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
@@ -102,11 +95,11 @@ export class Pickups {
       if (dx * dx + dz * dz > this.t.radius ** 2 || Math.abs(player.pos.y - it.pos.y) > 1.2) continue;
       const got = weapon.addAmmo(it.crate ? 'crate' : 'drop');
       if (!got) {
-        if (this.toastTime <= 0) this.#show('AMMO FULL');
+        if (this.fullCooldown <= 0) this.events.emit('pickup:full');
+        this.fullCooldown = 1.4;
         continue;
       }
-      this.#show(got);
-      this.audio.pickup();
+      this.events.emit('pickup:collected', got);
       if (it.crate) {
         it.active = false;
         it.timer = this.t.respawn;

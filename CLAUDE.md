@@ -7,7 +7,8 @@
 ## Index
 
 - `instructions/project.md` — goal, stack, run/build, testing
-- `instructions/architecture.md` — modules, frame order, conventions
+- `instructions/architecture.md` — layers, modules, frame order, events, conventions
+- `instructions/engine.md` — runtime loop, fault isolation, performance rules
 - `instructions/gameplay.md` — controls, mechanics, tuning tables
 - `instructions/animation.md` — skeleton, dummy parts, swapping in modeled parts
 - `instructions/level.md` — arena layout, lighting, grid textures

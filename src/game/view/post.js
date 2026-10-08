@@ -61,9 +61,13 @@ const GradeShader = {
     }`,
 };
 
+// Post stack + auto exposure. Follows the engine's dynamic resolution through 'engine:resize'.
+const EXPOSURE = { outside: 1.0, inside: 1.9, rate: 1.2 };
+
 export class Post {
-  constructor(renderer, scene, camera) {
+  constructor(renderer, scene, camera, events) {
     this.renderer = renderer;
+    this.exposure = EXPOSURE.outside;
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
     const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
     this.composer = new EffectComposer(renderer, rt);
@@ -76,6 +80,7 @@ export class Post {
     this.u = this.grade.uniforms;
     this.flash = 0;
     this.damage = 0;
+    events.on('engine:resize', ({ width, height, pixelRatio }) => this.setSize(width, height, pixelRatio));
   }
 
   hit(amount = 1) {
@@ -86,11 +91,15 @@ export class Post {
     this.flash = 1;
   }
 
-  setSize(w, h) {
+  setSize(w, h, pixelRatio = this.renderer.getPixelRatio()) {
+    this.composer.setPixelRatio(pixelRatio);
     this.composer.setSize(w, h);
   }
 
   render(dt, { player, inside }) {
+    // eyes open up indoors, clamp down in the sun
+    this.exposure += ((inside ? EXPOSURE.inside : EXPOSURE.outside) - this.exposure) * (1 - Math.exp(-dt * EXPOSURE.rate));
+    this.renderer.toneMappingExposure = this.exposure;
     this.flash = Math.max(0, this.flash - dt * 6);
     this.damage = Math.max(0, this.damage - dt * 2.2);
     const u = this.u;

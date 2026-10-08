@@ -13,8 +13,8 @@ npm run build    # static build in dist/
 npm run build:artifact  # single-file page for hosting (dist/artifact/)
 ```
 
-Click **Deploy** to lock the mouse. Add `?debug` to the URL to run without pointer lock
-(exposes `window.game` for testing).
+Click **Deploy** to lock the mouse. Add `?debug` to the URL to skip the start panel, show the
+performance readout and expose `window.game` for testing.
 
 ## Controls
 
@@ -22,12 +22,15 @@ Click **Deploy** to lock the mouse. Add `?debug` to the URL to run without point
 | --- | --- |
 | WASD | move |
 | Mouse | look |
-| Left Shift | hold to aim (pops up from low cover, peeks from high cover edges) |
-| LMB | fire |
+| Shift | sprint |
+| RMB | hold to aim (pops up from low cover, peeks from high cover edges); trackpad mode: E toggles |
+| LMB / F | fire |
 | R | reload |
 | Space | take / leave cover — with W behind low cover: vault |
 | Q | swap shoulder |
+| 1 / 2, wheel | switch gun |
 | H | show skeletons |
+| F3 | performance stats |
 
 ## What's in
 
@@ -40,6 +43,12 @@ Click **Deploy** to lock the mouse. Add `?debug` to the URL to run without point
 - Sunlit yard with shadows, dark interior with skylight, flickering lights and eye adaptation
 - Post-processing: bloom, color grade, vignette, chromatic aberration, film grain
 - Game feel: trauma camera shake, smoothed follow, FOV punch, recoil recovery, hitstop on kills, shell casings, shockwaves
+
+## Architecture
+
+`src/engine/` is a game-agnostic runtime: phased system scheduler with substepped simulation, per-system
+fault isolation, event bus, action-mapped input, object pools and dynamic resolution to hold 60 fps.
+`src/game/` is the shooter built on it; `src/game/game.js` wires every system and declares the frame order.
 
 Project docs for contributors and agents live in [`instructions/`](instructions/), indexed by [`CLAUDE.md`](CLAUDE.md).
 

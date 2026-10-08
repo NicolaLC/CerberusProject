@@ -1,4 +1,8 @@
-// Game-feel hub: gameplay code reports events, this turns them into camera, post, time and sound feedback.
+import * as THREE from 'three';
+
+// Game-feel hub: turns gameplay events into hitstop, camera trauma, FOV punch and post flashes.
+// Owns the game time scale (engine.timeScale) through update().
+const _n = new THREE.Vector3();
 const TUNING = {
   hitstopKill: 0.07, // seconds of near-freeze on a kill
   hitstopHead: 0.025,
@@ -17,6 +21,18 @@ export class Juice {
     this.timeScale = 1;
   }
 
+  listen(events) {
+    events.on('weapon:hit', (h) => (h.killed ? this.kill(h.point, h.dir) : this.hit(h.crit)));
+    events.on('weapon:reload', (kind) => {
+      if (kind === 'perfect') this.perfectReload();
+      else if (kind === 'jam') this.camRig.addTrauma(0.15);
+    });
+    events.on('player:hurt', () => this.hurt());
+    events.on('player:coverSlam', () => this.coverSlam());
+    events.on('player:land', () => this.land());
+    return this;
+  }
+
   hitstop(s) {
     this.stop = Math.max(this.stop, s);
   }
@@ -31,7 +47,7 @@ export class Juice {
     this.camRig.punch(3);
     this.post.kill();
     this.fx.shockwave(point);
-    this.fx.impact(point, dir.clone().negate(), 0x6fe3ff, 24, false);
+    this.fx.impact(point, _n.copy(dir).negate(), 0x6fe3ff, 24, false);
   }
 
   perfectReload() {

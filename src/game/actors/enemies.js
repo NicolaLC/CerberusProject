@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { Rig, Animator, HIT_ZONE } from './rig.js';
+import { Pool } from '../../engine/pool.js';
+import { damp, wrapAngle, segSegDist } from '../../engine/math.js';
 
 // Training puppets: the shared humanoid rig hung on a pneumatic post.
 // kinds: 'static' (takes hits), 'mover' (slides on a rail), 'shooter' (pops up from cover and fires bolts).
@@ -38,7 +40,13 @@ const RESPAWN = 6;
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const _u = new THREE.Vector3();
+const _step = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
 const _ray = new THREE.Raycaster();
+// reused event payloads: listeners must copy what they keep
+const HURT = { amount: 0, dir: new THREE.Vector3() };
+const BOLT_HIT = { point: null, normal: new THREE.Vector3() };
 
 class Puppet {
   constructor(sys, def) {
@@ -126,6 +134,7 @@ class Puppet {
       this.weakSpots.push(spot);
       this.hitMeshes.push(spot);
     }
+    this.sys.dirty = true;
   }
 
   damage(amount, point, dir, zone) {
@@ -133,7 +142,7 @@ class Puppet {
     this.health -= amount;
     this.flash = 0.08;
     // hit reaction: push away from the shot
-    const local = _v.copy(dir).applyAxisAngle(new THREE.Vector3(0, 1, 0), -this.yaw);
+    const local = _v.copy(dir).applyAxisAngle(_up, -this.yaw);
     this.animator.impulse(local.z * (zone === 'head' ? 9 : 6), -local.x * 6);
     if (this.health <= 0) {
       this.#die(dir);
@@ -146,8 +155,8 @@ class Puppet {
     this.alive = false;
     this.deadTime = 0;
     this.sys.kills++;
-    this.sys.audio.thud();
-    this.sys.pickups?.drop(this.pos);
+    this.sys.dirty = true;
+    this.sys.events.emit('puppet:down', this);
     this.group.updateMatrixWorld(true);
     // break the dummy apart: every rig mesh becomes a debris chunk
     for (const m of this.hitMeshes) {
@@ -171,7 +180,7 @@ class Puppet {
     this.alive = true;
     this.health = this.maxHealth;
     this.rig.root.visible = true;
-    this.#placeWeakSpots();
+    this.#placeWeakSpots(); // marks the target list dirty
     this.lift = this.kind === 'shooter' ? HIDE : -1.8;
     this.state = 'hidden';
     this.timer = 1.5;
@@ -205,20 +214,20 @@ class Puppet {
     if (this.kind === 'mover') {
       this.moveT += (dt * this.speed) / this.home.distanceTo(this.to);
       const s = 0.5 - 0.5 * Math.cos(this.moveT * Math.PI);
-      const prev = this.pos.clone();
+      const prev = _u.copy(this.pos);
       this.pos.lerpVectors(this.home, this.to, s);
       speed = dt > 0 ? prev.distanceTo(this.pos) / dt : 0;
     }
 
     if (this.kind === 'shooter') this.#shooterAI(dt, player);
-    else this.lift += (0 - this.lift) * (1 - Math.exp(-dt * 4));
+    else this.lift += (0 - this.lift) * damp(4, dt);
 
     // flash on hit
     this.flash -= dt;
     const e = this.flash > 0 ? 0.9 : 0;
     this.mats.body.emissive.setScalar(e);
     this.mats.plate.emissive.setScalar(e);
-    this.weakMat.emissiveIntensity = 2.4 + Math.sin(performance.now() * 0.008) * 1.4; // pulse
+    this.weakMat.emissiveIntensity = 2.4 + Math.sin(this.sys.time * 8) * 1.4; // pulse
 
     this.animator.update(dt, { speed: speed * 0.5, run: false, crouch: 0, aimPitch: 0, combat: false });
     this.group.position.copy(this.pos);
@@ -237,22 +246,20 @@ class Puppet {
 
     // turn to face the player
     const want = Math.atan2(target.x - this.pos.x, target.z - this.pos.z);
-    let d = want - this.yaw;
-    d = Math.atan2(Math.sin(d), Math.cos(d));
-    this.yaw += d * (1 - Math.exp(-dt * 4));
+    this.yaw += wrapAngle(want - this.yaw) * damp(4, dt);
 
     this.timer -= dt;
     const upLift = 0;
     switch (this.state) {
       case 'hidden':
-        this.lift += (HIDE - this.lift) * (1 - Math.exp(-dt * 8));
+        this.lift += (HIDE - this.lift) * damp(8, dt);
         if (this.timer <= 0 && active) {
           this.state = 'up';
           this.timer = 0.5;
         }
         break;
       case 'up':
-        this.lift += (upLift - this.lift) * (1 - Math.exp(-dt * 10));
+        this.lift += (upLift - this.lift) * damp(10, dt);
         if (this.timer <= 0) {
           if (this.#hasLOS(target)) {
             this.state = 'telegraph';
@@ -293,8 +300,8 @@ class Puppet {
   }
 
   #hasLOS(target) {
-    const from = this.emitter.getWorldPosition(new THREE.Vector3());
-    const dir = target.clone().sub(from);
+    const from = this.emitter.getWorldPosition(_u);
+    const dir = _step.subVectors(target, from);
     const len = dir.length();
     _ray.set(from, dir.normalize());
     _ray.far = len - 0.5;
@@ -302,82 +309,114 @@ class Puppet {
   }
 
   #fire(target) {
-    const from = this.emitter.getWorldPosition(new THREE.Vector3());
-    const dist = from.distanceTo(target);
-    const aim = target.clone();
-    const spread = 0.25 + dist * 0.015;
-    aim.x += (Math.random() - 0.5) * spread;
-    aim.y += (Math.random() - 0.5) * spread;
-    aim.z += (Math.random() - 0.5) * spread;
-    this.sys.spawnBolt(from, aim.sub(from).normalize());
+    const from = this.emitter.getWorldPosition(_u);
+    const spread = 0.25 + from.distanceTo(target) * 0.015;
+    const dir = _step.copy(target);
+    dir.x += (Math.random() - 0.5) * spread;
+    dir.y += (Math.random() - 0.5) * spread;
+    dir.z += (Math.random() - 0.5) * spread;
+    this.sys.spawnBolt(from, dir.sub(from).normalize());
   }
 }
 
+const BOLT = { speed: 34, life: 3, damage: 7, radius: 0.06 };
+
 export class Enemies {
-  constructor({ scene, world, fx, audio, juice }) {
-    Object.assign(this, { scene, world, fx, audio, juice });
+  constructor({ scene, world, events }) {
+    Object.assign(this, { scene, world, events });
     this.kills = 0;
+    this.time = 0;
     this.bolts = [];
-    this.boltGeo = new THREE.CapsuleGeometry(0.06, 0.5, 4, 8).rotateX(Math.PI / 2);
-    this.boltMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff6a2a).multiplyScalar(6) });
-    this.boltGlow = new THREE.Mesh(
-      new THREE.SphereGeometry(0.22, 12, 8),
-      new THREE.MeshBasicMaterial({ color: 0xff4010, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }),
-    );
+    this.dirty = true; // hit-mesh list needs a rebuild
+    this.targets = [];
+    const geo = new THREE.CapsuleGeometry(0.06, 0.5, 4, 8).rotateX(Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff6a2a).multiplyScalar(6) });
+    const glowGeo = new THREE.SphereGeometry(0.22, 12, 8);
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0xff4010, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
+    this.boltPool = new Pool(
+      () => {
+        const m = new THREE.Mesh(geo, mat);
+        m.add(new THREE.Mesh(glowGeo, glowMat));
+        m.visible = false;
+        this.scene.add(m);
+        return { obj: m, vel: new THREE.Vector3(), life: 0 };
+      },
+      { reset: (b) => (b.obj.visible = false) },
+    ).warm(16);
     this.puppets = SPAWNS.map((d) => new Puppet(this, d));
   }
 
+  // Raycast targets of the living puppets (cached; rebuilt only when a puppet dies, respawns or re-rolls weak spots).
   hitMeshes() {
-    const out = [];
-    for (const p of this.puppets) if (p.alive) out.push(...p.hitMeshes);
+    if (this.dirty) {
+      this.dirty = false;
+      this.targets.length = 0;
+      for (const p of this.puppets) if (p.alive) for (const m of p.hitMeshes) this.targets.push(m);
+    }
+    return this.targets;
+  }
+
+  // Chest points of exposed puppets for aim assist. Fills and returns `out` (array of reusable vectors).
+  aimPoints(out) {
+    let n = 0;
+    for (const p of this.puppets) {
+      if (!p.alive || p.lift <= -0.3) continue;
+      if (!out[n]) out[n] = new THREE.Vector3();
+      p.rig.bones.Spine2.getWorldPosition(out[n++]);
+    }
+    out.length = n;
     return out;
   }
 
   spawnBolt(from, dir) {
-    const m = new THREE.Mesh(this.boltGeo, this.boltMat);
-    m.add(this.boltGlow.clone());
-    m.position.copy(from);
-    m.lookAt(from.clone().add(dir));
-    this.scene.add(m);
-    this.bolts.push({ obj: m, vel: dir.multiplyScalar(34), life: 3 });
-    this.audio.zap(0.12);
+    const b = this.boltPool.acquire();
+    b.obj.position.copy(from);
+    b.obj.lookAt(_v.copy(from).add(dir));
+    b.obj.visible = true;
+    b.vel.copy(dir).multiplyScalar(BOLT.speed);
+    b.life = BOLT.life;
+    this.bolts.push(b);
+    this.events.emit('bolt:fired', b.obj.position);
   }
 
-  update(dt, player, hud, rig) {
+  update(dt, player) {
+    this.time += dt;
     for (const p of this.puppets) p.update(dt, player);
 
     const cap = player.dead ? null : player.capsule();
     for (let i = this.bolts.length - 1; i >= 0; i--) {
       const b = this.bolts[i];
       b.life -= dt;
-      const from = b.obj.position.clone();
-      const step = b.vel.clone().multiplyScalar(dt);
+      const from = b.obj.position;
+      const step = _step.copy(b.vel).multiplyScalar(dt);
       const len = step.length();
-      const to = from.clone().add(step);
+      const to = _w.copy(from).add(step);
       let done = b.life <= 0;
 
-      if (!done && cap && segSegDist(from, to, cap.a, cap.b) < cap.r + 0.06) {
-        player.damage(7);
-        hud.damage(b.vel, rig);
-        this.juice.hurt();
-        this.audio.thud();
+      if (!done && cap && segSegDist(from, to, cap.a, cap.b) < cap.r + BOLT.radius) {
+        HURT.amount = player.damage(BOLT.damage);
+        HURT.dir.copy(b.vel).normalize();
+        this.events.emit('player:hurt', HURT);
         done = true;
       }
       if (!done) {
-        _ray.set(from, step.clone().normalize());
+        _ray.set(from, step.divideScalar(len || 1));
         _ray.far = len;
         const hit = _ray.intersectObjects(this.world.meshes, false)[0];
         if (hit) {
-          const n = hit.face ? hit.face.normal.clone() : step.clone().negate().normalize();
-          this.fx.impact(hit.point, n, 0xff6a2a, 10, true);
+          BOLT_HIT.point = hit.point;
+          if (hit.face) BOLT_HIT.normal.copy(hit.face.normal);
+          else BOLT_HIT.normal.copy(step).negate();
+          this.events.emit('bolt:impact', BOLT_HIT);
           done = true;
         }
       }
       if (done) {
-        this.scene.remove(b.obj);
-        this.bolts.splice(i, 1);
+        this.boltPool.release(b);
+        this.bolts[i] = this.bolts[this.bolts.length - 1];
+        this.bolts.pop();
       } else {
-        b.obj.position.copy(to);
+        from.copy(to);
       }
     }
   }
@@ -405,42 +444,4 @@ function targetMat() {
   t.colorSpace = THREE.SRGBColorSpace;
   _target = new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: 0.6 });
   return _target;
-}
-
-// Closest distance between segments p1-q1 and p2-q2.
-function segSegDist(p1, q1, p2, q2) {
-  const d1 = q1.clone().sub(p1);
-  const d2 = q2.clone().sub(p2);
-  const r = p1.clone().sub(p2);
-  const a = d1.dot(d1);
-  const e = d2.dot(d2);
-  const f = d2.dot(r);
-  let s;
-  let t;
-  if (a <= 1e-8 && e <= 1e-8) return p1.distanceTo(p2);
-  if (a <= 1e-8) {
-    s = 0;
-    t = THREE.MathUtils.clamp(f / e, 0, 1);
-  } else {
-    const c = d1.dot(r);
-    if (e <= 1e-8) {
-      t = 0;
-      s = THREE.MathUtils.clamp(-c / a, 0, 1);
-    } else {
-      const b = d1.dot(d2);
-      const denom = a * e - b * b;
-      s = denom !== 0 ? THREE.MathUtils.clamp((b * f - c * e) / denom, 0, 1) : 0;
-      t = (b * s + f) / e;
-      if (t < 0) {
-        t = 0;
-        s = THREE.MathUtils.clamp(-c / a, 0, 1);
-      } else if (t > 1) {
-        t = 1;
-        s = THREE.MathUtils.clamp((b - c) / a, 0, 1);
-      }
-    }
-  }
-  const c1 = p1.clone().addScaledVector(d1, s);
-  const c2 = p2.clone().addScaledVector(d2, t);
-  return c1.distanceTo(c2);
 }

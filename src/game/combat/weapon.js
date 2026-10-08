@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GUNS, GUN_ORDER } from './guns.js';
 
 // Hitscan weapons (stats in guns.js). Aim ray comes from the camera; the shot is then validated from the muzzle.
+// Gameplay only: everything audiovisual is announced through events (see instructions/architecture.md).
 const SWITCH_TIME = 0.45;
 // Active reload (Gears of War style): press reload again while the marker sweeps the bar.
 const ACTIVE = {
@@ -12,10 +13,18 @@ const ACTIVE = {
 const _ray = new THREE.Raycaster();
 const _dir = new THREE.Vector3();
 const _muz = new THREE.Vector3();
+const _aim = new THREE.Vector3();
+const _toAim = new THREE.Vector3();
+const _back = new THREE.Vector3();
+const _targets = [];
+// payloads are reused: listeners must copy what they keep
+const SHOT = { from: _muz, to: new THREE.Vector3(), dir: _toAim, right: null, heavy: false };
+const HIT = { point: null, normal: new THREE.Vector3(), dir: _toAim, zone: '', amount: 0, crit: false, weak: false, killed: false };
+const IMPACT = { point: null, normal: new THREE.Vector3() };
 
 export class Weapon {
-  constructor({ camera, rig, player, world, enemies, fx, hud, audio, juice }) {
-    Object.assign(this, { camera, rig, player, world, enemies, fx, hud, audio, juice });
+  constructor({ camera, rig, player, world, enemies, events }) {
+    Object.assign(this, { camera, rig, player, world, enemies, events });
     this.state = {};
     for (const id of GUN_ORDER) this.state[id] = { ammo: GUNS[id].mag, reserve: GUNS[id].reserve, boost: false };
     this.active = null; // { total, attempted, result } while a reload runs
@@ -80,7 +89,7 @@ export class Weapon {
     this.switching = SWITCH_TIME;
     this.reloading = 0;
     this.active = null;
-    this.audio.click();
+    this.events.emit('weapon:switch', id);
   }
 
   get boosted() {
@@ -97,7 +106,7 @@ export class Weapon {
     this.reloading = this.t.reloadTime;
     this.active = { total: this.t.reloadTime, attempted: false, result: null };
     this.state[this.current].boost = false;
-    this.audio.click();
+    this.events.emit('weapon:reload', 'start');
   }
 
   // Second press during a reload: perfect = instant + damage boost, good = instant, else jam.
@@ -111,19 +120,14 @@ export class Weapon {
       this.#finishReload();
       this.state[this.current].boost = true;
       this.#showResult('perfect');
-      this.audio.perfect();
-      this.juice.perfectReload();
     } else if (p >= z.good[0] && p <= z.good[1]) {
       this.#finishReload();
       this.#showResult('good');
-      this.audio.click();
     } else {
       a.result = 'jam';
       this.reloading += ACTIVE.jamPenalty;
       a.total += ACTIVE.jamPenalty;
       this.#showResult('jam');
-      this.audio.jam();
-      this.rig.addTrauma(0.15);
     }
   }
 
@@ -137,14 +141,16 @@ export class Weapon {
 
   #showResult(kind) {
     this.result = { kind, time: performance.now() };
+    this.events.emit('weapon:reload', kind);
   }
 
-  update(dt, input) {
-    // switching: 1 / 2, or the mouse wheel (not in trackpad mode, where the wheel looks around)
-    for (const id of GUN_ORDER) if (input.wasPressed(GUNS[id].key)) this.switchTo(id);
-    if (input.wheelSteps) {
+  update(dt, controls) {
+    // switching: number keys, or the mouse wheel (not in trackpad mode, where the wheel looks around)
+    const slot = controls.slotPressed;
+    if (slot >= 0 && slot < GUN_ORDER.length) this.switchTo(GUN_ORDER[slot]);
+    if (controls.cycle) {
       const i = GUN_ORDER.indexOf(this.pending ?? this.current);
-      this.switchTo(GUN_ORDER[(i + Math.sign(input.wheelSteps) + GUN_ORDER.length) % GUN_ORDER.length]);
+      this.switchTo(GUN_ORDER[(i + controls.cycle + GUN_ORDER.length) % GUN_ORDER.length]);
     }
     if (this.switching > 0) {
       const before = this.switching;
@@ -169,7 +175,7 @@ export class Weapon {
     this.bloom = Math.max(0, this.bloom - t.bloomDecay * dt);
     this.firing = false;
 
-    if (input.wasPressed('KeyR')) {
+    if (controls.reloadPressed) {
       if (this.reloading > 0) this.#tryActiveReload();
       else this.reload();
     }
@@ -177,14 +183,14 @@ export class Weapon {
       this.reloading -= dt;
       if (this.reloading <= 0) {
         this.#finishReload();
-        this.audio.click();
+        this.events.emit('weapon:reload', 'done');
       }
     }
 
     const p = this.player;
-    const trigger = input.firing();
+    const trigger = controls.firing;
     this.spin = t.spinUp > 0 ? THREE.MathUtils.clamp(this.spin + (trigger ? dt / t.spinUp : -dt * 2), 0, 1) : 1;
-    const canFire = !p.dead && !p.snap && this.reloading <= 0 && this.switching <= 0;
+    const canFire = !p.dead && !p.snap && !p.sprinting && this.reloading <= 0 && this.switching <= 0;
     if (!trigger || !canFire) {
       this.cooldown = Math.max(this.cooldown, 0);
       return;
@@ -195,7 +201,7 @@ export class Weapon {
       return;
     }
     if (this.ammo <= 0) {
-      if (input.firePressed()) this.audio.click();
+      if (controls.firePressed) this.events.emit('weapon:dry');
       this.reload();
       return;
     }
@@ -224,29 +230,31 @@ export class Weapon {
     _dir.normalize();
 
     const camPos = this.camera.position;
-    const targets = [...this.world.meshes, ...this.enemies.hitMeshes()];
+    _targets.length = 0;
+    for (const m of this.world.meshes) _targets.push(m);
+    for (const m of this.enemies.hitMeshes()) _targets.push(m);
     _ray.set(camPos, _dir);
     _ray.near = camPos.distanceTo(this.rig.pivot); // skip stuff between camera and player
     _ray.far = t.range;
-    let hit = _ray.intersectObjects(targets, false)[0];
-    const aimPoint = hit ? hit.point.clone() : camPos.clone().addScaledVector(_dir, t.range);
+    let hit = _ray.intersectObjects(_targets, false)[0];
+    if (hit) _aim.copy(hit.point);
+    else _aim.copy(camPos).addScaledVector(_dir, t.range);
 
     // validate from muzzle
     this.player.muzzle.getWorldPosition(_muz);
-    const toAim = aimPoint.clone().sub(_muz);
+    const toAim = _toAim.subVectors(_aim, _muz);
     const dist = toAim.length();
     toAim.normalize();
     _ray.set(_muz, toAim);
     _ray.near = 0;
     _ray.far = Math.max(0.01, dist - 0.02);
-    const block = _ray.intersectObjects(targets, false)[0];
+    const block = _ray.intersectObjects(_targets, false)[0];
     if (block) hit = block;
 
-    const end = hit ? hit.point : aimPoint;
-    this.fx.tracer(_muz, end);
-    this.fx.muzzleFlash(_muz, toAim);
-    this.fx.casing(_muz.clone().addScaledVector(toAim, -0.6), this.rig.right);
-    this.audio.shot(this.current === 'mg');
+    SHOT.to.copy(hit ? hit.point : _aim);
+    SHOT.right = this.rig.right;
+    SHOT.heavy = this.current === 'mg';
+    this.events.emit('weapon:shot', SHOT);
     this.rig.kick(t.recoilPitch * (this.player.aiming ? 0.6 : 1), (Math.random() - 0.5) * t.recoilYaw, t.trauma);
     this.bloom = Math.min(t.bloomMax, this.bloom + t.bloomPerShot);
 
@@ -256,17 +264,19 @@ export class Weapon {
       const zone = hit.object.userData.zone;
       const boost = this.boosted ? ACTIVE.boostMult : 1;
       const mult = boost * (zone === 'weak' ? t.weakMult : zone === 'head' ? t.headMult : zone === 'limb' ? t.limbMult : 1);
-      const crit = zone === 'head' || zone === 'weak';
-      const killed = enemy.damage(t.damage * mult, hit.point, toAim, zone);
-      this.fx.impact(hit.point, toAim.clone().negate(), zone === 'weak' ? 0xff2bd6 : 0x6fe3ff, zone === 'weak' ? 14 : 6, false);
-      this.fx.number(hit.point, t.damage * mult, crit, zone === 'weak');
-      this.hud.hitmarker(crit, killed);
-      if (killed) this.juice.kill(hit.point, toAim);
-      else this.juice.hit(crit);
-      this.audio.tick(crit);
+      HIT.amount = t.damage * mult;
+      HIT.killed = enemy.damage(HIT.amount, hit.point, toAim, zone);
+      HIT.point = hit.point;
+      HIT.normal.copy(toAim).negate();
+      HIT.zone = zone;
+      HIT.weak = zone === 'weak';
+      HIT.crit = zone === 'head' || HIT.weak;
+      this.events.emit('weapon:hit', HIT);
     } else {
-      const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : toAim.clone().negate();
-      this.fx.impact(hit.point, n);
+      IMPACT.point = hit.point;
+      if (hit.face) IMPACT.normal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
+      else IMPACT.normal.copy(_back.copy(toAim).negate());
+      this.events.emit('weapon:impact', IMPACT);
     }
   }
 }

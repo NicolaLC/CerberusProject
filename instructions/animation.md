@@ -1,6 +1,6 @@
 # Animation & rig
 
-All characters use `Rig` from `src/rig.js`.
+All characters use `Rig` from `src/game/actors/rig.js`.
 
 ## Skeleton (Mixamo layout)
 - Bone keys are Mixamo names without the prefix: Hips, Spine, Spine1, Spine2, Neck, Head,
@@ -14,7 +14,7 @@ All characters use `Rig` from `src/rig.js`.
 - `rig.root` is the character origin at the feet; set its position and `rotation.y` (facing).
 - `H` in game toggles `SkeletonHelper`s.
 
-## Player model (`src/soldier.js`)
+## Player model (`src/game/actors/soldier.js`)
 - `buildSoldier(rig)` builds a procedural armored sci-fi soldier: several rounded-box / capsule pieces per
   bone (undersuit, gunmetal plates, light ceramic accents, red stripe, cyan HDR glow strips that feed bloom),
   plus a backpack attached to Spine2. The player rig is created with `dummy: false`; puppets keep the dummy.
@@ -41,7 +41,7 @@ All characters use `Rig` from `src/rig.js`.
 `{ speed, run, crouch 0..1, aimPitch, combat, recoil, lean, lookYaw, lower }`.
 - Layers: reset to rest → hit spring → legs → torso → arms → feet IK.
 - Walk: pendulum legs, small hip twist and bob.
-- Run (`run`: player at full walk speed out of combat, blended in over ~0.15s), deliberately anime: `RUN` table — 0.42 rad forward lean, high knees
+- Run (`run`: player sprinting, blended in over ~0.15s), deliberately anime: `RUN` table — 0.42 rad forward lean, high knees
   (thigh forward 1.25), heel kick (knee 2.1), hang-time bounce, hips twist with shoulders counter-rotating,
   head kept level. The left hand lets go of the gun and pumps; the right hand carries it low.
 - Kneel (low cover) blends over everything with `crouch`.

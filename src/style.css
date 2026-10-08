@@ -85,3 +85,17 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #areload[data-state='jam'] .label { color: #ff5a4a; }
 #areload[data-state='jam'] .track { border-color: #ff5a4a; background: rgba(80, 0, 0, 0.6); }
 #ammo.boost { color: #f4fbff; text-shadow: 0 0 12px #7fe8ff, 0 0 4px #7fe8ff; }
+
+/* engine stats readout (F3 / ` / ?debug) */
+#stats {
+  position: fixed;
+  left: 8px;
+  bottom: 8px;
+  z-index: 50;
+  padding: 4px 8px;
+  font: 11px/1.4 ui-monospace, monospace;
+  white-space: pre;
+  color: #9fe8ff;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
