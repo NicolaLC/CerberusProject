@@ -61,12 +61,13 @@ export class Hud {
     events.on('player:hurt', (h) => this.damage(h.dir, camRig));
     events.on('pickup:collected', (msg) => this.toast(msg));
     events.on('pickup:full', () => this.toast('AMMO FULL'));
+    events.on('arena:clear', () => this.toast('ARENA CLEAR · reload the page to reset', 6));
     return this;
   }
 
-  toast(message) {
+  toast(message, seconds = 1.4) {
     text(this.el.toast, message);
-    this.toastTime = 1.4;
+    this.toastTime = seconds;
   }
 
   // Pops in proportion to the damage dealt; kills hold longer and bigger.
@@ -152,7 +153,7 @@ export class Hud {
     text(e.prompt, prompt);
     css(e.prompt, 'opacity', prompt ? 1 : 0);
 
-    text(e.kills, enemies.kills);
+    text(e.kills, `${enemies.kills} / ${enemies.puppets.length}`);
     text(e.zone, world.isInterior(player.pos) ? 'INTERIOR' : 'TRAINING YARD');
 
     this.dmgTime -= dt;

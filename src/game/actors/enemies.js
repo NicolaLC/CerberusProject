@@ -37,7 +37,9 @@ const SPAWNS = [
 const HIDE = -0.95;
 const WEAK_COUNT = 2;
 const WEAK_BONES = ['Spine2', 'Spine1', 'Hips', 'LeftArm', 'RightArm', 'LeftForeArm', 'RightForeArm', 'LeftUpLeg', 'RightUpLeg', 'LeftLeg', 'RightLeg']; // rig lift when retracted behind low cover
-const RESPAWN = 6;
+// Destroyed puppets stay destroyed until the page is reloaded; their debris fades and is removed.
+const DEBRIS_LIFE = 5; // s
+const ENGAGE_RANGE = 30; // m: shooters only pop up and fire at a player this close (with line of sight)
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
@@ -156,6 +158,7 @@ class Puppet {
     this.sys.kills++;
     this.sys.dirty = true;
     this.sys.events.emit('puppet:down', this);
+    if (this.sys.kills === this.sys.puppets.length) this.sys.events.emit('arena:clear');
     this.group.updateMatrixWorld(true);
     // break the dummy apart: every rig mesh becomes a debris chunk
     for (const m of this.hitMeshes) {
@@ -173,21 +176,17 @@ class Puppet {
     this.rig.root.visible = false;
   }
 
-  #respawn() {
+  // debris is gone: free it and lower the empty post into its base
+  #clearDebris() {
     for (const d of this.debris) this.sys.scene.remove(d.obj);
-    this.debris = [];
-    this.alive = true;
-    this.health = this.maxHealth;
-    this.rig.root.visible = true;
-    this.#placeWeakSpots(); // marks the target list dirty
-    this.lift = this.kind === 'shooter' ? HIDE : -1.8;
-    this.state = 'hidden';
-    this.timer = 1.5;
+    this.debris.length = 0;
+    this.sys.setStand(this.index, this.pos, 0.02);
   }
 
   update(dt, player) {
     const world = this.sys.world;
     if (!this.alive) {
+      if (!this.debris.length) return; // destroyed for good
       this.deadTime += dt;
       for (const d of this.debris) {
         d.v.y -= 18 * dt;
@@ -203,9 +202,9 @@ class Puppet {
           d.v.z *= 0.6;
           d.av.multiplyScalar(0.6);
         }
-        if (this.deadTime > RESPAWN - 1) d.obj.scale.multiplyScalar(1 - dt * 3);
+        if (this.deadTime > DEBRIS_LIFE - 1) d.obj.scale.multiplyScalar(1 - dt * 3);
       }
-      if (this.deadTime > RESPAWN) this.#respawn();
+      if (this.deadTime > DEBRIS_LIFE) this.#clearDebris();
       return;
     }
 
@@ -241,7 +240,7 @@ class Puppet {
     const head = _v.copy(this.pos).setY(this.pos.y + 1.7);
     const target = player.chest(_w);
     const dist = head.distanceTo(target);
-    const active = !player.dead && dist < 55;
+    const active = !player.dead && dist < ENGAGE_RANGE;
 
     // turn to face the player
     const want = Math.atan2(target.x - this.pos.x, target.z - this.pos.z);
@@ -365,7 +364,7 @@ export class Enemies {
     this.bases.instanceMatrix.needsUpdate = this.posts.instanceMatrix.needsUpdate = true;
   }
 
-  // Raycast targets of the living puppets (cached; rebuilt only when a puppet dies, respawns or re-rolls weak spots).
+  // Raycast targets of the living puppets (cached; rebuilt only when a puppet dies).
   hitMeshes() {
     if (this.dirty) {
       this.dirty = false;
