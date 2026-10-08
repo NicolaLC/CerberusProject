@@ -137,17 +137,4 @@ export class Controls {
     if (settings.trackpad || !this.input.edges) return 0;
     return Math.sign(this.input.wheelSteps);
   }
-
-  // Short labels of inputs for prompts, for the device in use.
-  get aimLabel() {
-    return this.pad ? 'LT' : settings.trackpad ? 'E' : 'RMB';
-  }
-
-  get coverLabel() {
-    return this.pad ? 'A' : 'SPACE';
-  }
-
-  get forwardLabel() {
-    return this.pad ? 'up' : 'W';
-  }
 }

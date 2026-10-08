@@ -154,9 +154,6 @@ export class Game {
       name: 'hud',
       phase: 'present',
       update: (dt) => {
-        hud.aimLabel = controls.aimLabel;
-        hud.coverLabel = controls.coverLabel;
-        hud.forwardLabel = controls.forwardLabel;
         hud.update(dt, { player, weapon, enemies, camRig, world });
       },
     });

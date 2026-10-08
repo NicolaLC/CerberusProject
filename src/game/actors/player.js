@@ -58,7 +58,6 @@ export class Player {
     this.recoil = 0;
     this.lastShot = 99;
     this.cover = null; // { normal, tangent, type, edgeL, edgeR }
-    this.coverCandidate = null;
     this.snap = null; // smooth move into cover / vault
     this.peek = new THREE.Vector3();
     this.shields = TUNING.maxShields;
@@ -186,7 +185,6 @@ export class Player {
     }
 
     // ----- cover -----
-    this.coverCandidate = this.cover ? null : this.#findCover(wish, _f, false);
 
     if (controls.coverPressed) {
       if (this.cover) {
@@ -194,7 +192,7 @@ export class Player {
         if (this.cover.type === 'low' && into > 0.5) this.#tryVault();
         else this.cover = null;
       } else {
-        const c = this.coverCandidate ?? this.#findCover(wish, _f, true);
+        const c = this.#findCover(wish, _f, true); // move direction, camera forward, then all around
         if (c) this.#enterCover(c);
       }
     }
@@ -298,7 +296,7 @@ export class Player {
     return hit;
   }
 
-  // Runs every frame (prompt), so it must not allocate unless it finds something.
+  // Must not allocate unless it finds something.
   #findCover(wish, fwd, wide) {
     const hasWish = wish.lengthSq() > 0.1;
     const count = (hasWish ? 1 : 0) + 1 + (wide ? RING.length : 0);
