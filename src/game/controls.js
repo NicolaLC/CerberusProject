@@ -11,7 +11,7 @@ export const BINDINGS = {
   right: ['KeyD'],
   run: ['ShiftLeft', 'ShiftRight'],
   padSprint: ['Pad10'], // L3 click: sprint until the stick is released
-  aim: ['Mouse2', 'Pad6'], // hold (mouse, LT) / toggle (trackpad)
+  aim: ['Mouse2', 'Pad6'], // hold (mouse, LT), always
   aimToggle: ['KeyE'], // trackpad mode only
   fire: ['Mouse0', 'KeyF', 'Pad7'],
   reload: ['KeyR', 'Pad2'],
@@ -21,6 +21,9 @@ export const BINDINGS = {
   slot1: ['Digit1', 'Pad14'],
   slot2: ['Digit2', 'Pad12'],
   slot3: ['Digit3', 'Pad15'],
+  slot4: ['Digit4'],
+  slot5: ['Digit5'],
+  slot6: ['Digit6', 'Pad13'], // d-pad down: sidearm
   pause: ['Pad9'],
   lookLeft: ['ArrowLeft'],
   lookRight: ['ArrowRight'],
@@ -53,8 +56,10 @@ export class Controls {
     const a = this.actions;
     if (!settings.trackpad || !(this.input.locked || this.input.free)) {
       this.aimLatched = false;
-    } else if (a.pressed('aimToggle') || a.pressed('aim')) {
-      this.aimLatched = !this.aimLatched; // E or two-finger click toggles: hard to hold a click while swiping
+    } else if (a.pressed('aim')) {
+      this.aimLatched = false; // a held aim takes over
+    } else if (a.pressed('aimToggle')) {
+      this.aimLatched = !this.aimLatched; // E toggles: hard to hold a click while swiping
     }
     const p = this.input.pad;
     if (a.pressed('padSprint')) this.sprintLatched = !this.sprintLatched;
@@ -96,7 +101,7 @@ export class Controls {
   }
 
   get aiming() {
-    return settings.trackpad ? this.aimLatched : this.actions.held('aim');
+    return this.actions.held('aim') || (settings.trackpad && this.aimLatched);
   }
 
   get running() {
@@ -128,6 +133,9 @@ export class Controls {
     if (this.actions.pressed('slot1')) return 0;
     if (this.actions.pressed('slot2')) return 1;
     if (this.actions.pressed('slot3')) return 2;
+    if (this.actions.pressed('slot4')) return 3;
+    if (this.actions.pressed('slot5')) return 4;
+    if (this.actions.pressed('slot6')) return 5;
     return -1;
   }
 

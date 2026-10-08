@@ -82,7 +82,7 @@ const r = await p.evaluate(() => {
   btn(6, 0);
   step(5);
   out.fired = ammo - weapon.ammo;
-  // X reloads, d-pad right = sniper, RB = next gun
+  // X reloads, d-pad right = sniper, RB = next gun, d-pad down = pistol
   tap(2);
   out.reloading = weapon.reloading > 0;
   step(200);
@@ -92,6 +92,9 @@ const r = await p.evaluate(() => {
   tap(5);
   step(40);
   out.next = weapon.current;
+  tap(13); // d-pad down: sidearm
+  step(40);
+  out.sidearm = weapon.current;
   // Menu pauses, A deploys again
   tap(9);
   out.paused = engine.paused;
@@ -113,7 +116,8 @@ expect('right stick turns the camera', r.turned > 0.5);
 expect('LT aims', r.aiming);
 expect('RT fires', r.fired >= 3); // 0.33 s at 540 rpm
 expect('X reloads', r.reloading);
-expect('d-pad right selects the sniper, RB cycles', r.sniper === 'sniper' && r.next === 'rifle');
+expect('d-pad right selects the sniper, RB cycles', r.sniper === 'sniper' && r.next === 'burst');
+expect('d-pad down selects the pistol', r.sidearm === 'pistol');
 expect('Menu pauses, A deploys', r.paused && r.overlayShown === 'flex' && r.resumed && /Test Pad/.test(r.padStatus));
 expect('no page errors', errors.length === 0);
 if (errors.length) console.log(errors);

@@ -7,12 +7,12 @@
 
 ## Input (bindings: `BINDINGS` in `game/controls.js`)
 - Aim (zoom): hold RMB. Sprint: Shift. Fire: LMB or F. Arrow keys look. F3: performance stats.
-- Trackpad mode: two-finger swipe (wheel events) looks; E (or a two-finger click) toggles aim; aim assist
+- Trackpad mode: two-finger swipe (wheel events) looks; E toggles aim (right click and LT always aim only while held); aim assist
   stronger (1.6 vs 0.8). E does nothing outside trackpad mode.
 - Aim assist (`camRig.assist`): within ~4-8° of a visible puppet's chest the look slows (friction) and eases toward it.
 - Look sensitivity multiplier lives in settings.
 - Controller (standard mapping, Xbox names): L stick move (analog: partial tilt walks slower), R stick look,
-  LT aim, RT fire, X reload, A cover / vault, LB swap shoulder, Y or RB next gun, d-pad ← ↑ → = AR / MG / SR,
+  LT aim, RT fire, X reload, A cover / vault, LB swap shoulder, Y or RB next gun, d-pad ← ↑ → ↓ = AR / MG / SR / pistol,
   L3 click sprints until the stick is released or pulled back, View = stats, Menu = pause (A or Menu deploys from
   the start panel, no pointer lock needed). Look: 15% radial dead zone, response curve ^2.2, ×1.7 turn boost after
   0.25 s at the rim (`PAD_LOOK`), optional invert Y. Aim assist uses the stronger trackpad profile (friction + pull).
@@ -31,16 +31,21 @@
   `'low'` / `'high'` cover blocks, or `'wall'` for walls (building walls, the range separator, the boss arena's
   walls). Walls behave as high cover: peek at their ends and doorways.
 - Slide along the face with A/D (camera relative); stops 0.2m before an edge. Moving away from the cover exits.
+  The slide sets `player.vel`, so the legs side-step (hips turned toward the move, chest to the wall); crouched
+  behind low cover it is a crouch-walk (gait keeps running with the hips down, IK bends the legs).
 - Low: crouched; aim or fire pops up (fire waits until standing). `Space` + W vaults over.
 - Out of combat the character turns its back to the wall and looks at the camera.
-- High: standing; aiming at an edge peeks 0.8m sideways and swaps shoulder to that side. Away from the ends
+- High: standing; aiming at an edge peeks: the feet stay behind cover (0.2 m weight shift, `PEEK` in player.js), the torso
+  leans out 0.6 rad so head and gun clear the edge, at a left edge the gun hold mirrors to the left shoulder
+  (`leftHanded` → Animator `hand`), and the camera moves to that side
+  only for the peek (`camRig.peekSide`); the player's own shoulder (`camRig.shoulder`) comes back afterwards. Away from the ends
   (no edge within 0.45 m) there is no line of fire: aiming and shooting are blocked (`player.pinned`).
 
 ## Weapons (`game/combat/guns.js`, controller in `weapon.js`)
 - Reload (R) is an active reload: a bar with a marker sweeps across `activeReload` zones (fractions of reload time).
   R again inside `perfect` = instant + ×1.25 damage for that magazine (ammo counter glows); inside `good` = instant;
   outside = jam, +1s, and the bar disappears (nothing left to read: the reload just runs on). One try per reload. The magazine auto-reloads when it hits 0 (also after switching to an empty gun).
-- 1 / 2 / 3 or mouse wheel switches (0.45s lower/raise, model swaps at the bottom). Ammo is tracked per gun.
+- 1–6 (AR, MG, SR, BR burst, RG railgun, PS pistol) or mouse wheel switches (0.45s lower/raise, model swaps at the bottom). Ammo is tracked per gun.
 - M-8 Avenger (AR): 540 rpm, mag 32, reserve 192/384, reload 1.8s, 18 dmg, head ×2.5, weak ×3, limbs ×0.8.
   Spread hip 0.022 / aim 0.004 + bloom 0.007 per shot.
 - M-76 Revenant (MG): 780 rpm after a 0.4s spin-up (starts at 35%), mag 90, reserve 270/450, reload 3.0s,
@@ -50,6 +55,14 @@
   a puppet, headshot a trooper. Aimed spread 0, hip 0.045, moving +0.03. One big kick per shot, 95% recovered after
   0.18 s (`recoil.hold`). Scope: `zoom` { fov 24, dist 1.5, sens ×0.45 } replaces the aim FOV/distance/sensitivity
   (CameraRig.zoom, set by Weapon on switch); a vignette overlay follows the zoom; the crosshair dims while cycling.
+- M-15 Vindicator (BR, precision mid-range): `burst: 3` rounds at 900 rpm per pull, `burstDelay` 0.3 s between
+  bursts (holding repeats), mag 24, 24 dmg, aim spread 0.0015, tiny bloom; the recoil pattern restarts every burst.
+  A started burst finishes even if the trigger is released (`weapon.burstLeft`).
+- ARC-9 Tempest (RG, railgun): semi; a pull starts a 0.45 s `charge` (`weapon.charging`, event `weapon:charge`),
+  then the slug fires. `pierce: 4`: it passes through up to 4 enemies (each once) and stops at the first wall or
+  armored part. The slug follows the muzzle-to-crosshair line past the aim point. 100 dmg, mag 4, no falloff, light zoom without scope overlay (`zoom.scope` only on the sniper).
+  `beam: true` draws a thick lingering trail. Charge cancels on reload/switch/sprint.
+- M-6 Paladin (PS, sidearm): semi, 330 rpm, mag 12, reload 1.2 s, 32 dmg, aim spread 0.002. Held out front.
 - Add a gun: new entry in `GUNS` (stats, sockets, `build()` model) and its id in `GUN_ORDER`.
 - Hit = camera ray (starts at player distance), then re-cast from muzzle; muzzle hit wins.
 

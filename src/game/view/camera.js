@@ -35,7 +35,8 @@ export class CameraRig {
     this.t = TUNING;
     this.yaw = 0;
     this.pitch = -0.08;
-    this.shoulder = 1; // 1 = right shoulder, -1 = left
+    this.shoulder = 1; // 1 = right shoulder, -1 = left (the player's choice)
+    this.peekSide = 0; // cover peek overrides the shoulder while it lasts (0 = none)
     this.side = 0.85;
     this.dist = 3.4;
     this.height = 1.6;
@@ -181,7 +182,8 @@ export class CameraRig {
     }
     const framing = aiming ? 0 : this.focusBlend; // pulled back a little to fit the big target
 
-    const targetSide = (aiming ? 0.95 : 0.85) * this.shoulder;
+    // peeking: further out, over the leaning shoulder
+    const targetSide = (this.peekSide ? 1.05 : aiming ? 0.95 : 0.85) * (this.peekSide || this.shoulder);
     this.side += (targetSide - this.side) * k;
     const mode = aiming ? 'aim' : player.sprinting ? 'sprint' : 'normal';
     const zoomed = aiming && this.zoom;

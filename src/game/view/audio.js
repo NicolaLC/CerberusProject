@@ -8,11 +8,13 @@ export class Audio {
   listen(events) {
     events.on('weapon:shot', (s) => {
       if (s.gun === 'sniper') this.snipe();
+      else if (s.beam) this.rail();
       else this.shot(s.heavy);
       if (s.mag <= 0.2) this.lowMag(s.mag); // last rounds: a rising click warns before the mag runs dry
     });
     events.on('weapon:hit', (h) => (h.killed ? this.kill() : this.hit(h.weak ? 'weak' : h.crit ? 'head' : 'body')));
     events.on('weapon:switch', () => this.click());
+    events.on('weapon:charge', (on) => on && this.railCharge());
     events.on('weapon:dry', () => this.click());
     events.on('weapon:reload', (kind) => (kind === 'perfect' ? this.perfect() : kind === 'jam' ? this.jam() : this.click()));
     events.on('puppet:down', () => this.thud());
@@ -252,6 +254,49 @@ export class Audio {
     this.#env(o, 1.0 * size, 0.6);
     o.start(t);
     o.stop(t + 0.7);
+  }
+
+  // Railgun: capacitor whine up to the shot (weapon charge time), then a hard crack and a falling zap.
+  railCharge() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(300, t);
+    o.frequency.exponentialRampToValueAtTime(2400, t + 0.45);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.exponentialRampToValueAtTime(0.1, t + 0.42);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.48);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.5);
+  }
+
+  rail() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const crack = this.ctx.createBufferSource();
+    crack.buffer = this.noise;
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 2500;
+    crack.connect(hp);
+    this.#env(hp, 1.2, 0.05);
+    crack.start(t, Math.random() * 0.3, 0.06);
+    const o = this.ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(2600, t);
+    o.frequency.exponentialRampToValueAtTime(90, t + 0.35);
+    this.#env(o, 0.35, 0.38);
+    o.start(t);
+    o.stop(t + 0.4);
+    const body = this.ctx.createOscillator();
+    body.frequency.setValueAtTime(110, t);
+    body.frequency.exponentialRampToValueAtTime(30, t + 0.25);
+    this.#env(body, 1.0, 0.3);
+    body.start(t);
+    body.stop(t + 0.32);
   }
 
   // Rising whine: the mech charging its cannons / rearing up.
