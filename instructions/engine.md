@@ -28,7 +28,8 @@ Goal: hold 60 fps, never freeze on a bug, scale to a much bigger game.
 
 ## Draw calls (`batch.js`)
 WebGL frames are CPU-bound on draw calls (one per mesh per material per pass, and the sun shadow pass
-repeats every caster). Budget: ≤ 300 calls per frame at the spawn view (`tests/render.browser.mjs`; was ~1200).
+repeats every caster). Budget: ≤ 220 calls per frame at the spawn view, ≤ 25 of them in the shadow pass
+(`tests/render.browser.mjs`; was ~1200 / ~60).
 - Pattern: originals stay in the scene as invisible PROXIES (raycasts, hit zones, colliders, userData keep
   working: three's Raycaster ignores `visible`); merged meshes render and have raycast disabled.
 - `mergeStatic(meshes, parent)`: the level (World.staticMeshes) → one mesh per material + shadow flags.
@@ -39,6 +40,16 @@ repeats every caster). Budget: ≤ 300 calls per frame at the spawn view (`tests
 - `mergeGroup(group)`: rigid sub-models (guns) → one mesh per material inside the group.
 - Instancing for many copies of one thing: puppet stands, sparks (per-instance HDR color), casings, decals.
 - New per-object visuals: prefer adding to an existing batch/instanced mesh over new Mesh objects.
+
+## Shadows
+- Every batch (level, each rig) builds ONE shadow-only mesh: all opaque casters merged, depth only. Color
+  meshes don't cast. Transparent parts (halos) never cast.
+- Shadow-only meshes stay `visible = false`; `installShadowOnly(renderer)` (done by Engine) shows them only
+  while shadow maps render, so the color pass never lists them. Layers can't do this: three's shadow pass
+  tests object layers against the main camera.
+- Shadow LOD (`game.js`, `SHADOW_LOD`): puppets farther than 34 m from the camera stop casting (back on
+  under 30 m). `RigidSkin.setCastShadow(on)` toggles a rig's shadow draw.
+- The sun's shadow frustum (±48 m, 4096²) follows the player in 2 m snaps (`world.updateSun`).
 
 ## Input
 - `Input` stores raw codes: `KeyW`, `ShiftLeft`, `Mouse0` (left), `Mouse2` (right), wheel deltas and notches.
