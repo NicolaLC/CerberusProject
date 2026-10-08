@@ -42,6 +42,10 @@ const TUNING = {
   healthRate: 12,
 };
 
+// Vaulting low cover: blocks up to `hopDepth` deep are jumped, deeper ones slid across on the hip.
+// Space while running (> runIn m/s) straight at low cover within runInReach m vaults without stopping.
+const VAULT = { hopDepth: 1.2, hopTime: 0.5, slideTime: 0.3, slideSpeed: 5.5, runIn: 3.5, runInReach: 2.2 };
+
 // High cover corner peek: sideways weight shift (m) and torso lean (rad, split over the spine).
 const PEEK = { shift: 0.2, lean: 0.6 };
 
@@ -79,6 +83,11 @@ export class Player {
 
   height() {
     return this.crouched ? this.t.crouchHeight : this.t.standHeight;
+  }
+
+  // In cover and moving along it (not shooting): hunched run facing the travel direction.
+  coverMoving() {
+    return !!this.cover && !this.aiming && this.lastShot >= 0.6 && this.vel.x * this.vel.x + this.vel.z * this.vel.z > 0.6;
   }
 
   visualPos() {
@@ -174,11 +183,18 @@ export class Player {
     if (this.snap) {
       const s = this.snap;
       s.t = Math.min(1, s.t + dt / s.dur);
-      const e = s.t * s.t * (3 - 2 * s.t);
+      // a slide keeps its momentum (linear); cover entry and the hop ease in and out
+      const e = s.vault === 'slide' ? s.t : s.t * s.t * (3 - 2 * s.t);
       this.pos.x = THREE.MathUtils.lerp(s.from.x, s.to.x, e);
       this.pos.z = THREE.MathUtils.lerp(s.from.z, s.to.z, e);
       const ground = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.stepHeight);
-      this.pos.y = s.hop ? Math.max(ground, s.from.y) + Math.sin(Math.PI * s.t) * s.hop : ground;
+      // slide: up onto the top, across it on the hip, down the far side; hop: one arc
+      const lift = s.vault === 'slide' ? (s.t < 0.2 ? Math.sin((s.t / 0.2) * Math.PI * 0.5) : s.t > 0.8 ? Math.cos(((s.t - 0.8) / 0.2) * Math.PI * 0.5) : 1) : Math.sin(Math.PI * s.t);
+      // vault height from the take-off and landing floors (not the floor underneath: that's the block's top)
+      this.pos.y = s.hop ? THREE.MathUtils.lerp(s.from.y, s.toY ?? s.from.y, e) + lift * s.hop : ground;
+      if (s.vault) {
+        this.facing = lerpAngle(this.facing, s.yaw, damp(20, dt)); // turn into the vault
+      }
       if (s.t >= 1) {
         this.snap = null;
         this.events.emit(s.hop ? 'player:land' : 'player:coverSlam');
@@ -193,11 +209,16 @@ export class Player {
     if (controls.coverPressed) {
       if (this.cover) {
         const into = -wish.dot(this.cover.normal);
-        if (this.cover.type === 'low' && into > 0.5) this.#tryVault();
+        if (this.cover.type === 'low' && into > 0.5) this.#tryVault(this.cover.normal, this.cover.collider, this.t.radius + 0.05);
         else this.cover = null;
       } else {
         const c = this.#findCover(wish, _f, true); // move direction, camera forward, then all around
-        if (c) this.#enterCover(c);
+        // running straight at low cover: vault it in one go instead of stopping behind it
+        const fast = this.vel.x * this.vel.x + this.vel.z * this.vel.z > VAULT.runIn * VAULT.runIn;
+        const dist = c ? _v.subVectors(this.pos, c.point).dot(c.normal) : 0;
+        if (c && c.type === 'low' && fast && -wish.dot(c.normal) > 0.7 && dist < VAULT.runInReach && this.#tryVault(c.normal, c.collider, dist)) {
+          // vaulted
+        } else if (c) this.#enterCover(c);
       }
     }
 
@@ -211,6 +232,7 @@ export class Player {
     // facing
     let targetFacing = this.facing;
     if (combat) targetFacing = rig.yaw + Math.PI;
+    else if (this.coverMoving()) targetFacing = Math.atan2(this.vel.x, this.vel.z); // moving along cover: turn into the move
     else if (this.cover) targetFacing = Math.atan2(this.cover.normal.x, this.cover.normal.z); // back to the wall
     else if (this.vel.lengthSq() > 0.2) targetFacing = Math.atan2(this.vel.x, this.vel.z);
     this.facing = lerpAngle(this.facing, targetFacing, damp(combat ? 25 : 12, dt));
@@ -290,8 +312,10 @@ export class Player {
         this.pos.z = hit.point.z + c.normal.z * (t.radius + 0.05);
       }
     }
-    // real slide velocity, so the legs shuffle along the wall (and stop at its end)
-    this.vel.set((this.pos.x - before.x) / dt, 0, (this.pos.z - before.z) / dt);
+    // real slide velocity (eased like free movement), so the legs step along the wall and settle at its end
+    const k = damp(t.accel, dt);
+    this.vel.x += ((this.pos.x - before.x) / dt - this.vel.x) * k;
+    this.vel.z += ((this.pos.z - before.z) / dt - this.vel.z) * k;
     c.edgeR = !this.#coverHitAt(_v.copy(this.pos).addScaledVector(c.tangent, 0.45), c.normal);
     c.edgeL = !this.#coverHitAt(_v.copy(this.pos).addScaledVector(c.tangent, -0.45), c.normal);
     if (!this.#coverHitAt(this.pos, c.normal)) this.cover = null;
@@ -337,20 +361,27 @@ export class Player {
     this.vel.set(0, 0, 0);
   }
 
-  #tryVault() {
-    const c = this.cover;
-    const b = c.collider.box;
-    const depth = Math.abs(c.normal.x) > 0.5 ? b.max.x - b.min.x : b.max.z - b.min.z;
-    const to = this.pos.clone().addScaledVector(c.normal, -(depth + this.t.radius * 2 + 0.25));
+  // Over low cover, from `dist` m in front of its face (normal toward us). Across the short side (thin
+  // block) it's a jump; along the long side (deep block) a slide over the top on the hip. False if blocked.
+  #tryVault(normal, collider, dist) {
+    const b = collider.box;
+    const depth = Math.abs(normal.x) > 0.5 ? b.max.x - b.min.x : b.max.z - b.min.z;
+    const to = this.pos.clone().addScaledVector(normal, -(dist + depth + this.t.radius + 0.25));
     // landing spot must be free
     const r = this.t.radius;
     for (const col of this.world.colliders) {
       const bb = col.box;
       if (bb.max.y <= this.pos.y + this.t.stepHeight || bb.min.y > this.pos.y + 1.8) continue;
-      if (to.x > bb.min.x - r && to.x < bb.max.x + r && to.z > bb.min.z - r && to.z < bb.max.z + r) return;
+      if (to.x > bb.min.x - r && to.x < bb.max.x + r && to.z > bb.min.z - r && to.z < bb.max.z + r) return false;
     }
+    const slide = depth > VAULT.hopDepth;
+    to.y = this.world.groundAt(to.x, to.z, this.pos.y + this.t.stepHeight);
     this.cover = null;
-    this.snap = { from: this.pos.clone(), to, t: 0, dur: 0.5, hop: b.max.y - this.pos.y + 0.25 };
+    this.snap = slide
+      ? { from: this.pos.clone(), to, toY: to.y, t: 0, dur: VAULT.slideTime + depth / VAULT.slideSpeed, hop: b.max.y - this.pos.y + 0.08, vault: 'slide', yaw: Math.atan2(-normal.x, -normal.z) }
+      : { from: this.pos.clone(), to, toY: to.y, t: 0, dur: VAULT.hopTime, hop: b.max.y - this.pos.y + 0.3, vault: 'hop', yaw: Math.atan2(-normal.x, -normal.z) };
+    this.events.emit('player:vault', this.snap.vault);
+    return true;
   }
 
   #collide() {
@@ -401,13 +432,15 @@ export class Player {
 
   #animate(dt, camRig, alive, weaponLower = 0) {
     const k = damp(12, dt);
-    const target = this.crouched || (this.snap && !this.snap.hop) ? 1 : this.snap ? 0.5 : 0;
+    const moving = this.coverMoving();
+    // behind low cover the hips come half up while moving along it (crouch-run), full kneel when still
+    const target = this.crouched ? (moving ? 0.45 : 1) : this.snap && !this.snap.hop ? 1 : 0;
     this.crouchBlend += (target - this.crouchBlend) * k;
     const combat = this.aiming || this.lastShot < 0.6;
     this.recoil = Math.max(0, this.recoil - dt * 11);
     // in cover with the back to the wall, the head turns to the camera
     let lookYaw = 0;
-    if (this.cover && !combat && alive) {
+    if (this.cover && !combat && !moving && alive) {
       const c = camRig.camera.position;
       const a = Math.atan2(c.x - this.pos.x, c.z - this.pos.z) - this.facing;
       lookYaw = THREE.MathUtils.clamp(wrapAngle(a), -1.2, 1.2);
@@ -425,6 +458,9 @@ export class Player {
       lean: (camRig.peekSide || camRig.shoulder) * PEEK.lean * Math.min(1, this.peek.length() / PEEK.shift),
       leftHanded: camRig.peekSide < 0 && alive, // peeking a left corner: the gun comes around on the left
       lookYaw,
+      hunch: moving && alive ? 1 : 0, // head ahead, shoulders down, gun low
+      vault: this.snap?.vault ?? null,
+      vaultT: this.snap?.t ?? 0,
       lower: weaponLower,
       vel: this.vel,
       yaw: this.facing,
