@@ -41,7 +41,12 @@ const SPAWNS = [
   { kind: 'trooper', pos: [16, 0, -50], yaw: 0 },
 ];
 
+// Flank director: with 2+ troopers engaged, every FLANK_EVERY s one of them is sent around the player.
+const FLANK = { every: 9, firstAfter: 5, retry: 2.5, engagedRange: 35 };
+
 const _v = new THREE.Vector3();
+const _front = new THREE.Vector3();
+const _eye = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _step = new THREE.Vector3();
 const _m = new THREE.Matrix4();
@@ -56,6 +61,8 @@ export class Enemies {
   constructor({ scene, world, events }) {
     Object.assign(this, { scene, world, events });
     this.cover = new CoverMap(world);
+    this.flankCooldown = FLANK.firstAfter;
+    this._engaged = [];
     this.player = null; // set on update
     this.kills = 0;
     this.time = 0;
@@ -155,9 +162,40 @@ export class Enemies {
     }
   }
 
+  // One flanker at a time: picks the engaged trooper already farthest round the player's side and asks it
+  // to take a flank spot. The others keep shooting from cover meanwhile (they pin the player down).
+  #flankDirector(dt, player) {
+    this.flankCooldown -= dt;
+    if (this.flankCooldown > 0 || player.dead) return;
+    this.flankCooldown = FLANK.retry;
+    const engaged = this._engaged;
+    engaged.length = 0;
+    for (const e of this.puppets) {
+      if (e.kind !== 'trooper' || !e.alive || !e.alerted) continue;
+      if (e.flanking) return; // a flank is already under way
+      if (e.pos.distanceTo(player.pos) < FLANK.engagedRange) engaged.push(e);
+    }
+    if (engaged.length < 2) return;
+    // the side the player defends: away from their cover box, else where they face
+    if (player.cover) _front.copy(player.cover.normal).negate();
+    else _front.set(Math.sin(player.facing), 0, Math.cos(player.facing));
+    player.chest(_eye);
+    // whoever is already most to the side has the shortest way round
+    const side = (e) => ((e.pos.x - player.pos.x) * _front.x + (e.pos.z - player.pos.z) * _front.z) / (e.pos.distanceTo(player.pos) || 1);
+    engaged.sort((a, b) => side(a) - side(b));
+    for (const e of engaged) {
+      if (e.flank(_front, _eye)) {
+        this.flankCooldown = FLANK.every;
+        this.events.emit('trooper:flank', e);
+        return;
+      }
+    }
+  }
+
   update(dt, player) {
     this.time += dt;
     this.player = player;
+    this.#flankDirector(dt, player);
     for (const p of this.puppets) p.update(dt, player);
 
     const cap = player.dead ? null : player.capsule();
