@@ -133,8 +133,10 @@ export class Player {
     this.root.rotation.set(0, this.facing, 0);
   }
 
-  kick() {
+  // Visual gun kick on the model (per-gun back / climb); camera recoil is separate.
+  kick(def) {
     this.recoil = 1;
+    this.kickDef = def;
   }
 
   update(dt, controls, rig, weapon) {
@@ -418,7 +420,7 @@ export class Player {
     const target = this.crouched || (this.snap && !this.snap.hop) ? 1 : this.snap ? 0.5 : 0;
     this.crouchBlend += (target - this.crouchBlend) * k;
     const combat = this.aiming || this.lastShot < 0.6;
-    this.recoil = Math.max(0, this.recoil - dt * 8);
+    this.recoil = Math.max(0, this.recoil - dt * 11);
     // in cover with the back to the wall, the head turns to the camera
     let lookYaw = 0;
     if (this.cover && !combat && alive) {
@@ -433,7 +435,9 @@ export class Player {
       crouch: this.crouchBlend,
       aimPitch: camRig.pitch,
       combat: combat && alive,
-      recoil: this.recoil,
+      recoil: this.recoil * this.recoil, // eased: sharp snap back, quick settle
+      kickBack: this.kickDef?.back,
+      kickClimb: this.kickDef?.climb,
       lean: this.peek.length() > 0.2 ? -camRig.shoulder * 0.25 : 0,
       lookYaw,
       lower: weaponLower,

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { GUNS, GUN_ORDER } from './guns.js';
+import { coneDir, recoilKick, falloff } from './ballistics.js';
+import { Rng } from '../../engine/random.js';
 
 // Hitscan weapons (stats in guns.js). Aim ray comes from the camera; the shot is then validated from the muzzle.
 // Gameplay only: everything audiovisual is announced through events (see instructions/architecture.md).
@@ -17,9 +19,11 @@ const _aim = new THREE.Vector3();
 const _toAim = new THREE.Vector3();
 const _back = new THREE.Vector3();
 const _targets = [];
+const _kick = [0, 0];
+const _probeDir = new THREE.Vector3();
 // payloads are reused: listeners must copy what they keep
-const SHOT = { from: _muz, to: new THREE.Vector3(), dir: _toAim, right: null, heavy: false };
-const HIT = { point: null, normal: new THREE.Vector3(), dir: _toAim, zone: '', amount: 0, crit: false, weak: false, killed: false };
+const SHOT = { from: _muz, to: new THREE.Vector3(), dir: _toAim, right: null, heavy: false, flash: 1, mag: 1 };
+const HIT = { point: null, normal: new THREE.Vector3(), dir: _toAim, zone: '', amount: 0, crit: false, weak: false, killed: false, distance: 0 };
 const IMPACT = { point: null, normal: new THREE.Vector3() };
 
 export class Weapon {
@@ -37,6 +41,11 @@ export class Weapon {
     this.spin = 0; // 0..1 spin-up for the machine gun
     this.bloom = 0;
     this.firing = false;
+    this.rng = new Rng(); // own stream: spread and recoil jitter are reproducible per seed
+    this.sinceShot = 99; // seconds since the last round left
+    this.burst = 0; // rounds in the current burst (recoil pattern index)
+    // what the crosshair is on, refreshed every frame by probe(): HUD reads it
+    this.aim = { enemy: false, weak: false, blocked: false, blockPoint: new THREE.Vector3(), distance: 0 };
     this.player.setGun(this.current);
   }
 
@@ -65,8 +74,65 @@ export class Weapon {
     return this.switching > 0 ? Math.sin((1 - this.switching / SWITCH_TIME) * Math.PI) : 0;
   }
 
+  // 0 = hip, 1 = fully aimed: follows the camera zoom, so snapping to aim and firing at once isn't free accuracy
+  aimBlend() {
+    const f = this.rig.t.fov;
+    return THREE.MathUtils.clamp((f.normal - this.rig.fov) / (f.normal - f.aim), 0, 1);
+  }
+
+  // Current cone half-angle (rad) of the next round. The crosshair draws exactly this.
   spread() {
-    return (this.player.aiming ? this.t.spreadAim : this.t.spreadHip) + this.bloom;
+    const t = this.t;
+    const a = this.aimBlend();
+    const p = this.player;
+    const move = Math.min(1, Math.hypot(p.vel.x, p.vel.z) / p.t.walk) * t.spreadMove * (1 - 0.6 * a);
+    let s = THREE.MathUtils.lerp(t.spreadHip, t.spreadAim, a) + move + this.bloom;
+    if (this.sinceShot > t.firstShot.rest) s *= THREE.MathUtils.lerp(t.firstShot.hip, t.firstShot.aim, a);
+    return s;
+  }
+
+  // Per frame, after the camera moved: what would a round hit right now?
+  // Sets aim.enemy / aim.weak (crosshair over a target) and aim.blocked (muzzle path obstructed: the round
+  // would hit cover in front of the gun instead of what the crosshair shows; the HUD marks the real impact).
+  probe() {
+    const a = this.aim;
+    a.enemy = a.weak = a.blocked = false;
+    if (this.player.dead || !this.player.muzzle) return;
+    const camPos = this.camera.position;
+    _probeDir.copy(this.rig.forward);
+    this.#targets();
+    _ray.set(camPos, _probeDir);
+    _ray.near = camPos.distanceTo(this.rig.pivot);
+    _ray.far = this.t.range;
+    const hit = _ray.intersectObjects(_targets, false)[0];
+    if (hit) _aim.copy(hit.point);
+    else _aim.copy(camPos).addScaledVector(_probeDir, this.t.range);
+    a.distance = hit ? hit.distance : this.t.range;
+    this.player.muzzle.getWorldPosition(_muz);
+    const d = _toAim.subVectors(_aim, _muz);
+    const dist = d.length();
+    _ray.set(_muz, d.normalize());
+    _ray.near = 0;
+    _ray.far = Math.max(0.01, dist - 0.05);
+    const block = _ray.intersectObjects(_targets, false)[0];
+    const final = block ?? hit;
+    // only an obstruction well short of the aim point counts (grazing the target's own surroundings doesn't)
+    if (block && block.point.distanceTo(_aim) > Math.max(0.4, dist * 0.04)) {
+      a.blocked = true;
+      a.blockPoint.copy(block.point);
+    }
+    const enemy = final?.object.userData.enemy;
+    if (enemy && enemy.alive) {
+      a.enemy = true;
+      a.weak = final.object.userData.zone === 'weak';
+    }
+  }
+
+  #targets() {
+    _targets.length = 0;
+    for (const m of this.world.meshes) _targets.push(m);
+    for (const m of this.enemies.hitMeshes()) _targets.push(m);
+    return _targets;
   }
 
   // Fills every gun from a pickup (kind: 'crate' | 'drop'). Returns a short label, or '' if all were full.
@@ -172,7 +238,9 @@ export class Weapon {
     }
     const t = this.t;
     this.cooldown -= dt;
-    this.bloom = Math.max(0, this.bloom - t.bloomDecay * dt);
+    this.sinceShot += dt;
+    if (this.sinceShot > t.bloomDelay) this.bloom = Math.max(0, this.bloom - t.bloomDecay * dt);
+    if (this.sinceShot > t.recoil.reset) this.burst = 0;
     this.firing = false;
 
     if (controls.reloadPressed) {
@@ -219,20 +287,13 @@ export class Weapon {
     this.ammo--;
     this.firing = true;
     this.player.lastShot = 0;
-    this.player.kick();
 
-    // camera aim ray with spread cone
-    const s = this.spread();
-    _dir.copy(this.rig.forward);
-    _dir.x += (Math.random() - 0.5) * 2 * s;
-    _dir.y += (Math.random() - 0.5) * 2 * s;
-    _dir.z += (Math.random() - 0.5) * 2 * s;
-    _dir.normalize();
+    // camera aim ray, uniformly inside the spread cone (spread is measured before this round adds bloom)
+    coneDir(_dir, this.rig.forward, this.rig.right, this.spread(), this.rng.next(), this.rng.next());
+    this.sinceShot = 0;
 
     const camPos = this.camera.position;
-    _targets.length = 0;
-    for (const m of this.world.meshes) _targets.push(m);
-    for (const m of this.enemies.hitMeshes()) _targets.push(m);
+    this.#targets();
     _ray.set(camPos, _dir);
     _ray.near = camPos.distanceTo(this.rig.pivot); // skip stuff between camera and player
     _ray.far = t.range;
@@ -254,8 +315,14 @@ export class Weapon {
     SHOT.to.copy(hit ? hit.point : _aim);
     SHOT.right = this.rig.right;
     SHOT.heavy = this.current === 'mg';
+    SHOT.flash = t.flash;
+    SHOT.mag = this.ammo / t.mag;
     this.events.emit('weapon:shot', SHOT);
-    this.rig.kick(t.recoilPitch * (this.player.aiming ? 0.6 : 1), (Math.random() - 0.5) * t.recoilYaw, t.trauma);
+    const r = t.recoil;
+    recoilKick(r, this.burst++, _kick, this.rng.next(), this.rng.next());
+    const k = THREE.MathUtils.lerp(1, r.aim, this.aimBlend());
+    this.rig.kick(_kick[0] * k, -_kick[1] * k, t.trauma, r.recover, (60 / t.rpm) * 1.3);
+    this.player.kick(t.kick);
     this.bloom = Math.min(t.bloomMax, this.bloom + t.bloomPerShot);
 
     if (!hit) return;
@@ -264,7 +331,8 @@ export class Weapon {
       const zone = hit.object.userData.zone;
       const boost = this.boosted ? ACTIVE.boostMult : 1;
       const mult = boost * (zone === 'weak' ? t.weakMult : zone === 'head' ? t.headMult : zone === 'limb' ? t.limbMult : 1);
-      HIT.amount = t.damage * mult;
+      HIT.distance = _muz.distanceTo(hit.point);
+      HIT.amount = t.damage * mult * falloff(t.falloff, HIT.distance);
       HIT.killed = enemy.damage(HIT.amount, hit.point, toAim, zone);
       HIT.point = hit.point;
       HIT.normal.copy(toAim).negate();

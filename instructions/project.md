@@ -19,4 +19,7 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 - Headless check: Playwright with Chromium (`--use-angle=swiftshader`); real keyboard/mouse events work once the
   start button is clicked (pointer lock). SwiftShader runs at 3-15 fps and frames are clamped to 0.1 s,
   so count frames, not milliseconds.
+- `npm test`: pure-math unit tests (`tests/ballistics.test.mjs`).
+- `tests/gunplay.browser.mjs`: deterministic gunplay checks in Chromium (first-shot accuracy, recoil pattern
+  and recovery, crosshair states, hit registration). Needs `npm run dev` and Playwright.
 - Fault injection: `game.engine.add({ name: 'bad', update() { throw 1 } })` must get disabled while the game runs on.

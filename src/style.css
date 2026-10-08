@@ -14,8 +14,16 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #crosshair .r { left: var(--gap); }
 #crosshair .dot { width: 2px; height: 2px; left: -1px; top: -1px; }
 #crosshair.aim i { background: #7fe8ff; }
+#crosshair.enemy i { background: #ff4a3a; }
+#crosshair.weak i { background: #ff6af0; }
+#crosshair.blocked i { background: rgba(190, 200, 210, 0.45); }
+/* where the round will really hit when the muzzle is obstructed */
+#blockmark { position: absolute; left: 0; top: 0; width: 14px; height: 14px; opacity: 0; pointer-events: none; }
+#blockmark::before, #blockmark::after { content: ''; position: absolute; left: 6px; top: -1px; width: 2px; height: 16px; background: #ff5a3a; box-shadow: 0 0 3px #000; }
+#blockmark::before { transform: rotate(45deg); }
+#blockmark::after { transform: rotate(-45deg); }
 
-#hitmarker { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%) rotate(45deg); opacity: 0; transition: opacity 0.05s; }
+#hitmarker { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%) rotate(45deg); opacity: 0; }
 #hitmarker::before, #hitmarker::after { content: ''; position: absolute; background: #fff; }
 #hitmarker::before { left: 10px; top: 0; width: 2px; height: 22px; }
 #hitmarker::after { top: 10px; left: 0; height: 2px; width: 22px; }

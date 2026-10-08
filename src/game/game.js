@@ -60,7 +60,7 @@ export class Game {
         if (engine.paused) return;
         // aim assist (friction + gentle pull) while aiming, stronger in trackpad mode
         let friction = 1;
-        if (player.aiming && settings.aimAssist) friction = camRig.assist(realDt * engine.timeScale, enemies.aimPoints(assistTargets), settings.trackpad ? 1.6 : 0.8);
+        if (player.aiming && settings.aimAssist) friction = camRig.assist(realDt * engine.timeScale, enemies.aimPoints(assistTargets), settings.trackpad ? 1.6 : 0.8, settings.trackpad);
         controls.look(realDt, look);
         const k = settings.sensitivity * friction;
         camRig.look(look.x * k, look.y * k, player.aiming);
@@ -87,6 +87,7 @@ export class Game {
     engine.add({ name: 'enemies', update: (dt) => enemies.update(dt, player) });
     engine.add({ name: 'pickups', update: (dt) => pickups.update(dt, player, weapon) });
     engine.add({ name: 'camera', phase: 'late', whilePaused: true, update: (dt) => camRig.update(dt, player, engine.realDt) });
+    engine.add({ name: 'aimProbe', phase: 'late', update: () => weapon.probe() });
     engine.add({ name: 'fx', phase: 'present', update: (dt) => fx.update(dt) });
     engine.add({
       name: 'world',
@@ -105,6 +106,12 @@ export class Game {
         hud.aimLabel = controls.aimLabel;
         hud.update(dt, { player, weapon, enemies, camRig, world });
       },
+    });
+    engine.add({
+      name: 'audio',
+      phase: 'present',
+      whilePaused: true, // silences the MG whine on pause
+      update: () => audio.spin(weapon.t.spinUp > 0 && !engine.paused ? weapon.spin : 0),
     });
     engine.add({
       name: 'post',

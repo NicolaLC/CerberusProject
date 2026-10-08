@@ -10,6 +10,8 @@ Goal: hold 60 fps, never freeze on a bug, scale to a much bigger game.
 - Edge presses (`input.wasPressed`) are only visible in the first substep: a press is consumed once.
 - Every system call is wrapped: an exception is logged, the frame continues. 10 failures in a row disable the
   system and emit `engine:systemFailed` (the HUD shows SYSTEM FAULT). Event listeners are isolated the same way.
+- `engine.stop()` + `engine.step(dt)` run exact frames without the browser loop (deterministic tests).
+- `random.js`: seedable `Rng` streams; give each gameplay system its own.
 - WebGL context loss pauses rendering until restore. `engine.timings[name]` = smoothed ms per system.
 
 ## Performance rules
