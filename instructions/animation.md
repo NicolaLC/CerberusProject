@@ -40,12 +40,20 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
 
 ## Animator (procedural)
 `new Animator(rig, { armed, ground })`, then each frame `animator.update(dt, state)` with
-`{ speed, run, crouch 0..1, aimPitch, combat, recoil, lean, lookYaw, lower }`.
-- Layers: reset to rest → hit spring → legs → torso → arms → feet IK.
-- Walk: pendulum legs, small hip twist and bob.
-- Run (`run`: player sprinting, blended in over ~0.15s), deliberately anime: `RUN` table — 0.42 rad forward lean, high knees
-  (thigh forward 1.25), heel kick (knee 2.1), hang-time bounce, hips twist with shoulders counter-rotating,
-  head kept level. The left hand lets go of the gun and pumps; the right hand carries it low.
+`{ speed, run, crouch 0..1, aimPitch, combat, recoil, lean, lookYaw, lower, vel, yaw }`.
+- Layers: reset to rest → hit spring → gait (foot paths, hips) → torso → arms → leg IK + kneel → feet IK → foot pitch.
+- Gait (`GAIT` table): legs are not swung by angle, each foot follows a path in the character's space and the leg
+  is IK'd to it (`twoBone`, knees forward). In stance the foot moves back at exactly the ground speed, so planted
+  feet don't slide (checked: ~1-3 mm/frame at 1.6-7.4 m/s). Cadence (cycles/s) and duty factor (share of the cycle
+  a foot is planted) follow speed like a real gait: walk 0.6 duty (double support, hips vault over the planted leg),
+  run ~0.3 (flight phase, hips compress at mid-stance). Walk → run blends by speed (2.0-3.2 m/s), the sprint flag
+  forces run. Stride = duty × speed / cadence. Hips drop just enough for the planted foot to stay in reach.
+  Walk: heel strike → roll → toe off; run: the foot leaves fast and folds under the hips (heel kick), toes point.
+  Pass `vel` (world) and `yaw` (facing): feet step along the actual movement (strafe, backpedal). Foot pitch is
+  applied last (`#orientFeet`), relative to the character, so planted feet stay flat.
+- Sprint style (`run`: player sprinting, blended in over ~0.15s), deliberately anime: `RUN` table — 0.42 rad forward
+  lean, hips twist with shoulders counter-rotating, extra heel kick, head kept level. The left hand lets go of the
+  gun and pumps; the right hand carries it low. Unarmed rigs swing their arms against the legs (more when running).
 - Kneel (low cover) blends over everything with `crouch`.
 - Arms: two-bone IK to the grip sockets, elbows down and slightly out. `lower` (weapon switch) drops the gun.
 - Feet IK (when `ground(x, z, maxY)` is given; the player has it, hanging puppets don't): hips drop to the
@@ -53,3 +61,8 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
 - `lookYaw` turns neck + head (used in cover: back to the wall, head toward the camera).
 - `animator.impulse(pitch, roll)` kicks the hit-reaction spring.
 - Check pose changes from the side and front (see project.md testing), not only from behind.
+
+## Spider mech (`src/game/actors/spider.js`)
+- Not the humanoid rig: its own bones (body, turret, two shutters, femur + tibia per leg) baked with `RigidSkin`.
+- Leg bones are children of the root, posed in root space each frame by `placeBone` (+Y along the segment);
+  a broken leg's bones are scaled to ~0 (hides the skinned parts without a rebake).

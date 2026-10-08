@@ -103,6 +103,20 @@ export class FX {
     });
     events.on('weapon:impact', (i) => this.impact(i.point, i.normal));
     events.on('bolt:impact', (i) => this.impact(i.point, i.normal, 0xff6a2a, 10, true));
+    // spider mech: blasts (mortar, stomp, death), a leg breaking off, footfalls
+    const up = new THREE.Vector3(0, 1, 0);
+    events.on('blast', (b) => {
+      this.impact(b.point, up, 0xff6a2a, b.kind === 'drone' ? 16 : b.kind === 'stomp' ? 26 : 34, b.kind !== 'stomp');
+      this.shockwave(b.point);
+    });
+    events.on('boss:leg', (b) => {
+      this.impact(b.point, up, 0xff2bd6, 30, false);
+      this.shockwave(b.point);
+    });
+    events.on('boss:dead', (b) => {
+      for (let i = 0; i < 3; i++) this.impact(b.point, up, i ? 0xff6a2a : 0xff2bd6, 40, false);
+      this.shockwave(b.point);
+    });
     return this;
   }
 

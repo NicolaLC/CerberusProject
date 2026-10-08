@@ -30,6 +30,19 @@ export class Juice {
     events.on('player:hurt', () => this.hurt());
     events.on('player:coverSlam', () => this.coverSlam());
     events.on('player:land', () => this.land());
+    // boss: the ground shakes with distance
+    const near = (p, r) => Math.max(0, 1 - this.camRig.pivot.distanceTo(p) / r);
+    events.on('blast', (b) => this.camRig.addTrauma(0.5 * near(b.point, b.radius * 4)));
+    events.on('boss:step', (s) => this.camRig.addTrauma(0.08 * near(s.point, 14)));
+    events.on('boss:leg', (b) => {
+      this.hitstop(this.t.hitstopKill);
+      this.camRig.addTrauma(0.3 * near(b.point, 40));
+    });
+    events.on('boss:dead', (b) => {
+      this.hitstop(0.15);
+      this.camRig.addTrauma(0.7 * near(b.point, 60));
+      this.post.kill();
+    });
     return this;
   }
 

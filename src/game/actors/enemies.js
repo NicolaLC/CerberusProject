@@ -3,6 +3,8 @@ import { Pool } from '../../engine/pool.js';
 import { segSegDist } from '../../engine/math.js';
 import { Puppet } from './puppet.js';
 import { Trooper } from './trooper.js';
+import { SpiderMech } from './spider.js';
+import { Drone } from './drone.js';
 import { CoverMap } from '../ai/cover.js';
 
 // The enemy system: spawns every enemy (training puppets and troopers, one list), owns enemy projectiles,
@@ -39,7 +41,18 @@ const SPAWNS = [
   { kind: 'trooper', pos: [22, 0, -6], yaw: 0 },
   { kind: 'trooper', pos: [-12, 0, -44], yaw: 0 },
   { kind: 'trooper', pos: [16, 0, -50], yaw: 0 },
+  // drones: hover and strafe, shoot short bursts (actors/drone.js); pos = the ground under them
+  { kind: 'drone', pos: [-20, 0, -4] },
+  { kind: 'drone', pos: [12, 0, 6] },
+  { kind: 'drone', pos: [-36, 0, 24] },
+  { kind: 'drone', pos: [40, 0, 20] },
+  { kind: 'drone', pos: [30, 0, -30] }, // boss arena escorts
+  { kind: 'drone', pos: [46, 0, -40] },
+  // miniboss: spider mech in the north-east arena (actors/spider.js)
+  { kind: 'boss', pos: [38, 0, -46], yaw: 0 },
 ];
+const STAND_KINDS = ['static', 'mover', 'shooter']; // puppets on a pneumatic stand
+const MAKE = { trooper: Trooper, boss: SpiderMech, drone: Drone };
 
 // Flank director: with 2+ troopers engaged, every FLANK_EVERY s one of them is sent around the player.
 const FLANK = { every: 9, firstAfter: 5, retry: 2.5, engagedRange: 35 };
@@ -93,11 +106,12 @@ export class Enemies {
       this.scene.add(m);
       return m;
     };
-    const stands = SPAWNS.filter((d) => d.kind !== 'trooper').length;
+    const stands = SPAWNS.filter((d) => STAND_KINDS.includes(d.kind)).length;
     this.bases = stand(new THREE.CylinderGeometry(0.35, 0.4, 0.08, 16), stands);
     this.posts = stand(new THREE.CylinderGeometry(0.05, 0.05, 1, 8), stands);
     // every enemy (puppets and troopers) lives in this one list
-    this.puppets = SPAWNS.map((d) => (d.kind === 'trooper' ? new Trooper(this, d) : new Puppet(this, d)));
+    this.puppets = SPAWNS.map((d) => new (MAKE[d.kind] ?? Puppet)(this, d));
+    this.boss = this.puppets.find((p) => p.kind === 'boss') ?? null;
   }
 
   setStand(i, pos, postH) {
@@ -123,6 +137,10 @@ export class Enemies {
     let n = 0;
     for (const p of this.puppets) {
       if (!p.alive || p.lift <= -0.3) continue;
+      if (p.aimPoints) {
+        n = p.aimPoints(out, n);
+        continue;
+      }
       if (!out[n]) out[n] = new THREE.Vector3();
       p.rig.bones.Spine2.getWorldPosition(out[n++]);
     }
@@ -130,13 +148,25 @@ export class Enemies {
     return out;
   }
 
-  spawnBolt(from, dir) {
+  // Damages the player from a point (direction for the HUD indicator) and announces it.
+  hurtPlayer(amount, from) {
+    const p = this.player;
+    if (!p || p.dead) return;
+    HURT.amount = p.damage(amount);
+    HURT.dir.subVectors(p.pos, from).setY(0);
+    if (HURT.dir.lengthSq() < 1e-6) HURT.dir.set(0, 0, 1);
+    HURT.dir.normalize();
+    this.events.emit('player:hurt', HURT);
+  }
+
+  spawnBolt(from, dir, damage = BOLT.damage) {
     const b = this.boltPool.acquire();
     b.obj.position.copy(from);
     b.obj.lookAt(_v.copy(from).add(dir));
     b.obj.visible = true;
     b.vel.copy(dir).multiplyScalar(BOLT.speed);
     b.life = BOLT.life;
+    b.damage = damage;
     this.bolts.push(b);
     this.events.emit('bolt:fired', b.obj.position);
   }
@@ -209,7 +239,7 @@ export class Enemies {
       let done = b.life <= 0;
 
       if (!done && cap && segSegDist(from, to, cap.a, cap.b) < cap.r + BOLT.radius) {
-        HURT.amount = player.damage(BOLT.damage);
+        HURT.amount = player.damage(b.damage);
         HURT.dir.copy(b.vel).normalize();
         this.events.emit('player:hurt', HURT);
         done = true;

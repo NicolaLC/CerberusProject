@@ -28,7 +28,7 @@ performance readout and expose `window.game` for testing.
 | R | reload |
 | Space | take / leave cover — with W behind low cover: vault |
 | Q | swap shoulder |
-| 1 / 2, wheel | switch gun |
+| 1 / 2 / 3, wheel | switch gun (assault rifle / machine gun / sniper rifle) |
 | H | show skeletons |
 | F3 | performance stats |
 
@@ -40,6 +40,10 @@ performance readout and expose `window.game` for testing.
 - Shields + health with regen, directional damage indicator
 - Shared humanoid bone rig with placeholder dummy parts and procedural animation (arm IK on weapon grips)
 - Puppet enemies on posts: static, rail movers and pop-up shooters (engage within 30 m); they break apart and stay down until reload
+- Sniper rifle: semi-auto, scoped zoom, pin-point when aimed
+- Spider mech miniboss: armored hull, break its legs at the glowing knees to bring it down, then shoot the exposed core
+- Drones: hovering quad-rotors that circle you and fire short bursts; shoot the glowing core underneath
+- Wall cover: building and arena walls work as high cover with peeking at their ends
 - Troopers: armed soldiers that spot you, run to cover that blocks your line of fire, pop up or peek to shoot, and relocate when flanked
 - Sunlit yard with shadows, dark interior with skylight, flickering lights and eye adaptation
 - Post-processing: bloom, color grade, vignette, chromatic aberration, film grain

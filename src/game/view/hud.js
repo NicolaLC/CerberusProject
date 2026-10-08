@@ -43,10 +43,13 @@ export class Hud {
       arPerfect: document.querySelector('#areload .perfect'),
       arCursor: document.querySelector('#areload .cursor'),
       arLabel: document.querySelector('#areload .label'),
-      slots: { rifle: $('slot-rifle'), mg: $('slot-mg') },
+      slots: { rifle: $('slot-rifle'), mg: $('slot-mg'), sniper: $('slot-sniper') },
     };
     this.el.toast = $('toast');
     this.el.block = $('blockmark');
+    this.el.scope = $('scope');
+    this.el.boss = { root: $('boss'), name: $('boss-name'), fill: $('boss-fill'), legs: $('boss-legs'), state: $('boss-state') };
+    this.armorHint = 0;
     this.hitTime = 0;
     this.hitMax = 1;
     this.hitPop = 0;
@@ -63,7 +66,31 @@ export class Hud {
     events.on('pickup:full', () => this.toast('AMMO FULL'));
     events.on('arena:clear', () => this.toast('ARENA CLEAR · reload the page to reset', 6));
     events.on('trooper:flank', () => this.toast('⚠ ENEMY FLANKING', 2));
+    events.on('boss:wake', (b) => this.toast(`⚠ ${b.name} · SHOOT THE LEG JOINTS`, 3));
+    events.on('boss:down', () => this.toast('CORE EXPOSED', 2));
+    events.on('boss:dead', () => this.toast('MECH DESTROYED', 3));
+    events.on('weapon:armored', () => {
+      // a hint, not spam: at most every few seconds
+      if (this.armorHint > 0) return;
+      this.armorHint = 4;
+      this.toast('ARMORED · aim for the glowing joints', 1.6);
+    });
     return this;
+  }
+
+  #boss(b) {
+    const e = this.el.boss;
+    const on = !!b && b.awake && (b.alive || b.debris.length > 0);
+    e.root.classList.toggle('on', on);
+    if (!on) return;
+    text(e.name, b.name);
+    css(e.fill, 'width', `${((100 * Math.max(0, b.health)) / b.maxHealth).toFixed(1)}%`);
+    const legs = b.legs.map((l) => (l.alive ? 1 : 0)).join('');
+    if (legs !== this.bossLegs) {
+      this.bossLegs = legs;
+      e.legs.innerHTML = b.legs.map((l) => `<i class="${l.alive ? '' : 'gone'}"></i>`).join('');
+    }
+    text(e.state, !b.alive ? 'DESTROYED' : b.down > 0 ? 'CORE EXPOSED' : '');
   }
 
   toast(message, seconds = 1.4) {
@@ -88,6 +115,8 @@ export class Hud {
 
   update(dt, { player, weapon, enemies, camRig, world }) {
     const e = this.el;
+    this.armorHint -= dt;
+    this.#boss(enemies.boss);
     // crosshair gap from spread (rad -> px)
     const fovRad = THREE.MathUtils.degToRad(camRig.camera.fov);
     const gap = 4 + (weapon.spread() / Math.tan(fovRad / 2)) * (innerHeight / 2);
@@ -108,6 +137,9 @@ export class Hud {
     }
     css(e.block, 'opacity', blockVisible ? 1 : 0);
     css(e.cross, 'opacity', player.snap || player.sprinting ? 0.15 : 1);
+    // scoped gun: the overlay follows the zoom; the crosshair dims while the bolt cycles
+    css(e.scope, 'opacity', weapon.t.zoom ? weapon.aimBlend().toFixed(2) : 0);
+    e.cross.classList.toggle('cycling', !!weapon.t.semi && weapon.cooldown > 0.05);
 
     this.hitTime -= dt;
     const hk = this.hitTime > 0 ? this.hitTime / this.hitMax : 0;
@@ -124,10 +156,12 @@ export class Hud {
 
     // active reload bar
     const z = weapon.t.activeReload;
-    const since = weapon.result ? (performance.now() - weapon.result.time) / 1000 : 99;
-    const showBar = !!weapon.active || since < 0.7;
+    // a missed press (jam) just removes the bar: the reload carries on with its penalty, nothing to read
+    const since = weapon.result && weapon.result.kind !== 'jam' ? (performance.now() - weapon.result.time) / 1000 : 99;
+    const jammed = weapon.active?.result === 'jam';
+    const showBar = (!!weapon.active && !jammed) || since < 0.7;
     css(e.ar, 'opacity', showBar ? 1 : 0);
-    if (weapon.active) {
+    if (weapon.active && !jammed) {
       const pct = (v) => `${(v * 100).toFixed(2)}%`;
       css(e.arGood, 'left', pct(z.good[0]));
       css(e.arGood, 'width', pct(z.good[1] - z.good[0]));
@@ -135,9 +169,9 @@ export class Hud {
       css(e.arPerfect, 'width', pct(z.perfect[1] - z.perfect[0]));
       css(e.arCursor, 'left', pct(Math.min(1, weapon.reloadProgress())));
     }
-    const kind = since < 0.7 ? weapon.result.kind : weapon.active ? 'pending' : '';
+    const kind = since < 0.7 ? weapon.result.kind : weapon.active && !jammed ? 'pending' : '';
     e.ar.dataset.state = kind;
-    text(e.arLabel, { perfect: 'PERFECT', good: 'GOOD', jam: 'JAMMED', pending: 'R' }[kind] ?? '');
+    text(e.arLabel, { perfect: 'PERFECT', good: 'GOOD', pending: 'R' }[kind] ?? '');
 
     css(e.shield, 'width', `${player.shields}%`);
     css(e.health, 'width', `${player.health}%`);

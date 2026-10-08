@@ -4,7 +4,7 @@ import { chromium } from 'playwright';
 
 const URL = process.env.URL ?? 'http://localhost:5173/?debug';
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-const p = await b.newPage({ viewport: { width: 640, height: 360 } });
+const p = await b.newPage({ viewport: { width: 320, height: 180 } });
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 await p.goto(URL);
@@ -17,6 +17,8 @@ const result = await p.evaluate(() => {
   const keys = engine.input.keys;
   const step = (n = 1) => { for (let i = 0; i < n; i++) engine.step(1 / 60); };
   const deg = (r) => +(r * 57.2958).toFixed(2);
+  // a key press as the browser delivers it: held + a press edge for this frame
+  const press = (code, frames = 1) => { keys.add(code); engine.input.pressed.add(code); step(frames); keys.delete(code); };
   const out = {};
 
   // --- spread states ---
@@ -68,8 +70,39 @@ const result = await p.evaluate(() => {
   engine.events.on('weapon:hit', (h) => hits.push({ zone: h.zone, amount: +h.amount.toFixed(1), dist: +h.distance.toFixed(1) }));
   const ammo = weapon.ammo;
   keys.add('Mouse0'); step(); keys.delete('Mouse0'); step(2);
-  out.firstShot = { fired: ammo - weapon.ammo, hits };
+  out.firstShot = { fired: ammo - weapon.ammo, hits: [...hits] };
+
+  // --- sniper: semi-auto, scoped zoom, pin-point, one body shot destroys a puppet ---
+  press('Digit3');
+  step(60);
+  const aimAt = () => {
+    const c = camRig.camera.position;
+    camRig.yaw = Math.atan2(-(chest.x - c.x), -(chest.z - c.z));
+    camRig.pitch = Math.atan2(chest.y - c.y, Math.hypot(chest.x - c.x, chest.z - c.z));
+  };
+  for (let i = 0; i < 60; i++) { aimAt(); step(); }
+  out.sniper = { gun: weapon.current, fov: +camRig.fov.toFixed(1), aimBlend: +weapon.aimBlend().toFixed(2), spread: +weapon.spread().toFixed(5) };
+  out.sniper.scope = +getComputedStyle(document.getElementById('scope')).opacity;
+  hits.length = 0;
+  const sAmmo = weapon.ammo;
+  press('Mouse0', 120); // held 2 s: still one round
+  out.sniper.heldShots = sAmmo - weapon.ammo;
+  out.sniper.killed = hits.length === 1 && hits[0].zone === 'torso' && !pp.alive;
+  // a click just before the bolt is back is buffered and fires when it is
+  press('Mouse0');
+  step(42); // 0.72 s: bolt still cycling (0.86 s)
+  const before = weapon.ammo;
+  press('Mouse0');
+  step(20);
+  out.sniper.buffered = before - weapon.ammo;
   keys.delete('Mouse2');
+  step(30);
+
+  // --- failed active reload: the reload UI goes away ---
+  press('KeyR'); step(2);
+  const barUp = +document.getElementById('areload').style.opacity;
+  press('KeyR'); step(2); // far too early: jam
+  out.jam = { result: weapon.result?.kind, barUp, barAfter: +document.getElementById('areload').style.opacity, stillReloading: weapon.reloading > 0 };
   return out;
 });
 
@@ -84,6 +117,12 @@ expect('aimed 10-round climb 3-4.5°', result.burstA.peak > 3 && result.burstA.p
 expect('recovery returns most of the climb', result.burstA.settled < result.burstA.peak * 0.25);
 expect('crosshair reads enemy', result.probe.enemy && !result.probe.blocked && /enemy/.test(result.probe.cross));
 expect('first aimed shot hits the target', result.firstShot.fired === 1 && result.firstShot.hits.length === 1);
+expect('sniper scopes in (narrow fov, overlay)', result.sniper.gun === 'sniper' && result.sniper.fov < 26 && result.sniper.aimBlend > 0.98 && result.sniper.scope > 0.9);
+expect('sniper aimed is pin-point', result.sniper.spread === 0);
+expect('sniper is semi-auto (held trigger = 1 round)', result.sniper.heldShots === 1);
+expect('sniper body shot destroys a puppet', result.sniper.killed);
+expect('sniper buffers a click during the bolt cycle', result.sniper.buffered === 1);
+expect('failed active reload removes the reload bar', result.jam.result === 'jam' && result.jam.barUp === 1 && result.jam.barAfter === 0 && result.jam.stillReloading);
 expect('no page errors', errors.length === 0);
 if (errors.length) console.log(errors);
 await b.close();

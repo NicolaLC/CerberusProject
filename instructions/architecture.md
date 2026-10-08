@@ -53,11 +53,16 @@ Paused (start panel): only `whilePaused` systems run (controls, stats, camera, p
 Payload objects marked * are reused: copy what you keep.
 | event | payload | listeners |
 |---|---|---|
-| `weapon:shot` | *{ from, to, dir, right, heavy, flash, mag } | fx (tracer, flash, casing), audio |
+| `weapon:shot` | *{ from, to, dir, right, heavy, gun, flash, mag } | fx (tracer, flash, casing), audio |
 | `weapon:hit` | *{ point, normal, dir, zone, amount, crit, weak, killed, distance } | fx, hud hitmarker, juice, audio |
 | `weapon:impact` | *{ point, normal } | fx |
 | `weapon:reload` | 'start' \| 'done' \| 'good' \| 'perfect' \| 'jam' | audio, juice |
 | `weapon:switch` / `weapon:dry` | gun id / – | audio |
+| `weapon:armored` | enemy | hud hint |
+| `boss:wake` / `boss:down` | boss | hud toast, audio |
+| `blast` / `boss:leg` / `boss:dead` | *{ point, radius, kind } (blast kind: mortar, stomp, drone) | fx, juice, audio |
+| `boss:step` | *{ point, big } | juice, audio |
+| `boss:charge` / `boss:stomp` / `boss:mortar` | boss / boss / position | audio |
 | `player:hurt` | *{ amount, dir } | hud (direction), juice, audio |
 | `player:coverSlam` / `player:land` | – | juice |
 | `puppet:down` | puppet | pickups (drop), audio |

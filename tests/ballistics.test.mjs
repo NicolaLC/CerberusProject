@@ -37,8 +37,9 @@ check('cone up is camera up', out.y > 0 && Math.abs(out.x) < 1e-6);
 // recoil patterns: deterministic without jitter, loop past the end
 for (const [id, g] of Object.entries(GUNS)) {
   const r = g.recoil;
-  const a = recoilKick(r, 3, [0, 0], 0.5, 0.5);
-  check(`${id} pattern deterministic at jitter midpoint`, a[0] === r.pattern[3][0] && a[1] === r.pattern[3][1]);
+  const k = Math.min(3, r.pattern.length - 1);
+  const a = recoilKick(r, k, [0, 0], 0.5, 0.5);
+  check(`${id} pattern deterministic at jitter midpoint`, a[0] === r.pattern[k][0] && a[1] === r.pattern[k][1]);
   const last = r.pattern.length - 1;
   const loopStart = r.pattern.length - r.loop;
   const b = recoilKick(r, last + 1, [0, 0], 0.5, 0.5);
@@ -46,9 +47,18 @@ for (const [id, g] of Object.entries(GUNS)) {
   const lo = recoilKick(r, 0, [0, 0], 0, 0)[0];
   const hi = recoilKick(r, 0, [0, 0], 1, 1)[0];
   check(`${id} jitter bounded`, Math.abs(hi / r.pattern[0][0] - 1) <= r.jitter + 1e-9 && Math.abs(lo / r.pattern[0][0] - 1) <= r.jitter + 1e-9);
-  let up = 0;
-  for (let i = 0; i < 10; i++) up += r.pattern[i][0];
-  check(`${id} 10-round climb sane`, up > 0.04 && up < 0.15, `${((up * 180) / Math.PI).toFixed(1)}°`);
+  if (g.semi) {
+    // one big kick per round instead of a climbing burst
+    check(`${id} single kick sane`, r.pattern[0][0] > 0.03 && r.pattern[0][0] < 0.1 && r.recover >= 0.9);
+  } else {
+    let up = 0;
+    for (let i = 0; i < 10; i++) up += r.pattern[i][0];
+    check(`${id} 10-round climb sane`, up > 0.04 && up < 0.15, `${((up * 180) / Math.PI).toFixed(1)}°`);
+  }
+  if (!g.falloff) {
+    check(`${id} no falloff`, falloff(g.falloff, 1e4) === 1);
+    continue;
+  }
   check(`${id} falloff`, falloff(g.falloff, 0) === 1 && falloff(g.falloff, 1e4) === g.falloff.min && falloff(g.falloff, (g.falloff.start + g.falloff.end) / 2) === (1 + g.falloff.min) / 2);
 }
 

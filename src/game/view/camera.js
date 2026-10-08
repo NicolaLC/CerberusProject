@@ -38,6 +38,7 @@ export class CameraRig {
     this.dist = 3.4;
     this.height = 1.6;
     this.fov = 70;
+    this.zoom = null; // { fov, dist, sens } of a scoped gun while aiming (set by Weapon)
     this.pivot = new THREE.Vector3();
     this.smoothPivot = null;
     this.forward = new THREE.Vector3();
@@ -67,8 +68,13 @@ export class CameraRig {
     this.dipV -= v;
   }
 
+  // FOV when fully aimed with the current gun
+  aimFov() {
+    return this.zoom?.fov ?? this.t.fov.aim;
+  }
+
   look(dx, dy, aiming) {
-    const sens = aiming ? this.t.aimSens : this.t.sens;
+    const sens = aiming ? this.t.aimSens * (this.zoom?.sens ?? 1) : this.t.sens;
     this.yaw -= dx * sens;
     this.pitch -= dy * sens;
     // the player pulling against the recoil counts as compensation: the auto-recovery won't overshoot
@@ -154,10 +160,11 @@ export class CameraRig {
     const targetSide = (aiming ? 0.95 : 0.85) * this.shoulder;
     this.side += (targetSide - this.side) * k;
     const mode = aiming ? 'aim' : player.sprinting ? 'sprint' : 'normal';
-    this.dist += (t.dist[mode] - this.dist) * k;
+    const zoomed = aiming && this.zoom;
+    this.dist += ((zoomed ? this.zoom.dist : t.dist[mode]) - this.dist) * k;
     this.height += (player.eyeHeight() - this.height) * k;
     this.fovKick = Math.max(0, this.fovKick - dt * 30);
-    this.fov += (t.fov[mode] - this.fov) * (1 - Math.exp(-dt * 8));
+    this.fov += ((zoomed ? this.zoom.fov : t.fov[mode]) - this.fov) * (1 - Math.exp(-dt * (zoomed ? 11 : 8)));
 
     // strafe roll + sprint bob
     const v = player.vel;

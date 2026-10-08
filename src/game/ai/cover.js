@@ -2,8 +2,8 @@ import * as THREE from 'three';
 
 // Cover spots for AI, generated once from the level's cover boxes (world.box(..., { cover })).
 // Every vertical face of a cover box gets spots 0.65 m off the face:
-//   low cover  -> spots along the face (crouch behind it, stand up to shoot over it)
-//   high cover -> only spots near a face end (hide behind it, step sideways to the edge to shoot)
+//   low cover         -> spots along the face (crouch behind it, stand up to shoot over it)
+//   high cover, walls -> only spots near a face end (hide behind it, step sideways to the edge to shoot)
 // A spot protects from a threat when the box lies between them (2D segment vs box test).
 
 const TUNING = {
@@ -47,7 +47,8 @@ export class CoverMap {
     for (const f of faces) {
       const len = f.hi - f.lo;
       const along = [];
-      if (col.cover === 'high') {
+      const high = col.cover !== 'low'; // 'high' boxes and 'wall's: hide behind, peek round the end
+      if (high) {
         // ends only (peekable), unless the face is narrow: then the center reaches both edges
         if (len <= t.edgeReach * 2) along.push(f.lo + len / 2);
         else along.push(f.lo + 0.45, f.hi - 0.45);
@@ -70,10 +71,10 @@ export class CoverMap {
         const tangent = new THREE.Vector3(-normal.z, 0, normal.x);
         // high cover: step toward the nearer face end to shoot
         let peek = 0;
-        if (col.cover === 'high') peek = s - f.lo < f.hi - s ? -1 : 1;
+        if (high) peek = s - f.lo < f.hi - s ? -1 : 1;
         if (f.axis === 'x') peek *= tangent.x >= 0 ? 1 : -1;
         else peek *= tangent.z >= 0 ? 1 : -1;
-        this.spots.push({ pos, normal, tangent, type: col.cover, box: b, peek, owner: null, badUntil: 0 });
+        this.spots.push({ pos, normal, tangent, type: high ? 'high' : 'low', box: b, peek, owner: null, badUntil: 0 });
       }
     }
   }

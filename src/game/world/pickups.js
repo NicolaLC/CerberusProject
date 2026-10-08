@@ -18,6 +18,8 @@ const SPOTS = [
   [0, 0, -24],
   [-20, 0, -34],
   [20, 0, -58],
+  [28, 0, -17], // boss arena: at the gate and at the back
+  [47, 0, -60],
 ];
 
 export class Pickups {

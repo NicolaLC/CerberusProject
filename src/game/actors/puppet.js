@@ -31,6 +31,7 @@ export class Puppet extends EnemyBody {
     this.state = 'hidden';
     this.timer = 1 + Math.random() * 2;
     this.shotsLeft = 0;
+    this.vel = new THREE.Vector3();
 
     this.rig.attach('Spine2', box(0.22, 0.22, 0.02, targetMat(), 0, 0.12, 0.155)); // bullseye
     this.emitter = this.rig.socket('Spine2', 'emitter', 0, 0.15, 0.3);
@@ -52,12 +53,13 @@ export class Puppet extends EnemyBody {
       const prev = _u.copy(this.pos);
       this.pos.lerpVectors(this.home, this.to, s);
       speed = dt > 0 ? prev.distanceTo(this.pos) / dt : 0;
+      if (dt > 0) this.vel.subVectors(this.pos, prev).divideScalar(dt);
     }
 
     if (this.kind === 'shooter') this.#shooterAI(dt, player);
     else this.lift += (0 - this.lift) * damp(4, dt);
 
-    this.animator.update(dt, { speed: speed * 0.5, run: false, crouch: 0, aimPitch: 0, combat: false });
+    this.animator.update(dt, { speed, run: false, crouch: 0, aimPitch: 0, combat: false, vel: this.vel, yaw: this.yaw });
     this.group.position.copy(this.pos);
     this.rig.root.position.y = this.lift;
     this.rig.root.rotation.y = this.yaw;

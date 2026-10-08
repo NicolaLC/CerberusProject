@@ -283,6 +283,8 @@ export class Trooper extends EnemyBody {
       aimPitch: this.aimPitch,
       combat: combat || (this.alerted && !moving),
       recoil: this.recoil,
+      vel: this.vel,
+      yaw: this.yaw,
     });
     this.group.position.copy(this.pos).add(this.offset);
     this.rig.root.position.y = 0;

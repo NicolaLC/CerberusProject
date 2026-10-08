@@ -22,7 +22,7 @@ const _targets = [];
 const _kick = [0, 0];
 const _probeDir = new THREE.Vector3();
 // payloads are reused: listeners must copy what they keep
-const SHOT = { from: _muz, to: new THREE.Vector3(), dir: _toAim, right: null, heavy: false, flash: 1, mag: 1 };
+const SHOT = { from: _muz, to: new THREE.Vector3(), dir: _toAim, right: null, heavy: false, gun: '', flash: 1, mag: 1 };
 const HIT = { point: null, normal: new THREE.Vector3(), dir: _toAim, zone: '', amount: 0, crit: false, weak: false, killed: false, distance: 0 };
 const IMPACT = { point: null, normal: new THREE.Vector3() };
 
@@ -44,9 +44,11 @@ export class Weapon {
     this.rng = new Rng(); // own stream: spread and recoil jitter are reproducible per seed
     this.sinceShot = 99; // seconds since the last round left
     this.burst = 0; // rounds in the current burst (recoil pattern index)
+    this.queued = 0; // semi-auto: seconds a click stays buffered
     // what the crosshair is on, refreshed every frame by probe(): HUD reads it
     this.aim = { enemy: false, weak: false, blocked: false, blockPoint: new THREE.Vector3(), distance: 0 };
     this.player.setGun(this.current);
+    this.rig.zoom = null;
   }
 
   get t() {
@@ -76,8 +78,8 @@ export class Weapon {
 
   // 0 = hip, 1 = fully aimed: follows the camera zoom, so snapping to aim and firing at once isn't free accuracy
   aimBlend() {
-    const f = this.rig.t.fov;
-    return THREE.MathUtils.clamp((f.normal - this.rig.fov) / (f.normal - f.aim), 0, 1);
+    const normal = this.rig.t.fov.normal;
+    return THREE.MathUtils.clamp((normal - this.rig.fov) / (normal - this.rig.aimFov()), 0, 1);
   }
 
   // Current cone half-angle (rad) of the next round. The crosshair draws exactly this.
@@ -122,7 +124,8 @@ export class Weapon {
       a.blockPoint.copy(block.point);
     }
     const enemy = final?.object.userData.enemy;
-    if (enemy && enemy.alive) {
+    // armored parts (the mech's hull) read as cover, not as a target
+    if (enemy && enemy.alive && (!enemy.armor || enemy.armor(final.object.userData.zone, final.object) > 0)) {
       a.enemy = true;
       a.weak = final.object.userData.zone === 'weak';
     }
@@ -143,7 +146,7 @@ export class Weapon {
       const s = this.state[id];
       const got = Math.min(g.pickup[kind], g.maxReserve - s.reserve);
       s.reserve += got;
-      if (got > 0) parts.push(`+${got} ${id === 'mg' ? 'MG' : 'AR'}`);
+      if (got > 0) parts.push(`+${got} ${g.short}`);
     }
     return parts.join('  ');
   }
@@ -228,6 +231,7 @@ export class Weapon {
         this.bloom = 0;
         this.spin = 0;
         this.player.setGun(this.current);
+        this.rig.zoom = this.t.zoom ?? null;
         if (this.ammo === 0) this.switchedEmpty = true;
       }
     }
@@ -257,9 +261,12 @@ export class Weapon {
 
     const p = this.player;
     const trigger = controls.firing;
+    // semi-auto: one round per click; a click shortly before the bolt is back is buffered, not lost
+    this.queued = controls.firePressed ? 0.25 : this.queued - dt;
+    const pull = t.semi ? this.queued > 0 : trigger;
     this.spin = t.spinUp > 0 ? THREE.MathUtils.clamp(this.spin + (trigger ? dt / t.spinUp : -dt * 2), 0, 1) : 1;
     const canFire = !p.dead && !p.snap && !p.sprinting && this.reloading <= 0 && this.switching <= 0;
-    if (!trigger || !canFire) {
+    if (!pull || !canFire) {
       this.cooldown = Math.max(this.cooldown, 0);
       return;
     }
@@ -274,9 +281,17 @@ export class Weapon {
       return;
     }
     const rpm = t.rpm * (t.spinUp > 0 ? 0.35 + 0.65 * this.spin : 1);
-    while (this.cooldown <= 0 && this.ammo > 0) {
-      this.cooldown += 60 / rpm;
-      this.#fire();
+    if (t.semi) {
+      if (this.cooldown <= 0) {
+        this.cooldown = 60 / rpm;
+        this.queued = 0;
+        this.#fire();
+      }
+    } else {
+      while (this.cooldown <= 0 && this.ammo > 0) {
+        this.cooldown += 60 / rpm;
+        this.#fire();
+      }
     }
     // auto reload the moment the magazine runs dry
     if (this.ammo === 0) this.reload();
@@ -315,25 +330,33 @@ export class Weapon {
     SHOT.to.copy(hit ? hit.point : _aim);
     SHOT.right = this.rig.right;
     SHOT.heavy = this.current === 'mg';
+    SHOT.gun = this.current;
     SHOT.flash = t.flash;
     SHOT.mag = this.ammo / t.mag;
     this.events.emit('weapon:shot', SHOT);
     const r = t.recoil;
     recoilKick(r, this.burst++, _kick, this.rng.next(), this.rng.next());
     const k = THREE.MathUtils.lerp(1, r.aim, this.aimBlend());
-    this.rig.kick(_kick[0] * k, -_kick[1] * k, t.trauma, r.recover, (60 / t.rpm) * 1.3);
+    this.rig.kick(_kick[0] * k, -_kick[1] * k, t.trauma, r.recover, r.hold ?? (60 / t.rpm) * 1.3);
     this.player.kick(t.kick);
     this.bloom = Math.min(t.bloomMax, this.bloom + t.bloomPerShot);
 
     if (!hit) return;
     const enemy = hit.object.userData.enemy;
-    if (enemy) {
+    const armor = enemy?.armor ? enemy.armor(hit.object.userData.zone, hit.object) : 1;
+    if (enemy && armor <= 0) {
+      // armor: the round glances off (sparks, no damage) and the HUD hints where to shoot
+      IMPACT.point = hit.point;
+      IMPACT.normal.copy(toAim).negate();
+      this.events.emit('weapon:impact', IMPACT);
+      this.events.emit('weapon:armored', enemy);
+    } else if (enemy) {
       const zone = hit.object.userData.zone;
       const boost = this.boosted ? ACTIVE.boostMult : 1;
       const mult = boost * (zone === 'weak' ? t.weakMult : zone === 'head' ? t.headMult : zone === 'limb' ? t.limbMult : 1);
       HIT.distance = _muz.distanceTo(hit.point);
-      HIT.amount = t.damage * mult * falloff(t.falloff, HIT.distance);
-      HIT.killed = enemy.damage(HIT.amount, hit.point, toAim, zone);
+      HIT.amount = t.damage * mult * armor * falloff(t.falloff, HIT.distance);
+      HIT.killed = enemy.damage(HIT.amount, hit.point, toAim, zone, hit.object);
       HIT.point = hit.point;
       HIT.normal.copy(toAim).negate();
       HIT.zone = zone;

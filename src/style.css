@@ -30,6 +30,13 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #hitmarker.crit::before, #hitmarker.crit::after { background: #ffd23a; }
 #hitmarker.kill::before, #hitmarker.kill::after { background: #ff3a3a; }
 
+/* sniper scope: dark ring outside a circle plus fine full-screen hairlines, faded in with the zoom */
+#scope { position: absolute; inset: 0; opacity: 0; pointer-events: none;
+  background:
+    linear-gradient(#0008, #0008) center / 100% 1px no-repeat,
+    linear-gradient(#0008, #0008) center / 1px 100% no-repeat,
+    radial-gradient(circle at center, transparent 0 34vmin, rgba(0, 0, 0, 0.55) 35vmin, rgba(0, 0, 0, 0.92) 46vmin); }
+#crosshair.cycling i { opacity: 0.35; }
 #vignette { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(200, 20, 20, 0.75) 100%); }
 #dmg-dir { position: absolute; left: 50%; top: 50%; width: 260px; height: 260px; opacity: 0; transform: translate(-50%, -50%); }
 #dmg-dir::before { content: ''; position: absolute; left: 50%; top: 0; transform: translateX(-50%); border: 14px solid transparent; border-bottom: 22px solid rgba(255, 60, 40, 0.9); }
@@ -69,6 +76,15 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 
 #death { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; font: 700 22px monospace; letter-spacing: 6px; color: #ff6a5a; background: rgba(60, 0, 0, 0.35); pointer-events: none; }
 
+/* boss bar: core health, one pip per leg, state */
+#boss { position: absolute; left: 50%; top: 64px; width: min(460px, 70vw); transform: translateX(-50%); font: 700 12px monospace; letter-spacing: 3px; color: #ffb48a; text-align: center; opacity: 0; transition: opacity 0.4s; }
+#boss.on { opacity: 1; }
+#boss .bar { height: 8px; margin: 4px 0; background: rgba(40, 10, 0, 0.6); border: 1px solid #ff7a3a; }
+#boss-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff5a1a, #ffb04a); box-shadow: 0 0 8px rgba(255, 110, 40, 0.8); }
+#boss .row { display: flex; justify-content: space-between; font-size: 11px; }
+#boss .legs i { display: inline-block; width: 12px; height: 6px; margin-right: 4px; background: #ff2bd6; box-shadow: 0 0 6px #ff2bd6; }
+#boss .legs i.gone { background: #3a2a30; box-shadow: none; }
+#boss .state { color: #ff6af0; }
 #toast { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font: 700 16px monospace; letter-spacing: 3px; color: #7fe8ff; text-shadow: 0 0 8px rgba(56, 216, 255, 0.7); opacity: 0; }
 #overlay .settings { display: grid; gap: 10px; margin-bottom: 18px; font: 12px monospace; }
 #overlay .row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
@@ -90,8 +106,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #areload .label { margin-top: 6px; text-align: center; font: 700 12px monospace; letter-spacing: 4px; color: #9fc8e8; }
 #areload[data-state='perfect'] .label { color: #f4fbff; text-shadow: 0 0 10px #7fe8ff; font-size: 15px; }
 #areload[data-state='good'] .label { color: #7fe8ff; }
-#areload[data-state='jam'] .label { color: #ff5a4a; }
-#areload[data-state='jam'] .track { border-color: #ff5a4a; background: rgba(80, 0, 0, 0.6); }
 #ammo.boost { color: #f4fbff; text-shadow: 0 0 12px #7fe8ff, 0 0 4px #7fe8ff; }
 
 /* engine stats readout (F3 / ` / ?debug) */
