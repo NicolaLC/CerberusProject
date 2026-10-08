@@ -30,7 +30,6 @@ export class Hud {
       reload: $('reload'),
       shield: $('shield-fill'),
       health: $('health-fill'),
-      prompt: $('prompt'),
       kills: $('kills'),
       vignette: $('vignette'),
       dmgDir: $('dmg-dir'),
@@ -50,15 +49,11 @@ export class Hud {
     this.el.scope = $('scope');
     this.el.lock = $('lockmark');
     this.el.boss = { root: $('boss'), name: $('boss-name'), fill: $('boss-fill'), legs: $('boss-legs'), state: $('boss-state') };
-    this.armorHint = 0;
     this.hitTime = 0;
     this.hitMax = 1;
     this.hitPop = 0;
     this.dmgTime = 0;
     this.toastTime = 0;
-    this.aimLabel = 'RMB';
-    this.coverLabel = 'SPACE';
-    this.forwardLabel = 'W';
   }
 
   // HUD reactions to gameplay events. camRig: for the damage direction indicator.
@@ -67,17 +62,11 @@ export class Hud {
     events.on('player:hurt', (h) => this.damage(h.dir, camRig));
     events.on('pickup:collected', (msg) => this.toast(msg));
     events.on('pickup:full', () => this.toast('AMMO FULL'));
-    events.on('arena:clear', () => this.toast('ARENA CLEAR · reload the page to reset', 6));
+    events.on('arena:clear', () => this.toast('ARENA CLEAR', 6));
     events.on('trooper:flank', () => this.toast('⚠ ENEMY FLANKING', 2));
-    events.on('boss:wake', (b) => this.toast(`⚠ ${b.name} · SHOOT THE LEG JOINTS`, 3));
+    events.on('boss:wake', (b) => this.toast(`⚠ ${b.name}`, 3));
     events.on('boss:down', () => this.toast('CORE EXPOSED', 2));
     events.on('boss:dead', () => this.toast('MECH DESTROYED', 3));
-    events.on('weapon:armored', () => {
-      // a hint, not spam: at most every few seconds
-      if (this.armorHint > 0) return;
-      this.armorHint = 4;
-      this.toast('ARMORED · aim for the glowing joints', 1.6);
-    });
     return this;
   }
 
@@ -118,7 +107,6 @@ export class Hud {
 
   update(dt, { player, weapon, enemies, camRig, world }) {
     const e = this.el;
-    this.armorHint -= dt;
     this.#boss(enemies.boss);
     // lock-on marker on the boss while the camera follows it
     let lockVisible = false;
@@ -184,23 +172,11 @@ export class Hud {
     }
     const kind = since < 0.7 ? weapon.result.kind : weapon.active && !jammed ? 'pending' : '';
     e.ar.dataset.state = kind;
-    text(e.arLabel, { perfect: 'PERFECT', good: 'GOOD', pending: 'R' }[kind] ?? '');
+    text(e.arLabel, { perfect: 'PERFECT', good: 'GOOD' }[kind] ?? '');
 
     css(e.shield, 'width', `${player.shields}%`);
     css(e.health, 'width', `${player.health}%`);
 
-    let prompt = '';
-    if (player.cover) {
-      const c = player.cover;
-      const aim = this.aimLabel;
-      const cv = this.coverLabel;
-      prompt = c.type === 'low' ? `${cv} leave cover · ${cv} + ${this.forwardLabel} vault · ${aim} aim to pop up` : c.edgeL || c.edgeR ? `${aim} aim to peek from the edge` : 'No line of fire · move to an edge to peek';
-    } else if (player.coverCandidate) {
-      prompt = `${this.coverLabel} take ${player.coverCandidate.type} cover`;
-    }
-    if (!prompt && weapon.reserve === 0 && weapon.ammo <= 8) prompt = 'LOW AMMO · grab a glowing cyan ammo case';
-    text(e.prompt, prompt);
-    css(e.prompt, 'opacity', prompt ? 1 : 0);
 
     text(e.kills, `${enemies.kills} / ${enemies.puppets.length}`);
     text(e.zone, world.isInterior(player.pos) ? 'INTERIOR' : 'TRAINING YARD');

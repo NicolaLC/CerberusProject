@@ -41,19 +41,23 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
 ## Animator (procedural)
 `new Animator(rig, { armed, ground })`, then each frame `animator.update(dt, state)` with
 `{ speed, run, crouch 0..1, aimPitch, combat, recoil, lean, lookYaw, lower, vel, yaw }`.
-- Layers: reset to rest → hit spring → gait (foot paths, hips) → torso → arms → leg IK + kneel → feet IK → foot pitch.
-- Gait (`GAIT` table): legs are not swung by angle, each foot follows a path in the character's space and the leg
-  is IK'd to it (`twoBone`, knees forward). In stance the foot moves back at exactly the ground speed, so planted
-  feet don't slide (checked: ~1-3 mm/frame at 1.6-7.4 m/s). Cadence (cycles/s) and duty factor (share of the cycle
-  a foot is planted) follow speed like a real gait: walk 0.6 duty (double support, hips vault over the planted leg),
-  run ~0.3 (flight phase, hips compress at mid-stance). Walk → run blends by speed (2.0-3.2 m/s), the sprint flag
-  forces run. Stride = duty × speed / cadence. Hips drop just enough for the planted foot to stay in reach.
-  Walk: heel strike → roll → heel up onto the toes (`FOOT` 0.14 m pivot, moving forward only) → toe off; the
-  heel lift keeps the trailing leg long, so the hips don't sink into a crouch. Run: quick short steps (our legs
-  are short; a long stance reads as a crouch), the foot leaves fast and folds under the hips, toes point.
-  The carried gun sways a little with the steps (less while aiming).
-  Pass `vel` (world) and `yaw` (facing): feet step along the actual movement (strafe, backpedal). Foot pitch is
-  applied last (`#orientFeet`), relative to the character, so planted feet stay flat.
+- Layers: reset to rest → hit spring → gait key poses (FK legs, hips) → torso → arms → foot locks (IK) + kneel → feet IK (terrain) → foot pitch.
+- Gait = key poses (`locomotion.js`, after David Rosen's GDC 2014 "An Indie Approach to Procedural Animation"):
+  per gait (walk, run) 8-9 authored LEFT-leg poses over one cycle (thigh, knee, foot pitch; heel strike at t=0)
+  plus hips height/pitch keys per step; the right leg plays half a cycle later. Keys are interpolated with a cyclic
+  Catmull-Rom spline. Walk ↔ run blend by speed (2.0-3.2 m/s, sprint forces run), phase-synced.
+  - Speed: the swing scales with sqrt(speed / authored speed) (clamped), and the cycle rate is set so the planted
+    ankle travels back exactly at ground speed (stance travel measured from the keys at load).
+  - Hips sink by how much the supporting leg is bent (weighted by stance), so a straight leg vaults the body and
+    a bent one lowers it: the bob comes from the poses, not a sine.
+  - Foot lock: when a foot's stance starts its world position is latched; while it carries weight the leg is IK'd
+    to it (blend in after heel strike, out before toe off), y on the floor plus the heel roll. A lock more than
+    0.45 m off its pose (spinning on the spot) lets go until the next step. Planted feet slip < 1 mm/frame
+    (`tests/animation.browser.mjs`).
+  - Direction: pass `vel` and `yaw`. The hips turn toward the movement (up to 0.9 rad), the thighs take the rest
+    (UpLeg rotation order YXZ: yaw, then swing), the spine undoes the hips' yaw so the chest keeps facing.
+    Backpedaling plays the cycle in reverse.
+  - Tuning = editing key numbers; check side views (walk, jog 4.6, sprint 7.4, strafe, backpedal).
 - Sprint style (`run`: player sprinting, blended in over ~0.15s), deliberately anime: `RUN` table — 0.42 rad forward
   lean, hips twist with shoulders counter-rotating, extra heel kick, head kept level. The left hand lets go of the
   gun and pumps; the right hand carries it low. Unarmed rigs swing their arms against the legs (more when running).

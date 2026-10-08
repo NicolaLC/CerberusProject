@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GAITS, RUN_AT, LEG_REST, ankleDown, sampleCyclic, amplitude, frequency } from './locomotion.js';
 
 // Humanoid skeleton shared by every character, named after the Mixamo rig.
 // - Keys are Mixamo bone names without the prefix; Bone.name gets the `mixamorig` prefix, which is how
@@ -151,7 +152,7 @@ export class Rig {
 // ---------------------------------------------------------------------------
 // Procedural animation. Character state in, bone transforms out.
 // state: { speed, run, crouch 0..1, aimPitch, combat, recoil, lean, lookYaw, lower 0..1 }
-// Layers: rest → hit spring → gait (foot paths, hips) → torso → arms (IK or run pump) → leg IK + kneel → feet IK.
+// Layers: rest → hit spring → gait key poses (locomotion.js) → torso → arms (IK or run pump) → foot locks + kneel → feet IK.
 // ---------------------------------------------------------------------------
 
 const _a = new THREE.Vector3();
@@ -161,6 +162,10 @@ const _d = new THREE.Vector3();
 const _e = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
+const _q3 = new THREE.Quaternion();
+const _yAxis = new THREE.Vector3(0, 1, 0);
+const _pw = [0, 0, 0];
+const _pr = [0, 0, 0];
 const _pole = new THREE.Vector3();
 const _euler = new THREE.Euler();
 // IK scratch (the animator runs for every rig every frame: no allocations below)
@@ -177,25 +182,15 @@ const SIDES = ['Left', 'Right'];
 const KNEEL_L = [-1.45, 1.45, 0]; // low cover kneel: thigh, knee, toes
 const KNEEL_R = [0.15, 1.5, 0.9];
 
-// Anime sprint style (`run` flag): torso lean, hip twist, arm pump. The leg motion itself comes from GAIT.
+// Anime sprint style (`run` flag): torso lean, hip twist, arm pump. The legs come from the key poses.
 const RUN = {
   lean: 0.42, // forward torso lean (rad)
   hipsLean: 0.14,
   twist: 0.22, // hips yaw, shoulders counter-rotate
   armPump: 1.15,
-  heelKick: 0.12, // extra swing-foot lift (m)
 };
-
-// Gait: each foot follows a stance/swing path in the character's space and the leg is IK'd to it.
-// In stance the foot moves back at exactly the ground speed, so planted feet never slide; cadence and duty
-// factor change with speed like a real walk (double support) -> run (flight phase).
-const GAIT = {
-  walk: { cadence: [0.8, 0.18], duty: 0.6, lift: 0.1, bob: 0.022, width: 1 }, // cadence: cycles/s = a + b * speed
-  // quicker, shorter steps than a real runner: our legs are short and a long stance reads as a crouch
-  run: { cadence: [1.4, 0.1], duty: [0.38, 0.015], lift: 0.28, bob: -0.025, width: 0.75 }, // duty: a - b * speed
-  runAt: [2.0, 3.2], // m/s: walk -> run blend (the sprint style forces run)
-  legLen: 0.815, // hip joint to ankle with the knee barely bent: hips drop so a planted foot stays in reach
-};
+const HIP_YAW = 0.9; // rad: strafing turns the hips (and legs) toward the movement, the chest keeps facing
+const LOCK_RELEASE = 0.45; // m: a planted foot this far from its pose (spinning on the spot, a shove) lets go
 
 export class Animator {
   // ground(x, z, maxY) -> floor height; enables feet IK
@@ -203,18 +198,24 @@ export class Animator {
     this.rig = rig;
     this.armed = armed;
     this.ground = ground;
-    this.phase = 0; // gait cycle 0..1 (left foot touches down at 0)
+    this.phase = 0; // gait cycle 0..1 (left heel strike at 0)
     this.run = 0;
     this.gait = 0; // 0 walk .. 1 run
     this.dirX = 0; // smoothed local move direction (+X = character's left, +Z = forward)
     this.dirZ = 1;
+    this.hipYaw = 0;
+    this.legYaw = 0; // the rest of the turn, taken by the thighs: steps always go where the body moves
+    this.drop = 0; // hips lowered so the supporting foot reaches the floor
     this.weaponPitch = 0.4;
     this.spinePitch = 0;
     this.hipsOffset = 0;
     this.look = 0;
     this.hit = new THREE.Vector2(); // spring-driven hit reaction (x: pitch, y: roll)
     this.hitVel = new THREE.Vector2();
-    this.legs = { Left: { pos: new THREE.Vector3(), pitch: 0 }, Right: { pos: new THREE.Vector3(), pitch: 0 } };
+    // thighs: yaw first, then swing (the swing plane turns with the step direction)
+    for (const side of SIDES) rig.bones[side + 'UpLeg'].rotation.order = 'YXZ';
+    const leg = () => ({ thigh: 0, knee: 0, pitch: 0, stance: 0, locked: false, released: false, lock: new THREE.Vector3() });
+    this.legs = { Left: leg(), Right: leg() };
   }
 
   impulse(pitch, roll) {
@@ -235,20 +236,13 @@ export class Animator {
     this.hit.x += this.hitVel.x * dt;
     this.hit.y += this.hitVel.y * dt;
 
-    // ----- gait -----
+    // ----- gait: key poses (locomotion.js) -----
     this.run = mix(this.run, s.run ? 1 : 0, 1 - Math.exp(-dt * 7));
     const r = this.run;
     const c = s.crouch;
     const v = s.speed;
-    const W = GAIT.walk;
-    const R = GAIT.run;
-    const g = (this.gait = Math.max(r, smoothstep(GAIT.runAt[0], GAIT.runAt[1], v)));
-    const cadence = mix(W.cadence[0] + W.cadence[1] * v, R.cadence[0] + R.cadence[1] * v, g);
-    const duty = mix(W.duty, THREE.MathUtils.clamp(R.duty[0] - R.duty[1] * v, 0.26, 0.36), g);
-    this.phase = (this.phase + cadence * dt) % 1;
-    const stride = (duty * v) / cadence; // distance a planted foot travels back
     if (s.vel && v > 0.3) {
-      // which way the body moves relative to where it faces: strafing / backpedaling feet follow it
+      // which way the body moves relative to where it faces: strafing / backpedaling
       const sn = Math.sin(s.yaw);
       const cs = Math.cos(s.yaw);
       const k = 1 - Math.exp(-dt * 10);
@@ -261,53 +255,52 @@ export class Animator {
       this.dirX = 0;
       this.dirZ = 1;
     }
-    const step = Math.min(1, v / 1.2) * (1 - c); // feet lift only when actually moving
-    const lift = mix(W.lift, R.lift + RUN.heelKick * r, g) * step;
-    const width = 0.11 * mix(W.width, R.width, g) * (1 + 0.7 * Math.abs(this.dirX));
-    // push-off: the heel peels up in the second half of stance (the foot rolls onto the toes), which keeps the
-    // trailing leg long instead of folding both knees; only when moving forward (the roll is along the foot)
-    const heel = mix(0.045, 0.08, g) * step * Math.max(0, this.dirZ);
-    const L2 = GAIT.legLen * GAIT.legLen;
-    let drop = 0;
+    const m = smoothstep(0.05, 0.6, v) * (1 - c); // how much of the gait shows (0 = standing)
+    // strafing: the hips turn toward the movement (up to HIP_YAW); backpedaling plays the cycle in reverse
+    const back = this.dirZ < -0.25;
+    const dirYaw = back ? Math.atan2(-this.dirX, -this.dirZ) : Math.atan2(this.dirX, this.dirZ);
+    const want = THREE.MathUtils.clamp(dirYaw, -HIP_YAW, HIP_YAW);
+    const ease = 1 - Math.exp(-dt * 8);
+    this.hipYaw = mix(this.hipYaw, want * m, ease);
+    this.legYaw = mix(this.legYaw, (dirYaw - want) * m, ease);
+    const W = GAITS.walk;
+    const R = GAITS.run;
+    const g = (this.gait = Math.max(r, smoothstep(RUN_AT[0], RUN_AT[1], v)));
+    const freq = v > 0.01 ? mix(frequency(W, v), frequency(R, v), g) : 0;
+    this.phase = (((this.phase + freq * dt * (back ? -1 : 1)) % 1) + 1) % 1;
+    const duty = mix(W.duty, R.duty, g);
+    const ampW = amplitude(W, v);
+    const ampR = amplitude(R, v);
+    let wSum = 0;
+    let dSum = 0;
     for (const side of SIDES) {
       const u = side === 'Left' ? this.phase : (this.phase + 0.5) % 1;
       const L = this.legs[side];
-      let z;
-      let y;
-      let weight; // how much this foot carries the body (hips must drop to keep it in reach)
-      if (u < duty) {
-        // stance: heel strike (walk) / flat contact (run), roll over, heel up onto the toes
-        const k = u / duty;
-        z = stride * (0.5 - k);
-        const roll = Math.max(0, (k - 0.45) / 0.55);
-        y = heel * roll * roll;
-        weight = 1;
-        L.pitch = Math.asin(Math.min(1, y / FOOT)) - (1 - g) * 0.25 * Math.max(0, 1 - k / 0.2) * step;
-      } else {
-        // swing: forward with eased speed; the run lifts the heel early (kick) and points the toes
-        const w = (u - duty) / (1 - duty);
-        // run: the foot leaves the ground fast and folds up under the hips (heel toward the seat), not trailing behind
-        const e = mix(0.5 - 0.5 * Math.cos(Math.PI * w), 1 - Math.pow(1 - w, 1.8), g);
-        z = stride * (e - 0.5);
-        y = lift * Math.sin(Math.PI * Math.pow(w, mix(0.9, 0.7, g))) + heel * (1 - w) * (1 - w);
-        weight = 1 - Math.sin(Math.PI * w); // fades out after lift-off, back in for touch-down
-        const toe = Math.asin(Math.min(1, heel / FOOT));
-        L.pitch = mix(mix(toe + 0.15 * (1 - g), -0.25 * (1 - g), w), mix(toe, 0, w) + 0.45 * Math.sin(Math.PI * w), g) * step;
-      }
-      // hip height that keeps this foot in reach: sqrt(L^2 - z^2) above the ankle, plus the ankle's own lift
-      const zz = Math.min(Math.abs(z), GAIT.legLen * 0.9);
-      drop = Math.max(drop, weight * Math.max(0, GAIT.legLen - Math.sqrt(L2 - zz * zz) - y));
-      const sx = side === 'Left' ? width : -width;
-      L.pos.set(sx + this.dirX * z, ANKLE + y, this.dirZ * z);
+      sampleCyclic(W.legs, u, _pw);
+      sampleCyclic(R.legs, u, _pr);
+      L.thigh = mix(_pw[0] * ampW, _pr[0] * ampR, g) * m;
+      L.knee = mix(_pw[1] * mix(1, ampW, 0.5), _pr[1] * mix(1, ampR, 0.5), g) * m;
+      L.pitch = mix(_pw[2] * ampW, _pr[2] * ampR, g) * m;
+      setX(B[side + 'UpLeg'], L.thigh);
+      B[side + 'UpLeg'].rotation.y = this.legYaw;
+      setX(B[side + 'Leg'], L.knee);
+      // stance weight: ramps in after heel strike and out before toe off
+      L.stance = u < duty ? Math.min(1, u / 0.05) * Math.min(1, (duty - u) / 0.08) : 0;
+      // how much shorter this leg is than straight: the hips sink by that on the supporting leg
+      wSum += L.stance;
+      dSum += L.stance * (LEG_REST - ankleDown(L.thigh, L.knee));
     }
-    // left foot forward -> -1 (drives hips twist and the arm swing)
+    if (wSum > 0.05) this.drop = mix(this.drop, dSum / wSum, 1 - Math.exp(-dt * 25));
+    sampleCyclic(W.hips, (this.phase * 2) % 1, _pw);
+    sampleCyclic(R.hips, (this.phase * 2) % 1, _pr);
+    const bob = mix(_pw[0], _pr[0], g) * m;
+    const hipsPitch = mix(_pw[1], _pr[1], g) * m;
+    // left leg forward -> -1 (drives hips twist and the arm swing)
     const sw = -Math.cos(this.phase * Math.PI * 2);
     const amt = Math.min(1, v / 4) * (1 - c);
-    // walk vaults over the planted leg (highest at mid-stance); run compresses there and floats in flight
-    const bob = Math.cos(Math.PI * 4 * (this.phase - duty / 2)) * mix(W.bob, R.bob, g) * step;
-    B.Hips.position.y += -0.38 * c - drop * (1 - c) - 0.015 * g * step + bob;
-    const twist = sw * mix(0.08, RUN.twist, r) * amt;
-    B.Hips.rotation.set(RUN.hipsLean * r * amt, twist, -sw * 0.04 * amt);
+    B.Hips.position.y += -0.38 * c - this.drop * m + bob;
+    const twist = sw * mix(mix(W.twist, R.twist, g), RUN.twist, r) * m;
+    B.Hips.rotation.set(hipsPitch + RUN.hipsLean * r * amt, this.hipYaw + twist, -sw * mix(W.roll, R.roll, g) * m);
 
     // ----- torso -----
     const kk = 1 - Math.exp(-dt * 14);
@@ -317,7 +310,8 @@ export class Animator {
     this.weaponPitch = mix(this.weaponPitch, -aim * 0.7 - c * 0.15, 1 - Math.exp(-dt * 22));
     const lean = (s.lean ?? 0) * 0.33;
     const sp = this.spinePitch / 3 + this.hit.x / 3;
-    B.Spine.rotation.set(sp, -twist * 0.5, this.hit.y / 3 + lean);
+    // the chest keeps facing where the character aims (hips yaw undone); it leans with the hips unless aiming
+    B.Spine.rotation.set(sp - (s.combat ? hipsPitch : 0), -twist * 0.5 - this.hipYaw, this.hit.y / 3 + lean);
     B.Spine1.rotation.set(sp, -twist * 0.9, this.hit.y / 3 + lean); // shoulders counter-rotate
     B.Spine2.rotation.set(sp - RUN.hipsLean * running, -twist * 0.4, this.hit.y / 3 + lean);
     // head stays level and looks where it should (at the camera while in cover)
@@ -363,14 +357,32 @@ export class Animator {
     }
     rig.root.updateMatrixWorld(true);
 
-    // ----- legs: IK to the gait targets, kneel blended over them -----
+    // ----- legs: planted feet locked in place (IK), kneel blended over everything -----
     const rootQ = rig.root.getWorldQuaternion(_q2);
-    const pole = _knee.set(0, 0.15, 1).applyQuaternion(rootQ); // knees forward
-    if (c < 0.999) {
-      for (const side of SIDES) {
-        const target = rig.root.localToWorld(_c.copy(this.legs[side].pos));
-        twoBone(B[side + 'UpLeg'], B[side + 'Leg'], B[side + 'Foot'], target, pole);
+    const baseQ = _q3.setFromAxisAngle(_yAxis, this.hipYaw + this.legYaw).premultiply(rootQ); // where the legs walk
+    const pole = _knee.set(0, 0.15, 1).applyQuaternion(baseQ); // knees forward
+    const rootY = rig.root.getWorldPosition(_a).y;
+    for (const side of SIDES) {
+      const L = this.legs[side];
+      if (L.stance <= 0 || v < 0.2) {
+        L.locked = L.released = false;
+        continue;
       }
+      const foot = B[side + 'Foot'];
+      const fk = foot.getWorldPosition(_b);
+      const floor = this.ground ? this.ground(fk.x, fk.z, rootY + 0.6) : rootY;
+      if (!L.locked && !L.released) {
+        L.locked = true;
+        L.lock.set(fk.x, floor, fk.z);
+      }
+      if (L.locked && Math.hypot(fk.x - L.lock.x, fk.z - L.lock.z) > LOCK_RELEASE) {
+        L.locked = false;
+        L.released = true; // re-plants next step
+      }
+      const w = L.locked ? L.stance : 0;
+      const heelUp = FOOT * Math.sin(Math.max(0, L.pitch)); // rolling onto the toes lifts the ankle
+      _c.set(mix(fk.x, L.lock.x, w), mix(fk.y, floor + ANKLE + heelUp, L.stance), mix(fk.z, L.lock.z, w));
+      twoBone(B[side + 'UpLeg'], B[side + 'Leg'], foot, _c, pole);
     }
     if (c > 0.001) {
       for (const side of SIDES) {
@@ -383,16 +395,16 @@ export class Animator {
     rig.root.updateMatrixWorld(true);
 
     if (this.ground) this.#feetIK(dt, c);
-    this.#orientFeet(rootQ, 1 - c);
+    this.#orientFeet(baseQ, 1 - c);
   }
 
-  // Feet keep the gait's pitch relative to the character (flat on the floor when planted), not the shin's.
-  #orientFeet(rootQ, w) {
+  // Feet keep the pose's pitch relative to the hips' walking direction (flat when planted), not the shin's.
+  #orientFeet(baseQ, w) {
     if (w <= 0.01) return;
     const B = this.rig.bones;
     for (const side of SIDES) {
       const foot = B[side + 'Foot'];
-      _q.copy(foot.parent.getWorldQuaternion(_fq).invert()).multiply(rootQ);
+      _q.copy(foot.parent.getWorldQuaternion(_fq).invert()).multiply(baseQ);
       _fq.setFromEuler(_euler.set(this.legs[side].pitch, 0, 0));
       _q.multiply(_fq);
       foot.quaternion.slerp(_q, w);

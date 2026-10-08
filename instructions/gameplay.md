@@ -16,8 +16,7 @@
   L3 click sprints until the stick is released or pulled back, View = stats, Menu = pause (A or Menu deploys from
   the start panel, no pointer lock needed). Look: 15% radial dead zone, response curve ^2.2, ×1.7 turn boost after
   0.25 s at the rim (`PAD_LOOK`), optional invert Y. Aim assist uses the stronger trackpad profile (friction + pull).
-  Rumble on shots (sniper hardest), hits taken, nearby blasts and boss footsteps. Prompts switch to pad labels
-  (LT, A) as soon as the pad is used, back to keys on keyboard/mouse input (`input.device`).
+  Rumble on shots (sniper hardest), hits taken, nearby blasts and boss footsteps.
 
 ## Ammo
 - Pickups fill every gun at once (`pickup.crate` / `pickup.drop` per gun: AR 96/32, MG 135/45). Cases at fixed `SPOTS`
@@ -27,6 +26,7 @@
 
 ## Cover
 - `Space` near a cover box (reach 2.2m, move dir or camera forward, then 8 directions) snaps to it.
+- No on-screen hints or button prompts: the HUD shows state (ammo, health, boss bar, warnings), never instructions.
 - Cover type from height above feet: < 1.7m = low, else high. Boxes are cover only if created with `{ cover }`:
   `'low'` / `'high'` cover blocks, or `'wall'` for walls (building walls, the range separator, the boss arena's
   walls). Walls behave as high cover: peek at their ends and doorways.
@@ -34,8 +34,7 @@
 - Low: crouched; aim or fire pops up (fire waits until standing). `Space` + W vaults over.
 - Out of combat the character turns its back to the wall and looks at the camera.
 - High: standing; aiming at an edge peeks 0.8m sideways and swaps shoulder to that side. Away from the ends
-  (no edge within 0.45 m) there is no line of fire: aiming and shooting are blocked (`player.pinned`) and the
-  prompt says to move to an edge.
+  (no edge within 0.45 m) there is no line of fire: aiming and shooting are blocked (`player.pinned`).
 
 ## Weapons (`game/combat/guns.js`, controller in `weapon.js`)
 - Reload (R) is an active reload: a bar with a marker sweeps across `activeReload` zones (fractions of reload time).
