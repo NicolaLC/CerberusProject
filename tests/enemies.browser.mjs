@@ -56,10 +56,39 @@ const r = await p.evaluate(() => {
   out.squadFired = fired;
   const before = squad.map((t) => t.spot);
   player.pos.set(4, 0, -34); // walk around them
-  step(9);
+  step(12); // AI timings are randomized: leave room for a full cover cycle before they move
   out.relocated = squad.map((t, i) => t.spot !== before[i] && !!t.spot && cover.protects(t.spot, player.pos));
   const inside = (t) => { const v = t.pos.clone(); g.world.collideCircle(v, 0.38, 1.8, 0.45); return v.distanceTo(t.pos) > 0.01; };
   out.noneInside = !squad.some(inside);
+
+  // 4. flanking: player dug in behind low cover facing the squad -> one trooper goes round the side
+  for (const t of enemies.puppets) if (t.kind === 'trooper' && t.pos.z > -35) t.alive = true;
+  player.pos.set(-6, 0, 1.6);
+  g.camRig.yaw = 0;
+  step(0.3);
+  engine.input.keys.add('Space');
+  engine.input.pressed.add('Space');
+  step(0.2);
+  engine.input.keys.delete('Space');
+  step(0.5);
+  out.playerInCover = !!player.cover;
+  const front = player.cover.normal.clone().negate(); // the side the player defends
+  for (const t of enemies.puppets) if (t.kind === 'trooper' && t.alive) t.alert();
+  let flanker = null;
+  engine.events.on('trooper:flank', (t) => (flanker ??= t));
+  for (let i = 0; i < 20 && !flanker; i++) step(1);
+  out.flanked = !!flanker;
+  if (flanker) {
+    for (let i = 0; i < 12 && flanker.flanking; i++) step(0.5); // arrive
+    const d = flanker.pos.clone().sub(player.pos).setY(0).normalize();
+    out.flankAngleOk = d.dot(front) < 0.4; // beside or behind the player's cover
+    out.flankerProtected = !!flanker.spot && enemies.cover.protects(flanker.spot, player.pos);
+    fired = 0;
+    engine.events.on('bolt:fired', (pos) => { if (pos === flanker.muzzle || pos.distanceTo(flanker.pos) < 2.5) fired++; });
+    step(6);
+    out.flankerFired = fired;
+  }
+  out.allInRange = enemies.puppets.filter((t) => t.kind === 'trooper' && t.alive && t.alerted && t.spot).every((t) => t.spot.pos.distanceTo(player.pos) <= 34.5);
   return out;
 });
 console.log(r);
@@ -74,6 +103,10 @@ expect('troopers end up behind cover that blocks the player', r.inCover.every(Bo
 expect('troopers shoot back', r.squadFired > 0);
 expect('flanked troopers relocate to cover against the new position', r.relocated.every(Boolean));
 expect('troopers never stand inside geometry', r.noneInside);
+expect('flank: a trooper is sent round when the player digs in', r.playerInCover && r.flanked);
+expect('flank: it ends up beside or behind the player', r.flankAngleOk && r.flankerProtected);
+expect('flank: and fires from there', r.flankerFired > 0);
+expect('troopers never pick cover out of the fight (> 34 m)', r.allInRange);
 expect('no page errors', errors.length === 0);
 await b.close();
 process.exit(fail.length ? 1 : 0);
