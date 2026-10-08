@@ -60,6 +60,8 @@
 
 ## Puppets (`game/actors/enemies.js`)
 - static 100hp, mover 100hp (rail), shooter 120hp: hidden → up → telegraph (visor glow 0.45s) → 3 bolts → hide.
-- Weak spots: 2 random body parts per spawn get a pulsing magenta patch (zone `weak`, ×3 damage). Re-rolled on respawn.
+- Weak spots: 2 random body parts per puppet get a pulsing magenta patch (zone `weak`, ×3 damage).
 - Bolts: 34 m/s, 7 dmg, collide with world and the player capsule.
-- Death breaks the rig parts into debris; respawn after 6s. Spawn list: `SPAWNS` at top of the file.
+- Death breaks the rig parts into debris that fades after 5s. Destroyed puppets stay destroyed until the page
+  is reloaded; the HUD counts `down / total` and shows ARENA CLEAR when all are down. Spawn list: `SPAWNS`.
+- Shooters only engage a player within `ENGAGE_RANGE` (30 m) with line of sight.

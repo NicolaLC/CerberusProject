@@ -23,4 +23,5 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 - `tests/gunplay.browser.mjs`: deterministic gunplay checks in Chromium (first-shot accuracy, recoil pattern
   and recovery, crosshair states, hit registration). Needs `npm run dev` and Playwright.
 - `tests/render.browser.mjs`: draw-call budget and batching invariants (same setup).
+- `tests/enemies.browser.mjs`: destroyed puppets stay destroyed, shooters engage only within range.
 - Fault injection: `game.engine.add({ name: 'bad', update() { throw 1 } })` must get disabled while the game runs on.
