@@ -17,6 +17,9 @@ import { settings, bindSettingsUI } from './settings.js';
 // frame order. This is the only file that knows about all systems; they only know their direct
 // dependencies (constructor args) and the event bus.
 const RESPAWN_AFTER = 3; // s
+// Shadow LOD: puppets farther than this from the camera stop casting (hysteresis avoids flicker at the edge).
+// Their contact shadow is a few pixels at that range, and the sun's shadow map is centered on the player.
+const SHADOW_LOD = { far: 34, near: 30 };
 
 export class Game {
   constructor({ canvas, debug = false }) {
@@ -97,6 +100,19 @@ export class Game {
         world.updateSun(player.pos);
         // hide the player model when the camera is pushed into it
         player.root.visible = camera.position.distanceTo(camRig.pivot) > 0.45;
+      },
+    });
+    engine.add({
+      name: 'shadowLod',
+      phase: 'present',
+      update: () => {
+        const cam = camera.position;
+        for (const p of enemies.puppets) {
+          const d2 = p.pos.distanceToSquared(cam);
+          const lim = p.skin.castShadow ? SHADOW_LOD.far : SHADOW_LOD.near;
+          const on = d2 < lim * lim;
+          if (on !== p.skin.castShadow) p.skin.setCastShadow(on);
+        }
       },
     });
     engine.add({

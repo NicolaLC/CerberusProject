@@ -9,6 +9,13 @@ import * as THREE from 'three';
 // - mergeStatic(meshes, parent): static level geometry -> one Mesh per material/shadow combination.
 // - RigidSkin: every part hanging on a skeleton's bones -> one SkinnedMesh per material, each vertex fully
 //   weighted to its bone (rigid skinning). Bones animate exactly as before; the GPU moves the parts.
+//
+// Shadows: the shadow pass only needs depth, so material splits are wasted there. Each batch also builds ONE
+// shadow-only mesh (all opaque casters merged, material irrelevant); the color meshes stop casting.
+// Result: 1 shadow draw per rig / per level instead of one per material.
+// Shadow-only meshes stay `visible = false` (so the color pass never lists them) and installShadowOnly()
+// makes them visible only while the renderer draws shadow maps. (Layers can't do this: three's shadow pass
+// tests layers against the main camera.)
 
 const _m = new THREE.Matrix4();
 const _inv = new THREE.Matrix4();
@@ -16,6 +23,42 @@ const _nm = new THREE.Matrix3();
 const _p = new THREE.Vector3();
 const _n = new THREE.Vector3();
 const noRaycast = () => {};
+
+// depth pass ignores color; FrontSide matches the merged sources (shadow pass renders back faces of it)
+const SHADOW_MAT = new THREE.MeshBasicMaterial();
+const shadowOnlyMeshes = new Set();
+
+// Wraps renderer.shadowMap.render so shadow-only meshes exist only during the shadow pass.
+export function installShadowOnly(renderer) {
+  const sm = renderer.shadowMap;
+  const render = sm.render.bind(sm);
+  sm.render = (lights, scene, camera) => {
+    for (const m of shadowOnlyMeshes) m.visible = m.userData.castEnabled;
+    render(lights, scene, camera);
+    for (const m of shadowOnlyMeshes) m.visible = false;
+  };
+}
+
+// Concatenates every opaque casting bucket into one bucket for the shadow-only mesh (null if none).
+function shadowBucket(buckets) {
+  const out = { material: SHADOW_MAT, pos: [], nor: [], uv: [], skin: [] };
+  for (const b of buckets.values()) {
+    if (!b.castShadow || b.material.transparent) continue;
+    for (const k of ['pos', 'nor', 'uv', 'skin']) for (let i = 0; i < b[k].length; i++) out[k].push(b[k][i]);
+  }
+  return out.pos.length ? out : null;
+}
+
+function shadowOnly(mesh) {
+  mesh.visible = false; // see installShadowOnly
+  mesh.userData.castEnabled = true;
+  shadowOnlyMeshes.add(mesh);
+  mesh.castShadow = true;
+  mesh.receiveShadow = false;
+  mesh.raycast = noRaycast;
+  mesh.userData.batch = true;
+  return mesh;
+}
 
 // Buckets triangles of `mesh` (all groups, multi-material aware) into `buckets` keyed by material + shadow
 // flags, transformed by `matrix`. boneIndex >= 0 also records skin attributes.
@@ -87,13 +130,20 @@ export function mergeStatic(meshes, parent) {
   const out = [];
   for (const b of buckets.values()) {
     const mesh = new THREE.Mesh(toGeometry(b), b.material);
-    mesh.castShadow = b.castShadow;
+    mesh.castShadow = false; // the shadow-only mesh below casts for all of them
     mesh.receiveShadow = b.receiveShadow;
     mesh.matrixAutoUpdate = false;
     mesh.raycast = noRaycast;
     mesh.userData.batch = true;
     parent.add(mesh);
     out.push(mesh);
+  }
+  const sb = shadowBucket(buckets);
+  if (sb) {
+    const shadow = shadowOnly(new THREE.Mesh(toGeometry(sb), SHADOW_MAT));
+    shadow.matrixAutoUpdate = false;
+    parent.add(shadow);
+    out.shadow = shadow;
   }
   return out;
 }
@@ -128,6 +178,8 @@ export class RigidSkin {
     this.exclude = exclude;
     this.cullMargin = cullMargin;
     this.meshes = [];
+    this.shadow = null; // shadow-only SkinnedMesh (see installShadowOnly)
+    this.castShadow = true;
     this.boneIndex = new Map(skeleton.bones.map((b, i) => [b, i]));
     this.rebuild();
   }
@@ -138,6 +190,12 @@ export class RigidSkin {
       m.geometry.dispose();
     }
     this.meshes.length = 0;
+    if (this.shadow) {
+      this.shadow.removeFromParent();
+      this.shadow.geometry.dispose();
+      shadowOnlyMeshes.delete(this.shadow);
+      this.shadow = null;
+    }
 
     const sources = [];
     const walk = (o, bone) => {
@@ -159,13 +217,20 @@ export class RigidSkin {
     }
     for (const b of buckets.values()) {
       const mesh = new THREE.SkinnedMesh(toGeometry(b), b.material);
-      mesh.castShadow = b.castShadow;
+      mesh.castShadow = false; // see this.shadow
       mesh.receiveShadow = b.receiveShadow;
       mesh.raycast = noRaycast;
       mesh.userData.batch = true;
       this.root.add(mesh);
       mesh.bind(this.skeleton, mesh.matrixWorld.copy(this.root.matrixWorld));
       this.meshes.push(mesh);
+    }
+    const sb = shadowBucket(buckets);
+    if (sb) {
+      this.shadow = shadowOnly(new THREE.SkinnedMesh(toGeometry(sb), SHADOW_MAT));
+      this.root.add(this.shadow);
+      this.shadow.bind(this.skeleton, this.shadow.matrixWorld.copy(this.root.matrixWorld));
+      this.shadow.userData.castEnabled = this.castShadow;
     }
     // One culling sphere for the whole rig (a small part, e.g. a wrist light, swings far outside its own
     // bind-pose bounds), from the bind-pose geometry, padded for animation. Not computeBoundingSphere():
@@ -175,5 +240,12 @@ export class RigidSkin {
     const sphere = box.getBoundingSphere(new THREE.Sphere());
     sphere.radius *= this.cullMargin;
     for (const m of this.meshes) m.boundingSphere = sphere;
+    if (this.shadow) this.shadow.boundingSphere = sphere;
+  }
+
+  // Shadow LOD: turn the rig's single shadow draw on/off (e.g. by distance).
+  setCastShadow(on) {
+    this.castShadow = on;
+    if (this.shadow) this.shadow.userData.castEnabled = on;
   }
 }

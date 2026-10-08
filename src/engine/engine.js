@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Events } from './events.js';
 import { Input } from './input.js';
 import { Perf, StatsPanel } from './perf.js';
+import { installShadowOnly } from './batch.js';
 
 // Game-agnostic runtime: renderer, scene, main camera, input, event bus, frame loop and system scheduler.
 //
@@ -31,6 +32,7 @@ export class Engine {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.info.autoReset = false; // count the whole frame (all post passes), reset in #frame
+    installShadowOnly(this.renderer); // shadow-only batch meshes (engine/batch.js)
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(fov, innerWidth / innerHeight, near, far);
     this.events = new Events();
