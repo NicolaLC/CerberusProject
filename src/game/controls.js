@@ -16,6 +16,7 @@ export const BINDINGS = {
   shoulder: ['KeyQ'],
   slot1: ['Digit1'],
   slot2: ['Digit2'],
+  slot3: ['Digit3'],
   lookLeft: ['ArrowLeft'],
   lookRight: ['ArrowRight'],
   lookUp: ['ArrowUp'],
@@ -93,6 +94,7 @@ export class Controls {
   get slotPressed() {
     if (this.actions.pressed('slot1')) return 0;
     if (this.actions.pressed('slot2')) return 1;
+    if (this.actions.pressed('slot3')) return 2;
     return -1;
   }
 

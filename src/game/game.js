@@ -49,7 +49,7 @@ export class Game {
     Object.assign(this, { world, controls, camRig, player, enemies, pickups, weapon, fx, hud, audio, post, juice });
 
     // skeleton debug overlay (H)
-    const helpers = [player.rigModel, ...enemies.puppets.map((p) => p.rig)].map((r) => r.helper());
+    const helpers = [player.rigModel, ...enemies.puppets.filter((p) => p.rig).map((p) => p.rig)].map((r) => r.helper());
     for (const h of helpers) {
       h.visible = false;
       scene.add(h);

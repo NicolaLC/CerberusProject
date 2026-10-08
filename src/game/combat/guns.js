@@ -8,6 +8,7 @@ import { pattern } from './ballistics.js';
 export const GUNS = {
   rifle: {
     name: 'M-8 AVENGER',
+    short: 'AR',
     rpm: 540,
     spinUp: 0, // seconds to reach full rpm
     mag: 32,
@@ -57,6 +58,7 @@ export const GUNS = {
   },
   mg: {
     name: 'M-76 REVENANT',
+    short: 'MG',
     rpm: 780,
     spinUp: 0.4,
     mag: 90,
@@ -107,6 +109,64 @@ export const GUNS = {
       return g;
     },
   },
+  // Precision rifle: semi-auto (one round per click), a slow bolt cycle, pin-point when scoped,
+  // poor from the hip. Body shot kills a puppet, headshot kills a trooper.
+  sniper: {
+    name: 'M-29 LANCE',
+    short: 'SR',
+    semi: true,
+    rpm: 70, // bolt cycle ~0.86 s
+    spinUp: 0,
+    mag: 5,
+    reserve: 25,
+    maxReserve: 40,
+    pickup: { crate: 10, drop: 3 },
+    reloadTime: 2.4,
+    activeReload: { good: [0.36, 0.56], perfect: [0.43, 0.49] },
+    damage: 110,
+    headMult: 3,
+    limbMult: 0.7,
+    weakMult: 3,
+    range: 300,
+    falloff: null, // full damage at any range
+    spreadHip: 0.045,
+    spreadAim: 0,
+    spreadMove: 0.03,
+    firstShot: { rest: 0, hip: 1, aim: 1 },
+    bloomPerShot: 0,
+    bloomMax: 0,
+    bloomDecay: 1,
+    bloomDelay: 0,
+    recoil: {
+      // one big climb per shot, almost fully recovered before the bolt is back
+      pattern: [[0.06, 0.006]],
+      loop: 1,
+      jitter: 0.2,
+      aim: 0.7,
+      recover: 0.95,
+      reset: 0.5,
+      hold: 0.18, // s before the aim settles back (not the whole bolt cycle)
+    },
+    kick: { back: 0.14, climb: 0.2 },
+    flash: 1.6,
+    trauma: 0.14,
+    fireMoveSpeed: null,
+    zoom: { fov: 24, dist: 1.5, sens: 0.45 }, // aimed view: scope magnification
+    sockets: { gripR: [0, -0.15, 0.24], gripL: [0, -0.08, 0.5], muzzle: [0, 0.02, 1.3] },
+    build(m, box) {
+      const g = new THREE.Group();
+      g.add(box(0.06, 0.15, 0.26, m.gun, 0, -0.03, 0.06)); // stock
+      g.add(box(0.03, 0.05, 0.16, m.plate, 0, 0.05, 0.08)); // cheek rest
+      g.add(box(0.08, 0.12, 0.5, m.gun, 0, 0, 0.42)); // receiver
+      g.add(box(0.04, 0.04, 0.6, m.gun, 0, 0.02, 0.96)); // long barrel
+      g.add(box(0.07, 0.07, 0.08, m.gun, 0, 0.02, 1.26)); // muzzle brake
+      g.add(box(0.06, 0.15, 0.07, m.gun, 0, -0.12, 0.24)); // pistol grip
+      g.add(box(0.06, 0.07, 0.34, m.gun, 0, 0.12, 0.36)); // scope
+      g.add(box(0.05, 0.05, 0.02, m.glow, 0, 0.12, 0.535)); // scope lens
+      g.add(box(0.02, 0.025, 0.42, m.glow, 0.045, 0.02, 0.4));
+      return g;
+    },
+  },
 };
 
-export const GUN_ORDER = ['rifle', 'mg'];
+export const GUN_ORDER = ['rifle', 'mg', 'sniper'];

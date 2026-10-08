@@ -416,6 +416,8 @@ export class Player {
       lean: this.peek.length() > 0.2 ? -camRig.shoulder * 0.25 : 0,
       lookYaw,
       lower: weaponLower,
+      vel: this.vel,
+      yaw: this.facing,
     });
 
     this.root.position.copy(this.visualPos());

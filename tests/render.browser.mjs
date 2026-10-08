@@ -29,7 +29,7 @@ const r = await p.evaluate(() => {
   // Many far puppets are legitimately behind walls from the spawn, so any one in sight must read as an enemy.
   let hittable = false;
   for (const target of lodFar) {
-    if (!target.alive) continue;
+    if (!target.alive || !target.rig) continue; // humanoids (the boss is covered by tests/boss.browser.mjs)
     for (let i = 0; i < 20; i++) {
       const c = g.engine.camera.position;
       const t = target.rig.bones.Spine2.getWorldPosition(c.clone());

@@ -274,8 +274,26 @@ export class World {
 
     // ---------- East shooting range ----------
     this.box(40, 0, 32, 18, LOW, 1, m.low, { cover: 'low' }); // firing line bench
-    this.box(31, 0, 9, 0.6, 2.2, 42, m.wall); // lane separator wall
+    this.box(31, 0, 9, 0.6, 2.2, 42, m.wall, { cover: 'wall' }); // lane separator wall
     for (const z of [26, 14, 2, -10]) this.strip(40, 0.01, z, 18, 0.02, 0.15, m.stripWhite);
+
+    // ---------- North-east arena: the spider mech (actors/spider.js ARENA) ----------
+    // fenced off from the range by a wall with a gate; freestanding concrete walls to hide behind
+    const AW = 3.2;
+    this.box(34, 0, -14, 6, AW, 0.6, m.wall, { cover: 'wall' }); // x 31..37
+    this.box(46.25, 0, -14, 7.5, AW, 0.6, m.wall, { cover: 'wall' }); // x 42.5..50
+    for (const [x, z, w, d] of [
+      [34, -23, 6, 0.6],
+      [45, -29, 0.6, 5],
+      [29.5, -36, 5, 0.6],
+      [42, -42, 6.5, 0.6],
+      [33, -52, 0.6, 5],
+      [44.5, -55, 5, 0.6],
+    ]) this.box(x, 0, z, w, AW, d, m.wall, { cover: 'wall' });
+    this.box(39, 0, -33, 3, LOW, 1, m.low, { cover: 'low' });
+    this.box(27.5, 0, -28, 1, LOW, 3, m.low, { cover: 'low' });
+    this.box(37, 0, -58, 3, LOW, 1, m.low, { cover: 'low' });
+    this.strip(39.75, AW, -14, 5.5, 0.12, 0.7, m.stripWhite); // gate lintel light (x 37..42.5)
 
     // ---------- Building (dark interior) ----------
     // footprint x -24..24, z -62..-30, wall height 7, roof at 7..7.5
@@ -285,15 +303,15 @@ export class World {
     // south wall with two doors: A at x=-12, B at x=16 (4m wide, 4m tall)
     const southSegs = [[-24, -14], [-10, 14], [18, 24]];
     const southMat = faces(m.wall, { nz: m.inWall });
-    for (const [a, b] of southSegs) this.box((a + b) / 2, 0, zS, b - a, WH, wallT, southMat);
+    for (const [a, b] of southSegs) this.box((a + b) / 2, 0, zS, b - a, WH, wallT, southMat, { cover: 'wall' });
     for (const x of [-12, 16]) this.box(x, 4, zS, 4, WH - 4, wallT, southMat);
-    this.box(-24, 0, -46, wallT, WH, 32, faces(m.wall, { px: m.inWall })); // west
-    this.box(24, 0, -46, wallT, WH, 32, faces(m.wall, { nx: m.inWall })); // east
+    this.box(-24, 0, -46, wallT, WH, 32, faces(m.wall, { px: m.inWall }), { cover: 'wall' }); // west
+    this.box(24, 0, -46, wallT, WH, 32, faces(m.wall, { nx: m.inWall }), { cover: 'wall' }); // east
     // interior floor
     this.box(0, 0, -46, 47.4, 0.02, 31.4, m.inFloor, { shadow: false });
     // inner partition at x = 8 with doorway at z=-40
-    this.box(8, 0, -34.15, 0.5, WH, 7.7, m.inWall);
-    this.box(8, 0, -52, 0.5, WH, 20, m.inWall);
+    this.box(8, 0, -34.15, 0.5, WH, 7.7, m.inWall, { cover: 'wall' });
+    this.box(8, 0, -52, 0.5, WH, 20, m.inWall, { cover: 'wall' });
     this.box(8, 3.5, -40, 0.5, WH - 3.5, 4, m.inWall);
     // roof with skylight over main hall (x -10..-2, z -50..-42)
     const RY = WH;

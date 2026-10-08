@@ -7,7 +7,8 @@ export class Audio {
   // Sound reactions to gameplay events.
   listen(events) {
     events.on('weapon:shot', (s) => {
-      this.shot(s.heavy);
+      if (s.gun === 'sniper') this.snipe();
+      else this.shot(s.heavy);
       if (s.mag <= 0.2) this.lowMag(s.mag); // last rounds: a rising click warns before the mag runs dry
     });
     events.on('weapon:hit', (h) => (h.killed ? this.kill() : this.hit(h.weak ? 'weak' : h.crit ? 'head' : 'body')));
@@ -17,6 +18,14 @@ export class Audio {
     events.on('puppet:down', () => this.thud());
     events.on('player:hurt', () => this.thud());
     events.on('bolt:fired', () => this.zap(0.12));
+    events.on('blast', (b) => this.boom(Math.min(1.2, 0.4 + b.radius / 6)));
+    events.on('boss:leg', () => this.boom(0.8));
+    events.on('boss:dead', () => this.boom(1.4));
+    events.on('boss:step', () => this.thud());
+    events.on('boss:charge', () => this.charge());
+    events.on('boss:stomp', () => this.charge());
+    events.on('boss:mortar', () => this.zap(0.25));
+    events.on('boss:wake', () => this.charge());
     events.on('pickup:collected', () => this.pickup());
     return this;
   }
@@ -81,6 +90,49 @@ export class Audio {
       this.#env(clack, 0.05, 0.02);
       clack.start(t + 0.012);
       clack.stop(t + 0.04);
+    }
+  }
+
+  // Sniper: sharper, louder crack, deep boom, long rolling tail, then the bolt worked back and forth.
+  snipe() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const crack = this.ctx.createBufferSource();
+    crack.buffer = this.noise;
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 1800;
+    crack.connect(hp);
+    this.#env(hp, 1.3, 0.06);
+    crack.start(t, Math.random() * 0.3, 0.08);
+
+    const body = this.ctx.createOscillator();
+    body.frequency.setValueAtTime(140, t);
+    body.frequency.exponentialRampToValueAtTime(28, t + 0.2);
+    this.#env(body, 1.2, 0.26);
+    body.start(t);
+    body.stop(t + 0.3);
+
+    const tail = this.ctx.createBufferSource();
+    tail.buffer = this.noise;
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 500;
+    tail.connect(lp);
+    this.#env(lp, 0.5, 0.9);
+    tail.start(t, 0, 0.5);
+
+    for (const [at, f] of [[0.38, 1500], [0.55, 1100]]) {
+      const bolt = this.ctx.createOscillator();
+      bolt.type = 'square';
+      bolt.frequency.value = f;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.setValueAtTime(0.06, t + at);
+      g.gain.exponentialRampToValueAtTime(0.001, t + at + 0.04);
+      bolt.connect(g).connect(this.master);
+      bolt.start(t + at);
+      bolt.stop(t + at + 0.05);
     }
   }
 
@@ -176,6 +228,44 @@ export class Audio {
     this.#env(o, volume, 0.2);
     o.start(t);
     o.stop(t + 0.2);
+  }
+
+  // Explosion: low noise burst with a long tail plus a sub drop.
+  boom(size = 1) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const n = this.ctx.createBufferSource();
+    n.buffer = this.noise;
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(1400, t);
+    f.frequency.exponentialRampToValueAtTime(120, t + 0.6 * size);
+    n.connect(f);
+    this.#env(f, 1.1 * size, 0.7 * size);
+    n.start(t, 0, 0.5);
+    const o = this.ctx.createOscillator();
+    o.frequency.setValueAtTime(90, t);
+    o.frequency.exponentialRampToValueAtTime(25, t + 0.5);
+    this.#env(o, 1.0 * size, 0.6);
+    o.start(t);
+    o.stop(t + 0.7);
+  }
+
+  // Rising whine: the mech charging its cannons / rearing up.
+  charge() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(220, t);
+    o.frequency.exponentialRampToValueAtTime(1100, t + 0.6);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.exponentialRampToValueAtTime(0.12, t + 0.5);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.72);
   }
 
   thud() {

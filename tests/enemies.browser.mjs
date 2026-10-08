@@ -16,6 +16,9 @@ const r = await p.evaluate(() => {
   engine.stop();
   const step = (s) => { for (let i = 0; i < s * 60; i++) engine.step(1 / 60); };
   const out = {};
+  // drones and the boss have their own tests: keep them out of these counts
+  for (const e of enemies.puppets) if (e.kind === 'drone' || e.kind === 'boss') e.alive = false;
+  enemies.dirty = true;
 
   // 1. a destroyed puppet stays destroyed
   const pp = enemies.puppets.find((x) => x.kind === 'static');
