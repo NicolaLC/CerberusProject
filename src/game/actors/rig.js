@@ -180,6 +180,12 @@ const _bq = new THREE.Quaternion();
 const _fq = new THREE.Quaternion();
 const SIDES = ['Left', 'Right'];
 const CROUCH_DROP = 0.38; // m the hips sink when crouched
+// [LeftUpLeg x, LeftLeg x, RightUpLeg x, RightLeg x], hips [pitch, roll, height], extra spine pitch per bone
+const VAULT_POSE = {
+  hop: { legs: [-1.25, 1.9, -0.75, 1.7], hips: [0.25, 0, 0.1], spine: 0.12 },
+  slide: { legs: [-1.45, 0.2, -1.05, 1.15], hips: [-0.35, 0.45, -0.8], spine: 0.2 }, // hips down onto the top
+};
+const HUNCH = 0.55; // rad of forward spine bend moving along cover
 const KNEEL_L = [-1.45, 1.45, 0]; // low cover kneel: thigh, knee, toes
 const KNEEL_R = [0.15, 1.5, 0.9];
 
@@ -211,12 +217,15 @@ export class Animator {
     this.spinePitch = 0;
     this.hipsOffset = 0;
     this.look = 0;
+    this.gaitW = 0; // 0 standing .. 1 full gait, eased
+    this.holdV = 0; // last moving speed (the cadence a stop winds down from)
+    this.hunch = 0;
     this.hand = 1; // 1 = gun on the right shoulder, -1 = mirrored to the left (peeking a left corner)
     this.hit = new THREE.Vector2(); // spring-driven hit reaction (x: pitch, y: roll)
     this.hitVel = new THREE.Vector2();
     // thighs: yaw first, then swing (the swing plane turns with the step direction)
     for (const side of SIDES) rig.bones[side + 'UpLeg'].rotation.order = 'YXZ';
-    const leg = () => ({ thigh: 0, knee: 0, pitch: 0, stance: 0, locked: false, released: false, lock: new THREE.Vector3() });
+    const leg = () => ({ thigh: 0, knee: 0, pitch: 0, stance: 0, locked: false, released: false, lw: 0, lock: new THREE.Vector3() });
     this.legs = { Left: leg(), Right: leg() };
   }
 
@@ -243,6 +252,14 @@ export class Animator {
     const r = this.run;
     const c = s.crouch;
     const v = s.speed;
+    // gait weight eases out after a stop (the legs finish the step and settle) and in quickly on a start;
+    // meanwhile the cycle keeps the last cadence, fading with it
+    const gw = smoothstep(0.05, 0.6, v);
+    this.gaitW = mix(this.gaitW, gw, 1 - Math.exp(-dt * (gw > this.gaitW ? 14 : 5)));
+    if (v > 0.3) this.holdV = v;
+    const ve = Math.max(v, this.holdV * this.gaitW); // the speed the legs act out
+    this.hunch = mix(this.hunch, s.hunch ? 1 : 0, 1 - Math.exp(-dt * 8));
+    const hu = this.hunch;
     if (s.vel && v > 0.3) {
       // which way the body moves relative to where it faces: strafing / backpedaling
       const sn = Math.sin(s.yaw);
@@ -258,10 +275,12 @@ export class Animator {
       this.dirZ = 1;
     }
     // crouched and moving (sliding along low cover): the gait keeps going with the hips down, IK bends the legs
-    const mv = smoothstep(0.05, 0.6, v);
+    const mv = this.gaitW;
     const ck = c * (1 - mv); // kneel pose weight: only when crouched and still
     const cw = c * mv; // crouch-walk weight
-    const m = mv * (1 - ck) * (1 - 0.35 * cw); // how much of the gait shows (0 = standing); short steps crouched
+    // crouched steps are shorter and quicker (the cadence rises so planted feet still keep pace with the ground)
+    const short = 1 - 0.5 * cw;
+    const m = mv * (1 - ck) * short; // how much of the gait shows (0 = standing)
     // strafing: the hips turn toward the movement (up to HIP_YAW); backpedaling plays the cycle in reverse
     const back = this.dirZ < -0.25;
     const dirYaw = back ? Math.atan2(-this.dirX, -this.dirZ) : Math.atan2(this.dirX, this.dirZ);
@@ -271,12 +290,15 @@ export class Animator {
     this.legYaw = mix(this.legYaw, (dirYaw - want) * m, ease);
     const W = GAITS.walk;
     const R = GAITS.run;
-    const g = (this.gait = Math.max(r, smoothstep(RUN_AT[0], RUN_AT[1], v)));
-    const freq = v > 0.01 ? mix(frequency(W, v), frequency(R, v), g) : 0;
+    // walk <-> run blend eased in time: a stop decelerates in a few frames, the poses must not swap that fast
+    // crouched it stays a (quick) walk: the run's big kick and knee drive don't fit under low cover
+    this.gait = mix(this.gait, Math.max(r, smoothstep(RUN_AT[0], RUN_AT[1], ve)) * (1 - Math.min(1, 2 * cw)), 1 - Math.exp(-dt * 6));
+    const g = this.gait;
+    const freq = ve > 0.01 ? mix(frequency(W, ve), frequency(R, ve), g) / short : 0;
     this.phase = (((this.phase + freq * dt * (back ? -1 : 1)) % 1) + 1) % 1;
     const duty = mix(W.duty, R.duty, g);
-    const ampW = amplitude(W, v);
-    const ampR = amplitude(R, v);
+    const ampW = amplitude(W, ve);
+    const ampR = amplitude(R, ve);
     let wSum = 0;
     let dSum = 0;
     for (const side of SIDES) {
@@ -303,7 +325,7 @@ export class Animator {
     const hipsPitch = mix(_pw[1], _pr[1], g) * m;
     // left leg forward -> -1 (drives hips twist and the arm swing)
     const sw = -Math.cos(this.phase * Math.PI * 2);
-    const amt = Math.min(1, v / 4) * (1 - c);
+    const amt = Math.min(1, ve / 4) * (1 - c);
     B.Hips.position.y += -CROUCH_DROP * c - this.drop * m + bob;
     const twist = sw * mix(mix(W.twist, R.twist, g), RUN.twist, r) * m;
     B.Hips.rotation.set(hipsPitch + RUN.hipsLean * r * amt, this.hipYaw + twist, -sw * mix(W.roll, R.roll, g) * m);
@@ -311,15 +333,16 @@ export class Animator {
     // ----- torso -----
     const kk = 1 - Math.exp(-dt * 14);
     const running = r * amt;
-    const aim = s.combat ? s.aimPitch : mix(-0.5, -0.95, r);
-    this.spinePitch = mix(this.spinePitch, -aim * 0.3 * (1 - running) + RUN.lean * running + 0.08 * g * amt * (1 - r) + c * 0.15, kk);
+    const aim = s.combat ? s.aimPitch : mix(-0.5, -0.95, Math.max(r, hu));
+    // hunch (moving along cover): chest folds forward over raised hips, the head stays up and looks ahead
+    this.spinePitch = mix(this.spinePitch, -aim * 0.3 * (1 - running) + RUN.lean * running + 0.08 * g * amt * (1 - r) + c * 0.15 * (1 - hu) + HUNCH * hu, kk);
     this.weaponPitch = mix(this.weaponPitch, -aim * 0.7 - c * 0.15, 1 - Math.exp(-dt * 22));
     const lean = (s.lean ?? 0) * 0.33;
     const sp = this.spinePitch / 3 + this.hit.x / 3;
     // the chest keeps facing where the character aims (hips yaw undone); it leans with the hips unless aiming
     B.Spine.rotation.set(sp - (s.combat ? hipsPitch : 0), -twist * 0.5 - this.hipYaw, this.hit.y / 3 + lean);
     B.Spine1.rotation.set(sp, -twist * 0.9, this.hit.y / 3 + lean); // shoulders counter-rotate
-    B.Spine2.rotation.set(sp - RUN.hipsLean * running, -twist * 0.4, this.hit.y / 3 + lean);
+    B.Spine2.rotation.set(sp - RUN.hipsLean * running + 0.15 * hu, -twist * 0.4, this.hit.y / 3 + lean); // shoulders roll down
     // head stays level and looks where it should (at the camera while in cover)
     this.look = mix(this.look, s.lookYaw ?? 0, kk * 0.6);
     B.Neck.rotation.set(-this.spinePitch * 0.55 - RUN.hipsLean * running, this.look * 0.4 + twist * 0.3, 0);
@@ -376,31 +399,35 @@ export class Animator {
     const baseQ = _q3.setFromAxisAngle(_yAxis, this.hipYaw + this.legYaw).premultiply(rootQ); // where the legs walk
     const pole = _knee.set(0, 0.15, 1).applyQuaternion(baseQ); // knees forward
     const rootY = rig.root.getWorldPosition(_a).y;
+    const lift = CROUCH_DROP * c * mv;
     for (const side of SIDES) {
       const L = this.legs[side];
       const foot = B[side + 'Foot'];
-      if (L.stance <= 0 || v < 0.2) {
-        L.locked = L.released = false;
-        if (cw < 0.01) continue;
-        // crouch-walk swing: the foot moves as if the hips were up, the knee folds to reach it
-        const fk = foot.getWorldPosition(_b);
-        fk.y += CROUCH_DROP * c;
-        twoBone(B[side + 'UpLeg'], B[side + 'Leg'], foot, fk, pole);
-        continue;
-      }
       const fk = foot.getWorldPosition(_b);
       const floor = this.ground ? this.ground(fk.x, fk.z, rootY + 0.6) : rootY;
+      // lowered hips (crouch-walk): the feet follow the gait as if the hips were up, the knees fold to reach
+      fk.y = Math.max(fk.y + lift, floor + ANKLE);
+      if (L.stance <= 0 || m < 0.002) {
+        L.locked = L.released = false;
+        L.lw = 0;
+        if (lift > 0.001 && m > 0.01) twoBone(B[side + 'UpLeg'], B[side + 'Leg'], foot, fk, pole);
+        continue;
+      }
       if (!L.locked && !L.released) {
         L.locked = true;
+        L.lw = 1;
         L.lock.set(fk.x, floor, fk.z);
       }
       if (L.locked && Math.hypot(fk.x - L.lock.x, fk.z - L.lock.z) > LOCK_RELEASE) {
         L.locked = false;
         L.released = true; // re-plants next step
       }
-      const w = L.locked ? L.stance : 0;
+      // the locks fade out with the gait on a stop (no snap when the last one lets go)
+      const st = L.stance * Math.min(1, m / 0.25);
+      if (!L.locked) L.lw = Math.max(0, L.lw - dt * 8); // a released lock lets go over ~0.12 s
+      const w = L.lw * st;
       const heelUp = FOOT * Math.sin(Math.max(0, L.pitch)); // rolling onto the toes lifts the ankle
-      _c.set(mix(fk.x, L.lock.x, w), mix(fk.y, floor + ANKLE + heelUp, L.stance), mix(fk.z, L.lock.z, w));
+      _c.set(mix(fk.x, L.lock.x, w), mix(fk.y, floor + ANKLE + heelUp, st), mix(fk.z, L.lock.z, w));
       twoBone(B[side + 'UpLeg'], B[side + 'Leg'], foot, _c, pole);
     }
     if (ck > 0.001) {
@@ -411,9 +438,23 @@ export class Animator {
         setX(B[side + 'ToeBase'], kneel[2] * ck);
       }
     }
+    // vault over low cover: a tucked jump, or a slide across the top on the hip (legs forward, leaning back)
+    const vw = s.vault ? smoothstep(0, 0.22, s.vaultT) * (1 - smoothstep(0.78, 1, s.vaultT)) : 0;
+    if (vw > 0.001) {
+      const P = VAULT_POSE[s.vault];
+      blendTo(B.LeftUpLeg, P.legs[0], 0, 0, vw);
+      blendTo(B.LeftLeg, P.legs[1], 0, 0, vw);
+      blendTo(B.RightUpLeg, P.legs[2], 0, 0, vw);
+      blendTo(B.RightLeg, P.legs[3], 0, 0, vw);
+      B.Hips.rotation.x += P.hips[0] * vw;
+      B.Hips.rotation.z += P.hips[1] * vw;
+      B.Hips.position.y += P.hips[2] * vw;
+      B.Spine1.rotation.x += P.spine * vw;
+      B.Spine2.rotation.x += P.spine * vw;
+    }
     rig.root.updateMatrixWorld(true);
 
-    if (this.ground) this.#feetIK(dt, ck);
+    if (this.ground && vw < 0.05) this.#feetIK(dt, ck);
     this.#orientFeet(baseQ, 1 - ck);
   }
 

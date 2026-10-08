@@ -76,3 +76,11 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
 - Not the humanoid rig: its own bones (body, turret, two shutters, femur + tibia per leg) baked with `RigidSkin`.
 - Leg bones are children of the root, posed in root space each frame by `placeBone` (+Y along the segment);
   a broken leg's bones are scaled to ~0 (hides the skinned parts without a rebake).
+- Stops and starts: the gait weight (`gaitW`) eases in fast and out over ~0.3 s while the cycle keeps the last
+  cadence (`holdV`), so a stop finishes the step instead of snapping to idle; the walk/run blend is eased in time
+  (a stop drops the speed in a few frames), and foot locks fade out (`lw`) rather than letting go in one frame.
+- Crouch-walk: hips lowered by `CROUCH_DROP × crouch`; every foot is IK'd to its standing-gait position (raised by
+  that drop, never below the floor), with shorter quicker steps (`short`) and walk keys only.
+- Vault poses (`VAULT_POSE`): `hop` tucks both legs, `slide` puts the legs forward and the hips down onto the
+  block's top, rolled onto one side; weight eases in/out over the vault, foot IK is off meanwhile.
+

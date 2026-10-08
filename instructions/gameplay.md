@@ -31,9 +31,15 @@
   `'low'` / `'high'` cover blocks, or `'wall'` for walls (building walls, the range separator, the boss arena's
   walls). Walls behave as high cover: peek at their ends and doorways.
 - Slide along the face with A/D (camera relative); stops 0.2m before an edge. Moving away from the cover exits.
-  The slide sets `player.vel`, so the legs side-step (hips turned toward the move, chest to the wall); crouched
-  behind low cover it is a crouch-walk (gait keeps running with the hips down, IK bends the legs).
+  Moving along cover (not shooting, `player.coverMoving()`) the character turns into the move and runs hunched
+  (Animator `hunch`: chest folded forward, shoulders down, head up looking ahead, gun low); behind low cover
+  the hips come half up (crouch 0.45) and it is a quick short-step walk with the feet IK'd to the floor.
+  Stopping turns the back to the wall again.
 - Low: crouched; aim or fire pops up (fire waits until standing). `Space` + W vaults over.
+- Vault (`VAULT` in player.js): a block up to 1.2 m deep (its short side) is jumped (tucked hop, 0.5 s); a deeper
+  one (its long side) is slid across on the hip (0.3 s + depth / 5.5 m/s, linear, keeps momentum). Running
+  (> 3.5 m/s) straight at low cover within 2.2 m and pressing `Space` vaults without stopping. Heights come
+  from the take-off and landing floors (the floor under the arc is the block's top). Event `player:vault`.
 - Out of combat the character turns its back to the wall and looks at the camera.
 - High: standing; aiming at an edge peeks: the feet stay behind cover (0.2 m weight shift, `PEEK` in player.js), the torso
   leans out 0.6 rad so head and gun clear the edge, at a left edge the gun hold mirrors to the left shoulder
