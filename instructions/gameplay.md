@@ -70,7 +70,7 @@
 - Armed soldiers (150 hp, 1 weak spot, rifle). Idle until they see the player (32 m + line of sight), get
   shot, or a squadmate within 22 m alerts them.
 - Take cover: pick a free spot whose box is between them and the player (threat within ~50° behind the box),
-  6+ m from the player, ideally ~15 m, reachable in a straight line or around the spot's own box (one corner
+  6-28 m from the player (34 m when retreating: never out of the fight), ideally ~15 m, reachable in a straight line or around the spot's own box (one corner
   waypoint; no general pathfinding, same floor level only). Spots are reserved, one trooper each.
 - Low cover: crouch, stand up to shoot over it. High cover: hide at an end, step 0.8 m out to shoot.
 - Cycle: cover 1-2.2 s → peek → aim (visor flares 0.5 s) → 3-4 bolts → cover. No line of sight twice →

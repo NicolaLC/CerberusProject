@@ -15,6 +15,7 @@ const TUNING = {
   maxTravel: 22, // m: how far an AI will run for a spot
   idealRange: 15, // m: preferred distance to the threat
   minRange: 6, // closer than this to the threat is not an option
+  maxRange: 28, // farther than this is out of the fight (troopers engage within 30 m); retreat: +6
 };
 
 const _a = new THREE.Vector3();
@@ -130,7 +131,7 @@ export class CoverMap {
       const straight = s.pos.distanceTo(from);
       if (straight > maxTravel) continue;
       const range = s.pos.distanceTo(threat);
-      if (range < t.minRange) continue;
+      if (range < t.minRange || range > (opts.retreat ? t.maxRange + 6 : t.maxRange)) continue;
       if (!this.protects(s, threat)) continue;
       const bx = (s.pos.x - threat.x) / range;
       const bz = (s.pos.z - threat.z) / range;
