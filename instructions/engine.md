@@ -28,8 +28,8 @@ Goal: hold 60 fps, never freeze on a bug, scale to a much bigger game.
 
 ## Draw calls (`batch.js`)
 WebGL frames are CPU-bound on draw calls (one per mesh per material per pass, and the sun shadow pass
-repeats every caster). Budget: ≤ 220 calls per frame at the spawn view, ≤ 25 of them in the shadow pass
-(`tests/render.browser.mjs`; was ~1200 / ~60).
+repeats every caster). Budget: ≤ 140 calls per frame at the spawn view, ≤ 25 of them in the shadow pass
+(`tests/render.browser.mjs`; history: ~1200 → 240 batching → 187 shadows → ~108 puppet LOD).
 - Pattern: originals stay in the scene as invisible PROXIES (raycasts, hit zones, colliders, userData keep
   working: three's Raycaster ignores `visible`); merged meshes render and have raycast disabled.
 - `mergeStatic(meshes, parent)`: the level (World.staticMeshes) → one mesh per material + shadow flags.
@@ -41,13 +41,22 @@ repeats every caster). Budget: ≤ 220 calls per frame at the spawn view, ≤ 25
 - Instancing for many copies of one thing: puppet stands, sparks (per-instance HDR color), casings, decals.
 - New per-object visuals: prefer adding to an existing batch/instanced mesh over new Mesh objects.
 
+## Distance LOD (`RigidSkin` with `lod: true`, switched by the `lod` system in `game.js`)
+- Far detail = ONE SkinnedMesh for the whole rig: every opaque part merged, its material's color baked as a
+  vertex color and its glow as a `lodEmissive` vertex attribute (shader patch on one shared program).
+  Transparent parts (halos) are dropped; textured materials give `userData.lodColor`, glows can be boosted
+  with `userData.lodGlow` (puppet weak spots: 5, to stay readable without the halo).
+- Each rig has its own LOD material instance, so per-rig effects still work (hit flash sets its `emissive`).
+- Puppets switch to far detail beyond 32 m from the camera (back under 28 m). Hitboxes never change:
+  far puppets are hit exactly like near ones (tested).
+
 ## Shadows
 - Every batch (level, each rig) builds ONE shadow-only mesh: all opaque casters merged, depth only. Color
   meshes don't cast. Transparent parts (halos) never cast.
 - Shadow-only meshes stay `visible = false`; `installShadowOnly(renderer)` (done by Engine) shows them only
   while shadow maps render, so the color pass never lists them. Layers can't do this: three's shadow pass
   tests object layers against the main camera.
-- Shadow LOD (`game.js`, `SHADOW_LOD`): puppets farther than 34 m from the camera stop casting (back on
+- Shadow LOD (`game.js`, `LOD.shadow`): puppets farther than 34 m from the camera stop casting (back on
   under 30 m). `RigidSkin.setCastShadow(on)` toggles a rig's shadow draw.
 - The sun's shadow frustum (±48 m, 4096²) follows the player in 2 m snaps (`world.updateSun`).
 
