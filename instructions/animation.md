@@ -17,9 +17,12 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
 - `H` in game toggles `SkeletonHelper`s.
 
 ## Player model (`src/game/actors/soldier.js`)
-- `buildSoldier(rig)` builds a procedural armored sci-fi soldier: several rounded-box / capsule pieces per
-  bone (undersuit, gunmetal plates, light ceramic accents, red stripe, cyan HDR glow strips that feed bloom),
-  plus a backpack attached to Spine2. The player rig is created with `dummy: false`; puppets keep the dummy.
+- `buildSoldier(rig)` builds a procedural military combat robot (mood reference: olive drab plate carrier and
+  pads over an exposed mechanical frame): rounded boxes / cylinders / capsules per bone. Palette: dark mesh
+  fabric, olive drab hard plates, grey-green padded cordura (pouches, shoulder and knee pads), black metal frame
+  (waist actuator, neck pistons, shin hydraulics), yellow hazard rings, amber HDR LEDs; a boxy sensor head with
+  a big lens; radio backpack attached to Spine2. Every detail is a child of a bone part, so it follows the body;
+  RigidSkin batches it to one draw per material (keep to the 8 materials in `soldierMaterials`). The player rig is created with `dummy: false`; puppets keep the dummy.
 - Same contract as the dummy: each bone's group is its part, so `rig.setPart` swaps in a modeled piece.
 
 ## Dummy parts (pivots for modeled parts)
