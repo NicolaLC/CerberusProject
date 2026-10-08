@@ -24,6 +24,8 @@ const TUNING = {
   dist: { normal: 3.4, aim: 1.9, sprint: 3.9 },
   fov: { normal: 70, aim: 50, sprint: 78 },
   bob: { walk: 0.015, sprint: 0.05 },
+  // boss lock-on: the camera turns to keep `focus` framed whenever the player isn't steering it
+  focus: { yawRate: 3.5, pitchRate: 2.5, idle: [0.35, 0.9], dist: 1.1, fov: 5, pitch: [-0.35, 0.45] },
 };
 
 export class CameraRig {
@@ -39,6 +41,9 @@ export class CameraRig {
     this.height = 1.6;
     this.fov = 70;
     this.zoom = null; // { fov, dist, sens } of a scoped gun while aiming (set by Weapon)
+    this.focus = null; // world point to keep framed (boss lock-on), set each frame by the game; null = free
+    this.focusBlend = 0; // 0..1, eased in/out
+    this.lookIdle = 99; // seconds since the player last moved the view
     this.pivot = new THREE.Vector3();
     this.smoothPivot = null;
     this.forward = new THREE.Vector3();
@@ -75,6 +80,7 @@ export class CameraRig {
 
   look(dx, dy, aiming) {
     const sens = aiming ? this.t.aimSens * (this.zoom?.sens ?? 1) : this.t.sens;
+    if (Math.abs(dx) + Math.abs(dy) > 0.5) this.lookIdle = 0;
     this.yaw -= dx * sens;
     this.pitch -= dy * sens;
     // the player pulling against the recoil counts as compensation: the auto-recovery won't overshoot
@@ -157,14 +163,32 @@ export class CameraRig {
       }
     }
 
+    // boss lock-on: steer toward the focus unless the player is aiming or looking around (then spring back)
+    this.lookIdle += realDt;
+    this.focusBlend += ((this.focus ? 1 : 0) - this.focusBlend) * (1 - Math.exp(-dt * 3));
+    if (this.focus && !aiming) {
+      const fc = t.focus;
+      const f = this.focus;
+      const w = THREE.MathUtils.smoothstep(this.lookIdle, fc.idle[0], fc.idle[1]);
+      const dx = f.x - this.pivot.x;
+      const dz = f.z - this.pivot.z;
+      const wantYaw = Math.atan2(-dx, -dz);
+      let dyaw = wantYaw - this.yaw;
+      dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
+      this.yaw += dyaw * (1 - Math.exp(-dt * fc.yawRate)) * w;
+      const wantPitch = THREE.MathUtils.clamp(Math.atan2(f.y - this.pivot.y, Math.hypot(dx, dz)), fc.pitch[0], fc.pitch[1]);
+      this.pitch += (wantPitch - this.pitch) * (1 - Math.exp(-dt * fc.pitchRate)) * w;
+    }
+    const framing = aiming ? 0 : this.focusBlend; // pulled back a little to fit the big target
+
     const targetSide = (aiming ? 0.95 : 0.85) * this.shoulder;
     this.side += (targetSide - this.side) * k;
     const mode = aiming ? 'aim' : player.sprinting ? 'sprint' : 'normal';
     const zoomed = aiming && this.zoom;
-    this.dist += ((zoomed ? this.zoom.dist : t.dist[mode]) - this.dist) * k;
+    this.dist += ((zoomed ? this.zoom.dist : t.dist[mode] + framing * t.focus.dist) - this.dist) * k;
     this.height += (player.eyeHeight() - this.height) * k;
     this.fovKick = Math.max(0, this.fovKick - dt * 30);
-    this.fov += ((zoomed ? this.zoom.fov : t.fov[mode]) - this.fov) * (1 - Math.exp(-dt * (zoomed ? 11 : 8)));
+    this.fov += ((zoomed ? this.zoom.fov : t.fov[mode] + framing * t.focus.fov) - this.fov) * (1 - Math.exp(-dt * (zoomed ? 11 : 8)));
 
     // strafe roll + sprint bob
     const v = player.vel;

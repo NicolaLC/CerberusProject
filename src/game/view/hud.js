@@ -48,6 +48,7 @@ export class Hud {
     this.el.toast = $('toast');
     this.el.block = $('blockmark');
     this.el.scope = $('scope');
+    this.el.lock = $('lockmark');
     this.el.boss = { root: $('boss'), name: $('boss-name'), fill: $('boss-fill'), legs: $('boss-legs'), state: $('boss-state') };
     this.armorHint = 0;
     this.hitTime = 0;
@@ -56,6 +57,8 @@ export class Hud {
     this.dmgTime = 0;
     this.toastTime = 0;
     this.aimLabel = 'RMB';
+    this.coverLabel = 'SPACE';
+    this.forwardLabel = 'W';
   }
 
   // HUD reactions to gameplay events. camRig: for the damage direction indicator.
@@ -117,6 +120,16 @@ export class Hud {
     const e = this.el;
     this.armorHint -= dt;
     this.#boss(enemies.boss);
+    // lock-on marker on the boss while the camera follows it
+    let lockVisible = false;
+    if (camRig.focus && camRig.focusBlend > 0.3) {
+      _p.copy(camRig.focus).project(camRig.camera);
+      if (_p.z < 1) {
+        lockVisible = true;
+        css(e.lock, 'transform', `translate(${(((_p.x + 1) / 2) * innerWidth).toFixed(1)}px, ${(((1 - _p.y) / 2) * innerHeight).toFixed(1)}px) translate(-50%, -50%) rotate(45deg)`);
+      }
+    }
+    css(e.lock, 'opacity', lockVisible ? 1 : 0);
     // crosshair gap from spread (rad -> px)
     const fovRad = THREE.MathUtils.degToRad(camRig.camera.fov);
     const gap = 4 + (weapon.spread() / Math.tan(fovRad / 2)) * (innerHeight / 2);
@@ -180,9 +193,10 @@ export class Hud {
     if (player.cover) {
       const c = player.cover;
       const aim = this.aimLabel;
-      prompt = c.type === 'low' ? `SPACE leave cover · SPACE + W vault · ${aim} aim to pop up` : c.edgeL || c.edgeR ? `${aim} aim to peek from the edge` : 'Move to an edge to peek';
+      const cv = this.coverLabel;
+      prompt = c.type === 'low' ? `${cv} leave cover · ${cv} + ${this.forwardLabel} vault · ${aim} aim to pop up` : c.edgeL || c.edgeR ? `${aim} aim to peek from the edge` : 'No line of fire · move to an edge to peek';
     } else if (player.coverCandidate) {
-      prompt = `SPACE take ${player.coverCandidate.type} cover`;
+      prompt = `${this.coverLabel} take ${player.coverCandidate.type} cover`;
     }
     if (!prompt && weapon.reserve === 0 && weapon.ammo <= 8) prompt = 'LOW AMMO · grab a glowing cyan ammo case';
     text(e.prompt, prompt);

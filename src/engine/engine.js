@@ -47,6 +47,7 @@ export class Engine {
     this.time = 0; // scaled seconds since start
     this.realDt = 0; // unscaled seconds of the current frame
     this.paused = false;
+    this.headless = false; // tests: step the simulation without rendering (see #tick)
     this.contextLost = false;
     this.last = 0;
 
@@ -121,6 +122,7 @@ export class Engine {
     this.realDt = realDt;
 
     const input = this.input;
+    input.poll();
     this.#run('pre', realDt);
 
     if (this.paused) {
@@ -140,7 +142,9 @@ export class Engine {
       this.#run('present', dt);
     }
     this.renderer.info.reset();
-    if (!this.contextLost) this.#run('render', realDt);
+    // headless (tests): simulate without drawing; world matrices still update for raycasts and hitboxes
+    if (this.headless) this.scene.updateMatrixWorld();
+    else if (!this.contextLost) this.#run('render', realDt);
 
     input.endFrame();
     this.stats.update(realDt, this.perf, this.renderer, this.timings);

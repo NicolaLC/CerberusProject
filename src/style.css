@@ -37,6 +37,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
     linear-gradient(#0008, #0008) center / 1px 100% no-repeat,
     radial-gradient(circle at center, transparent 0 34vmin, rgba(0, 0, 0, 0.55) 35vmin, rgba(0, 0, 0, 0.92) 46vmin); }
 #crosshair.cycling i { opacity: 0.35; }
+/* boss lock-on marker: a diamond on the boss */
+#lockmark { position: absolute; left: 0; top: 0; width: 26px; height: 26px; border: 2px solid rgba(255, 140, 70, 0.8); box-shadow: 0 0 8px rgba(255, 110, 40, 0.6); opacity: 0; pointer-events: none; transition: opacity 0.3s; }
 #vignette { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(200, 20, 20, 0.75) 100%); }
 #dmg-dir { position: absolute; left: 50%; top: 50%; width: 260px; height: 260px; opacity: 0; transform: translate(-50%, -50%); }
 #dmg-dir::before { content: ''; position: absolute; left: 50%; top: 0; transform: translateX(-50%); border: 14px solid transparent; border-bottom: 22px solid rgba(255, 60, 40, 0.9); }
@@ -69,7 +71,9 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #overlay h2 { font-size: 12px; letter-spacing: 4px; color: #6fc8ff; font-weight: 400; margin-bottom: 20px; text-transform: uppercase; }
 #overlay table { width: 100%; font: 13px monospace; border-collapse: collapse; margin-bottom: 22px; }
 #overlay td { padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
-#overlay td:first-child { color: #ffd23a; width: 90px; }
+#overlay td:first-child, #overlay td:nth-child(2) { color: #ffd23a; width: 82px; }
+#overlay td:nth-child(2) { color: #8fd8ff; }
+#overlay tr.head td { color: #6f8fa8; font-size: 11px; letter-spacing: 2px; }
 #overlay .note { font: 12px monospace; color: #6f8fa8; margin-bottom: 12px; }
 #start { width: 100%; padding: 12px; font: 700 14px monospace; letter-spacing: 4px; color: #001522; background: #3ac0ff; border: 0; cursor: pointer; }
 #start:hover { background: #7fe8ff; }

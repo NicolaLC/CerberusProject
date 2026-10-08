@@ -31,7 +31,10 @@ export class Audio {
   }
 
   init() {
-    if (this.ctx) return;
+    if (this.ctx) {
+      if (this.ctx.state === 'suspended') this.ctx.resume(); // e.g. created from a gamepad press (no user gesture)
+      return;
+    }
     this.ctx = new AudioContext();
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.35;

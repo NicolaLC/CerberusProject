@@ -9,7 +9,7 @@ src/
   engine/                 runtime, see instructions/engine.md
     engine.js             renderer, scene, camera, phased scheduler, fault isolation, loop
     events.js             pub/sub bus
-    input.js              raw devices (keys, 'Mouse0..2', motion, wheel, pointer lock)
+    input.js              raw devices (keys, 'Mouse0..2', motion, wheel, pointer lock, gamepad 'Pad0..16' + sticks, rumble)
     actions.js            named actions -> device codes
     perf.js               frame timing, dynamic resolution, stats panel (F3)
     pool.js               object pools

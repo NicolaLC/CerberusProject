@@ -160,6 +160,15 @@ export class Trooper extends EnemyBody {
 
       case 'move': {
         moving = true;
+        // the destination stopped protecting (the player moved round): pick another now, not on arrival
+        this.recheck = (this.recheck ?? 0) - dt;
+        if (this.recheck <= 0) {
+          this.recheck = 0.5;
+          if (live && !this.sys.cover.protects(this.spot, player.pos)) {
+            this.#relocate();
+            break;
+          }
+        }
         const goal = this.path.length ? this.path[0] : this.spot.pos;
         _d.subVectors(goal, this.pos).setY(0);
         const left = _d.length();
@@ -184,6 +193,11 @@ export class Trooper extends EnemyBody {
       }
 
       case 'cover':
+        // flanked while hiding: move at once rather than wait out the cover time
+        if (live && this.spot && this.timer > 0 && !this.sys.cover.protects(this.spot, player.pos)) {
+          this.#relocate();
+          break;
+        }
         if (this.timer > 0) break;
         if (!live) {
           this.timer = 1;
@@ -323,7 +337,15 @@ export class Trooper extends EnemyBody {
 
   // Pick a (new) cover spot and run there; none reachable: fight from here.
   #relocate(retreat = false) {
-    const found = this.sys.cover.find(this, this.pos, this.sys.player.pos, this.sys.time, { avoid: this.spot, retreat, spread: this.#squad() });
+    const cover = this.sys.cover;
+    const opts = { avoid: this.spot, retreat, spread: this.#squad() };
+    let found = cover.find(this, this.pos, this.sys.player.pos, this.sys.time, opts);
+    // nothing in range (e.g. the player went deep into the building): take cover a bit farther out rather than
+    // stand in the open; later relocations work it closer
+    if (!found) {
+      opts.maxRange = cover.t.maxRange + 6; // the retreat limit: never out of the fight
+      found = cover.find(this, this.pos, this.sys.player.pos, this.sys.time, opts);
+    }
     this.flanking = false;
     this.#take(found);
   }

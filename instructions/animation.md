@@ -48,7 +48,10 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
   a foot is planted) follow speed like a real gait: walk 0.6 duty (double support, hips vault over the planted leg),
   run ~0.3 (flight phase, hips compress at mid-stance). Walk → run blends by speed (2.0-3.2 m/s), the sprint flag
   forces run. Stride = duty × speed / cadence. Hips drop just enough for the planted foot to stay in reach.
-  Walk: heel strike → roll → toe off; run: the foot leaves fast and folds under the hips (heel kick), toes point.
+  Walk: heel strike → roll → heel up onto the toes (`FOOT` 0.14 m pivot, moving forward only) → toe off; the
+  heel lift keeps the trailing leg long, so the hips don't sink into a crouch. Run: quick short steps (our legs
+  are short; a long stance reads as a crouch), the foot leaves fast and folds under the hips, toes point.
+  The carried gun sways a little with the steps (less while aiming).
   Pass `vel` (world) and `yaw` (facing): feet step along the actual movement (strafe, backpedal). Foot pitch is
   applied last (`#orientFeet`), relative to the character, so planted feet stay flat.
 - Sprint style (`run`: player sprinting, blended in over ~0.15s), deliberately anime: `RUN` table — 0.42 rad forward

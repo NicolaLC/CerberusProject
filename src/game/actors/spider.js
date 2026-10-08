@@ -198,6 +198,13 @@ export class SpiderMech {
     return false;
   }
 
+  // What the camera frames while the boss is engaged: the body, a bit low so the legs stay in view.
+  focusPoint(out) {
+    this.body.getWorldPosition(out);
+    out.y -= 0.6;
+    return out;
+  }
+
   // Aim assist targets: knees and the exposed core.
   aimPoints(out, n) {
     for (const l of this.legs) {

@@ -14,6 +14,7 @@
       <div id="hitmarker"></div>
       <div id="blockmark"></div>
       <div id="scope"></div>
+      <div id="lockmark"></div>
       <div id="dmg-dir"></div>
       <div id="vignette"></div>
       <div id="numbers"></div>
@@ -51,26 +52,29 @@
         <h1>CERBERUS</h1>
         <h2>combat training arena · prototype</h2>
         <table>
-          <tr><td>WASD</td><td>move</td></tr>
-          <tr><td>Mouse</td><td>look</td></tr>
-          <tr><td>Shift</td><td>sprint (hold, moving forward)</td></tr>
-          <tr><td>RMB</td><td>hold to aim (zoom) · pops up / peeks from cover</td></tr>
-          <tr><td>LMB / F</td><td>fire</td></tr>
-          <tr><td>R</td><td>reload · press R again in the white zone for a perfect reload</td></tr>
-          <tr><td>1 / 2 / 3</td><td>assault rifle / machine gun / sniper rifle (or mouse wheel)</td></tr>
-          <tr><td>Space</td><td>take / leave cover · + W vault low cover</td></tr>
-          <tr><td>Q</td><td>swap shoulder</td></tr>
-          <tr><td>←↑↓→</td><td>look (keyboard)</td></tr>
-          <tr><td>H / F3</td><td>skeleton debug / performance stats</td></tr>
+          <tr class="head"><td>keys</td><td>pad</td><td></td></tr>
+          <tr><td>WASD</td><td>L stick</td><td>move</td></tr>
+          <tr><td>Mouse</td><td>R stick</td><td>look</td></tr>
+          <tr><td>Shift</td><td>L3 click</td><td>sprint (hold Shift moving forward · L3 sprints until you let go of the stick)</td></tr>
+          <tr><td>RMB</td><td>LT</td><td>hold to aim (zoom) · pops up / peeks from cover</td></tr>
+          <tr><td>LMB / F</td><td>RT</td><td>fire</td></tr>
+          <tr><td>R</td><td>X</td><td>reload · press again in the white zone for a perfect reload</td></tr>
+          <tr><td>1 / 2 / 3</td><td>d-pad ← ↑ →</td><td>assault rifle / machine gun / sniper rifle (wheel, Y or RB: next)</td></tr>
+          <tr><td>Space</td><td>A</td><td>take / leave cover · + forward: vault low cover</td></tr>
+          <tr><td>Q</td><td>LB</td><td>swap shoulder</td></tr>
+          <tr><td>←↑↓→</td><td></td><td>look (keyboard)</td></tr>
+          <tr><td>H / F3</td><td>View</td><td>skeleton debug / performance stats</td></tr>
+          <tr><td>Esc</td><td>Menu</td><td>pause</td></tr>
         </table>
         <p class="note">Ammo: walk over the glowing cyan cases. Broken puppets sometimes drop clips. Shoot the pulsing magenta weak spots for triple damage.</p>
         <div class="settings">
           <label class="row" for="sens"><span>Look sensitivity</span><input id="sens" type="range" min="0.3" max="3" step="0.1" /><output id="sens-out">1.0×</output></label>
           <label class="row" for="trackpad"><input id="trackpad" type="checkbox" /><span>Trackpad mode: two-finger swipe to look, E toggles aim</span></label>
           <label class="row" for="assist"><input id="assist" type="checkbox" /><span>Aim assist</span></label>
+          <label class="row" for="invert"><input id="invert" type="checkbox" /><span>Invert look Y (controller)</span></label>
         </div>
-        <p class="note">Keyboard plus mouse or trackpad.</p>
-        <button id="start">CLICK TO DEPLOY</button>
+        <p class="note">Keyboard plus mouse or trackpad, or a controller. <span id="pad-status">Controller: press any button to connect.</span></p>
+        <button id="start">CLICK TO DEPLOY · A / MENU ON A CONTROLLER</button>
       </div>
     </div>
 

@@ -29,6 +29,9 @@ performance readout and expose `window.game` for testing.
 | Space | take / leave cover — with W behind low cover: vault |
 | Q | swap shoulder |
 | 1 / 2 / 3, wheel | switch gun (assault rifle / machine gun / sniper rifle) |
+
+Controllers work too (standard layout): sticks move/look, LT aim, RT fire, X reload, A cover, LB shoulder,
+Y/RB next gun, d-pad picks a gun, L3 sprint, Menu pause.
 | H | show skeletons |
 | F3 | performance stats |
 

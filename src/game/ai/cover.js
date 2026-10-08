@@ -22,6 +22,7 @@ const _a = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _ray = new THREE.Raycaster();
+const MIN_FACE = 0.8; // m: narrower faces get no spots
 const CORNER_PAD = 0.8; // detour corners sit this far outside the cover box
 const FLANK_CONE = 0.35; // flank spots: bearing from the threat at least ~70° away from its front
 const SPREAD_COS = Math.cos(THREE.MathUtils.degToRad(25)); // squadmates closer than this in bearing...
@@ -46,6 +47,8 @@ export class CoverMap {
     ];
     for (const f of faces) {
       const len = f.hi - f.lo;
+      // the end of a wall (e.g. beside a doorway) is a place to peek from, not to hide behind
+      if (len < MIN_FACE) continue;
       const along = [];
       const high = col.cover !== 'low'; // 'high' boxes and 'wall's: hide behind, peek round the end
       if (high) {
@@ -119,6 +122,7 @@ export class CoverMap {
   // opts.spread     positions of squadmates: spots on the same bearing from the threat cost more (fan out)
   // opts.flank      { front }: only spots outside ~70° of `front` (the side the player is defended or
   //                 looking toward), seen from the threat: attack from the side or behind
+  // opts.maxRange   override the farthest acceptable distance to the threat
   // opts.needSight  { eye }: the firing position must see `eye` (the player's chest); checked lazily
   // Branch and bound: cheap score first, routing and line-of-sight only for candidates that can still win.
   find(ai, from, threat, now, opts = {}) {
@@ -132,7 +136,7 @@ export class CoverMap {
       const straight = s.pos.distanceTo(from);
       if (straight > maxTravel) continue;
       const range = s.pos.distanceTo(threat);
-      if (range < t.minRange || range > (opts.retreat ? t.maxRange + 6 : t.maxRange)) continue;
+      if (range < t.minRange || range > (opts.maxRange ?? (opts.retreat ? t.maxRange + 6 : t.maxRange))) continue;
       if (!this.protects(s, threat)) continue;
       const bx = (s.pos.x - threat.x) / range;
       const bz = (s.pos.z - threat.z) / range;

@@ -159,7 +159,9 @@ export class Player {
     const wish = _w.set(0, 0, 0).addScaledVector(_f, ax.y).addScaledVector(_r, ax.x);
     if (wish.lengthSq() > 1) wish.normalize();
 
-    this.aiming = controls.aiming && !this.snap;
+    // behind a wall or high block away from its ends there's no line of fire: no aiming, no shooting
+    this.pinned = !!this.cover && this.cover.type === 'high' && !this.cover.edgeL && !this.cover.edgeR;
+    this.aiming = controls.aiming && !this.snap && !this.pinned;
     if (weapon.firing) this.lastShot = 0;
     // sprint: forward only, not while aiming, shooting or in cover; pulling the trigger ends it
     this.sprinting = controls.running && ax.y > 0 && !this.aiming && !this.cover && !this.snap && !controls.firing && this.lastShot > t.sprintCooldown;

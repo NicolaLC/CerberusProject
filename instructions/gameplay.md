@@ -11,6 +11,13 @@
   stronger (1.6 vs 0.8). E does nothing outside trackpad mode.
 - Aim assist (`camRig.assist`): within ~4-8° of a visible puppet's chest the look slows (friction) and eases toward it.
 - Look sensitivity multiplier lives in settings.
+- Controller (standard mapping, Xbox names): L stick move (analog: partial tilt walks slower), R stick look,
+  LT aim, RT fire, X reload, A cover / vault, LB swap shoulder, Y or RB next gun, d-pad ← ↑ → = AR / MG / SR,
+  L3 click sprints until the stick is released or pulled back, View = stats, Menu = pause (A or Menu deploys from
+  the start panel, no pointer lock needed). Look: 15% radial dead zone, response curve ^2.2, ×1.7 turn boost after
+  0.25 s at the rim (`PAD_LOOK`), optional invert Y. Aim assist uses the stronger trackpad profile (friction + pull).
+  Rumble on shots (sniper hardest), hits taken, nearby blasts and boss footsteps. Prompts switch to pad labels
+  (LT, A) as soon as the pad is used, back to keys on keyboard/mouse input (`input.device`).
 
 ## Ammo
 - Pickups fill every gun at once (`pickup.crate` / `pickup.drop` per gun: AR 96/32, MG 135/45). Cases at fixed `SPOTS`
@@ -26,7 +33,9 @@
 - Slide along the face with A/D (camera relative); stops 0.2m before an edge. Moving away from the cover exits.
 - Low: crouched; aim or fire pops up (fire waits until standing). `Space` + W vaults over.
 - Out of combat the character turns its back to the wall and looks at the camera.
-- High: standing; aiming at an edge peeks 0.8m sideways and swaps shoulder to that side.
+- High: standing; aiming at an edge peeks 0.8m sideways and swaps shoulder to that side. Away from the ends
+  (no edge within 0.45 m) there is no line of fire: aiming and shooting are blocked (`player.pinned`) and the
+  prompt says to move to an edge.
 
 ## Weapons (`game/combat/guns.js`, controller in `weapon.js`)
 - Reload (R) is an active reload: a bar with a marker sweeps across `activeReload` zones (fractions of reload time).
@@ -108,6 +117,12 @@
 - Relocate when flanked (spot stops protecting), the player is within 5 m, after 2-4 bursts, or once below
   40% health (retreat farther). Hit while exposed: 50% chance to duck back early. No cover reachable: fight
   in the open and keep looking.
+- No protected spot within 28 m of the player: accept one up to 34 m (the retreat limit) rather than stand in the
+  open; later relocations work closer.
+- Cover is re-checked continuously: a trooper hiding in a spot that stops protecting it moves at once, and one
+  running to a spot re-picks every 0.5 s if the player has moved round it.
+- Faces narrower than 0.8 m get no spots (a wall's end beside a doorway is for peeking, not hiding: the
+  protection test would only graze it).
 - Cover spots: 0.65 m off every face of every cover box (low: every 1.2 m; high: near the ends only).
 - Squad tactics:
   - Spread: a spot on the same bearing from the player as a squadmate (within 25°) costs +5 m, so a squad
