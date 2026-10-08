@@ -4,6 +4,20 @@ export class Audio {
     this.ctx = null;
   }
 
+  // Sound reactions to gameplay events.
+  listen(events) {
+    events.on('weapon:shot', (s) => this.shot(s.heavy));
+    events.on('weapon:hit', (h) => this.tick(h.crit));
+    events.on('weapon:switch', () => this.click());
+    events.on('weapon:dry', () => this.click());
+    events.on('weapon:reload', (kind) => (kind === 'perfect' ? this.perfect() : kind === 'jam' ? this.jam() : this.click()));
+    events.on('puppet:down', () => this.thud());
+    events.on('player:hurt', () => this.thud());
+    events.on('bolt:fired', () => this.zap(0.12));
+    events.on('pickup:collected', () => this.pickup());
+    return this;
+  }
+
   init() {
     if (this.ctx) return;
     this.ctx = new AudioContext();

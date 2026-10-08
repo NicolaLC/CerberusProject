@@ -162,6 +162,17 @@ const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _pole = new THREE.Vector3();
 const _euler = new THREE.Euler();
+// IK scratch (the animator runs for every rig every frame: no allocations below)
+const _fp = new THREE.Vector3();
+const _knee = new THREE.Vector3();
+const _bend = new THREE.Vector3();
+const _joint = new THREE.Vector3();
+const _reach = new THREE.Vector3();
+const _bp = new THREE.Vector3();
+const _bdir = new THREE.Vector3();
+const _bq = new THREE.Quaternion();
+const _fq = new THREE.Quaternion();
+const SIDES = ['Left', 'Right'];
 
 const RUN = {
   lean: 0.42, // forward torso lean (rad)
@@ -295,14 +306,15 @@ export class Animator {
     const rig = this.rig;
     const B = rig.bones;
     const rootY = rig.root.getWorldPosition(_a).y;
-    const targets = {};
+    const targets = (this.feet ??= { Left: { ty: 0, lift: 0 }, Right: { ty: 0, lift: 0 } });
     let lowest = 0;
-    for (const side of ['Left', 'Right']) {
-      const p = B[side + 'Foot'].getWorldPosition(new THREE.Vector3());
+    for (const side of SIDES) {
+      const p = B[side + 'Foot'].getWorldPosition(_fp);
       const lift = Math.max(0, p.y - rootY - ANKLE); // animated lift above a flat floor
       const g = this.ground(p.x, p.z, rootY + 0.6);
       const ty = g + ANKLE + lift;
-      targets[side] = { ty, lift };
+      targets[side].ty = ty;
+      targets[side].lift = lift;
       lowest = Math.min(lowest, ty - p.y);
     }
     this.hipsOffset = mix(this.hipsOffset, Math.max(-0.4, lowest), 1 - Math.exp(-dt * 18));
@@ -312,8 +324,8 @@ export class Animator {
     const w = 1 - crouch;
     if (w <= 0.01) return;
     const rootQ = rig.root.getWorldQuaternion(_q2);
-    const pole = new THREE.Vector3(0, 0.15, 1).applyQuaternion(rootQ); // knees forward
-    for (const side of ['Left', 'Right']) {
+    const pole = _knee.set(0, 0.15, 1).applyQuaternion(rootQ); // knees forward
+    for (const side of SIDES) {
       const t = targets[side];
       const foot = B[side + 'Foot'];
       const now = foot.getWorldPosition(_b);
@@ -321,7 +333,7 @@ export class Animator {
       twoBone(B[side + 'UpLeg'], B[side + 'Leg'], foot, goal, pole);
       // planted feet stay flat on the floor
       if (t.lift < 0.06) {
-        const pq = foot.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+        const pq = foot.parent.getWorldQuaternion(_fq).invert();
         _q.copy(pq).multiply(rootQ);
         foot.quaternion.slerp(_q, w * (1 - t.lift / 0.06));
         foot.updateMatrixWorld(true);
@@ -347,20 +359,21 @@ function twoBone(upper, lower, end, target, pole) {
   dir.normalize();
   const cosA = THREE.MathUtils.clamp((l1 * l1 + dist * dist - l2 * l2) / (2 * l1 * dist), -1, 1);
   const sinA = Math.sqrt(1 - cosA * cosA);
-  const bend = pole.clone().addScaledVector(dir, -pole.dot(dir)).normalize();
-  const joint = a.clone().addScaledVector(dir, l1 * cosA).addScaledVector(bend, l1 * sinA);
-  const reach = a.clone().addScaledVector(dir, dist);
+  const bend = _bend.copy(pole).addScaledVector(dir, -pole.dot(dir)).normalize();
+  const joint = _joint.copy(a).addScaledVector(dir, l1 * cosA).addScaledVector(bend, l1 * sinA);
+  const reach = _reach.copy(a).addScaledVector(dir, dist);
   aimBone(upper, joint);
   aimBone(lower, reach);
 }
 
 // Rotate bone so its child axis (rest offset of its first bone child) points at a world target.
 function aimBone(bone, worldTarget) {
-  const child = bone.children.find((o) => o.isBone);
-  const parentQ = bone.parent.getWorldQuaternion(new THREE.Quaternion());
-  const p = bone.getWorldPosition(new THREE.Vector3());
-  const dir = worldTarget.clone().sub(p).normalize().applyQuaternion(parentQ.invert());
-  bone.quaternion.setFromUnitVectors(child.position.clone().normalize(), dir);
+  const ud = bone.userData;
+  if (!ud.aimAxis) ud.aimAxis = bone.children.find((o) => o.isBone).position.clone().normalize();
+  const parentQ = bone.parent.getWorldQuaternion(_bq);
+  const p = bone.getWorldPosition(_bp);
+  const dir = _bdir.copy(worldTarget).sub(p).normalize().applyQuaternion(parentQ.invert());
+  bone.quaternion.setFromUnitVectors(ud.aimAxis, dir);
   bone.updateMatrixWorld(true);
 }
 

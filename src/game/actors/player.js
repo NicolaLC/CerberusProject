@@ -1,13 +1,21 @@
 import * as THREE from 'three';
 import { Rig, Animator } from './rig.js';
-import { GUNS } from './guns.js';
+import { GUNS } from '../combat/guns.js';
 import { buildSoldier } from './soldier.js';
+import { damp, lerpAngle, wrapAngle } from '../../engine/math.js';
 
+// The player character: movement, collision, cover state machine, health; drives its rig animator.
+// Reads intents from Controls; reports what happened through events ('player:coverSlam', 'player:land').
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _f = new THREE.Vector3();
 const _r = new THREE.Vector3();
+const _o = new THREE.Vector3();
+const _n = new THREE.Vector3();
 const _ray = new THREE.Raycaster();
+const _move = { x: 0, y: 0 };
+// probe directions for the wide cover search (8 compass points)
+const RING = Array.from({ length: 8 }, (_, i) => new THREE.Vector3(Math.sin((i * Math.PI) / 4), 0, Math.cos((i * Math.PI) / 4)));
 
 export const SPAWN = new THREE.Vector3(0, 0, 38);
 
@@ -16,7 +24,9 @@ const TUNING = {
   standHeight: 1.8,
   crouchHeight: 1.05,
   stepHeight: 0.45,
-  walk: 5,
+  walk: 4.6,
+  sprint: 7.4,
+  sprintCooldown: 0.4, // seconds after a shot before sprinting is allowed again
   aimWalk: 2.6,
   coverSlide: 3.2,
   accel: 14,
@@ -31,9 +41,10 @@ const TUNING = {
 };
 
 export class Player {
-  constructor(scene, world) {
+  constructor({ scene, world, events }) {
     this.scene = scene;
     this.world = world;
+    this.events = events;
     this.t = TUNING;
     this.pos = SPAWN.clone();
     this.vel = new THREE.Vector3();
@@ -42,6 +53,8 @@ export class Player {
     this.crouchBlend = 0;
     this.crouched = false;
     this.aiming = false;
+    this.sprinting = false;
+    this.recoil = 0;
     this.lastShot = 99;
     this.cover = null; // { normal, tangent, type, edgeL, edgeR }
     this.coverCandidate = null;
@@ -52,6 +65,7 @@ export class Player {
     this.sinceHit = 99;
     this.dead = false;
     this.deadTime = 0;
+    this.hitCapsule = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: TUNING.radius };
     this.#buildModel();
   }
 
@@ -71,11 +85,15 @@ export class Player {
     return out.copy(this.pos).add(this.peek).setY(this.pos.y + this.height() * 0.7);
   }
 
-  // Capsule for incoming projectiles.
+  // Capsule for incoming projectiles (reused object, valid until the next call).
   capsule() {
-    const base = this.pos.clone().add(this.peek);
+    const c = this.hitCapsule;
     const r = this.t.radius;
-    return { a: base.clone().setY(base.y + r), b: base.clone().setY(base.y + this.height() - r), r };
+    c.a.copy(this.pos).add(this.peek);
+    c.b.copy(c.a);
+    c.a.y += r;
+    c.b.y += this.height() - r;
+    return c;
   }
 
   damage(amount) {
@@ -96,6 +114,7 @@ export class Player {
       this.deadTime = 0;
       this.cover = null;
       this.aiming = false;
+      this.sprinting = false;
     }
     return amount;
   }
@@ -118,7 +137,7 @@ export class Player {
     this.recoil = 1;
   }
 
-  update(dt, input, rig, weapon) {
+  update(dt, controls, rig, weapon) {
     const t = this.t;
     this.sinceHit += dt;
     this.lastShot += dt;
@@ -131,14 +150,16 @@ export class Player {
       return;
     }
 
-    const ax = input.axis();
+    const ax = controls.move(_move);
     rig.flatForward(_f);
     rig.flatRight(_r);
     const wish = _w.set(0, 0, 0).addScaledVector(_f, ax.y).addScaledVector(_r, ax.x);
     if (wish.lengthSq() > 1) wish.normalize();
 
-    this.aiming = input.aiming() && !this.snap;
+    this.aiming = controls.aiming && !this.snap;
     if (weapon.firing) this.lastShot = 0;
+    // sprint: forward only, not while aiming, shooting or in cover; pulling the trigger ends it
+    this.sprinting = controls.running && ax.y > 0 && !this.aiming && !this.cover && !this.snap && !controls.firing && this.lastShot > t.sprintCooldown;
     const combat = this.aiming || this.lastShot < 0.6;
 
     // ----- smooth snap (enter cover / vault) -----
@@ -152,7 +173,7 @@ export class Player {
       this.pos.y = s.hop ? Math.max(ground, s.from.y) + Math.sin(Math.PI * s.t) * s.hop : ground;
       if (s.t >= 1) {
         this.snap = null;
-        if (this.juice) s.hop ? this.juice.land() : this.juice.coverSlam();
+        this.events.emit(s.hop ? 'player:land' : 'player:coverSlam');
         this.pos.y = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.stepHeight);
       }
       this.#animate(dt, rig, 1, weapon.lowered());
@@ -162,7 +183,7 @@ export class Player {
     // ----- cover -----
     this.coverCandidate = this.cover ? null : this.#findCover(wish, _f, false);
 
-    if (input.wasPressed('Space')) {
+    if (controls.coverPressed) {
       if (this.cover) {
         const into = -wish.dot(this.cover.normal);
         if (this.cover.type === 'low' && into > 0.5) this.#tryVault();
@@ -178,14 +199,14 @@ export class Player {
       return;
     }
     if (this.cover) this.#updateCover(dt, wish, rig);
-    else this.#updateFree(dt, wish, input, weapon);
+    else this.#updateFree(dt, wish);
 
     // facing
     let targetFacing = this.facing;
     if (combat) targetFacing = rig.yaw + Math.PI;
     else if (this.cover) targetFacing = Math.atan2(this.cover.normal.x, this.cover.normal.z); // back to the wall
     else if (this.vel.lengthSq() > 0.2) targetFacing = Math.atan2(this.vel.x, this.vel.z);
-    this.facing = lerpAngle(this.facing, targetFacing, 1 - Math.exp(-dt * (combat ? 25 : 12)));
+    this.facing = lerpAngle(this.facing, targetFacing, damp(combat ? 25 : 12, dt));
 
     // crouch: only behind low cover when not shooting
     this.crouched = !!this.cover && this.cover.type === 'low' && !combat;
@@ -202,17 +223,17 @@ export class Player {
         peekTarget.copy(tr).multiplyScalar(side * 0.8).addScaledVector(this.cover.normal, 0.15);
       }
     }
-    this.peek.lerp(peekTarget, 1 - Math.exp(-dt * 14));
+    this.peek.lerp(peekTarget, damp(14, dt));
 
     this.#animate(dt, rig, 1, weapon.lowered());
   }
 
-  #updateFree(dt, wish, input, weapon) {
+  #updateFree(dt, wish) {
     const t = this.t;
-    let speed = this.aiming ? t.aimWalk : t.walk;
+    let speed = this.aiming ? t.aimWalk : this.sprinting ? t.sprint : t.walk;
     // heavy guns slow you down while they fire
     if (this.gun?.fireMoveSpeed && this.lastShot < 0.25) speed = Math.min(speed, this.gun.fireMoveSpeed);
-    const k = 1 - Math.exp(-dt * t.accel);
+    const k = damp(t.accel, dt);
     this.vel.x += (wish.x * speed - this.vel.x) * k;
     this.vel.z += (wish.z * speed - this.vel.z) * k;
 
@@ -265,25 +286,25 @@ export class Player {
   }
 
   #coverHitAt(p, n) {
-    _ray.set(new THREE.Vector3(p.x, this.pos.y + 0.5, p.z), new THREE.Vector3(-n.x, 0, -n.z));
+    _ray.set(_o.set(p.x, this.pos.y + 0.5, p.z), _n.set(-n.x, 0, -n.z));
     _ray.far = this.t.radius + 0.7;
     const hit = _ray.intersectObjects(this.world.coverMeshes, false)[0];
     if (!hit || !hit.face || hit.face.normal.dot(n) < 0.9) return null;
     return hit;
   }
 
+  // Runs every frame (prompt), so it must not allocate unless it finds something.
   #findCover(wish, fwd, wide) {
-    const dirs = [];
-    if (wish.lengthSq() > 0.1) dirs.push(wish.clone().normalize());
-    dirs.push(fwd.clone());
-    if (wide) for (let i = 0; i < 8; i++) dirs.push(new THREE.Vector3(Math.sin((i * Math.PI) / 4), 0, Math.cos((i * Math.PI) / 4)));
-    const origin = new THREE.Vector3(this.pos.x, this.pos.y + 0.5, this.pos.z);
-    for (const d of dirs) {
-      _ray.set(origin, d);
+    const hasWish = wish.lengthSq() > 0.1;
+    const count = (hasWish ? 1 : 0) + 1 + (wide ? RING.length : 0);
+    for (let i = 0; i < count; i++) {
+      const j = hasWish ? i : i + 1;
+      const d = j === 0 ? _n.copy(wish).normalize() : j === 1 ? fwd : RING[j - 2];
+      _ray.set(_o.set(this.pos.x, this.pos.y + 0.5, this.pos.z), d);
       _ray.far = this.t.coverReach;
       const hit = _ray.intersectObjects(this.world.coverMeshes, false)[0];
       if (!hit || !hit.face) continue;
-      const n = hit.face.normal.clone();
+      const n = hit.face.normal;
       if (Math.abs(n.y) > 0.3 || n.dot(d) > -0.5) continue;
       // something solid between us and the cover? (another collider)
       _ray.far = hit.distance;
@@ -291,7 +312,7 @@ export class Player {
       if (block && block.object !== hit.object && block.distance < hit.distance - 0.05) continue;
       const col = hit.object.userData.collider;
       const type = col.box.max.y - this.pos.y < 1.7 ? 'low' : 'high';
-      return { point: hit.point.clone(), normal: n, type, collider: col };
+      return { point: hit.point, normal: n.clone(), type, collider: col };
     }
     return null;
   }
@@ -353,7 +374,7 @@ export class Player {
     }
   }
 
-  // ---------------- model (skeleton + dummy parts) ----------------
+  // ---------------- model (skeleton + soldier parts + guns) ----------------
 
   #buildModel() {
     const box = (w, h, d, m, x, y, z) => {
@@ -393,22 +414,22 @@ export class Player {
   }
 
   #animate(dt, camRig, alive, weaponLower = 0) {
-    const k = 1 - Math.exp(-dt * 12);
+    const k = damp(12, dt);
     const target = this.crouched || (this.snap && !this.snap.hop) ? 1 : this.snap ? 0.5 : 0;
     this.crouchBlend += (target - this.crouchBlend) * k;
     const combat = this.aiming || this.lastShot < 0.6;
-    this.recoil = Math.max(0, (this.recoil ?? 0) - dt * 8);
+    this.recoil = Math.max(0, this.recoil - dt * 8);
     // in cover with the back to the wall, the head turns to the camera
     let lookYaw = 0;
     if (this.cover && !combat && alive) {
       const c = camRig.camera.position;
       const a = Math.atan2(c.x - this.pos.x, c.z - this.pos.z) - this.facing;
-      lookYaw = THREE.MathUtils.clamp(Math.atan2(Math.sin(a), Math.cos(a)), -1.2, 1.2);
+      lookYaw = THREE.MathUtils.clamp(wrapAngle(a), -1.2, 1.2);
     }
     const speed = alive ? Math.hypot(this.vel.x, this.vel.z) : 0;
     this.animator.update(dt, {
       speed,
-      run: speed > 3.8 && !combat, // full walk speed uses the anime run
+      run: this.sprinting && alive, // sprint plays the anime run
       crouch: this.crouchBlend,
       aimPitch: camRig.pitch,
       combat: combat && alive,
@@ -427,11 +448,5 @@ export class Player {
     }
     this.root.updateMatrixWorld(true);
   }
-}
-
-function lerpAngle(a, b, t) {
-  let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
-  if (d < -Math.PI) d += Math.PI * 2;
-  return a + d * t;
 }
 

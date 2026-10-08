@@ -14,7 +14,9 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 - No pointer lock (sandboxed frames): input falls back to free-mouse mode; arrow keys also turn the camera.
 
 ## Testing
-- `?debug` URL flag: no pointer lock, `window.game` exposes `{ player, camRig, weapon, enemies, world, input, ... }`.
-- Headless check: Playwright with Chromium (`--use-angle=swiftshader`), drive `game.input.keys` /
-  `game.input.pressed` / `game.input.mouse` between `requestAnimationFrame`s and screenshot.
-  SwiftShader runs at ~6 fps and `dt` is clamped to 0.05, so count frames, not milliseconds.
+- `?debug` URL flag: no start panel, stats readout on, `window.game` is the `Game` (`player`, `camRig`, `weapon`,
+  `enemies`, `controls`, `engine` with `scene`, `input`, `events`, `timings`, `perf`).
+- Headless check: Playwright with Chromium (`--use-angle=swiftshader`); real keyboard/mouse events work once the
+  start button is clicked (pointer lock). SwiftShader runs at 3-15 fps and frames are clamped to 0.1 s,
+  so count frames, not milliseconds.
+- Fault injection: `game.engine.add({ name: 'bad', update() { throw 1 } })` must get disabled while the game runs on.

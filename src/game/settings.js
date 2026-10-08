@@ -1,35 +1,24 @@
+import { loadJSON, saveJSON } from '../engine/storage.js';
+
 // Per-player settings, remembered in this browser when storage is available.
 const KEY = 'cerberus.settings';
 const DEFAULTS = {
   sensitivity: 1, // multiplier on look speed
-  trackpad: false, // aim toggles, two-finger swipe looks, stronger aim assist
+  trackpad: false, // E toggles aim, two-finger swipe looks, stronger aim assist
   aimAssist: true,
 };
 
-export const settings = { ...DEFAULTS, ...load() };
+export const settings = { ...DEFAULTS, ...loadJSON(KEY) };
 
-function load() {
-  try {
-    return JSON.parse(localStorage.getItem(KEY)) ?? {};
-  } catch {
-    return {};
-  }
-}
-
-export function saveSettings() {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(settings));
-  } catch {
-    // storage blocked: settings last for this session only
-  }
-}
+export const saveSettings = () => saveJSON(KEY, settings);
 
 // Wires the controls in the start/pause panel.
 export function bindSettingsUI() {
-  const sens = document.getElementById('sens');
-  const sensOut = document.getElementById('sens-out');
-  const pad = document.getElementById('trackpad');
-  const assist = document.getElementById('assist');
+  const $ = (id) => document.getElementById(id);
+  const sens = $('sens');
+  const sensOut = $('sens-out');
+  const pad = $('trackpad');
+  const assist = $('assist');
   const sync = () => {
     sens.value = settings.sensitivity;
     sensOut.textContent = `${Number(settings.sensitivity).toFixed(1)}×`;
