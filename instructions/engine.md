@@ -2,14 +2,13 @@
 
 Goal: hold 60 fps, never freeze on a bug, scale to a much bigger game.
 
-- `engine.headless`: simulate without drawing (tests); `scene.updateMatrixWorld()` replaces the render phase.
-
 ## Loop and scheduler (`engine.js`)
 - Systems: `{ name, phase, update(dt, engine), whilePaused }` added with `engine.add()`. Phases run in order
   `pre → simulate → late → present → render`.
 - Frame dt is clamped to 0.1 s. `simulate` is split into equal substeps of ≤ 20 ms (max 4, then the game
   slows down instead of spiralling). Scaled by `engine.timeScale` (hitstop, owned by Juice).
 - Edge presses (`input.wasPressed`) are only visible in the first substep: a press is consumed once.
+- `engine.headless`: simulate without drawing (tests); `scene.updateMatrixWorld()` replaces the render phase.
 - Every system call is wrapped: an exception is logged, the frame continues. 10 failures in a row disable the
   system and emit `engine:systemFailed` (the HUD shows SYSTEM FAULT). Event listeners are isolated the same way.
 - `engine.stop()` + `engine.step(dt)` run exact frames without the browser loop (deterministic tests).
