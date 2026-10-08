@@ -39,6 +39,50 @@ export function installShadowOnly(renderer) {
   };
 }
 
+// Far-detail LOD: one material for a whole rig. Per-vertex color (diffuse) and lodEmissive (glow, baked from
+// each part's material) keep the silhouette and the readable glows (visor, weak spots) at range.
+// One program for every rig; each rig gets its own instance so a hit flash (`emissive`) stays per rig.
+const LOD_BASE = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.1 });
+LOD_BASE.onBeforeCompile = (shader) => {
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nattribute vec3 lodEmissive;\nvarying vec3 vLodEmissive;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLodEmissive = lodEmissive;');
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nvarying vec3 vLodEmissive;')
+    .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vLodEmissive;');
+};
+LOD_BASE.customProgramCacheKey = () => 'rig-lod';
+
+export function makeLodMaterial() {
+  const m = LOD_BASE.clone();
+  m.onBeforeCompile = LOD_BASE.onBeforeCompile;
+  m.customProgramCacheKey = LOD_BASE.customProgramCacheKey;
+  return m;
+}
+
+// Merges every opaque bucket into one, recording each source material's color and glow per vertex.
+// A textured material may set userData.lodColor (its average look) since the texture is dropped;
+// userData.lodGlow overrides emissiveIntensity (e.g. brighter, to stand in for a dropped transparent halo).
+function lodBucket(buckets, material) {
+  const out = { material, pos: [], nor: [], uv: [], skin: [], col: [], emi: [] };
+  const c = new THREE.Color();
+  const e = new THREE.Color();
+  for (const b of buckets.values()) {
+    const mat = b.material;
+    if (mat.transparent) continue;
+    c.copy(mat.userData.lodColor ?? mat.color ?? c.setScalar(1));
+    if (mat.emissive) e.copy(mat.emissive).multiplyScalar(mat.userData.lodGlow ?? mat.emissiveIntensity ?? 1);
+    else e.setScalar(0);
+    for (const k of ['pos', 'nor', 'uv', 'skin']) for (let i = 0; i < b[k].length; i++) out[k].push(b[k][i]);
+    const n = b.pos.length / 3;
+    for (let i = 0; i < n; i++) {
+      out.col.push(c.r, c.g, c.b);
+      out.emi.push(e.r, e.g, e.b);
+    }
+  }
+  return out.pos.length ? out : null;
+}
+
 // Concatenates every opaque casting bucket into one bucket for the shadow-only mesh (null if none).
 function shadowBucket(buckets) {
   const out = { material: SHADOW_MAT, pos: [], nor: [], uv: [], skin: [] };
@@ -98,6 +142,8 @@ function toGeometry(b) {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3));
   geo.setAttribute('normal', new THREE.Float32BufferAttribute(b.nor, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(b.uv, 2));
+  if (b.col) geo.setAttribute('color', new THREE.Float32BufferAttribute(b.col, 3));
+  if (b.emi) geo.setAttribute('lodEmissive', new THREE.Float32BufferAttribute(b.emi, 3));
   if (b.skin.length) {
     const n = b.skin.length;
     const idx = new Uint16Array(n * 4);
@@ -171,8 +217,12 @@ export function mergeGroup(group) {
 // Bakes the visible parts on a skeleton into SkinnedMeshes (one per material), parented to `root`.
 // exclude(object) -> true skips that object and its subtree (e.g. swappable guns).
 // rebuild() re-bakes after parts were added or removed (e.g. new weak spots on respawn).
+// lod: true also builds a far-detail mesh (one draw for the whole rig); switch with setFar().
 export class RigidSkin {
-  constructor(root, skeleton, { exclude = null, cullMargin = 1.3 } = {}) {
+  constructor(root, skeleton, { exclude = null, cullMargin = 1.3, lod = false } = {}) {
+    this.lodMaterial = lod ? makeLodMaterial() : null;
+    this.lodMesh = null;
+    this.far = false;
     this.root = root;
     this.skeleton = skeleton;
     this.exclude = exclude;
@@ -195,6 +245,11 @@ export class RigidSkin {
       this.shadow.geometry.dispose();
       shadowOnlyMeshes.delete(this.shadow);
       this.shadow = null;
+    }
+    if (this.lodMesh) {
+      this.lodMesh.removeFromParent();
+      this.lodMesh.geometry.dispose();
+      this.lodMesh = null;
     }
 
     const sources = [];
@@ -232,6 +287,17 @@ export class RigidSkin {
       this.shadow.bind(this.skeleton, this.shadow.matrixWorld.copy(this.root.matrixWorld));
       this.shadow.userData.castEnabled = this.castShadow;
     }
+    const lb = this.lodMaterial && lodBucket(buckets, this.lodMaterial);
+    if (lb) {
+      const mesh = new THREE.SkinnedMesh(toGeometry(lb), this.lodMaterial);
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
+      mesh.raycast = noRaycast;
+      mesh.userData.batch = true;
+      this.root.add(mesh);
+      mesh.bind(this.skeleton, mesh.matrixWorld.copy(this.root.matrixWorld));
+      this.lodMesh = mesh;
+    }
     // One culling sphere for the whole rig (a small part, e.g. a wrist light, swings far outside its own
     // bind-pose bounds), from the bind-pose geometry, padded for animation. Not computeBoundingSphere():
     // it reads skeleton.boneMatrices, unset before the first render, and collapses to a point.
@@ -241,6 +307,15 @@ export class RigidSkin {
     sphere.radius *= this.cullMargin;
     for (const m of this.meshes) m.boundingSphere = sphere;
     if (this.shadow) this.shadow.boundingSphere = sphere;
+    if (this.lodMesh) this.lodMesh.boundingSphere = sphere;
+    this.setFar(this.far);
+  }
+
+  // Detail switch: full (one draw per material) or far (one draw, baked colors). Hitboxes are unaffected.
+  setFar(far) {
+    this.far = far && !!this.lodMesh;
+    for (const m of this.meshes) m.visible = !this.far;
+    if (this.lodMesh) this.lodMesh.visible = this.far;
   }
 
   // Shadow LOD: turn the rig's single shadow draw on/off (e.g. by distance).

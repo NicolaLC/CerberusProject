@@ -17,9 +17,14 @@ import { settings, bindSettingsUI } from './settings.js';
 // frame order. This is the only file that knows about all systems; they only know their direct
 // dependencies (constructor args) and the event bus.
 const RESPAWN_AFTER = 3; // s
-// Shadow LOD: puppets farther than this from the camera stop casting (hysteresis avoids flicker at the edge).
-// Their contact shadow is a few pixels at that range, and the sun's shadow map is centered on the player.
-const SHADOW_LOD = { far: 34, near: 30 };
+// Puppet LOD by distance to the camera, with hysteresis (switch at `far`, back at `near`) so nothing flickers
+// at the edge. Detail: one draw with baked colors instead of one per material. Shadow: stop casting (a few
+// pixels at that range; the sun's shadow map is centered on the player anyway).
+const LOD = {
+  detail: { far: 32, near: 28 },
+  shadow: { far: 34, near: 30 },
+};
+const beyond = (d2, on, band) => d2 > (on ? band.near : band.far) ** 2;
 
 export class Game {
   constructor({ canvas, debug = false }) {
@@ -103,15 +108,17 @@ export class Game {
       },
     });
     engine.add({
-      name: 'shadowLod',
+      name: 'lod',
       phase: 'present',
       update: () => {
         const cam = camera.position;
         for (const p of enemies.puppets) {
+          const s = p.skin;
           const d2 = p.pos.distanceToSquared(cam);
-          const lim = p.skin.castShadow ? SHADOW_LOD.far : SHADOW_LOD.near;
-          const on = d2 < lim * lim;
-          if (on !== p.skin.castShadow) p.skin.setCastShadow(on);
+          const far = beyond(d2, s.far, LOD.detail);
+          if (far !== s.far) s.setFar(far);
+          const cast = !beyond(d2, !s.castShadow, LOD.shadow);
+          if (cast !== s.castShadow) s.setCastShadow(cast);
         }
       },
     });

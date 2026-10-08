@@ -84,6 +84,7 @@ class Puppet {
     this.rig.attach('Spine2', box(0.22, 0.22, 0.02, targetMat(), 0, 0.12, 0.155)); // bullseye
     this.emitter = this.rig.socket('Spine2', 'emitter', 0, 0.15, 0.3);
     this.weakMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2bd6, emissiveIntensity: 3 });
+    this.weakMat.userData.lodGlow = 5; // far LOD drops the halo: a brighter core keeps weak spots readable
     this.haloMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff2bd6).multiplyScalar(1.5), transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
     this.weakSpots = [];
     this.animator = new Animator(this.rig, { armed: false });
@@ -102,7 +103,8 @@ class Puppet {
     });
     this.#placeWeakSpots();
     // ~30 parts -> one skinned draw per material (body, plate, visor, target, weak spot, halo)
-    this.skin = new RigidSkin(this.rig.root, this.rig.skeleton);
+    // far away: one draw with baked colors (see game.js LOD)
+    this.skin = new RigidSkin(this.rig.root, this.rig.skeleton, { lod: true });
   }
 
   // Glowing weak spots on random body parts (front face). Hits there deal weakMult damage.
@@ -224,6 +226,7 @@ class Puppet {
     const e = this.flash > 0 ? 0.9 : 0;
     this.mats.body.emissive.setScalar(e);
     this.mats.plate.emissive.setScalar(e);
+    this.skin.lodMaterial.emissive.setScalar(e);
     this.weakMat.emissiveIntensity = 2.4 + Math.sin(this.sys.time * 8) * 1.4; // pulse
 
     this.animator.update(dt, { speed: speed * 0.5, run: false, crouch: 0, aimPitch: 0, combat: false });
@@ -459,5 +462,6 @@ function targetMat() {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   _target = new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: 0.6 });
+  _target.userData.lodColor = new THREE.Color(0xd86a6a); // average of the red/white rings for the far LOD
   return _target;
 }
