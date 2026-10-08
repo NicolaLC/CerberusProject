@@ -1,6 +1,8 @@
 import * as THREE from 'three';
+import { pattern } from './ballistics.js';
 
 // Weapon definitions: stats, hand/muzzle sockets on the `Weapon` bone, and the placeholder model.
+// Angles in radians. Spread values are cone half-angles. See instructions/gameplay.md (Gunplay).
 // Models are authored from the stock (bone pivot, z = 0) forward along +Z.
 // Grips must stay within arm reach: see instructions/animation.md.
 export const GUNS = {
@@ -19,13 +21,26 @@ export const GUNS = {
     limbMult: 0.8,
     weakMult: 3,
     range: 250,
+    falloff: { start: 35, end: 80, min: 0.65 }, // damage multiplier by distance
     spreadHip: 0.022,
     spreadAim: 0.004,
+    spreadMove: 0.012, // extra at full walk speed (×0.4 aimed)
+    firstShot: { rest: 0.3, hip: 0.5, aim: 0 }, // after resting `rest` s the next shot's spread is scaled
     bloomPerShot: 0.007,
     bloomMax: 0.05,
-    bloomDecay: 0.12,
-    recoilPitch: 0.012,
-    recoilYaw: 0.004,
+    bloomDecay: 0.12, // per second, starts `bloomDelay` s after the last shot
+    bloomDelay: 0.12,
+    recoil: {
+      // per shot [pitch up, yaw right]: a hard climb for 5 rounds, then a gentle right-left sway
+      pattern: pattern(16, (i) => [i < 5 ? 0.013 : 0.0085, i < 5 ? 0.0012 : 0.0035 * Math.sin((i - 5) * 0.9)]),
+      loop: 6,
+      jitter: 0.12,
+      aim: 0.6, // multiplier while aiming
+      recover: 0.85, // fraction pulled back after the burst
+      reset: 0.35, // idle seconds before the pattern restarts
+    },
+    kick: { back: 0.07, climb: 0.09 }, // gun model kick (m, rad)
+    flash: 1,
     trauma: 0.06,
     fireMoveSpeed: null, // walk speed while firing (null = normal)
     sockets: { gripR: [0, -0.15, 0.22], gripL: [0, -0.07, 0.44], muzzle: [0, 0.02, 0.88] },
@@ -55,13 +70,26 @@ export const GUNS = {
     limbMult: 0.8,
     weakMult: 3,
     range: 250,
+    falloff: { start: 25, end: 60, min: 0.6 },
     spreadHip: 0.034,
     spreadAim: 0.011,
+    spreadMove: 0.02,
+    firstShot: { rest: 0.4, hip: 0.7, aim: 0.4 },
     bloomPerShot: 0.004,
     bloomMax: 0.07,
     bloomDecay: 0.1,
-    recoilPitch: 0.0075,
-    recoilYaw: 0.011,
+    bloomDelay: 0.15,
+    recoil: {
+      // lighter climb, wide learnable snake left-right
+      pattern: pattern(24, (i) => [i < 3 ? 0.009 : 0.0055, 0.0015 + 0.006 * Math.sin(i * 0.55)]),
+      loop: 12,
+      jitter: 0.15,
+      aim: 0.65,
+      recover: 0.75,
+      reset: 0.4,
+    },
+    kick: { back: 0.05, climb: 0.05 },
+    flash: 1.3,
     trauma: 0.045,
     fireMoveSpeed: 2.2,
     sockets: { gripR: [0, -0.17, 0.24], gripL: [0, -0.11, 0.46], muzzle: [0, 0.03, 1.16] },

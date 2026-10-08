@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+const _p = new THREE.Vector3();
+
 // DOM HUD. All elements live in index.html.
 // Writes go through text()/css(), which skip unchanged values: no style recalc or layout for a static HUD.
 const $ = (id) => document.getElementById(id);
@@ -44,7 +46,10 @@ export class Hud {
       slots: { rifle: $('slot-rifle'), mg: $('slot-mg') },
     };
     this.el.toast = $('toast');
+    this.el.block = $('blockmark');
     this.hitTime = 0;
+    this.hitMax = 1;
+    this.hitPop = 0;
     this.dmgTime = 0;
     this.toastTime = 0;
     this.aimLabel = 'RMB';
@@ -52,7 +57,7 @@ export class Hud {
 
   // HUD reactions to gameplay events. camRig: for the damage direction indicator.
   listen(events, camRig) {
-    events.on('weapon:hit', (h) => this.hitmarker(h.crit, h.killed));
+    events.on('weapon:hit', (h) => this.hitmarker(h.crit, h.killed, h.amount));
     events.on('player:hurt', (h) => this.damage(h.dir, camRig));
     events.on('pickup:collected', (msg) => this.toast(msg));
     events.on('pickup:full', () => this.toast('AMMO FULL'));
@@ -64,8 +69,10 @@ export class Hud {
     this.toastTime = 1.4;
   }
 
-  hitmarker(crit, kill) {
-    this.hitTime = 0.15;
+  // Pops in proportion to the damage dealt; kills hold longer and bigger.
+  hitmarker(crit, kill, amount = 18) {
+    this.hitMax = this.hitTime = kill ? 0.32 : crit ? 0.2 : 0.14;
+    this.hitPop = Math.min(1.4, 0.35 + amount / 40) * (kill ? 1.5 : 1);
     this.el.hit.className = kill ? 'kill' : crit ? 'crit' : '';
   }
 
@@ -84,10 +91,26 @@ export class Hud {
     const gap = 4 + (weapon.spread() / Math.tan(fovRad / 2)) * (innerHeight / 2);
     e.cross.style.setProperty('--gap', `${gap.toFixed(1)}px`);
     e.cross.classList.toggle('aim', player.aiming);
+    // what the next round will hit: red over an enemy, magenta over a weak spot, grey when the gun is obstructed
+    const a = weapon.aim;
+    e.cross.classList.toggle('enemy', a.enemy && !a.weak);
+    e.cross.classList.toggle('weak', a.weak);
+    e.cross.classList.toggle('blocked', a.blocked);
+    let blockVisible = false;
+    if (a.blocked) {
+      _p.copy(a.blockPoint).project(camRig.camera);
+      if (_p.z < 1) {
+        blockVisible = true;
+        css(e.block, 'transform', `translate(${(((_p.x + 1) / 2) * innerWidth).toFixed(1)}px, ${(((1 - _p.y) / 2) * innerHeight).toFixed(1)}px) translate(-50%, -50%)`);
+      }
+    }
+    css(e.block, 'opacity', blockVisible ? 1 : 0);
     css(e.cross, 'opacity', player.snap || player.sprinting ? 0.15 : 1);
 
     this.hitTime -= dt;
-    css(e.hit, 'opacity', this.hitTime > 0 ? 1 : 0);
+    const hk = this.hitTime > 0 ? this.hitTime / this.hitMax : 0;
+    css(e.hit, 'opacity', hk > 0 ? Math.min(1, hk * 2.5).toFixed(2) : 0);
+    css(e.hit, 'transform', `translate(-50%, -50%) rotate(45deg) scale(${(1 + hk * hk * this.hitPop).toFixed(2)})`);
 
     text(e.ammo, weapon.ammo);
     text(e.gunName, weapon.t.name);

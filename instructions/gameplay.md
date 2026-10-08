@@ -38,6 +38,26 @@
 - Add a gun: new entry in `GUNS` (stats, sockets, `build()` model) and its id in `GUN_ORDER`.
 - Hit = camera ray (starts at player distance), then re-cast from muzzle; muzzle hit wins.
 
+## Gunplay (math in `combat/ballistics.js`, unit-tested by `npm test`)
+- Spread is a cone half-angle; rounds are uniform over the cone's disc (`coneDir`). The crosshair gap draws
+  exactly `weapon.spread()`.
+- `spread = lerp(hip, aim, aimBlend) + spreadMove × speed/walk (×0.4 aimed) + bloom`. `aimBlend` follows the
+  camera zoom (0 hip → 1 aimed), so aim-and-fire in the same instant isn't free accuracy.
+- First-shot accuracy: after `firstShot.rest` s without firing the next round's spread is scaled
+  (AR aimed ×0 = pin-point, hip ×0.5; MG aimed ×0.4, hip ×0.7). Tap or burst to stay accurate.
+- Bloom grows per shot and decays only `bloomDelay` s after the last shot.
+- Recoil is a fixed per-gun pattern (`recoil.pattern`, [pitch up, yaw right] per round, the last `loop` entries
+  repeat) with ±`jitter`, ×`recoil.aim` while aimed. AR: 5-round hard climb then a gentle sway (~3.7° per
+  10 rounds aimed). MG: lighter climb, wide left-right snake. Learnable: pull against it.
+- Camera applies a kick through a spring (~0.1 s), then pulls back `recover` of it (AR 85%, MG 75%) once you
+  stop firing; your own counter-pull is subtracted so it never overshoots. Pattern restarts after `recoil.reset` s.
+- Damage falloff by muzzle distance (`falloff`): AR full to 35 m → ×0.65 at 80 m; MG 25 m → ×0.6 at 60 m.
+- Each weapon has its own seeded RNG (`weapon.rng`): spread and jitter are reproducible per seed.
+- Aim probe (every frame, after the camera): crosshair red over an enemy, magenta over a weak spot, grey when
+  the muzzle is obstructed (e.g. crouched behind low cover) with a red ✕ where the round would really land.
+- Aim assist: mouse = friction only, strongest at the target's center (your aim never moves on its own);
+  trackpad = friction + pull.
+
 ## Puppets (`game/actors/enemies.js`)
 - static 100hp, mover 100hp (rail), shooter 120hp: hidden → up → telegraph (visor glow 0.45s) → 3 bolts → hide.
 - Weak spots: 2 random body parts per spawn get a pulsing magenta patch (zone `weak`, ×3 damage). Re-rolled on respawn.

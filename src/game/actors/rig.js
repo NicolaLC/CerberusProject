@@ -271,7 +271,10 @@ export class Animator {
     if (this.armed) {
       B.Weapon.rotation.x = this.weaponPitch + (s.lower ?? 0) * 1.1; // lowered while switching guns
       B.Weapon.rotation.y = (s.combat ? 0 : mix(0.35, 0.15, r)) + (s.lower ?? 0) * 0.4;
-      if (s.recoil) B.Weapon.position.z -= s.recoil * 0.06;
+      if (s.recoil) {
+        B.Weapon.position.z -= s.recoil * (s.kickBack ?? 0.06);
+        B.Weapon.rotation.x -= s.recoil * (s.kickClimb ?? 0); // muzzle climbs
+      }
       B.LeftShoulder.rotation.y = -0.6; // support shoulder rolls forward so the left hand reaches the handguard
       B.RightShoulder.rotation.y = 0.15;
       rig.root.updateMatrixWorld(true);

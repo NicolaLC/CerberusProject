@@ -83,7 +83,9 @@ export class Engine {
   }
 
   start() {
+    this.running = true;
     const tick = (now) => {
+      if (!this.running) return;
       requestAnimationFrame(tick);
       this.#frame(now);
     };
@@ -93,14 +95,28 @@ export class Engine {
     });
   }
 
+  // Stops the browser-driven loop (tests, tools). Resume with start().
+  stop() {
+    this.running = false;
+  }
+
+  // Runs exactly one frame of `dt` seconds, independent of wall time: deterministic tests and replays.
+  step(dt = 1 / 60) {
+    this.#tick(dt);
+  }
+
   #frame(now) {
     const ms = now - this.last;
     this.last = now;
-    let realDt = ms / 1000;
+    const realDt = ms / 1000;
     if (realDt <= 0) return;
+    this.perf.sample(Math.min(ms, 100), Math.min(realDt, this.t.maxFrame));
+    this.#tick(realDt);
+  }
+
+  #tick(realDt) {
     if (realDt > this.t.maxFrame) realDt = this.t.maxFrame;
     this.realDt = realDt;
-    this.perf.sample(Math.min(ms, 100), realDt);
 
     const input = this.input;
     this.#run('pre', realDt);

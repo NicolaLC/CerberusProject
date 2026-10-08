@@ -18,8 +18,9 @@ const TUNING = {
   maxShakeRoll: 0.06,
   maxShakePos: 0.12,
   traumaDecay: 1.6,
-  recoilRecover: 0.9, // fraction of recoil pitch given back
+  recoilSpring: 30, // 1/s: a kick is applied over ~0.1 s instead of a one-frame snap
   recoilRecoverRate: 5,
+  recoilRecoverDelay: 0.08, // s after the last shot before the aim settles back
   dist: { normal: 3.4, aim: 1.9, sprint: 3.9 },
   fov: { normal: 70, aim: 50, sprint: 78 },
   bob: { walk: 0.015, sprint: 0.05 },
@@ -45,7 +46,10 @@ export class CameraRig {
     this.time = 0;
     this.fovKick = 0;
     this.roll = 0;
-    this.recoilDebt = 0;
+    this.recoilDebt = 0; // pitch to give back after the burst
+    this.recoilYawDebt = 0;
+    this.kickPitch = 0; // recoil still to be applied (spring)
+    this.kickYaw = 0;
     this.dipY = 0;
     this.dipV = 0;
     this.bob = 0;
@@ -67,14 +71,18 @@ export class CameraRig {
     const sens = aiming ? this.t.aimSens : this.t.sens;
     this.yaw -= dx * sens;
     this.pitch -= dy * sens;
-    // player pulling down counts as recoil compensation
+    // the player pulling against the recoil counts as compensation: the auto-recovery won't overshoot
     if (dy > 0) this.recoilDebt = Math.max(0, this.recoilDebt - dy * sens);
+    if (dx !== 0 && Math.sign(-dx) !== Math.sign(this.recoilYawDebt)) {
+      this.recoilYawDebt = Math.sign(this.recoilYawDebt) * Math.max(0, Math.abs(this.recoilYawDebt) - Math.abs(dx) * sens);
+    }
     this.pitch = THREE.MathUtils.clamp(this.pitch, -1.25, 1.1);
   }
 
-  // Aim assist: slows the look near a target (friction) and eases toward it (magnetism).
-  // targets: world points (puppet chest/head). Returns the friction multiplier for this frame's look.
-  assist(dt, targets, strength) {
+  // Aim assist: slows the look near a target (friction) and, if `magnetism`, eases toward it.
+  // Mouse players get friction only (the aim never moves on its own); trackpad players also get the pull.
+  // targets: world points (puppet chests). Returns the friction multiplier for this frame's look.
+  assist(dt, targets, strength, magnetism = true) {
     const camPos = this.camera.position;
     let best = null;
     let bestAng = 0.09 * strength;
@@ -89,6 +97,8 @@ export class CameraRig {
       }
     }
     if (!best) return 1;
+    const friction = 1 - 0.45 * Math.min(1, strength) * (1 - bestAng / (0.09 * strength));
+    if (!magnetism) return friction;
     const d = _dir.copy(best).sub(camPos).normalize();
     const wantYaw = Math.atan2(-d.x, -d.z);
     const wantPitch = Math.asin(THREE.MathUtils.clamp(d.y, -1, 1));
@@ -97,13 +107,17 @@ export class CameraRig {
     const pull = 1 - Math.exp(-dt * 2.5 * strength);
     this.yaw += dy * pull;
     this.pitch += (wantPitch - this.pitch) * pull;
-    return 1 - 0.45 * Math.min(1, strength);
+    return friction;
   }
 
-  kick(pitch, yaw, trauma = 0.06) {
-    this.pitch = Math.min(1.1, this.pitch + pitch);
-    this.yaw += yaw;
-    this.recoilDebt += pitch * this.t.recoilRecover;
+  // Recoil: rotates the aim by (pitch up, yaw) over a few frames; `recover` of it is pulled back after the burst.
+  // `hold`: seconds without a shot before recovery may start (≥ the gun's shot interval, so a burst never sags).
+  kick(pitch, yaw, trauma = 0.06, recover = 0.85, hold = 0) {
+    this.recoilHold = hold;
+    this.kickPitch += pitch;
+    this.kickYaw += yaw;
+    this.recoilDebt += pitch * recover;
+    this.recoilYawDebt += yaw * recover * 0.5;
     this.addTrauma(trauma);
     this.punch(0.9);
   }
@@ -114,11 +128,27 @@ export class CameraRig {
     this.time += realDt;
     const k = 1 - Math.exp(-dt * 12);
 
-    // recoil recovery
-    if (this.recoilDebt > 0 && player.lastShot > 0.08) {
-      const r = Math.min(this.recoilDebt, this.recoilDebt * t.recoilRecoverRate * dt + 0.0005);
-      this.pitch -= r;
-      this.recoilDebt -= r;
+    // recoil: apply pending kick through a fast spring, then recover once the burst ends
+    if (this.kickPitch !== 0 || this.kickYaw !== 0) {
+      const f = 1 - Math.exp(-dt * t.recoilSpring);
+      const dp = Math.abs(this.kickPitch) < 1e-5 ? this.kickPitch : this.kickPitch * f;
+      const dyaw = Math.abs(this.kickYaw) < 1e-5 ? this.kickYaw : this.kickYaw * f;
+      this.pitch = Math.min(1.1, this.pitch + dp);
+      this.yaw += dyaw;
+      this.kickPitch -= dp;
+      this.kickYaw -= dyaw;
+    }
+    if (player.lastShot > Math.max(t.recoilRecoverDelay, this.recoilHold ?? 0)) {
+      if (this.recoilDebt > 0) {
+        const r = Math.min(this.recoilDebt, this.recoilDebt * t.recoilRecoverRate * dt + 0.0005);
+        this.pitch -= r;
+        this.recoilDebt -= r;
+      }
+      if (this.recoilYawDebt !== 0) {
+        const r = this.recoilYawDebt * Math.min(1, t.recoilRecoverRate * dt);
+        this.yaw -= r;
+        this.recoilYawDebt = Math.abs(this.recoilYawDebt - r) < 1e-5 ? 0 : this.recoilYawDebt - r;
+      }
     }
 
     const targetSide = (aiming ? 0.95 : 0.85) * this.shoulder;

@@ -15,13 +15,14 @@ src/
     pool.js               object pools
     math.js               damp, lerpAngle, wrapAngle, segSegDist (allocation-free)
     storage.js            safe localStorage JSON
+    random.js             seedable RNG streams
   game/
     game.js               COMPOSITION ROOT: builds systems, wires events, declares frame order, start/pause shell
     controls.js           BINDINGS table + intents (move, look, aiming, running, firing, slots...)
     settings.js           player settings + start-panel bindings
     world/  world.js (level boxes, colliders, cover, sky, lights), textures.js, pickups.js
     actors/ rig.js (skeleton, animator, IK), soldier.js (player model), player.js, enemies.js (puppets, bolts)
-    combat/ guns.js (gun table), weapon.js (controller, hitscan)
+    combat/ guns.js (gun table), weapon.js (controller, hitscan, aim probe), ballistics.js (pure shot math)
     view/   camera.js, fx.js, hud.js, audio.js, juice.js, post.js   (presentation only)
 ```
 
@@ -37,8 +38,8 @@ src/
 |---|---|---|
 | pre | controls (+ hitstop time scale, aim assist, look, shoulder, debug keys), stats toggle | real |
 | simulate (substeps ≤ 20 ms) | player → weapon → enemies → pickups | scaled |
-| late | camera | scaled (shake uses real) |
-| present | fx → world (lights, sun, player visibility) → hud | scaled |
+| late | camera → aimProbe (what the crosshair is on) | scaled (shake uses real) |
+| present | fx → world (lights, sun, player visibility) → hud → audio (MG spin) | scaled |
 | render | post (exposure, grade, bloom) | real |
 
 Paused (start panel): only `whilePaused` systems run (controls, stats, camera, post).
@@ -47,8 +48,8 @@ Paused (start panel): only `whilePaused` systems run (controls, stats, camera, p
 Payload objects marked * are reused: copy what you keep.
 | event | payload | listeners |
 |---|---|---|
-| `weapon:shot` | *{ from, to, dir, right, heavy } | fx (tracer, flash, casing), audio |
-| `weapon:hit` | *{ point, normal, dir, zone, amount, crit, weak, killed } | fx, hud hitmarker, juice, audio |
+| `weapon:shot` | *{ from, to, dir, right, heavy, flash, mag } | fx (tracer, flash, casing), audio |
+| `weapon:hit` | *{ point, normal, dir, zone, amount, crit, weak, killed, distance } | fx, hud hitmarker, juice, audio |
 | `weapon:impact` | *{ point, normal } | fx |
 | `weapon:reload` | 'start' \| 'done' \| 'good' \| 'perfect' \| 'jam' | audio, juice |
 | `weapon:switch` / `weapon:dry` | gun id / – | audio |

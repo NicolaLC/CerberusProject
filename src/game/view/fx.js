@@ -78,7 +78,7 @@ export class FX {
     const back = new THREE.Vector3();
     events.on('weapon:shot', (s) => {
       this.tracer(s.from, s.to);
-      this.muzzleFlash(s.from, s.dir);
+      this.muzzleFlash(s.from, s.dir, s.flash);
       this.casing(back.copy(s.from).addScaledVector(s.dir, -0.6), s.right);
     });
     events.on('weapon:hit', (h) => {
@@ -117,14 +117,14 @@ export class FX {
     return this.sparkMats.get(color);
   }
 
-  muzzleFlash(pos, dir) {
+  muzzleFlash(pos, dir, size = 1) {
     this.flashTime = 0.045;
     this.flashLight.position.copy(pos);
-    this.flashLight.intensity = 16;
+    this.flashLight.intensity = 16 * size;
     this.flash.position.copy(pos).addScaledVector(dir, 0.12);
     this.flash.quaternion.copy(this.camera.quaternion);
     this.flash.rotateZ(Math.random() * Math.PI);
-    this.flash.scale.setScalar(0.7 + Math.random() * 0.7);
+    this.flash.scale.setScalar((0.7 + Math.random() * 0.7) * size);
     this.flash.visible = true;
     // muzzle smoke
     const s = this.pools.smoke.acquire();
