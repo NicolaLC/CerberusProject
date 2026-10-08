@@ -3,6 +3,7 @@ import { Rig, Animator } from './rig.js';
 import { GUNS } from '../combat/guns.js';
 import { buildSoldier } from './soldier.js';
 import { damp, lerpAngle, wrapAngle } from '../../engine/math.js';
+import { RigidSkin, mergeGroup } from '../../engine/batch.js';
 
 // The player character: movement, collision, cover state machine, health; drives its rig animator.
 // Reads intents from Controls; reports what happened through events ('player:coverSlam', 'player:land').
@@ -392,11 +393,14 @@ export class Player {
     const gunMats = { gun: gunMat, plate: M.armor, glow: M.glow, glowHot: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff8a2a, emissiveIntensity: 2.5 }) };
     this.gunModels = {};
     for (const [id, def] of Object.entries(GUNS)) {
-      const g = def.build(gunMats, box);
+      const g = mergeGroup(def.build(gunMats, box)); // one draw per material per gun
       g.visible = false;
+      g.userData.gun = true;
       rig.attach('Weapon', g);
       this.gunModels[id] = g;
     }
+    // ~100 soldier parts -> one skinned draw per material; guns stay separate (visibility per gun)
+    this.skin = new RigidSkin(rig.root, rig.skeleton, { exclude: (o) => o.userData.gun });
 
     this.scene.add(rig.root);
     this.rigModel = rig;

@@ -4,10 +4,16 @@ import { Pool } from '../../engine/pool.js';
 // Visual effects. Colors above 1.0 are intentional: they feed the bloom pass.
 // Never add/remove lights at runtime (shader recompiles): the muzzle light is permanent and toggled.
 // Hot path: every particle, decal and damage number is pooled, nothing is allocated per shot once warm.
+// Draw calls: sparks, casings and decals are InstancedMeshes (one draw each, whatever the count);
+// their pooled objects are plain Object3Ds whose matrices are written into the instance buffers.
 const HDR = (hex, k) => new THREE.Color(hex).multiplyScalar(k);
 const _v = new THREE.Vector3();
 const _spin = new THREE.Vector3();
 const MAX_DECALS = 150;
+const MAX_SPARKS = 256;
+const MAX_CASINGS = 64;
+const _c = new THREE.Color();
+const _o = new THREE.Object3D();
 
 export class FX {
   constructor(scene, camera, world) {
@@ -15,7 +21,6 @@ export class FX {
     this.camera = camera;
     this.world = world;
     this.live = []; // generic particles { obj, vel?, life, max, update? }
-    this.decals = [];
     this.numbers = [];
     this.numberPool = new Pool(() => ({ el: null, pos: new THREE.Vector3(), life: 0, drift: 0 }));
     this.numberLayer = document.getElementById('numbers');
@@ -23,7 +28,6 @@ export class FX {
     this.tracerGeo = new THREE.CylinderGeometry(0.012, 0.012, 1, 5, 1, true).rotateX(Math.PI / 2).translate(0, 0, 0.5);
     this.tracerMat = new THREE.MeshBasicMaterial({ color: HDR(0xffd890, 6), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
     this.sparkGeo = new THREE.BoxGeometry(0.03, 0.03, 0.09);
-    this.sparkMats = new Map();
     this.decalGeo = new THREE.PlaneGeometry(0.12, 0.12);
     this.decalMat = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
     this.smokeMat = new THREE.SpriteMaterial({ map: softTexture(), color: 0xb8b8b8, transparent: true, depthWrite: false, opacity: 0.5 });
@@ -49,14 +53,10 @@ export class FX {
     };
     const ringMat = new THREE.MeshBasicMaterial({ color: HDR(0x6fe3ff, 3), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     this.pools = {
-      spark: new Pool(() => hidden(new THREE.Mesh(this.sparkGeo, this.#sparkMat(0xffc070)))),
+      spark: new Pool(() => Object.assign(new THREE.Object3D(), { color: new THREE.Color() })),
       smoke: new Pool(() => hidden(new THREE.Sprite(this.smokeMat.clone()))),
       tracer: new Pool(() => hidden(new THREE.Mesh(this.tracerGeo, this.tracerMat.clone()))),
-      casing: new Pool(() => {
-        const m = hidden(new THREE.Mesh(this.casingGeo, this.casingMat));
-        m.castShadow = true;
-        return m;
-      }),
+      casing: new Pool(() => new THREE.Object3D()),
       ring: new Pool(() => hidden(new THREE.Mesh(this.ringGeo, ringMat.clone()))),
       number: new Pool(() => {
         const el = document.createElement('div');
@@ -71,6 +71,22 @@ export class FX {
     this.pools.tracer.warm(16);
     this.pools.casing.warm(24);
     this.decalNext = 0;
+    this.decalCount = 0;
+
+    const instanced = (geo, mat, max) => {
+      const m = new THREE.InstancedMesh(geo, mat, max);
+      m.count = 0;
+      m.frustumCulled = false; // instances anywhere in the arena
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      scene.add(m);
+      return m;
+    };
+    // sparks: white additive material tinted per instance with HDR colors (> 1 feeds bloom)
+    this.sparks = instanced(this.sparkGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }), MAX_SPARKS);
+    this.sparks.setColorAt(0, _c.setScalar(0)); // allocates instanceColor
+    this.casings = instanced(this.casingGeo, this.casingMat, MAX_CASINGS);
+    this.casings.castShadow = true;
+    this.decalMesh = instanced(this.decalGeo, this.decalMat, MAX_DECALS);
   }
 
   // Visual reactions to gameplay events.
@@ -110,12 +126,6 @@ export class FX {
     this.live.push(p);
   }
 
-  #sparkMat(color) {
-    if (!this.sparkMats.has(color)) {
-      this.sparkMats.set(color, new THREE.MeshBasicMaterial({ color: HDR(color, 4), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
-    }
-    return this.sparkMats.get(color);
-  }
 
   muzzleFlash(pos, dir, size = 1) {
     this.flashTime = 0.045;
@@ -144,10 +154,11 @@ export class FX {
   }
 
   impact(point, normal, color = 0xffc070, count = 8, decal = true) {
-    const mat = this.#sparkMat(color);
+    _c.set(color).multiplyScalar(4);
     for (let i = 0; i < count; i++) {
       const m = this.pools.spark.acquire();
-      m.material = mat;
+      m.color.copy(_c);
+      m.scale.setScalar(1);
       m.position.copy(point);
       const v = _v.copy(normal).multiplyScalar(2 + Math.random() * 4);
       v.x += (Math.random() - 0.5) * 5;
@@ -161,16 +172,16 @@ export class FX {
     s.scale.setScalar(0.2);
     this.#add('smoke', s, 0.6, { vel: _v.copy(normal).multiplyScalar(0.6), grow: 1.4, fade: 0.45 });
     if (decal) {
-      // ring buffer: the oldest decal is recycled
-      let d = this.decals[this.decalNext];
-      if (!d) {
-        d = this.decals[this.decalNext] = new THREE.Mesh(this.decalGeo, this.decalMat);
-        this.scene.add(d);
-      }
-      this.decalNext = (this.decalNext + 1) % MAX_DECALS;
+      // ring buffer of instances: the oldest decal is recycled
+      const d = _o;
       d.position.copy(point).addScaledVector(normal, 0.01);
       d.lookAt(_v.copy(d.position).add(normal));
       d.rotateZ(Math.random() * 6.28);
+      d.updateMatrix();
+      this.decalMesh.setMatrixAt(this.decalNext, d.matrix);
+      this.decalMesh.instanceMatrix.needsUpdate = true;
+      this.decalNext = (this.decalNext + 1) % MAX_DECALS;
+      this.decalMesh.count = this.decalCount = Math.min(MAX_DECALS, this.decalCount + 1);
     }
   }
 
@@ -248,6 +259,32 @@ export class FX {
         this.live.pop();
       }
     }
+    // write live sparks and casings into their instance buffers
+    let ns = 0;
+    let nc = 0;
+    for (let i = 0; i < this.live.length; i++) {
+      const p = this.live[i];
+      if (p.kind === 'spark') {
+        if (ns >= MAX_SPARKS) continue;
+        p.obj.updateMatrix();
+        this.sparks.setMatrixAt(ns, p.obj.matrix);
+        this.sparks.setColorAt(ns++, p.obj.color);
+      } else if (p.kind === 'casing') {
+        if (nc >= MAX_CASINGS) continue;
+        p.obj.updateMatrix();
+        this.casings.setMatrixAt(nc++, p.obj.matrix);
+      }
+    }
+    if (ns || this.sparks.count) {
+      this.sparks.count = ns;
+      this.sparks.instanceMatrix.needsUpdate = true;
+      this.sparks.instanceColor.needsUpdate = true;
+    }
+    if (nc || this.casings.count) {
+      this.casings.count = nc;
+      this.casings.instanceMatrix.needsUpdate = true;
+    }
+
     const w = innerWidth;
     const h = innerHeight;
     for (let i = this.numbers.length - 1; i >= 0; i--) {

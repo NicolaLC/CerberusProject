@@ -26,6 +26,20 @@ Goal: hold 60 fps, never freeze on a bug, scale to a much bigger game.
 - Draw calls and triangles: F3 (or `?debug`) shows fps, ms, resolution %, draws, tris and the slowest systems.
   Renderer info is accumulated over the whole frame (all post passes).
 
+## Draw calls (`batch.js`)
+WebGL frames are CPU-bound on draw calls (one per mesh per material per pass, and the sun shadow pass
+repeats every caster). Budget: ≤ 300 calls per frame at the spawn view (`tests/render.browser.mjs`; was ~1200).
+- Pattern: originals stay in the scene as invisible PROXIES (raycasts, hit zones, colliders, userData keep
+  working: three's Raycaster ignores `visible`); merged meshes render and have raycast disabled.
+- `mergeStatic(meshes, parent)`: the level (World.staticMeshes) → one mesh per material + shadow flags.
+  Changing a level material (e.g. flickering strip) still works: the merged mesh shares the material object.
+- `RigidSkin(root, skeleton, { exclude })`: every mesh on a rig's bones → one SkinnedMesh per material,
+  vertices fully weighted to their bone. Bound at the current pose. Adding/removing parts later needs
+  `skin.rebuild()` (puppet weak spots do this on respawn). Culling uses one padded sphere per rig.
+- `mergeGroup(group)`: rigid sub-models (guns) → one mesh per material inside the group.
+- Instancing for many copies of one thing: puppet stands, sparks (per-instance HDR color), casings, decals.
+- New per-object visuals: prefer adding to an existing batch/instanced mesh over new Mesh objects.
+
 ## Input
 - `Input` stores raw codes: `KeyW`, `ShiftLeft`, `Mouse0` (left), `Mouse2` (right), wheel deltas and notches.
 - `Actions` maps names to codes; the game's table is `BINDINGS` in `game/controls.js`.

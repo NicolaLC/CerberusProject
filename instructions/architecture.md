@@ -13,6 +13,7 @@ src/
     actions.js            named actions -> device codes
     perf.js               frame timing, dynamic resolution, stats panel (F3)
     pool.js               object pools
+    batch.js              draw-call batching: static merge, rigid skinning, group merge
     math.js               damp, lerpAngle, wrapAngle, segSegDist (allocation-free)
     storage.js            safe localStorage JSON
     random.js             seedable RNG streams
