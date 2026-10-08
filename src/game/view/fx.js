@@ -93,7 +93,8 @@ export class FX {
   listen(events) {
     const back = new THREE.Vector3();
     events.on('weapon:shot', (s) => {
-      this.tracer(s.from, s.to);
+      if (s.beam) this.tracer(s.from, s.to, 5, 0.4);
+      else this.tracer(s.from, s.to);
       this.muzzleFlash(s.from, s.dir, s.flash);
       this.casing(back.copy(s.from).addScaledVector(s.dir, -0.6), s.right);
     });
@@ -158,13 +159,13 @@ export class FX {
     this.#add('smoke', s, 0.5, { vel: _v.copy(dir).multiplyScalar(0.8).setY(_v.y + 0.4), grow: 1.2, fade: 0.25 });
   }
 
-  tracer(from, to) {
+  tracer(from, to, width = 1, life = 0.07) {
     const m = this.pools.tracer.acquire();
     m.position.copy(from);
     m.scale.set(1, 1, 1);
     m.lookAt(to);
-    m.scale.set(1, 1, from.distanceTo(to));
-    this.#add('tracer', m, 0.07, { fadeMat: true });
+    m.scale.set(width, width, from.distanceTo(to));
+    this.#add('tracer', m, life, { fadeMat: true });
   }
 
   impact(point, normal, color = 0xffc070, count = 8, decal = true) {

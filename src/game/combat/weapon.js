@@ -21,8 +21,9 @@ const _back = new THREE.Vector3();
 const _targets = [];
 const _kick = [0, 0];
 const _probeDir = new THREE.Vector3();
+const _passed = [];
 // payloads are reused: listeners must copy what they keep
-const SHOT = { from: _muz, to: new THREE.Vector3(), dir: _toAim, right: null, heavy: false, gun: '', flash: 1, mag: 1 };
+const SHOT = { from: _muz, to: new THREE.Vector3(), dir: _toAim, right: null, heavy: false, beam: false, gun: '', flash: 1, mag: 1 };
 const HIT = { point: null, normal: new THREE.Vector3(), dir: _toAim, zone: '', amount: 0, crit: false, weak: false, killed: false, distance: 0 };
 const IMPACT = { point: null, normal: new THREE.Vector3() };
 
@@ -45,6 +46,8 @@ export class Weapon {
     this.sinceShot = 99; // seconds since the last round left
     this.burst = 0; // rounds in the current burst (recoil pattern index)
     this.queued = 0; // semi-auto: seconds a click stays buffered
+    this.charging = 0; // railgun: seconds left before the charged shot leaves
+    this.burstLeft = 0; // burst rifle: rounds still to fire in this burst
     // what the crosshair is on, refreshed every frame by probe(): HUD reads it
     this.aim = { enemy: false, weak: false, blocked: false, blockPoint: new THREE.Vector3(), distance: 0 };
     this.player.setGun(this.current);
@@ -158,6 +161,7 @@ export class Weapon {
     this.switching = SWITCH_TIME;
     this.reloading = 0;
     this.active = null;
+    this.burstLeft = 0;
     this.events.emit('weapon:switch', id);
   }
 
@@ -230,6 +234,7 @@ export class Weapon {
         this.pending = null;
         this.bloom = 0;
         this.spin = 0;
+        this.cooldown = 0; // the last gun's fire cycle doesn't carry over
         this.player.setGun(this.current);
         this.rig.zoom = this.t.zoom ?? null;
         if (this.ammo === 0) this.switchedEmpty = true;
@@ -266,6 +271,30 @@ export class Weapon {
     const pull = t.semi ? this.queued > 0 : trigger;
     this.spin = t.spinUp > 0 ? THREE.MathUtils.clamp(this.spin + (trigger ? dt / t.spinUp : -dt * 2), 0, 1) : 1;
     const canFire = !p.dead && !p.snap && !p.sprinting && !p.pinned && this.reloading <= 0 && this.switching <= 0;
+    // a started charge or burst finishes whether or not the trigger is still held
+    if (this.charging > 0) {
+      if (!canFire) {
+        this.charging = 0;
+        this.events.emit('weapon:charge', false);
+        return;
+      }
+      p.lastShot = 0; // shouldered while it charges
+      this.charging -= dt;
+      if (this.charging <= 0) {
+        this.charging = 0;
+        this.cooldown = 60 / t.rpm;
+        this.#fire();
+        if (this.ammo === 0) this.reload();
+      }
+      return;
+    }
+    if (this.burstLeft > 0) {
+      if (!canFire || this.ammo <= 0) this.burstLeft = 0;
+      else {
+        this.#burstStep();
+        return;
+      }
+    }
     if (!pull || !canFire) {
       this.cooldown = Math.max(this.cooldown, 0);
       return;
@@ -281,6 +310,23 @@ export class Weapon {
       return;
     }
     const rpm = t.rpm * (t.spinUp > 0 ? 0.35 + 0.65 * this.spin : 1);
+    if (t.charge) {
+      if (this.cooldown <= 0) {
+        this.charging = t.charge;
+        this.queued = 0;
+        p.lastShot = 0;
+        this.events.emit('weapon:charge', true);
+      }
+      return;
+    }
+    if (t.burst) {
+      if (this.cooldown <= 0) {
+        this.burstLeft = t.burst;
+        this.cooldown = 0;
+        this.#burstStep();
+      }
+      return;
+    }
     if (t.semi) {
       if (this.cooldown <= 0) {
         this.cooldown = 60 / rpm;
@@ -295,6 +341,20 @@ export class Weapon {
     }
     // auto reload the moment the magazine runs dry
     if (this.ammo === 0) this.reload();
+  }
+
+  // Fires the burst's rounds that are due; the last one starts the pause before the next burst.
+  #burstStep() {
+    const t = this.t;
+    while (this.cooldown <= 0 && this.burstLeft > 0 && this.ammo > 0) {
+      this.burstLeft--;
+      this.cooldown += this.burstLeft > 0 ? 60 / t.rpm : t.burstDelay;
+      this.#fire();
+    }
+    if (this.ammo === 0) {
+      this.burstLeft = 0;
+      this.reload();
+    }
   }
 
   #fire() {
@@ -316,22 +376,38 @@ export class Weapon {
     if (hit) _aim.copy(hit.point);
     else _aim.copy(camPos).addScaledVector(_dir, t.range);
 
-    // validate from muzzle
+    // validate from muzzle (a piercing slug flies on past the aim point, along the same line)
     this.player.muzzle.getWorldPosition(_muz);
     const toAim = _toAim.subVectors(_aim, _muz);
     const dist = toAim.length();
     toAim.normalize();
     _ray.set(_muz, toAim);
     _ray.near = 0;
-    _ray.far = Math.max(0.01, dist - 0.02);
-    const block = _ray.intersectObjects(_targets, false)[0];
-    if (block) hit = block;
+    _ray.far = t.pierce ? t.range : Math.max(0.01, dist - 0.02);
+    const muzHits = _ray.intersectObjects(_targets, false);
+    if (t.pierce) {
+      // every enemy on the line takes the slug (once each), up to the first wall or armor
+      hit = null;
+      _aim.copy(_muz).addScaledVector(toAim, t.range);
+      _passed.length = 0;
+      for (const h of muzHits) {
+        if (!this.#passes(h)) {
+          hit = h;
+          break;
+        }
+        const e = h.object.userData.enemy;
+        if (!e.alive || _passed.includes(e) || _passed.length >= t.pierce) continue;
+        _passed.push(e);
+        this.#hit(h, toAim, e);
+      }
+    } else if (muzHits[0]) hit = muzHits[0];
 
     SHOT.to.copy(hit ? hit.point : _aim);
     SHOT.right = this.rig.right;
     SHOT.heavy = this.current === 'mg';
     SHOT.gun = this.current;
     SHOT.flash = t.flash;
+    SHOT.beam = !!t.beam;
     SHOT.mag = this.ammo / t.mag;
     this.events.emit('weapon:shot', SHOT);
     const r = t.recoil;
@@ -342,7 +418,17 @@ export class Weapon {
     this.bloom = Math.min(t.bloomMax, this.bloom + t.bloomPerShot);
 
     if (!hit) return;
-    const enemy = hit.object.userData.enemy;
+    this.#hit(hit, toAim, hit.object.userData.enemy);
+  }
+
+  // A pierceable hit: a live enemy's part that isn't armored.
+  #passes(h) {
+    const e = h.object.userData.enemy;
+    return !!e && (!e.armor || e.armor(h.object.userData.zone, h.object) > 0);
+  }
+
+  #hit(hit, toAim, enemy) {
+    const t = this.t;
     const armor = enemy?.armor ? enemy.armor(hit.object.userData.zone, hit.object) : 1;
     if (enemy && armor <= 0) {
       // armor: the round glances off (sparks, no damage) and the HUD hints where to shoot

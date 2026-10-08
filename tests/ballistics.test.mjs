@@ -48,8 +48,13 @@ for (const [id, g] of Object.entries(GUNS)) {
   const hi = recoilKick(r, 0, [0, 0], 1, 1)[0];
   check(`${id} jitter bounded`, Math.abs(hi / r.pattern[0][0] - 1) <= r.jitter + 1e-9 && Math.abs(lo / r.pattern[0][0] - 1) <= r.jitter + 1e-9);
   if (g.semi) {
-    // one big kick per round instead of a climbing burst
-    check(`${id} single kick sane`, r.pattern[0][0] > 0.03 && r.pattern[0][0] < 0.1 && r.recover >= 0.9);
+    // one kick per round instead of a climbing burst (pistol small, sniper/railgun big)
+    check(`${id} single kick sane`, r.pattern[0][0] > 0.015 && r.pattern[0][0] < 0.1 && r.recover >= 0.9);
+  } else if (g.burst) {
+    // one burst climbs a little, and the pattern restarts before the next burst
+    let up = 0;
+    for (let i = 0; i < g.burst; i++) up += r.pattern[Math.min(i, r.pattern.length - 1)][0];
+    check(`${id} burst climb sane`, up > 0.01 && up < 0.05 && r.reset < g.burstDelay, `${((up * 180) / Math.PI).toFixed(1)}°`);
   } else {
     let up = 0;
     for (let i = 0; i < 10; i++) up += r.pattern[i][0];

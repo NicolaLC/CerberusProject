@@ -12,6 +12,7 @@ const _w = new THREE.Vector3();
 const _f = new THREE.Vector3();
 const _r = new THREE.Vector3();
 const _o = new THREE.Vector3();
+const _prev = new THREE.Vector3();
 const _n = new THREE.Vector3();
 const _ray = new THREE.Raycaster();
 const _move = { x: 0, y: 0 };
@@ -40,6 +41,9 @@ const TUNING = {
   healthDelay: 6,
   healthRate: 12,
 };
+
+// High cover corner peek: sideways weight shift (m) and torso lean (rad, split over the spine).
+const PEEK = { shift: 0.2, lean: 0.6 };
 
 export class Player {
   constructor({ scene, world, events }) {
@@ -215,15 +219,18 @@ export class Player {
     this.crouched = !!this.cover && this.cover.type === 'low' && !combat;
 
     // peek: high cover edge lean when aiming
+    // the camera swaps shoulder only for the peek; the player's chosen shoulder comes back afterwards
     const peekTarget = _v.set(0, 0, 0);
+    rig.peekSide = 0;
     if (this.cover && this.cover.type === 'high' && combat) {
       const tr = this.cover.tangent; // points toward camera right
       let side = 0;
       if (rig.shoulder > 0) side = this.cover.edgeR ? 1 : this.cover.edgeL ? -1 : 0;
       else side = this.cover.edgeL ? -1 : this.cover.edgeR ? 1 : 0;
       if (side !== 0) {
-        rig.shoulder = side;
-        peekTarget.copy(tr).multiplyScalar(side * 0.8).addScaledVector(this.cover.normal, 0.15);
+        rig.peekSide = side;
+        // the feet stay behind cover: a short weight shift, then the torso leans out (rig lean) to clear the edge
+        peekTarget.copy(tr).multiplyScalar(side * PEEK.shift).addScaledVector(this.cover.normal, 0.1);
       }
     }
     this.peek.lerp(peekTarget, damp(14, dt));
@@ -273,6 +280,7 @@ export class Player {
     const along = this.aiming && c.type === 'high' ? 0 : wish.dot(c.tangent);
     const speed = this.aiming ? t.aimWalk : t.coverSlide;
     const step = along * speed * dt;
+    const before = _prev.copy(this.pos);
     if (Math.abs(step) > 1e-4) {
       const next = _v.copy(this.pos).addScaledVector(c.tangent, step);
       const hit = this.#coverHitAt(next, c.normal);
@@ -282,7 +290,8 @@ export class Player {
         this.pos.z = hit.point.z + c.normal.z * (t.radius + 0.05);
       }
     }
-    this.vel.set(0, 0, 0);
+    // real slide velocity, so the legs shuffle along the wall (and stop at its end)
+    this.vel.set((this.pos.x - before.x) / dt, 0, (this.pos.z - before.z) / dt);
     c.edgeR = !this.#coverHitAt(_v.copy(this.pos).addScaledVector(c.tangent, 0.45), c.normal);
     c.edgeL = !this.#coverHitAt(_v.copy(this.pos).addScaledVector(c.tangent, -0.45), c.normal);
     if (!this.#coverHitAt(this.pos, c.normal)) this.cover = null;
@@ -413,7 +422,8 @@ export class Player {
       recoil: this.recoil * this.recoil, // eased: sharp snap back, quick settle
       kickBack: this.kickDef?.back,
       kickClimb: this.kickDef?.climb,
-      lean: this.peek.length() > 0.2 ? -camRig.shoulder * 0.25 : 0,
+      lean: (camRig.peekSide || camRig.shoulder) * PEEK.lean * Math.min(1, this.peek.length() / PEEK.shift),
+      leftHanded: camRig.peekSide < 0 && alive, // peeking a left corner: the gun comes around on the left
       lookYaw,
       lower: weaponLower,
       vel: this.vel,

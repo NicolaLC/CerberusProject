@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GUN_ORDER } from '../combat/guns.js';
 
 const _p = new THREE.Vector3();
 
@@ -42,7 +43,7 @@ export class Hud {
       arPerfect: document.querySelector('#areload .perfect'),
       arCursor: document.querySelector('#areload .cursor'),
       arLabel: document.querySelector('#areload .label'),
-      slots: { rifle: $('slot-rifle'), mg: $('slot-mg'), sniper: $('slot-sniper') },
+      slots: Object.fromEntries(GUN_ORDER.map((id) => [id, $(`slot-${id}`)])),
     };
     this.el.toast = $('toast');
     this.el.block = $('blockmark');
@@ -139,7 +140,7 @@ export class Hud {
     css(e.block, 'opacity', blockVisible ? 1 : 0);
     css(e.cross, 'opacity', player.snap || player.sprinting ? 0.15 : 1);
     // scoped gun: the overlay follows the zoom; the crosshair dims while the bolt cycles
-    css(e.scope, 'opacity', weapon.t.zoom ? weapon.aimBlend().toFixed(2) : 0);
+    css(e.scope, 'opacity', weapon.t.zoom?.scope ? weapon.aimBlend().toFixed(2) : 0);
     e.cross.classList.toggle('cycling', !!weapon.t.semi && weapon.cooldown > 0.05);
 
     this.hitTime -= dt;

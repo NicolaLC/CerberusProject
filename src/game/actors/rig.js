@@ -179,6 +179,7 @@ const _bdir = new THREE.Vector3();
 const _bq = new THREE.Quaternion();
 const _fq = new THREE.Quaternion();
 const SIDES = ['Left', 'Right'];
+const CROUCH_DROP = 0.38; // m the hips sink when crouched
 const KNEEL_L = [-1.45, 1.45, 0]; // low cover kneel: thigh, knee, toes
 const KNEEL_R = [0.15, 1.5, 0.9];
 
@@ -210,6 +211,7 @@ export class Animator {
     this.spinePitch = 0;
     this.hipsOffset = 0;
     this.look = 0;
+    this.hand = 1; // 1 = gun on the right shoulder, -1 = mirrored to the left (peeking a left corner)
     this.hit = new THREE.Vector2(); // spring-driven hit reaction (x: pitch, y: roll)
     this.hitVel = new THREE.Vector2();
     // thighs: yaw first, then swing (the swing plane turns with the step direction)
@@ -224,7 +226,7 @@ export class Animator {
   }
 
   // s: { speed, run, crouch, aimPitch, combat, recoil, lean, lookYaw, lower, kickBack, kickClimb,
-  //      vel (world velocity, optional), yaw (facing, with vel) }
+  //      vel (world velocity, optional), yaw (facing, with vel), leftHanded (mirror the gun hold) }
   update(dt, s) {
     const rig = this.rig;
     const B = rig.bones;
@@ -255,7 +257,11 @@ export class Animator {
       this.dirX = 0;
       this.dirZ = 1;
     }
-    const m = smoothstep(0.05, 0.6, v) * (1 - c); // how much of the gait shows (0 = standing)
+    // crouched and moving (sliding along low cover): the gait keeps going with the hips down, IK bends the legs
+    const mv = smoothstep(0.05, 0.6, v);
+    const ck = c * (1 - mv); // kneel pose weight: only when crouched and still
+    const cw = c * mv; // crouch-walk weight
+    const m = mv * (1 - ck) * (1 - 0.35 * cw); // how much of the gait shows (0 = standing); short steps crouched
     // strafing: the hips turn toward the movement (up to HIP_YAW); backpedaling plays the cycle in reverse
     const back = this.dirZ < -0.25;
     const dirYaw = back ? Math.atan2(-this.dirX, -this.dirZ) : Math.atan2(this.dirX, this.dirZ);
@@ -298,7 +304,7 @@ export class Animator {
     // left leg forward -> -1 (drives hips twist and the arm swing)
     const sw = -Math.cos(this.phase * Math.PI * 2);
     const amt = Math.min(1, v / 4) * (1 - c);
-    B.Hips.position.y += -0.38 * c - this.drop * m + bob;
+    B.Hips.position.y += -CROUCH_DROP * c - this.drop * m + bob;
     const twist = sw * mix(mix(W.twist, R.twist, g), RUN.twist, r) * m;
     B.Hips.rotation.set(hipsPitch + RUN.hipsLean * r * amt, this.hipYaw + twist, -sw * mix(W.roll, R.roll, g) * m);
 
@@ -321,8 +327,13 @@ export class Animator {
 
     // ----- arms -----
     if (this.armed) {
+      // mirrored hold: the gun crosses to the left shoulder pocket and the hands swap grips
+      this.hand = mix(this.hand, s.leftHanded ? -1 : 1, 1 - Math.exp(-dt * 16));
+      const hs = this.hand < 0 ? -1 : 1;
+      B.Weapon.position.x *= this.hand;
       B.Weapon.rotation.x = this.weaponPitch + (s.lower ?? 0) * 1.1; // lowered while switching guns
-      B.Weapon.rotation.y = (s.combat ? 0 : mix(0.35, 0.15, r)) + (s.lower ?? 0) * 0.4;
+      B.Weapon.rotation.z = -(s.lean ?? 0) * 0.85; // a leaning torso keeps the gun nearly level
+      B.Weapon.rotation.y = ((s.combat ? 0 : mix(0.35, 0.15, r)) + (s.lower ?? 0) * 0.4) * hs;
       // the carried gun rides the steps a little and sways with the shoulders (less while aiming)
       B.Weapon.position.y += bob * 0.5;
       const sway = sw * amt * (s.combat ? 0.3 : 1);
@@ -332,13 +343,16 @@ export class Animator {
         B.Weapon.position.z -= s.recoil * (s.kickBack ?? 0.06);
         B.Weapon.rotation.x -= s.recoil * (s.kickClimb ?? 0); // muzzle climbs
       }
-      B.LeftShoulder.rotation.y = -0.6; // support shoulder rolls forward so the left hand reaches the handguard
-      B.RightShoulder.rotation.y = 0.15;
+      // support shoulder rolls forward so the support hand reaches the handguard
+      B.LeftShoulder.rotation.y = hs > 0 ? -0.6 : -0.15;
+      B.RightShoulder.rotation.y = hs > 0 ? 0.15 : 0.6;
       rig.root.updateMatrixWorld(true);
-      if (rig.sockets.gripR) this.#armIK('Right', rig.sockets.gripR, -1);
-      if (rig.sockets.gripL) this.#armIK('Left', rig.sockets.gripL, 1);
+      const trigger = hs > 0 ? 'Right' : 'Left';
+      const support = hs > 0 ? 'Left' : 'Right';
+      if (rig.sockets.gripR) this.#armIK(trigger, rig.sockets.gripR, trigger === 'Right' ? -1 : 1);
+      if (rig.sockets.gripL) this.#armIK(support, rig.sockets.gripL, support === 'Right' ? -1 : 1);
       // running: the left hand lets go of the gun and pumps, anime style
-      const pump = r * amt * (s.combat ? 0 : 1);
+      const pump = r * amt * (s.combat ? 0 : 1) * (hs > 0 ? 1 : 0);
       if (pump > 0.01) {
         blendTo(B.LeftShoulder, 0, 0, 0, pump);
         blendTo(B.LeftArm, sw * RUN.armPump - 0.25, 0, 0.25, pump);
@@ -364,11 +378,16 @@ export class Animator {
     const rootY = rig.root.getWorldPosition(_a).y;
     for (const side of SIDES) {
       const L = this.legs[side];
+      const foot = B[side + 'Foot'];
       if (L.stance <= 0 || v < 0.2) {
         L.locked = L.released = false;
+        if (cw < 0.01) continue;
+        // crouch-walk swing: the foot moves as if the hips were up, the knee folds to reach it
+        const fk = foot.getWorldPosition(_b);
+        fk.y += CROUCH_DROP * c;
+        twoBone(B[side + 'UpLeg'], B[side + 'Leg'], foot, fk, pole);
         continue;
       }
-      const foot = B[side + 'Foot'];
       const fk = foot.getWorldPosition(_b);
       const floor = this.ground ? this.ground(fk.x, fk.z, rootY + 0.6) : rootY;
       if (!L.locked && !L.released) {
@@ -384,18 +403,18 @@ export class Animator {
       _c.set(mix(fk.x, L.lock.x, w), mix(fk.y, floor + ANKLE + heelUp, L.stance), mix(fk.z, L.lock.z, w));
       twoBone(B[side + 'UpLeg'], B[side + 'Leg'], foot, _c, pole);
     }
-    if (c > 0.001) {
+    if (ck > 0.001) {
       for (const side of SIDES) {
         const kneel = side === 'Left' ? KNEEL_L : KNEEL_R;
-        blendTo(B[side + 'UpLeg'], kneel[0], 0, 0, c);
-        blendTo(B[side + 'Leg'], kneel[1], 0, 0, c);
-        setX(B[side + 'ToeBase'], kneel[2] * c);
+        blendTo(B[side + 'UpLeg'], kneel[0], 0, 0, ck);
+        blendTo(B[side + 'Leg'], kneel[1], 0, 0, ck);
+        setX(B[side + 'ToeBase'], kneel[2] * ck);
       }
     }
     rig.root.updateMatrixWorld(true);
 
-    if (this.ground) this.#feetIK(dt, c);
-    this.#orientFeet(baseQ, 1 - c);
+    if (this.ground) this.#feetIK(dt, ck);
+    this.#orientFeet(baseQ, 1 - ck);
   }
 
   // Feet keep the pose's pitch relative to the hips' walking direction (flat when planted), not the shin's.

@@ -49,7 +49,10 @@ export class Game {
     const juice = new Juice({ camRig, post, fx }).listen(events);
     events.on('puppet:down', (p) => pickups.drop(p.pos));
     // controller rumble (only while the pad is the device in use)
-    events.on('weapon:shot', (s) => input.rumble(s.gun === 'sniper' ? 0.7 : s.heavy ? 0.3 : 0.12, s.gun === 'sniper' ? 0.5 : 0.35, s.gun === 'sniper' ? 140 : 50));
+    events.on('weapon:shot', (s) => {
+      const big = s.gun === 'sniper' || s.beam;
+      input.rumble(big ? 0.7 : s.heavy ? 0.3 : 0.12, big ? 0.5 : 0.35, big ? 140 : 50);
+    });
     events.on('player:hurt', () => input.rumble(0.6, 0.5, 180));
     events.on('blast', (b) => {
       const near = Math.max(0, 1 - b.point.distanceTo(player.pos) / (b.radius * 4));
@@ -60,7 +63,7 @@ export class Game {
       if (near > 0) input.rumble(near * 0.35, 0, 70);
     });
     addEventListener('pointerdown', () => audio.init()); // resumes audio started from a controller
-    Object.assign(this, { world, controls, camRig, player, enemies, pickups, weapon, fx, hud, audio, post, juice });
+    Object.assign(this, { world, controls, camRig, player, enemies, pickups, weapon, fx, hud, audio, post, juice, settings });
 
     // skeleton debug overlay (H)
     const helpers = [player.rigModel, ...enemies.puppets.filter((p) => p.rig).map((p) => p.rig)].map((r) => r.helper());
