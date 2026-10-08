@@ -14,6 +14,7 @@ const r = await p.evaluate(() => {
   const g = window.game;
   const { engine, enemies, player } = g;
   engine.stop();
+  engine.headless = true; // simulate only: nothing here checks pixels
   const step = (s) => { for (let i = 0; i < s * 60; i++) engine.step(1 / 60); };
   const out = {};
   // drones and the boss have their own tests: keep them out of these counts
@@ -61,6 +62,8 @@ const r = await p.evaluate(() => {
   player.pos.set(4, 0, -34); // walk around them
   step(12); // AI timings are randomized: leave room for a full cover cycle before they move
   out.relocated = squad.map((t, i) => t.spot !== before[i] && !!t.spot && cover.protects(t.spot, player.pos));
+  // diagnostics when it fails: where each trooper is and what it is doing
+  out.relocDetail = squad.map((t, i) => `${t.state} at ${t.pos.x.toFixed(1)},${t.pos.z.toFixed(1)} spot ${t.spot ? `${t.spot.pos.x.toFixed(1)},${t.spot.pos.z.toFixed(1)} ${t.spot.type}` : 'none'}${t.spot === before[i] ? ' (same)' : ''} protects=${!!t.spot && cover.protects(t.spot, player.pos)} alive=${t.alive}`);
   const inside = (t) => { const v = t.pos.clone(); g.world.collideCircle(v, 0.38, 1.8, 0.45); return v.distanceTo(t.pos) > 0.01; };
   out.noneInside = !squad.some(inside);
 

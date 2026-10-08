@@ -19,9 +19,16 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 - Headless check: Playwright with Chromium (`--use-angle=swiftshader`); real keyboard/mouse events work once the
   start button is clicked (pointer lock). SwiftShader runs at 3-15 fps and frames are clamped to 0.1 s,
   so count frames, not milliseconds.
+- Headless stepping: `engine.headless = true` skips the render phase (the scene's world matrices are still
+  updated, so raycasts and hitboxes stay correct). Every browser suite except `render` (draw calls, LOD) uses it:
+  the whole set runs in ~40 s instead of ~40 min on SwiftShader. Only render where a test checks pixels.
 - `npm test`: pure-math unit tests (`tests/ballistics.test.mjs`).
 - `tests/gunplay.browser.mjs`: deterministic gunplay checks in Chromium (first-shot accuracy, recoil pattern
   and recovery, crosshair states, hit registration). Needs `npm run dev` and Playwright.
 - `tests/render.browser.mjs`: draw-call budget and batching invariants (same setup).
-- `tests/enemies.browser.mjs`: destroyed puppets stay destroyed, shooters engage only within range.
+- `tests/enemies.browser.mjs`: destroyed puppets stay destroyed, shooters engage only within range, troopers.
+- `tests/boss.browser.mjs`: spider mech (wake, lock-on camera, attacks, arena bounds, armor, legs, core).
+- `tests/gamepad.browser.mjs`: controller with a simulated standard gamepad (`navigator.getGamepads` replaced
+  by an init script; set `window.__pad.axes` / `.buttons`).
+- Key presses in tests: add the code to `engine.input.keys` and `engine.input.pressed` (edges come from events).
 - Fault injection: `game.engine.add({ name: 'bad', update() { throw 1 } })` must get disabled while the game runs on.

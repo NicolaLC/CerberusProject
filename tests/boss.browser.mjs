@@ -14,6 +14,7 @@ const r = await p.evaluate(() => {
   const g = window.game;
   const { engine, enemies, player, world } = g;
   engine.stop();
+  engine.headless = true; // simulate only: nothing here checks pixels
   const step = (s) => { for (let i = 0; i < s * 60; i++) engine.step(1 / 60); };
   const boss = enemies.boss;
   const V = boss.pos.constructor;
@@ -35,6 +36,20 @@ const r = await p.evaluate(() => {
   engine.events.on('boss:step', () => steps++);
   hold(38, -20, 1);
   out.awake = boss.awake;
+  // 2b. lock-on: the camera turns to the boss on its own; looking around overrides it, then it comes back
+  const { camRig } = g;
+  const offBoss = () => {
+    const f = boss.focusPoint(new V());
+    const want = Math.atan2(-(f.x - camRig.pivot.x), -(f.z - camRig.pivot.z));
+    return Math.abs(Math.atan2(Math.sin(want - camRig.yaw), Math.cos(want - camRig.yaw)));
+  };
+  camRig.yaw += Math.PI * 0.8; // look away
+  hold(38, -20, 2.5);
+  out.lockOn = +offBoss().toFixed(3);
+  for (let i = 0; i < 40; i++) { camRig.look(30, 0, false); player.pos.set(38, 0, -20); engine.step(1 / 60); }
+  out.lookOverrides = +offBoss().toFixed(3);
+  hold(38, -20, 2.5);
+  out.lockReturns = +offBoss().toFixed(3);
   // 3. fights: cannon bursts at an exposed player, walks (feet step)
   hold(38, -20, 8);
   out.bolts = bolts;
@@ -87,6 +102,9 @@ const fail = [];
 const expect = (name, ok) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`); if (!ok) fail.push(name); };
 expect('dormant while the player is outside', r.dormantOutside);
 expect('wakes when the player enters the arena', r.awake);
+expect('camera locks on to the boss', r.lockOn < 0.1);
+expect('looking around overrides the lock', r.lookOverrides > 0.5);
+expect('and the camera comes back to the boss', r.lockReturns < 0.1);
 expect('fires cannon bursts', r.bolts >= 6);
 expect('walks (legs step)', r.steps > 6);
 expect('mortars a player hiding behind a wall', r.blastsOnHider >= 1);

@@ -6,6 +6,7 @@ const DEFAULTS = {
   sensitivity: 1, // multiplier on look speed
   trackpad: false, // E toggles aim, two-finger swipe looks, stronger aim assist
   aimAssist: true,
+  padInvertY: false, // controller right stick
 };
 
 export const settings = { ...DEFAULTS, ...loadJSON(KEY) };
@@ -19,11 +20,13 @@ export function bindSettingsUI() {
   const sensOut = $('sens-out');
   const pad = $('trackpad');
   const assist = $('assist');
+  const invert = $('invert');
   const sync = () => {
     sens.value = settings.sensitivity;
     sensOut.textContent = `${Number(settings.sensitivity).toFixed(1)}×`;
     pad.checked = settings.trackpad;
     assist.checked = settings.aimAssist;
+    invert.checked = settings.padInvertY;
   };
   sens.addEventListener('input', () => {
     settings.sensitivity = Number(sens.value);
@@ -38,6 +41,10 @@ export function bindSettingsUI() {
   });
   assist.addEventListener('change', () => {
     settings.aimAssist = assist.checked;
+    saveSettings();
+  });
+  invert.addEventListener('change', () => {
+    settings.padInvertY = invert.checked;
     saveSettings();
   });
   sync();

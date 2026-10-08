@@ -11,6 +11,10 @@ All of it reacts to gameplay events (see the events table in architecture.md); g
 - Recoil: per-gun pattern applied through a fast spring; most of it is recovered after the burst unless you
   pulled against it yourself (details in gameplay.md, Gunplay). The gun model kicks back and climbs (`kick`).
 - Strafe roll, head bob (walk 0.015, sprint 0.05), landing/cover dip spring (`dip()`).
+- Boss lock-on (`camRig.focus`, set in game.js while the boss is awake, alive and within 40 m): when the player
+  isn't steering (no look input for 0.35-0.9 s, eased) and isn't aiming, the camera turns toward the boss
+  (yaw rate 3.5, pitch 2.5, pitch clamped) and pulls back +1.1 m / +5° FOV to fit it. Looking around overrides it,
+  then it comes back; aiming is always free. A diamond marker sits on the boss (`#lockmark`).
 
 ## Feedback per event (`juice.js`, `fx.js`, `audio.js`)
 | Event | Feedback |

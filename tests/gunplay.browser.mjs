@@ -14,6 +14,7 @@ const result = await p.evaluate(() => {
   const g = window.game;
   const { engine, player, camRig, weapon, enemies } = g;
   engine.stop();
+  engine.headless = true; // simulate only: nothing here checks pixels
   const keys = engine.input.keys;
   const step = (n = 1) => { for (let i = 0; i < n; i++) engine.step(1 / 60); };
   const deg = (r) => +(r * 57.2958).toFixed(2);
@@ -103,6 +104,25 @@ const result = await p.evaluate(() => {
   const barUp = +document.getElementById('areload').style.opacity;
   press('KeyR'); step(2); // far too early: jam
   out.jam = { result: weapon.result?.kind, barUp, barAfter: +document.getElementById('areload').style.opacity, stillReloading: weapon.reloading > 0 };
+
+  // --- wall cover: no aiming or shooting away from the wall's ends ---
+  for (const e of enemies.puppets) e.alive = false;
+  enemies.dirty = true;
+  step(200); // finish the reload
+  player.pos.set(34, 0, -21.3); // south face of the arena wall at (34, -23), 6 m long
+  camRig.yaw = 0;
+  step(10);
+  press('Space', 30);
+  const wallAmmo = weapon.ammo;
+  keys.add('Mouse2');
+  keys.add('Mouse0');
+  step(30);
+  out.wall = { inCover: player.cover?.type, pinned: player.pinned, aiming: player.aiming, fired: wallAmmo - weapon.ammo };
+  keys.delete('Mouse0');
+  player.pos.x = 36.75; // at the east end
+  step(30);
+  out.wall.edgeAiming = player.aiming && !player.pinned;
+  keys.delete('Mouse2');
   return out;
 });
 
@@ -123,6 +143,8 @@ expect('sniper is semi-auto (held trigger = 1 round)', result.sniper.heldShots =
 expect('sniper body shot destroys a puppet', result.sniper.killed);
 expect('sniper buffers a click during the bolt cycle', result.sniper.buffered === 1);
 expect('failed active reload removes the reload bar', result.jam.result === 'jam' && result.jam.barUp === 1 && result.jam.barAfter === 0 && result.jam.stillReloading);
+expect('wall cover: no aiming or firing mid-wall', result.wall.inCover === 'high' && result.wall.pinned && !result.wall.aiming && result.wall.fired === 0);
+expect('wall cover: aiming works at the end', result.wall.edgeAiming);
 expect('no page errors', errors.length === 0);
 if (errors.length) console.log(errors);
 await b.close();

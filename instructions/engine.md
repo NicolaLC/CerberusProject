@@ -2,6 +2,8 @@
 
 Goal: hold 60 fps, never freeze on a bug, scale to a much bigger game.
 
+- `engine.headless`: simulate without drawing (tests); `scene.updateMatrixWorld()` replaces the render phase.
+
 ## Loop and scheduler (`engine.js`)
 - Systems: `{ name, phase, update(dt, engine), whilePaused }` added with `engine.add()`. Phases run in order
   `pre → simulate → late → present → render`.

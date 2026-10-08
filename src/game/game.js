@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { Engine } from '../engine/engine.js';
 import { World } from './world/world.js';
 import { Pickups } from './world/pickups.js';
@@ -17,6 +18,7 @@ import { settings, bindSettingsUI } from './settings.js';
 // frame order. This is the only file that knows about all systems; they only know their direct
 // dependencies (constructor args) and the event bus.
 const RESPAWN_AFTER = 3; // s
+const BOSS_FOCUS_RANGE = 40; // m: an awake boss this close keeps the camera on it
 // Puppet LOD by distance to the camera, with hysteresis (switch at `far`, back at `near`) so nothing flickers
 // at the edge. Detail: one draw with baked colors instead of one per material. Shadow: stop casting (a few
 // pixels at that range; the sun's shadow map is centered on the player anyway).
@@ -46,6 +48,18 @@ export class Game {
     const post = new Post(renderer, scene, camera, events);
     const juice = new Juice({ camRig, post, fx }).listen(events);
     events.on('puppet:down', (p) => pickups.drop(p.pos));
+    // controller rumble (only while the pad is the device in use)
+    events.on('weapon:shot', (s) => input.rumble(s.gun === 'sniper' ? 0.7 : s.heavy ? 0.3 : 0.12, s.gun === 'sniper' ? 0.5 : 0.35, s.gun === 'sniper' ? 140 : 50));
+    events.on('player:hurt', () => input.rumble(0.6, 0.5, 180));
+    events.on('blast', (b) => {
+      const near = Math.max(0, 1 - b.point.distanceTo(player.pos) / (b.radius * 4));
+      if (near > 0) input.rumble(near, near * 0.6, 260);
+    });
+    events.on('boss:step', (st) => {
+      const near = Math.max(0, 1 - st.point.distanceTo(player.pos) / 14);
+      if (near > 0) input.rumble(near * 0.35, 0, 70);
+    });
+    addEventListener('pointerdown', () => audio.init()); // resumes audio started from a controller
     Object.assign(this, { world, controls, camRig, player, enemies, pickups, weapon, fx, hud, audio, post, juice });
 
     // skeleton debug overlay (H)
@@ -64,11 +78,13 @@ export class Game {
       whilePaused: true,
       update: (realDt) => {
         controls.update();
+        this.#padShell();
         engine.timeScale = juice.update(realDt); // hitstop / slow motion
         if (engine.paused) return;
-        // aim assist (friction + gentle pull) while aiming, stronger in trackpad mode
+        // aim assist (friction + gentle pull) while aiming, stronger on a trackpad or a controller
         let friction = 1;
-        if (player.aiming && settings.aimAssist) friction = camRig.assist(realDt * engine.timeScale, enemies.aimPoints(assistTargets), settings.trackpad ? 1.6 : 0.8, settings.trackpad);
+        const assisted = settings.trackpad || controls.pad;
+        if (player.aiming && settings.aimAssist) friction = camRig.assist(realDt * engine.timeScale, enemies.aimPoints(assistTargets), assisted ? 1.6 : 0.8, assisted);
         controls.look(realDt, look);
         const k = settings.sensitivity * friction;
         camRig.look(look.x * k, look.y * k, player.aiming);
@@ -94,7 +110,19 @@ export class Game {
     engine.add({ name: 'weapon', update: (dt) => weapon.update(dt, controls) });
     engine.add({ name: 'enemies', update: (dt) => enemies.update(dt, player) });
     engine.add({ name: 'pickups', update: (dt) => pickups.update(dt, player, weapon) });
-    engine.add({ name: 'camera', phase: 'late', whilePaused: true, update: (dt) => camRig.update(dt, player, engine.realDt) });
+    // boss lock-on: an engaged boss within range stays framed (CameraRig.focus)
+    const bossFocus = new THREE.Vector3();
+    engine.add({
+      name: 'camera',
+      phase: 'late',
+      whilePaused: true,
+      update: (dt) => {
+        const b = enemies.boss;
+        const engaged = b && b.alive && b.awake && !player.dead && b.pos.distanceTo(player.pos) < BOSS_FOCUS_RANGE;
+        camRig.focus = engaged ? b.focusPoint(bossFocus) : null;
+        camRig.update(dt, player, engine.realDt);
+      },
+    });
     engine.add({ name: 'aimProbe', phase: 'late', update: () => weapon.probe() });
     engine.add({ name: 'fx', phase: 'present', update: (dt) => fx.update(dt) });
     engine.add({
@@ -127,6 +155,8 @@ export class Game {
       phase: 'present',
       update: (dt) => {
         hud.aimLabel = controls.aimLabel;
+        hud.coverLabel = controls.coverLabel;
+        hud.forwardLabel = controls.forwardLabel;
         hud.update(dt, { player, weapon, enemies, camRig, world });
       },
     });
@@ -159,12 +189,14 @@ export class Game {
       overlay.style.display = running ? 'none' : 'flex';
       canvas.style.cursor = input.free && running ? 'crosshair' : '';
     };
+    this.setRunning = setRunning;
+    this.padPlay = false; // started from a controller: runs without pointer lock
     setRunning(this.debug);
     document.getElementById('start').addEventListener('click', () => {
       audio.init();
       input.lock();
     });
-    document.addEventListener('pointerlockchange', () => setRunning(input.locked || input.free || this.debug));
+    document.addEventListener('pointerlockchange', () => setRunning(input.locked || input.free || this.padPlay || this.debug));
     addEventListener('keydown', (e) => {
       // Esc pauses in free-mouse mode (pointer lock handles it otherwise)
       if (e.code === 'Escape' && input.free && !engine.paused) {
@@ -172,6 +204,26 @@ export class Game {
         setRunning(false);
       }
     });
+  }
+
+  // Controller: A / Menu deploys from the start panel, Menu pauses; the panel shows the connected pad.
+  #padShell() {
+    const { engine, controls, audio } = this;
+    const input = engine.input;
+    if (engine.paused) {
+      const status = input.pad.connected ? `Controller: ${input.pad.id.replace(/\s*\(.*$/, '').slice(0, 40)} ✓` : 'Controller: press any button to connect.';
+      if (this.padStatus !== status) document.getElementById('pad-status').textContent = this.padStatus = status;
+      if (controls.pressed('pause') || (input.device === 'pad' && input.wasPressed('Pad0'))) {
+        audio.init();
+        this.padPlay = true;
+        this.setRunning(true);
+      }
+    } else if (controls.pressed('pause')) {
+      this.padPlay = false;
+      if (input.locked) document.exitPointerLock();
+      input.free = false;
+      this.setRunning(false);
+    }
   }
 
   start() {

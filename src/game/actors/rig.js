@@ -38,6 +38,7 @@ export const BONES = {
 };
 
 const ANKLE = 0.08;
+const FOOT = 0.14; // ankle to the ball of the foot (heel-up roll pivots there)
 
 // Placeholder part per bone: [w, h, d, offsetX, offsetY, offsetZ, materialSlot]
 const DUMMY = {
@@ -190,7 +191,8 @@ const RUN = {
 // factor change with speed like a real walk (double support) -> run (flight phase).
 const GAIT = {
   walk: { cadence: [0.8, 0.18], duty: 0.6, lift: 0.1, bob: 0.022, width: 1 }, // cadence: cycles/s = a + b * speed
-  run: { cadence: [1.15, 0.12], duty: [0.38, 0.015], lift: 0.3, bob: -0.04, width: 0.7 }, // duty: a - b * speed
+  // quicker, shorter steps than a real runner: our legs are short and a long stance reads as a crouch
+  run: { cadence: [1.4, 0.1], duty: [0.38, 0.015], lift: 0.28, bob: -0.025, width: 0.75 }, // duty: a - b * speed
   runAt: [2.0, 3.2], // m/s: walk -> run blend (the sprint style forces run)
   legLen: 0.815, // hip joint to ankle with the knee barely bent: hips drop so a planted foot stays in reach
 };
@@ -262,41 +264,48 @@ export class Animator {
     const step = Math.min(1, v / 1.2) * (1 - c); // feet lift only when actually moving
     const lift = mix(W.lift, R.lift + RUN.heelKick * r, g) * step;
     const width = 0.11 * mix(W.width, R.width, g) * (1 + 0.7 * Math.abs(this.dirX));
-    let reach = 0;
+    // push-off: the heel peels up in the second half of stance (the foot rolls onto the toes), which keeps the
+    // trailing leg long instead of folding both knees; only when moving forward (the roll is along the foot)
+    const heel = mix(0.045, 0.08, g) * step * Math.max(0, this.dirZ);
+    const L2 = GAIT.legLen * GAIT.legLen;
+    let drop = 0;
     for (const side of SIDES) {
       const u = side === 'Left' ? this.phase : (this.phase + 0.5) % 1;
       const L = this.legs[side];
       let z;
-      let y = 0;
-      let rz; // how far out the foot is while it carries weight (hips must drop to reach it)
+      let y;
+      let weight; // how much this foot carries the body (hips must drop to keep it in reach)
       if (u < duty) {
-        // stance: heel strike, roll over, toe off (walk); flat forefoot contact (run)
+        // stance: heel strike (walk) / flat contact (run), roll over, heel up onto the toes
         const k = u / duty;
         z = stride * (0.5 - k);
-        rz = Math.abs(z);
-        L.pitch = (1 - g) * (-0.25 * Math.max(0, 1 - k / 0.2) + 0.4 * Math.max(0, (k - 0.7) / 0.3));
+        const roll = Math.max(0, (k - 0.45) / 0.55);
+        y = heel * roll * roll;
+        weight = 1;
+        L.pitch = Math.asin(Math.min(1, y / FOOT)) - (1 - g) * 0.25 * Math.max(0, 1 - k / 0.2) * step;
       } else {
         // swing: forward with eased speed; the run lifts the heel early (kick) and points the toes
         const w = (u - duty) / (1 - duty);
         // run: the foot leaves the ground fast and folds up under the hips (heel toward the seat), not trailing behind
         const e = mix(0.5 - 0.5 * Math.cos(Math.PI * w), 1 - Math.pow(1 - w, 1.8), g);
         z = stride * (e - 0.5);
-        y = lift * Math.sin(Math.PI * Math.pow(w, mix(0.9, 0.7, g)));
-        rz = Math.abs(z) * (1 - Math.sin(Math.PI * w)); // weight fades in/out at lift-off and touch-down
-        L.pitch = mix(mix(0.4, -0.25, w), 0.55 * Math.sin(Math.PI * w), g) * step;
+        y = lift * Math.sin(Math.PI * Math.pow(w, mix(0.9, 0.7, g))) + heel * (1 - w) * (1 - w);
+        weight = 1 - Math.sin(Math.PI * w); // fades out after lift-off, back in for touch-down
+        const toe = Math.asin(Math.min(1, heel / FOOT));
+        L.pitch = mix(mix(toe + 0.15 * (1 - g), -0.25 * (1 - g), w), mix(toe, 0, w) + 0.45 * Math.sin(Math.PI * w), g) * step;
       }
-      reach = Math.max(reach, rz);
+      // hip height that keeps this foot in reach: sqrt(L^2 - z^2) above the ankle, plus the ankle's own lift
+      const zz = Math.min(Math.abs(z), GAIT.legLen * 0.9);
+      drop = Math.max(drop, weight * Math.max(0, GAIT.legLen - Math.sqrt(L2 - zz * zz) - y));
       const sx = side === 'Left' ? width : -width;
       L.pos.set(sx + this.dirX * z, ANKLE + y, this.dirZ * z);
     }
     // left foot forward -> -1 (drives hips twist and the arm swing)
     const sw = -Math.cos(this.phase * Math.PI * 2);
     const amt = Math.min(1, v / 4) * (1 - c);
-    const rl = Math.min(reach, GAIT.legLen * 0.9);
-    const drop = GAIT.legLen - Math.sqrt(GAIT.legLen * GAIT.legLen - rl * rl);
     // walk vaults over the planted leg (highest at mid-stance); run compresses there and floats in flight
     const bob = Math.cos(Math.PI * 4 * (this.phase - duty / 2)) * mix(W.bob, R.bob, g) * step;
-    B.Hips.position.y += -0.38 * c - drop * (1 - c) - 0.03 * g * step + bob;
+    B.Hips.position.y += -0.38 * c - drop * (1 - c) - 0.015 * g * step + bob;
     const twist = sw * mix(0.08, RUN.twist, r) * amt;
     B.Hips.rotation.set(RUN.hipsLean * r * amt, twist, -sw * 0.04 * amt);
 
@@ -320,8 +329,11 @@ export class Animator {
     if (this.armed) {
       B.Weapon.rotation.x = this.weaponPitch + (s.lower ?? 0) * 1.1; // lowered while switching guns
       B.Weapon.rotation.y = (s.combat ? 0 : mix(0.35, 0.15, r)) + (s.lower ?? 0) * 0.4;
-      // the carried gun rides the steps a little
+      // the carried gun rides the steps a little and sways with the shoulders (less while aiming)
       B.Weapon.position.y += bob * 0.5;
+      const sway = sw * amt * (s.combat ? 0.3 : 1);
+      B.Weapon.position.x += sway * 0.012;
+      B.Weapon.rotation.y += sway * 0.035;
       if (s.recoil) {
         B.Weapon.position.z -= s.recoil * (s.kickBack ?? 0.06);
         B.Weapon.rotation.x -= s.recoil * (s.kickClimb ?? 0); // muzzle climbs
