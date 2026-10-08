@@ -1,6 +1,8 @@
 # Animation & rig
 
 All characters use `Rig` from `src/game/actors/rig.js`.
+Rendering: parts are baked into one SkinnedMesh per material (`RigidSkin`, see engine.md); the part meshes
+remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuild()` after changing them.
 
 ## Skeleton (Mixamo layout)
 - Bone keys are Mixamo names without the prefix: Hips, Spine, Spine1, Spine2, Neck, Head,

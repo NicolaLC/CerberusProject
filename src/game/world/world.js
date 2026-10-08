@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { gridTexture, applyWorldUVs } from './textures.js';
+import { mergeStatic } from '../../engine/batch.js';
 
 // Static level: axis-aligned boxes only (collision, cover and shadows depend on that).
 // Coordinates: x = east, z = south, y = up. Floor is y = 0.
@@ -19,11 +20,14 @@ export class World {
     this.coverMeshes = [];
     this.interiorZones = [];
     this.flickerLights = [];
+    this.staticMeshes = []; // every level box; merged per material for rendering, kept as raycast proxies
 
     this.mats = this.#makeMaterials();
     this.#buildSky();
     this.#buildLights();
     this.#buildLevel();
+    // ~60 boxes x up to 6 face materials -> one draw per material (+ shadow pass)
+    this.batches = mergeStatic(this.staticMeshes, scene);
   }
 
   #makeMaterials() {
@@ -147,6 +151,7 @@ export class World {
     mesh.matrixAutoUpdate = false;
     mesh.updateMatrix();
     this.scene.add(mesh);
+    this.staticMeshes.push(mesh);
     if (collide) {
       const box = new THREE.Box3(
         new THREE.Vector3(cx - w / 2, y, cz - d / 2),

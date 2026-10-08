@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Rig, Animator, HIT_ZONE } from './rig.js';
 import { Pool } from '../../engine/pool.js';
+import { RigidSkin } from '../../engine/batch.js';
 import { damp, wrapAngle, segSegDist } from '../../engine/math.js';
 
 // Training puppets: the shared humanoid rig hung on a pneumatic post.
@@ -43,6 +44,7 @@ const _w = new THREE.Vector3();
 const _u = new THREE.Vector3();
 const _step = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
+const _m = new THREE.Matrix4();
 const _ray = new THREE.Raycaster();
 // reused event payloads: listeners must copy what they keep
 const HURT = { amount: 0, dir: new THREE.Vector3() };
@@ -87,16 +89,8 @@ class Puppet {
     this.animator = new Animator(this.rig, { armed: false });
     this.group.add(this.rig.root);
 
-    // post + base (not part of the rig)
-    const steel = new THREE.MeshStandardMaterial({ color: 0x55585e, metalness: 0.7, roughness: 0.35 });
-    this.base = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.08, 16), steel);
-    this.base.position.y = 0.04;
-    this.post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1, 8), steel);
-    for (const m of [this.base, this.post]) {
-      m.castShadow = true;
-      m.receiveShadow = true;
-      this.group.add(m);
-    }
+    // post + base: instanced across all puppets (Enemies.stands), slot = this.index
+    this.index = sys.puppetCount++;
     sys.scene.add(this.group);
 
     this.hitMeshes = [];
@@ -107,6 +101,8 @@ class Puppet {
       this.hitMeshes.push(o);
     });
     this.#placeWeakSpots();
+    // ~30 parts -> one skinned draw per material (body, plate, visor, target, weak spot, halo)
+    this.skin = new RigidSkin(this.rig.root, this.rig.skeleton);
   }
 
   // Glowing weak spots on random body parts (front face). Hits there deal weakMult damage.
@@ -135,6 +131,7 @@ class Puppet {
       this.hitMeshes.push(spot);
     }
     this.sys.dirty = true;
+    this.skin?.rebuild(); // new spots join the batch, removed ones leave it
   }
 
   damage(amount, point, dir, zone) {
@@ -234,8 +231,7 @@ class Puppet {
     this.rig.root.position.y = this.lift;
     this.rig.root.rotation.y = this.yaw;
     const postH = Math.max(0.05, 0.95 + this.lift - 0.08);
-    this.post.scale.y = postH;
-    this.post.position.y = 0.08 + postH / 2;
+    this.sys.setStand(this.index, this.pos, postH);
   }
 
   #shooterAI(dt, player) {
@@ -343,7 +339,27 @@ export class Enemies {
       },
       { reset: (b) => (b.obj.visible = false) },
     ).warm(16);
+    this.puppetCount = 0;
+    // pneumatic stands: one instanced draw for all bases, one for all posts
+    const steel = new THREE.MeshStandardMaterial({ color: 0x55585e, metalness: 0.7, roughness: 0.35 });
+    const stand = (geo) => {
+      const m = new THREE.InstancedMesh(geo, steel, SPAWNS.length);
+      m.castShadow = m.receiveShadow = true;
+      m.frustumCulled = false; // instances spread over the whole arena
+      this.scene.add(m);
+      return m;
+    };
+    this.bases = stand(new THREE.CylinderGeometry(0.35, 0.4, 0.08, 16));
+    this.posts = stand(new THREE.CylinderGeometry(0.05, 0.05, 1, 8));
     this.puppets = SPAWNS.map((d) => new Puppet(this, d));
+  }
+
+  setStand(i, pos, postH) {
+    _m.makeTranslation(pos.x, pos.y + 0.04, pos.z);
+    this.bases.setMatrixAt(i, _m);
+    _m.makeScale(1, postH, 1).setPosition(pos.x, pos.y + 0.08 + postH / 2, pos.z);
+    this.posts.setMatrixAt(i, _m);
+    this.bases.instanceMatrix.needsUpdate = this.posts.instanceMatrix.needsUpdate = true;
   }
 
   // Raycast targets of the living puppets (cached; rebuilt only when a puppet dies, respawns or re-rolls weak spots).
