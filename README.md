@@ -40,6 +40,7 @@ performance readout and expose `window.game` for testing.
 - Shields + health with regen, directional damage indicator
 - Shared humanoid bone rig with placeholder dummy parts and procedural animation (arm IK on weapon grips)
 - Puppet enemies on posts: static, rail movers and pop-up shooters (engage within 30 m); they break apart and stay down until reload
+- Troopers: armed soldiers that spot you, run to cover that blocks your line of fire, pop up or peek to shoot, and relocate when flanked
 - Sunlit yard with shadows, dark interior with skylight, flickering lights and eye adaptation
 - Post-processing: bloom, color grade, vignette, chromatic aberration, film grain
 - Game feel: trauma camera shake, smoothed follow, FOV punch, recoil recovery, hitstop on kills, shell casings, shockwaves

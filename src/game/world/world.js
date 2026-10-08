@@ -139,6 +139,65 @@ export class World {
     return g;
   }
 
+  // Pushes a standing body (feet at pos.y, radius r, height h) out of every collider it overlaps.
+  // Boxes lower than `step` above the feet are stepped over (stairs, curbs).
+  collideCircle(pos, r, h, step) {
+    const feet = pos.y;
+    const top = feet + h;
+    for (let iter = 0; iter < 2; iter++) {
+      for (const c of this.colliders) {
+        const b = c.box;
+        if (b.max.y <= feet + step || b.min.y >= top) continue;
+        const cx = Math.max(b.min.x, Math.min(pos.x, b.max.x));
+        const cz = Math.max(b.min.z, Math.min(pos.z, b.max.z));
+        const dx = pos.x - cx;
+        const dz = pos.z - cz;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= r * r) continue;
+        if (d2 > 1e-8) {
+          const d = Math.sqrt(d2);
+          pos.x += (dx / d) * (r - d);
+          pos.z += (dz / d) * (r - d);
+        } else {
+          // center inside the box: push out on the shallowest axis
+          const px0 = pos.x - b.min.x + r;
+          const px1 = b.max.x - pos.x + r;
+          const pz0 = pos.z - b.min.z + r;
+          const pz1 = b.max.z - pos.z + r;
+          const m = Math.min(px0, px1, pz0, pz1);
+          if (m === px0) pos.x -= px0;
+          else if (m === px1) pos.x += px1;
+          else if (m === pz0) pos.z -= pz0;
+          else pos.z += pz1;
+        }
+      }
+    }
+  }
+
+  // Can a body of radius r walk the straight line a -> b (xz) at feet height a.y without touching a box?
+  // 2D slab test against every collider in the body's vertical band. Cheap: no raycasts.
+  segmentClear(a, b, r, step = 0.45, h = 1.6) {
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    for (const c of this.colliders) {
+      const bx = c.box;
+      if (bx.max.y <= a.y + step || bx.min.y >= a.y + h) continue;
+      let t0 = 0;
+      let t1 = 1;
+      const slab = (p, d, lo, hi) => {
+        if (Math.abs(d) < 1e-9) return p > lo && p < hi;
+        let ta = (lo - p) / d;
+        let tb = (hi - p) / d;
+        if (ta > tb) [ta, tb] = [tb, ta];
+        t0 = Math.max(t0, ta);
+        t1 = Math.min(t1, tb);
+        return t0 < t1;
+      };
+      if (slab(a.x, dx, bx.min.x - r, bx.max.x + r) && slab(a.z, dz, bx.min.z - r, bx.max.z + r)) return false;
+    }
+    return true;
+  }
+
   // Box from min corner style args: center x/z, bottom y, size w/h/d.
   box(cx, y, cz, w, h, d, mat, { cover = null, collide = true, shadow = true } = {}) {
     const geo = new THREE.BoxGeometry(w, h, d);

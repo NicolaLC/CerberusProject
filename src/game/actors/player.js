@@ -345,36 +345,7 @@ export class Player {
   }
 
   #collide() {
-    const r = this.t.radius;
-    const feet = this.pos.y;
-    const top = feet + this.t.standHeight;
-    for (let iter = 0; iter < 2; iter++) {
-      for (const c of this.world.colliders) {
-        const b = c.box;
-        if (b.max.y <= feet + this.t.stepHeight || b.min.y >= top) continue;
-        const cx = Math.max(b.min.x, Math.min(this.pos.x, b.max.x));
-        const cz = Math.max(b.min.z, Math.min(this.pos.z, b.max.z));
-        let dx = this.pos.x - cx;
-        let dz = this.pos.z - cz;
-        const d2 = dx * dx + dz * dz;
-        if (d2 >= r * r) continue;
-        if (d2 > 1e-8) {
-          const d = Math.sqrt(d2);
-          this.pos.x += (dx / d) * (r - d);
-          this.pos.z += (dz / d) * (r - d);
-        } else {
-          // center inside box: push out on the shallowest axis
-          const pens = [
-            [this.pos.x - b.min.x + r, -1, 0],
-            [b.max.x - this.pos.x + r, 1, 0],
-            [this.pos.z - b.min.z + r, 0, -1],
-            [b.max.z - this.pos.z + r, 0, 1],
-          ].sort((a, b2) => a[0] - b2[0]);
-          this.pos.x += pens[0][1] * pens[0][0];
-          this.pos.z += pens[0][2] * pens[0][0];
-        }
-      }
-    }
+    this.world.collideCircle(this.pos, this.t.radius, this.t.standHeight, this.t.stepHeight);
   }
 
   // ---------------- model (skeleton + soldier parts + guns) ----------------

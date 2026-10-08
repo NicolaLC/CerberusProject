@@ -65,3 +65,17 @@
 - Death breaks the rig parts into debris that fades after 5s. Destroyed puppets stay destroyed until the page
   is reloaded; the HUD counts `down / total` and shows ARENA CLEAR when all are down. Spawn list: `SPAWNS`.
 - Shooters only engage a player within `ENGAGE_RANGE` (30 m) with line of sight.
+
+## Troopers (`game/actors/trooper.js`, cover in `game/ai/cover.js`)
+- Armed soldiers (150 hp, 1 weak spot, rifle). Idle until they see the player (32 m + line of sight), get
+  shot, or a squadmate within 22 m alerts them.
+- Take cover: pick a free spot whose box is between them and the player (threat within ~50° behind the box),
+  6+ m from the player, ideally ~15 m, reachable in a straight line or around the spot's own box (one corner
+  waypoint; no general pathfinding, same floor level only). Spots are reserved, one trooper each.
+- Low cover: crouch, stand up to shoot over it. High cover: hide at an end, step 0.8 m out to shoot.
+- Cycle: cover 1-2.2 s → peek → aim (visor flares 0.5 s) → 3-4 bolts → cover. No line of sight twice →
+  mark the spot bad for 6 s and move.
+- Relocate when flanked (spot stops protecting), the player is within 5 m, after 2-4 bursts, or once below
+  40% health (retreat farther). Hit while exposed: 50% chance to duck back early. No cover reachable: fight
+  in the open and keep looking.
+- Cover spots: 0.65 m off every face of every cover box (low: every 1.2 m; high: near the ends only).
