@@ -1,7 +1,7 @@
 # Level & lighting
 
-## Level file (`src/levels/arena.json`)
-Plain JSON (an editor can write it), imported by `game.js`, validated by `Registry.check`. Layout, enemies and
+## Level file (`src/levels/*.json`, listed in `scenes.js`)
+Plain JSON (an editor can write it), imported by `scenes.js`, validated by `Registry.check`. Layout, enemies and
 pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 ```
 { name, spawn: { pos, yaw }, interiorZones: [{ min, max }],
@@ -27,7 +27,20 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `pickup.light` / `pickup.heavy` | pickups | respawning ammo crate of that class |
 
 Interior zones (camera exposure) are `interiorZones` boxes, not pieces. Dropped clips are runtime, not data.
-Loading only: no unloading or scene switching yet (issue #62).
+
+## Scenes (`src/game/scenes.js`)
+| name | file | content |
+|---|---|---|
+| `arena` | `arena.json` | the training arena, default; no `?scene` = this |
+| `gym` | `gym.json` | placeholder: floor, low / high / wall cover, two ammo crates (real content: Gym epic #58) |
+| `library` | `library.json` | placeholder: one of each enemy kind standing in a row, far from the spawn (Library epic #59) |
+| `workshop` | `workshop.json` | placeholder: floor and three cover boxes (Workshop epic #60) |
+
+- `?scene=<name>` (works with `?debug`) opens one; unknown → arena + `console.warn`. At runtime: `game.loadScene('gym')`
+  (`window.game` exists with `?debug`). Switching frees the old level completely (architecture.md, Scenes).
+- Add a scene: write `src/levels/<name>.json` (spawn, `interiorZones` (may be `[]`), pieces), import it and list it in
+  `SCENES` in `scenes.js`. Nothing else: `scenes.browser.mjs` loads every listed scene via `?scene=` (add it to its `SCENES` list too
+  if you want it in the switching cycles).
 
 ## Layout (the arena file; was `world.js #buildLevel`)
 - Yard: x -50..50, z -62..50, perimeter walls 6m. Player spawn (0, 0, 38) facing north (-Z).

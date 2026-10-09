@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RigidSkin } from '../../engine/batch.js';
+import { disposeTree } from '../../engine/dispose.js';
 import { damp } from '../../engine/math.js';
 import { rb, cyl, ring, look, debrisCopy, disposeDebris } from './parts.js';
 
@@ -162,6 +163,14 @@ export class Drone {
     this.#place();
     this.skin = new RigidSkin(this.root, this.skeleton, { cullMargin: 1.5, lod: true });
     sys.dirty = true;
+  }
+
+  // Removes the drone from the scene and frees everything it owns.
+  dispose() {
+    for (const d of this.debris) disposeDebris(d.obj);
+    this.debris.length = 0;
+    disposeTree(this.root);
+    for (const m of [...Object.values(this.mats), this.skin.lodMaterial]) m.dispose();
   }
 
   // Aim assist target: the body.

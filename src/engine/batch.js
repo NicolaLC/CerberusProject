@@ -26,7 +26,13 @@ const noRaycast = () => {};
 
 // depth pass ignores color; FrontSide matches the merged sources (shadow pass renders back faces of it)
 const SHADOW_MAT = new THREE.MeshBasicMaterial();
+SHADOW_MAT.userData.shared = true; // disposeTree (engine/dispose.js) leaves it alone
 const shadowOnlyMeshes = new Set();
+
+// Unregisters a shadow-only mesh (it is being disposed): the set would otherwise keep it alive forever.
+export function forgetShadowOnly(mesh) {
+  shadowOnlyMeshes.delete(mesh);
+}
 
 // Wraps renderer.shadowMap.render so shadow-only meshes exist only during the shadow pass.
 export function installShadowOnly(renderer) {

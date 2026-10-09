@@ -31,6 +31,14 @@ const IMPACT = { point: null, normal: new THREE.Vector3() };
 export class Weapon {
   constructor({ camera, rig, player, world, enemies, events }) {
     Object.assign(this, { camera, rig, player, world, enemies, events });
+    this.rng = new Rng(); // own stream: spread and recoil jitter are reproducible per seed
+    // what the crosshair is on, refreshed every frame by probe(): HUD reads it
+    this.aim = { enemy: false, weak: false, blocked: false, blockPoint: new THREE.Vector3(), distance: 0 };
+    this.reset();
+  }
+
+  // Fresh loadout and no running action (new level): full magazines, rifle up, nothing reloading or charging.
+  reset() {
     this.state = {};
     for (const id of GUN_ORDER) this.state[id] = { ammo: GUNS[id].mag, reserve: GUNS[id].reserve, boost: false };
     this.active = null; // { total, attempted, result } while a reload runs
@@ -43,14 +51,11 @@ export class Weapon {
     this.spin = 0; // 0..1 spin-up for the machine gun
     this.bloom = 0;
     this.firing = false;
-    this.rng = new Rng(); // own stream: spread and recoil jitter are reproducible per seed
     this.sinceShot = 99; // seconds since the last round left
     this.burst = 0; // rounds in the current burst (recoil pattern index)
     this.queued = 0; // semi-auto: seconds a click stays buffered
     this.charging = 0; // railgun: seconds left before the charged shot leaves
     this.burstLeft = 0; // burst rifle: rounds still to fire in this burst
-    // what the crosshair is on, refreshed every frame by probe(): HUD reads it
-    this.aim = { enemy: false, weak: false, blocked: false, blockPoint: new THREE.Vector3(), distance: 0 };
     this.player.setGun(this.current);
     this.rig.zoom = null;
   }

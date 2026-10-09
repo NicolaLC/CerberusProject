@@ -1,0 +1,16 @@
+{
+  "name": "library",
+  "spawn": { "pos": [0, 0, 34], "yaw": 3.141592653589793 },
+  "interiorZones": [],
+  "pieces": [
+    { "id": "env.box", "pos": [0, -1, 0], "params": { "size": [70, 1, 90], "mat": "floor", "shadow": false } },
+    { "id": "env.box", "pos": [-8, 0, 10], "params": { "size": [3, 1.1, 1], "mat": "low", "cover": "low" } },
+    { "id": "env.box", "pos": [8, 0, 10], "params": { "size": [3, 2.8, 1], "mat": "high", "cover": "high" } },
+    { "id": "enemy.static", "pos": [-20, 0, -12] },
+    { "id": "enemy.mover", "pos": [-12, 0, -12], "params": { "to": [-12, 0, -12], "speed": 0 } },
+    { "id": "enemy.shooter", "pos": [-4, 0, -12] },
+    { "id": "enemy.trooper", "pos": [4, 0, -12] },
+    { "id": "enemy.drone", "pos": [12, 0, -12] },
+    { "id": "boss.spider", "pos": [24, 0, -34], "params": { "arena": { "minX": 18, "maxX": 30, "minZ": -40, "maxZ": -28 } } }
+  ]
+}
