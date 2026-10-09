@@ -270,7 +270,7 @@ down. Destroyed enemies stay destroyed until the page is reloaded.
 | Shooter puppet | 7 | 120 | Pops up from a stand and fires |
 | Trooper | 5 | 150 | Cover-using soldier |
 | Drone | 6 | 55 | Hovering flyer |
-| Spider mech (KR-6 Harvester) | 1 | core 900, legs 160 each | Miniboss |
+| Spider mech (SX-6 Tarantula) | 1 | core 900, legs 160 each | Miniboss |
 
 ### 7.1 Puppets
 - Static and mover puppets never attack. Each puppet gets 2 random body parts marked as weak spots (x3).
@@ -317,9 +317,9 @@ Armed soldiers, 150 HP, 1 weak spot. They are the cover-versus-cover test.
 - 55 HP: the eye is the head (x2.5), the glowing core underneath is the weak spot (x3). Hits knock them about. Shot
   down they tumble and burst on landing (no damage). They stay in the yard and never enter the building.
 
-### 7.4 Spider mech miniboss (KR-6 Harvester)
+### 7.4 Spider mech miniboss (SX-6 Tarantula)
 Located in the north-east arena. Dormant (crouched, eye dim) until the player enters the arena, comes within 28 m
-with line of sight, or shoots it. On wake: toast "(warning sign) KR-6 HARVESTER" and the boss bar appears.
+with line of sight, or shoots it. On wake: toast "(warning sign) SX-6 TARANTULA" and the boss bar appears.
 
 **Armor, legs, core:**
 | Part | Rule |

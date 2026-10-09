@@ -12,7 +12,7 @@ import { damp, wrapAngle, lerpAngle } from '../../engine/math.js';
 // Built from bones like the humanoids: one RigidSkin draw per material, the part meshes stay as hitboxes.
 
 const TUNING = {
-  name: 'KR-6 HARVESTER',
+  name: 'SX-6 TARANTULA',
   core: 900, // health of the core (the boss dies with it)
   legHealth: 160,
   height: 2.6, // body height standing
