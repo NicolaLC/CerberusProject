@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { EnemyBody } from './enemy.js';
+import { buildTrooper, trooperMaterials } from './looks.js';
 import { GUNS } from '../combat/guns.js';
 import { damp, lerpAngle } from '../../engine/math.js';
 
-// Troopers: armed soldiers that move and use cover.
+// Troopers: armed assault robots (looks.js) that move and use cover.
 //   idle   -> spot the player (range + line of sight), get shot, or hear a squadmate -> take cover
 //   move   -> run to a cover spot that blocks the player's line of fire (CoverMap)
 //   cover  -> crouch behind low cover / hide behind high cover
@@ -56,10 +57,12 @@ export class Trooper extends EnemyBody {
       pos: def.pos,
       yaw: def.yaw ?? 0,
       health: TUNING.health,
-      colors: { body: 0x3b4250, plate: 0x8f2a24, visor: 0xff3a20 },
+      mats: trooperMaterials(),
+      visor: 0xff3a20,
       armed: true,
       weakSpots: 1,
     });
+    buildTrooper(this.rig, this.mats, this.visor);
     this.t = TUNING;
     this.vel = new THREE.Vector3();
     this.offset = new THREE.Vector3(); // peek step, applied to the visual position

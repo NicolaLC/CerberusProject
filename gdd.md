@@ -273,13 +273,16 @@ down. Destroyed enemies stay destroyed until the page is reloaded.
 | Spider mech (SX-6 Tarantula) | 1 | core 900, legs 160 each | Miniboss |
 
 ### 7.1 Puppets
+- Look: crash-test mannequin robots on a pneumatic post, yellow (static, mover) or red-orange (shooter), bullseye
+  on the chest.
 - Static and mover puppets never attack. Each puppet gets 2 random body parts marked as weak spots (x3).
 - **Shooter cycle:** hidden, up, telegraph (visor glow 0.45 s), 3 bolts, hide. Only engages a player within 30 m
   with line of sight.
 - **Bolts:** 34 m/s, 7 damage, collide with the world and the player.
 
 ### 7.2 Troopers
-Armed soldiers, 150 HP, 1 weak spot. They are the cover-versus-cover test.
+Armed assault robots (gunmetal frame, slate armor, red faction plates, red visor slit), 150 HP, 1 weak spot.
+They are the cover-versus-cover test.
 
 | Property | Value |
 |---|---|
@@ -310,7 +313,7 @@ Armed soldiers, 150 HP, 1 weak spot. They are the cover-versus-cover test.
   `trooper:flank` event has no listener on screen); the player has to notice it.
 
 ### 7.3 Drones
-- Quad-rotors hovering 3.5 to 5 m up: four in the yard / range, two escorting the boss arena.
+- Ducted quad-rotors (armored pod, orange spine plate, red lens cluster, slung cannon) hovering 3.5 to 5 m up: four in the yard / range, two escorting the boss arena.
 - Wake on sight within 36 m with line of sight, or when hit. Then circle the player at 9 to 18 m (speed 5.5 m/s),
   flipping direction every 2.5 to 5.5 s.
 - Fire 2-bolt bursts (6 damage, 0.16 s apart) after a 0.45 s eye flare; cooldown 1.6 to 2.8 s.

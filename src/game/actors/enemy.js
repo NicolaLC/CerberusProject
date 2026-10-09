@@ -1,21 +1,26 @@
 import * as THREE from 'three';
 import { Rig, Animator, HIT_ZONE } from './rig.js';
 import { RigidSkin } from '../../engine/batch.js';
+import { debrisCopy, disposeDebris } from './parts.js';
 
 // Shared body of every enemy (training puppets, troopers): rig + animator, hit zones, glowing weak spots,
-// hit flash and the break-apart death. Subclasses add parts in their constructor, then call finishBody(),
-// and implement think(dt, player) for behavior. Destroyed enemies stay destroyed (debris fades away).
+// hit flash and the break-apart death. Subclasses add their look in their constructor (visual-only `look()`
+// groups from parts.js, built with this.mats and this.visor), then call finishBody(), and implement
+// think(dt, player) for behavior. Destroyed enemies stay destroyed (debris fades away).
+// Gameplay hitboxes are the rig's dummy boxes, kept invisible: the look never changes hit zones or weak spots.
 //
 // Interface used by the Enemies system and the rest of the game:
 //   kind, alive, pos, lift, rig, skin, hitMeshes, damage(), update(dt, player)
 
 const WEAK_BONES = ['Spine2', 'Spine1', 'Hips', 'LeftArm', 'RightArm', 'LeftForeArm', 'RightForeArm', 'LeftUpLeg', 'RightUpLeg', 'LeftLeg', 'RightLeg'];
 const DEBRIS_LIFE = 5; // s
+const HITBOX_MAT = new THREE.MeshBasicMaterial(); // never drawn
 const _v = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 
 export class EnemyBody {
-  constructor(sys, { kind, pos, yaw = 0, health, colors, armed = false, weakSpots = 2 }) {
+  // mats: the look's materials (all flash on a hit); visor: color of the glowing eyes (telegraphs shots)
+  constructor(sys, { kind, pos, yaw = 0, health, mats, visor = 0xff3020, armed = false, weakSpots = 2 }) {
     this.sys = sys;
     this.kind = kind;
     this.pos = new THREE.Vector3(...pos);
@@ -28,18 +33,15 @@ export class EnemyBody {
     this.debris = [];
     this.weakCount = weakSpots;
 
-    this.mats = {
-      body: new THREE.MeshStandardMaterial({ color: colors.body, roughness: 0.6, metalness: 0.1 }),
-      plate: new THREE.MeshStandardMaterial({ color: colors.plate ?? 0x24262b, roughness: 0.5, metalness: 0.4 }),
-    };
-    this.visor = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: colors.visor ?? 0xff3020, emissiveIntensity: 1.5 });
+    this.mats = mats;
+    this.visor = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: visor, emissiveIntensity: 1.5 });
     this.weakMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2bd6, emissiveIntensity: 3 });
     this.weakMat.userData.lodGlow = 5; // far LOD drops the halo: a brighter core keeps weak spots readable
     this.haloMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff2bd6).multiplyScalar(1.5), transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
 
     this.group = new THREE.Group();
-    this.rig = new Rig({ materials: this.mats });
-    this.rig.attach('Head', box(0.2, 0.06, 0.03, this.visor, 0, 0.14, 0.13));
+    this.rig = new Rig({ materials: { body: HITBOX_MAT } });
+    for (const p of Object.values(this.rig.parts)) p.visible = false; // hitboxes only: not baked, still raycast
     this.animator = new Animator(this.rig, { armed, ground: armed ? (x, z, maxY) => sys.world.groundAt(x, z, maxY) : null });
     this.group.add(this.rig.root);
     sys.scene.add(this.group);
@@ -114,18 +116,20 @@ export class EnemyBody {
     this.sys.events.emit('puppet:down', this);
     if (this.sys.kills === this.sys.puppets.length) this.sys.events.emit('arena:clear');
     this.group.updateMatrixWorld(true);
-    // break apart: every hit mesh becomes a debris chunk
-    for (const m of this.hitMeshes) {
-      const d = new THREE.Mesh(m.geometry, m.material);
-      m.matrixWorld.decompose(d.position, d.quaternion, d.scale);
-      d.castShadow = true;
-      this.sys.scene.add(d);
-      const v = dir.clone().multiplyScalar(5 + Math.random() * 5);
-      v.x += (Math.random() - 0.5) * 3;
-      v.y += 2 + Math.random() * 3;
-      v.z += (Math.random() - 0.5) * 3;
-      const av = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(12);
-      this.debris.push({ obj: d, v, av });
+    // break apart: every piece on a bone (look, weak spot, gun) becomes a debris chunk
+    for (const bone of this.rig.skeleton.bones) {
+      for (const piece of bone.children) {
+        if (piece.isBone) continue;
+        const d = debrisCopy(piece);
+        if (!d) continue;
+        this.sys.scene.add(d);
+        const v = dir.clone().multiplyScalar(5 + Math.random() * 5);
+        v.x += (Math.random() - 0.5) * 3;
+        v.y += 2 + Math.random() * 3;
+        v.z += (Math.random() - 0.5) * 3;
+        const av = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(12);
+        this.debris.push({ obj: d, v, av });
+      }
     }
     this.rig.root.visible = false;
   }
@@ -139,8 +143,7 @@ export class EnemyBody {
     // hit flash + weak spot pulse
     this.flash -= dt;
     const e = this.flash > 0 ? 0.9 : 0;
-    this.mats.body.emissive.setScalar(e);
-    this.mats.plate.emissive.setScalar(e);
+    for (const k in this.mats) this.mats[k].emissive.setScalar(e);
     this.skin.lodMaterial.emissive.setScalar(e);
     this.weakMat.emissiveIntensity = 2.4 + Math.sin(this.sys.time * 8) * 1.4;
   }
@@ -166,7 +169,7 @@ export class EnemyBody {
       if (this.deadTime > DEBRIS_LIFE - 1) d.obj.scale.multiplyScalar(1 - dt * 3);
     }
     if (this.deadTime > DEBRIS_LIFE) {
-      for (const d of this.debris) this.sys.scene.remove(d.obj);
+      for (const d of this.debris) disposeDebris(d.obj);
       this.debris.length = 0;
       this.onDebrisCleared?.();
     }
