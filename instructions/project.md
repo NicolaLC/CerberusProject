@@ -11,6 +11,8 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 - `npm run dev` — dev server on :5173
 - `npm run build` — must pass before committing
 - `npm run build:artifact` — single-file page in `dist/artifact/cerberus.html` (game inlined, three.js from jsDelivr via import map). Run it after `npm run build` (vite empties `dist/`). Published as a claude.ai Artifact: https://claude.ai/artifact/2dVW5ms3KtVJpkC6ap5fAL — republish the same file to update it.
+- `npm run desktop` / `npm run desktop:dist` — Electron desktop build, see `instructions/desktop.md`.
+- Pointer lock asks for raw mouse input (`unadjustedMovement`, no OS acceleration), falls back to plain lock.
 - No pointer lock (sandboxed frames): input falls back to free-mouse mode; arrow keys also turn the camera.
 
 ## Testing

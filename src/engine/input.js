@@ -65,18 +65,23 @@ export class Input {
     });
   }
 
-  // Requests pointer lock; falls back to free-mouse mode when the browser refuses.
+  // Requests pointer lock with raw mouse input (no OS acceleration) where supported, plain pointer lock
+  // where not; falls back to free-mouse mode when the browser refuses both (sandboxed frames).
   lock() {
     const fail = () => {
       if (this.locked) return;
       this.free = true;
       document.dispatchEvent(new Event('pointerlockchange'));
     };
-    document.addEventListener('pointerlockerror', fail, { once: true });
-    try {
-      const p = this.canvas.requestPointerLock?.();
+    const plain = () => {
+      const p = this.canvas.requestPointerLock();
       if (p?.catch) p.catch(fail);
-      else if (!this.canvas.requestPointerLock) fail();
+    };
+    try {
+      if (!this.canvas.requestPointerLock) return fail();
+      const p = this.canvas.requestPointerLock({ unadjustedMovement: true });
+      if (p?.catch) p.catch((e) => (e?.name === 'NotSupportedError' ? plain() : fail()));
+      else document.addEventListener('pointerlockerror', fail, { once: true }); // no promise: old API
     } catch {
       fail();
     }

@@ -9,13 +9,55 @@
     "build": "vite build",
     "preview": "vite preview",
     "build:artifact": "node scripts/build-artifact.mjs",
-    "test": "node tests/ballistics.test.mjs"
+    "test": "node tests/ballistics.test.mjs",
+    "desktop": "vite build && electron .",
+    "desktop:dist": "vite build && electron-builder"
   },
   "dependencies": {
     "three": "^0.180.0"
   },
   "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
     "vite": "^7.3.7"
+  },
+  "description": "Cerberus — third-person sci-fi cover shooter",
+  "main": "desktop/main.js",
+  "build": {
+    "appId": "dev.cerberus.game",
+    "productName": "Cerberus",
+    "copyright": "Proprietary, see LICENSE",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "!dist/artifact/**",
+      "desktop/**/*",
+      "package.json",
+      "!node_modules/**"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.action-games"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game"
+    }
   }
 }

@@ -23,7 +23,14 @@ Goal: hold 60 fps, never freeze on a bug, scale to a much bigger game.
 - Raycast target lists are cached (`enemies.hitMeshes()` rebuilds only when puppets die / respawn).
 - DOM HUD writes go through `text()` / `css()`, which skip unchanged values.
 - Dynamic resolution (`perf.js`): average frame time > 1.12× budget for 0.75 s → pixel ratio −0.1 (min 0.5);
-  < 0.8× budget for 4 s → +0.1 (max devicePixelRatio, 2). Emits `engine:resize`; post follows.
+  < 0.8× budget for 4 s → +0.1 (up to `perf.maxScale`). Emits `engine:resize`; post follows.
+- Graphics presets (`game/view/quality.js`, setting `quality`, panel "Graphics", applied live):
+  | preset | max pixel ratio | MSAA | bloom | sun shadow map | anisotropy |
+  |---|---|---|---|---|---|
+  | low | min(dpr, 1) | off | off | 2048 | 4 |
+  | high (default) | min(dpr, 2) | 4× | on | 4096 | 8 |
+  | ultra | min(dpr × 1.5, 2) (supersamples at 1x) | 8× (capped by GPU) | on | 4096 | 16 (capped) |
+  Dynamic resolution keeps running under every preset; the preset only caps how high it climbs.
 - Draw calls and triangles: F3 (or `?debug`) shows fps, ms, resolution %, draws, tris and the slowest systems.
   Renderer info is accumulated over the whole frame (all post passes).
 
