@@ -1,32 +1,83 @@
 import arShot from '../../assets/sfx/ar-shot.mp3';
+import mgShot from '../../assets/sfx/mg-shot.mp3';
+import sniperShot from '../../assets/sfx/sniper-shot.mp3';
+import sniperBolt from '../../assets/sfx/sniper-bolt.mp3';
+import burstShot from '../../assets/sfx/burst-shot.mp3';
+import railShot from '../../assets/sfx/rail-shot.mp3';
+import railCharge from '../../assets/sfx/rail-charge.mp3';
+import pistolShot from '../../assets/sfx/pistol-shot.mp3';
+import mgSpin from '../../assets/sfx/mg-spin.mp3';
+import dryFire from '../../assets/sfx/dry-fire.mp3';
+import reloadRifle from '../../assets/sfx/reload-rifle.mp3';
+import reloadMg from '../../assets/sfx/reload-mg.mp3';
+import reloadPerfect from '../../assets/sfx/reload-perfect.mp3';
+import reloadJam from '../../assets/sfx/reload-jam.mp3';
+import switchGun from '../../assets/sfx/switch.mp3';
 
 // SFX: synthesized at runtime, plus recorded samples (ElevenLabs, see credits.md) where one exists.
 // A sample replaces its synth sound once decoded; until then (or if loading fails) the synth plays.
 // Context is created on first user gesture.
 // [url, gain, pitch spread (±, playback rate)] per sample id
 const SAMPLES = {
-  rifle: [arShot, 0.6, 0.04], // KR-7 / AR single shot
+  rifle: [arShot, 0.6, 0.04], // shots are keyed by gun id
+  mg: [mgShot, 0.5, 0.05],
+  sniper: [sniperShot, 0.75, 0.02],
+  burst: [burstShot, 0.55, 0.04],
+  rail: [railShot, 0.7, 0.02],
+  pistol: [pistolShot, 0.55, 0.04],
+  sniperBolt: [sniperBolt, 0.5, 0.03],
+  railCharge: [railCharge, 0.6, 0],
+  mgSpin: [mgSpin, 0.35, 0], // looped, pitch and volume follow the spin
+  dry: [dryFire, 0.5, 0.04],
+  reload: [reloadRifle, 0.5, 0.02], // every gun but the MG
+  reloadMg: [reloadMg, 0.5, 0.02],
+  perfect: [reloadPerfect, 0.5, 0],
+  jam: [reloadJam, 0.5, 0],
+  switch: [switchGun, 0.9, 0.03],
 };
+const BOLT_DELAY = 0.22; // s after a sniper shot before the bolt is worked
 
 export class Audio {
-  constructor() {
+  // weapon: read for the gun being reloaded (the reload event carries no gun id)
+  constructor(weapon) {
+    this.weapon = weapon;
     this.ctx = null;
     this.samples = {}; // id -> decoded AudioBuffer
+    this.voice = {}; // id -> playing source that may be cut short (reload, rail charge)
   }
 
   // Sound reactions to gameplay events.
   listen(events) {
     events.on('weapon:shot', (s) => {
-      if (s.gun === 'sniper') this.snipe();
-      else if (s.beam) this.rail();
-      else if (!this.sample(s.gun)) this.shot(s.heavy);
+      if (!this.sample(s.gun)) {
+        if (s.gun === 'sniper') this.snipe();
+        else if (s.beam) this.rail();
+        else this.shot(s.heavy);
+      }
+      if (s.gun === 'sniper' && this.samples.sniper) this.sample('sniperBolt', BOLT_DELAY);
       if (s.mag <= 0.2) this.lowMag(s.mag); // last rounds: a rising click warns before the mag runs dry
     });
     events.on('weapon:hit', (h) => (h.killed ? this.kill() : this.hit(h.weak ? 'weak' : h.crit ? 'head' : 'body')));
-    events.on('weapon:switch', () => this.click());
-    events.on('weapon:charge', (on) => on && this.railCharge());
-    events.on('weapon:dry', () => this.click());
-    events.on('weapon:reload', (kind) => (kind === 'perfect' ? this.perfect() : kind === 'jam' ? this.jam() : this.click()));
+    events.on('weapon:switch', () => {
+      this.#cut('reload');
+      this.#cut('railCharge');
+      this.sample('switch') || this.click();
+    });
+    events.on('weapon:charge', (on) => {
+      if (!on) this.#cut('railCharge');
+      else if (!this.#voice('railCharge')) this.railCharge();
+    });
+    events.on('weapon:dry', () => this.sample('dry') || this.click());
+    events.on('weapon:reload', (kind) => {
+      if (kind === 'start') this.#voice(this.weapon?.current === 'mg' ? 'reloadMg' : 'reload') || this.click();
+      else if (kind === 'done') this.samples.reload || this.click(); // the reload sample ends on its own click
+      else {
+        this.#cut('reload'); // good / perfect finish it now; a jam stops it (the reload drags on, silent)
+        if (kind === 'perfect') this.sample('perfect') || this.perfect();
+        else if (kind === 'jam') this.sample('jam') || this.jam();
+        else this.click();
+      }
+    });
     events.on('puppet:down', () => this.thud());
     events.on('player:hurt', () => this.thud());
     events.on('player:jet', () => this.jet());
@@ -66,20 +117,42 @@ export class Audio {
     }
   }
 
-  // Plays the recorded sample for `id` (slightly detuned each time so repeats don't sound like a loop).
-  // False if there is none (yet): the caller falls back to its synth sound.
-  sample(id) {
+  // Plays the recorded sample for `id` (slightly detuned each time so repeats don't sound like a loop),
+  // `delay` seconds from now. Returns its source node, or null if there is no sample (yet): the caller
+  // falls back to its synth sound.
+  sample(id, delay = 0) {
     const buf = this.ctx && this.samples[id];
-    if (!buf) return false;
+    if (!buf) return null;
     const [, gain, spread] = SAMPLES[id];
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     src.playbackRate.value = 1 + (Math.random() * 2 - 1) * spread;
-    const g = this.ctx.createGain();
-    g.gain.value = gain;
-    src.connect(g).connect(this.master);
-    src.start();
-    return true;
+    src.gain = this.ctx.createGain();
+    src.gain.gain.value = gain;
+    src.connect(src.gain).connect(this.master);
+    src.start(this.ctx.currentTime + delay);
+    return src;
+  }
+
+  // A sample that can be cut short (one per id): the reload clatter, the railgun charge.
+  // Key `reload` holds both reload sounds.
+  #voice(id) {
+    const key = id === 'reloadMg' ? 'reload' : id;
+    this.#cut(key);
+    const src = this.sample(id);
+    if (!src) return null;
+    this.voice[key] = src;
+    src.onended = () => this.voice[key] === src && delete this.voice[key];
+    return src;
+  }
+
+  #cut(key) {
+    const src = this.voice[key];
+    if (!src) return;
+    delete this.voice[key];
+    const t = this.ctx.currentTime;
+    src.gain.gain.setTargetAtTime(0, t, 0.015); // quick fade, no click
+    src.stop(t + 0.08);
   }
 
   #env(node, peak, decay, gainNode = this.ctx.createGain()) {
@@ -187,10 +260,24 @@ export class Audio {
     o.stop(t + 0.07);
   }
 
-  // Machine gun barrel spin whine, 0..1 (continuous voice, created on first use).
+  // Machine gun barrel spin, 0..1 (continuous voice, created on first use): the recorded loop once decoded,
+  // pitched up with the spin, else a synth whine.
   spin(level) {
     if (!this.ctx || Math.abs(level - (this.spinLevel ?? -1)) < 0.02) return;
     this.spinLevel = level;
+    if (!this.spinLoop && this.samples.mgSpin) {
+      this.spinLoop = this.sample('mgSpin');
+      this.spinLoop.loop = true;
+      this.spinLoop.playbackRate.value = 0.7;
+      this.spinLoop.gain.gain.value = 0;
+      if (this.spinGain) this.spinGain.gain.value = 0; // synth whine off for good
+    }
+    const t = this.ctx.currentTime;
+    if (this.spinLoop) {
+      this.spinLoop.playbackRate.setTargetAtTime(0.7 + level * 0.4, t, 0.05);
+      this.spinLoop.gain.gain.setTargetAtTime(level > 0.01 ? SAMPLES.mgSpin[1] * (0.3 + 0.7 * level) : 0, t, 0.06);
+      return;
+    }
     if (!this.spinOsc) {
       this.spinOsc = this.ctx.createOscillator();
       this.spinOsc.type = 'sawtooth';
@@ -203,7 +290,6 @@ export class Audio {
       this.spinOsc.connect(f).connect(this.spinGain).connect(this.master);
       this.spinOsc.start();
     }
-    const t = this.ctx.currentTime;
     this.spinOsc.frequency.setTargetAtTime(180 + level * 520, t, 0.05);
     this.spinGain.gain.setTargetAtTime(level > 0.01 ? 0.03 + level * 0.05 : 0, t, 0.06);
   }

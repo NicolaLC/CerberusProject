@@ -45,7 +45,7 @@ export class Game {
     const weapon = new Weapon({ camera, rig: camRig, player, world, enemies, events });
     const fx = new FX(scene, camera, world).listen(events);
     const hud = new Hud().listen(events, camRig);
-    const audio = new Audio().listen(events);
+    const audio = new Audio(weapon).listen(events);
     const post = new Post(renderer, scene, camera, events);
     applyQuality(settings.quality, { engine, post, world });
     const juice = new Juice({ camRig, post, fx }).listen(events);
