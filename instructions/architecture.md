@@ -58,7 +58,7 @@ Payload objects marked * are reused: copy what you keep.
 | `weapon:impact` | *{ point, normal } | fx |
 | `weapon:reload` | 'start' \| 'done' \| 'good' \| 'perfect' \| 'jam' | audio, juice |
 | `weapon:switch` / `weapon:dry` | gun id / – | audio |
-| `weapon:armored` | enemy | hud hint |
+| `weapon:armored` | enemy | – (no listener: the HUD shows no hint) |
 | `boss:wake` / `boss:down` | boss | hud toast, audio |
 | `blast` / `boss:leg` / `boss:dead` | *{ point, radius, kind } (blast kind: mortar, stomp, drone) | fx, juice, audio |
 | `boss:step` | *{ point, big } | juice, audio |
