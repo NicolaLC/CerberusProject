@@ -64,6 +64,7 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
 - Sprint style (`run`: player sprinting, blended in over ~0.15s), deliberately anime: `RUN` table — 0.42 rad forward
   lean, hips twist with shoulders counter-rotating, extra heel kick, head kept level. The left hand lets go of the
   gun and pumps; the right hand carries it low. Unarmed rigs swing their arms against the legs (more when running).
+- Jetpack burst (`air`, eased in ~0.1 s): gait off, knees bent 0.5 rad, hips forward, foot locks and feet IK skipped.
 - Kneel (low cover) blends over everything with `crouch`.
 - Arms: two-bone IK to the grip sockets, elbows down and slightly out. `lower` (weapon switch) drops the gun.
 - Feet IK (when `ground(x, z, maxY)` is given; the player has it, hanging puppets don't): hips drop to the
