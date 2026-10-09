@@ -68,6 +68,8 @@ Payload objects marked * are reused: copy what you keep.
 | `player:coverSlam` / `player:land` | – / 'vault' \| 'jet' | juice, audio (land) |
 | `player:jet` | *{ point, dir } (nozzle, exhaust direction) | fx, audio, juice |
 | `player:vault` | 'hop' \| 'slide' | – |
+| `player:step` | *{ run, raised } (each heel strike; not in the air) | audio |
+| `enemy:step` | position (trooper / moving puppet heel strike) | audio (fades out by 28 m from the camera) |
 | `puppet:down` | puppet | pickups (drop), audio |
 | `bolt:fired` / `bolt:impact` | position / *{ point, normal } | audio / fx |
 | `pickup:collected` / `pickup:full` | label ('LIGHT AMMO +n AR ...') / – (all guns of the class full) | hud toast, audio |

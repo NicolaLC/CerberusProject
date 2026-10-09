@@ -5,6 +5,8 @@ import { buildSoldier } from './soldier.js';
 import { damp, lerpAngle, wrapAngle } from '../../engine/math.js';
 import { RigidSkin, mergeGroup } from '../../engine/batch.js';
 
+const STEP = { run: false, raised: false }; // player:step payload (reused)
+
 // The player character: movement, collision, cover state machine, health; drives its rig animator.
 // Reads intents from Controls; reports what happened through events ('player:coverSlam', 'player:land',
 // 'player:jet', 'player:vault').
@@ -506,6 +508,12 @@ export class Player {
     this.rigModel = rig;
     this.root = rig.root;
     this.animator = new Animator(rig, { armed: true, ground: (x, z, maxY) => this.world.groundAt(x, z, maxY) });
+    this.animator.onStep = () => {
+      if (this.airborne || this.dead) return;
+      STEP.run = this.sprinting;
+      STEP.raised = this.pos.y > 0.1; // on the platform, its stairs or a block (the floor is at 0)
+      this.events.emit('player:step', STEP);
+    };
   }
 
   // Show the gun and move hand/muzzle sockets to it.

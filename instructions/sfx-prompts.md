@@ -6,19 +6,18 @@ entry in `src/game/view/audio.js`. Every recorded sound has its pitch and volume
 generate one clean take, not variations. Keep every sound dry (no room reverb) unless the prompt asks for a tail,
 because the arena mixes many sounds at once. Remove a row once its sound is recorded and listed in `credits.md`.
 
-## Footsteps (none today, not even synth)
+## Footsteps (more takes)
 
-Footsteps repeat constantly, so these are the one exception to "one take": generate 4 short takes of each
-(`-1` … `-4`); the game picks one at random per step, on top of the pitch/volume variation. Each take is a single
-step, trimmed tight (sound starts at 0 s). Hooking them up needs a foot-plant event from the animator
-(`rig.js`, the stance phase of each leg): added when the files arrive.
+Recorded and wired: one take each (`step-walk-1`, `step-run-1`, `step-metal-1`, `step-robot-1`). Steps repeat
+constantly, so 3 more takes of each (`-2` … `-4`) make them far less repetitive: the game picks one at random per
+step (add each to its `SAMPLES` list). Same prompts, each a single step trimmed tight (sound starts at 0 s).
 
 | Files | Event | Length | Prompt |
 |---|---|---|---|
-| `step-walk-1..4.mp3` | player walking | 0.5 s | Single footstep of a soldier in heavy armored combat boots walking on concrete, firm heel-toe thud with a faint rattle of armor plates, close, dry, no reverb |
-| `step-run-1..4.mp3` | player sprinting | 0.5 s | Single fast running footstep of a heavily armored soldier on concrete, hard impact with a sharp scuff and armor plates clanking, close, dry |
-| `step-metal-1..4.mp3` | player on the metal platform / stairs (optional) | 0.5 s | Single heavy armored boot footstep on a metal grating platform, hollow metallic clang, dry |
-| `step-robot-1..4.mp3` | troopers and puppets walking | 0.5 s | Single footstep of a humanoid combat robot on concrete, heavy metallic foot with a small servo whir, slightly distant, dry |
+| `step-walk-2..4.mp3` | player walking | 0.5 s | Single footstep of a soldier in heavy armored combat boots walking on concrete, firm heel-toe thud with a faint rattle of armor plates, close, dry, no reverb |
+| `step-run-2..4.mp3` | player sprinting | 0.5 s | Single fast running footstep of a heavily armored soldier on concrete, hard impact with a sharp scuff and armor plates clanking, close, dry |
+| `step-metal-2..4.mp3` | player on anything raised (platform, stairs, blocks) | 0.5 s | Single heavy armored boot footstep on a metal grating platform, hollow metallic clang, dry |
+| `step-robot-2..4.mp3` | troopers and moving puppets | 0.5 s | Single footstep of a humanoid combat robot on concrete, heavy metallic foot with a small servo whir, slightly distant, dry |
 
 ## Hit feedback (UI-like, must cut through gunfire)
 
