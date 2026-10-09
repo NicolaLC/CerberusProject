@@ -70,6 +70,7 @@ export class Player {
     this.events = events;
     this.t = TUNING;
     this.spawn = new THREE.Vector3(...spawn.pos);
+    this.spawnYaw = spawn.yaw;
     this.pos = this.spawn.clone();
     this.vel = new THREE.Vector3();
     this.vy = 0;
@@ -173,8 +174,26 @@ export class Player {
     this.shields = this.t.maxShields;
     this.health = this.t.maxHealth;
     this.dead = false;
-    this.facing = Math.PI;
+    this.facing = this.spawnYaw;
     this.root.rotation.set(0, this.facing, 0);
+  }
+
+  // Puts the player at another level's spawn ({ pos, yaw }) with a clean slate (no cover, full health).
+  place(spawn) {
+    this.spawn.set(...spawn.pos);
+    this.spawnYaw = spawn.yaw;
+    this.respawn();
+    this.crouched = false;
+    this.crouchBlend = 0;
+    this.aiming = false;
+    this.sprinting = false;
+    this.recoil = 0;
+    this.lastShot = 99;
+    this.sinceHit = 99;
+    this.coverTimer = 0;
+    this.jetTimer = 0;
+    this.edgeTime = 0;
+    this.deadTime = 0;
   }
 
   // Visual gun kick on the model (per-gun back / climb); camera recoil is separate.

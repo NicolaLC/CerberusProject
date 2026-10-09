@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { gridTexture, applyWorldUVs } from './textures.js';
 import { mergeStatic } from '../../engine/batch.js';
+import { disposeTree } from '../../engine/dispose.js';
 
 // Static level: axis-aligned boxes only (collision, cover and shadows depend on that).
 // Coordinates: x = east, z = south, y = up. Floor is y = 0.
 // The layout lives in the level file (src/levels/*.json, instructions/level.md); this module builds its
-// environment pieces (env.*, light.*) through the piece registry. Sky, sun, fog and materials stay in code.
+// environment pieces (env.*, light.*) through the piece registry and frees them again (unload). Sky, sun, fog and
+// materials stay in code and outlive every level.
 
 export const SUN_DIR = new THREE.Vector3(0.45, 0.78, 0.43).normalize();
 
@@ -44,9 +46,10 @@ export const WORLD_PIECES = {
 };
 
 export class World {
-  // level: parsed level file; registry: Registry holding WORLD_PIECES. Construction is split in small steps
-  // (materials, sky, lights, level) so a later dispose() can mirror them.
-  constructor(scene, { level, registry }) {
+  // Two lifetimes. Permanent (built once): materials + grid textures, sky, fog, hemisphere and sun. Per level
+  // (load / unload, mirrored step by step): zones, boxes and strips (+ merged batches), point lights, colliders.
+  // The arrays are cleared in place, other systems hold them by reference.
+  constructor(scene) {
     this.scene = scene;
     this.named = new Map(); // piece name -> mesh (for references between pieces, e.g. a light flickering a strip)
     this.colliders = []; // { box: Box3, mesh, cover: 'low' | 'high' | null }
@@ -55,13 +58,32 @@ export class World {
     this.interiorZones = [];
     this.flickerLights = [];
     this.staticMeshes = []; // every level box; merged per material for rendering, kept as raycast proxies
+    this.lights = []; // the level's point lights
+    this.batches = [];
 
     this.mats = this.#makeMaterials();
+    this.keep = new Set(Object.values(this.mats)); // shared across levels: never disposed with a level
     this.#buildSky();
     this.#buildLights();
+  }
+
+  // level: parsed level file; registry: Registry holding WORLD_PIECES.
+  load(level, registry) {
+    this.unload();
     this.#buildLevel(level, registry);
     // ~60 boxes x up to 6 face materials -> one draw per material (+ shadow pass)
-    this.batches = mergeStatic(this.staticMeshes, scene);
+    this.batches = mergeStatic(this.staticMeshes, this.scene);
+    return this;
+  }
+
+  // Removes and frees the level: proxies and merged batches (geometry, own material clones), point lights.
+  unload() {
+    for (const m of this.staticMeshes) disposeTree(m, { keep: this.keep });
+    for (const m of [...this.batches, this.batches.shadow]) if (m) disposeTree(m, { keep: this.keep });
+    for (const l of this.lights) disposeTree(l);
+    this.batches = [];
+    for (const list of [this.staticMeshes, this.colliders, this.meshes, this.coverMeshes, this.interiorZones, this.flickerLights, this.lights]) list.length = 0;
+    this.named.clear();
   }
 
   // Material of a piece: params.mat names an entry of this.mats, params.faces overrides single box sides.
@@ -275,6 +297,7 @@ export class World {
     const l = new THREE.PointLight(color, intensity, distance, 2);
     l.position.set(x, y, z);
     this.scene.add(l);
+    this.lights.push(l);
     if (flicker) this.flickerLights.push({ light: l, base: intensity, seed: Math.random() * 100, strip: flicker.strip });
     return l;
   }
