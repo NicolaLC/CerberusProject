@@ -513,6 +513,7 @@ export class Animator {
     rig.root.updateMatrixWorld(true);
 
     if (this.ground && vw < 0.05 && aw < 0.05) this.#feetIK(dt, ck);
+    else this.hipsOffset = mix(this.hipsOffset, 0, 1 - Math.exp(-dt * 18)); // no stale ground offset in a vault / the air
     this.#orientFeet(baseQ, (1 - ck) * (1 - aw));
   }
 
