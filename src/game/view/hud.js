@@ -63,6 +63,13 @@ export class Hud {
     this.toastTime = 0;
   }
 
+  // Level change: no boss bar, lock-on, toast or hit feedback left over from the last one.
+  reset() {
+    this.hitTime = this.dmgTime = this.toastTime = 0;
+    this.bossLegs = null;
+    this.el.boss.root.classList.remove('on');
+  }
+
   // HUD reactions to gameplay events. camRig: for the damage direction indicator.
   listen(events, camRig) {
     events.on('weapon:hit', (h) => this.hitmarker(h.crit, h.killed, h.amount));

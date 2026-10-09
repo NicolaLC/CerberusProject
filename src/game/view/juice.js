@@ -25,6 +25,12 @@ export class Juice {
     this.timeScale = 1;
   }
 
+  // Level change: no hitstop left running.
+  reset() {
+    this.stop = 0;
+    this.timeScale = 1;
+  }
+
   listen(events) {
     events.on('weapon:hit', (h) => (h.killed ? this.kill(h.point, h.dir) : this.hit(h.crit)));
     events.on('weapon:reload', (kind) => {

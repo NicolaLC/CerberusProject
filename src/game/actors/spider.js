@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RigidSkin } from '../../engine/batch.js';
+import { disposeTree } from '../../engine/dispose.js';
 import { damp, wrapAngle, lerpAngle } from '../../engine/math.js';
 import { rbox, rb, cyl, look, debrisCopy, disposeDebris } from './parts.js';
 
@@ -262,6 +263,19 @@ export class SpiderMech {
     this.#pose(0);
     this.skin = new RigidSkin(this.root, this.skeleton, { cullMargin: 1.6, lod: true });
     sys.dirty = true;
+  }
+
+  // Removes the mech from the scene and frees everything it owns (rig, skin, debris, mortar orbs and rings).
+  dispose() {
+    for (const d of this.debris) disposeDebris(d.obj);
+    this.debris.length = 0;
+    for (const o of this.orbs) {
+      disposeTree(o.obj);
+      disposeTree(o.ring);
+    }
+    this.orbs.length = 0;
+    disposeTree(this.root);
+    for (const m of [...Object.values(this.mats), this.skin.lodMaterial]) m.dispose();
   }
 
   get legsLost() {

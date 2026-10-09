@@ -20,10 +20,11 @@ export const PICKUP_PIECES = {
 };
 
 export class Pickups {
-  // level: parsed level file; registry: Registry holding PICKUP_PIECES.
-  constructor({ scene, events, level, registry }) {
+  // Permanent: shared geometry and materials. Per level (load / unload): the crates and dropped clips (items).
+  constructor({ scene, events, registry }) {
     this.scene = scene;
     this.events = events;
+    this.registry = registry;
     this.t = TUNING;
     this.items = [];
     this.time = 0;
@@ -57,8 +58,21 @@ export class Pickups {
     this.ringGeo = new THREE.RingGeometry(0.45, 0.55, 32).rotateX(-Math.PI / 2);
     const ringMat = (c) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(2), transparent: true, opacity: 0.5, depthWrite: false });
     this.ringMats = { light: ringMat(hex.light), heavy: ringMat(hex.heavy) };
+  }
 
-    for (const piece of registry.piecesOf(level, 'pickups')) registry.build('pickups', this, piece);
+  // Builds the crates of a level file (registry pieces owned by 'pickups'). Unloads the current items first.
+  load(level) {
+    this.unload();
+    for (const piece of this.registry.piecesOf(level, 'pickups')) this.registry.build('pickups', this, piece);
+    return this;
+  }
+
+  // Removes every crate and dropped clip. Their geometry and materials are shared by all items: nothing to free.
+  unload() {
+    for (const it of this.items) this.scene.remove(it.model, it.ring);
+    this.items.length = 0;
+    this.time = 0;
+    this.fullCooldown = 0;
   }
 
   // a fixed crate that respawns after it is collected
