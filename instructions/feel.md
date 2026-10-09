@@ -7,6 +7,8 @@ All of it reacts to gameplay events (see the events table in architecture.md); g
 - Trauma shake: `addTrauma(0..1)`, shake = trauma², sum-of-sines noise on position, pitch, yaw, roll; decays 1.6/s. Visual only (aim uses the unshaken forward).
 - Shoulder offset 0.85m (0.95m aiming).
 - Smoothed follow of the head pivot (XZ stiffness 22, Y 10) so cover snaps and vaults glide.
+- Vault slide: FOV +8° (`fov.slide`, eased through `player.sliding` then the FOV spring, ~0.15 s) for speed; while aiming
+  the aim / scope FOV wins (no widening).
 - FOV punch per shot (+0.9°) and on kills (+3°). FOV / distance: 70° 3.4m, aim 50° 1.9m, sprint 78° 3.9m.
 - Recoil: per-gun pattern applied through a fast spring; most of it is recovered after the burst unless you
   pulled against it yourself (details in gameplay.md, Gunplay). The gun model kicks back and climbs (`kick`).

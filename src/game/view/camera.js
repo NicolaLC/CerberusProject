@@ -22,7 +22,7 @@ const TUNING = {
   recoilRecoverRate: 5,
   recoilRecoverDelay: 0.08, // s after the last shot before the aim settles back
   dist: { normal: 3.4, aim: 1.9, sprint: 3.9 },
-  fov: { normal: 70, aim: 50, sprint: 78 },
+  fov: { normal: 70, aim: 50, sprint: 78, slide: 8 }, // slide: extra degrees during the vault slide (not while aiming)
   bob: { walk: 0.015, sprint: 0.05 },
   // boss lock-on: the camera turns to keep `focus` framed whenever the player isn't steering it
   focus: { yawRate: 3.5, pitchRate: 2.5, idle: [0.35, 0.9], dist: 1.1, fov: 5, pitch: [-0.35, 0.45] },
@@ -190,7 +190,9 @@ export class CameraRig {
     this.dist += ((zoomed ? this.zoom.dist : t.dist[mode] + framing * t.focus.dist) - this.dist) * k;
     this.height += (player.eyeHeight() - this.height) * k;
     this.fovKick = Math.max(0, this.fovKick - dt * 30);
-    this.fov += ((zoomed ? this.zoom.fov : t.fov[mode] + framing * t.focus.fov) - this.fov) * (1 - Math.exp(-dt * (zoomed ? 11 : 8)));
+    // vault slide: wider for speed; aiming wins (the aim / scope FOV applies as usual). player.sliding is already eased.
+    const slideFov = aiming ? 0 : t.fov.slide * player.sliding;
+    this.fov += ((zoomed ? this.zoom.fov : t.fov[mode] + framing * t.focus.fov + slideFov) - this.fov) * (1 - Math.exp(-dt * (zoomed ? 11 : 8)));
 
     // strafe roll + sprint bob
     const v = player.vel;

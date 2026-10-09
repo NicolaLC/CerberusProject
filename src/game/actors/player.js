@@ -47,7 +47,11 @@ const TUNING = {
 
 // Vaulting low cover: blocks up to `hopDepth` deep are jumped, deeper ones slid across on the hip.
 // Space while running (> runIn m/s) straight at low cover within runInReach m vaults without stopping.
-const VAULT = { hopDepth: 1.2, hopTime: 0.5, slideTime: 0.3, slideSpeed: 5.5, runIn: 3.5, runInReach: 2.2 };
+// While sliding the player can aim and shoot (Vanquish style): the hips keep the slide pose and direction, the spine
+// twists toward the camera yaw by at most `twist` rad (the gun can't follow further), `tail` s after the slide the
+// twist is still passed on so it unwinds in step with the body turning to the camera. `fovEase` (1/s) smooths
+// `player.sliding` (0..1, read by the camera for the wider FOV).
+const VAULT = { hopDepth: 1.2, hopTime: 0.5, slideTime: 0.3, slideSpeed: 5.5, runIn: 3.5, runInReach: 2.2, twist: 1.2, tail: 0.25, fovEase: 20 };
 
 // Jump = a short jetpack burst, not a real jump. Thrust lifts vy linearly to `lift` over `thrust` s (gravity is
 // ignored meanwhile), then `gravity` x normal pulls back (floaty). Peak ~1.46 m: enough to land on low cover.
@@ -76,6 +80,8 @@ export class Player {
     this.lastShot = 99;
     this.cover = null; // { normal, tangent, type, edgeL, edgeR }
     this.snap = null; // smooth move into cover / vault
+    this.sliding = 0; // 0..1 eased: the hip slide over deep low cover (the camera widens its FOV)
+    this.slideTail = 99; // seconds since a slide ended (the torso twist unwinds for VAULT.tail s)
     this.airborne = false; // jetpack burst: true from take-off until landed
     this.jetting = 0; // seconds of thrust left
     this.jetTimer = 0; // seconds until the next burst is allowed
@@ -102,6 +108,11 @@ export class Player {
   // In cover and moving along it (not shooting): hunched run facing the travel direction.
   coverMoving() {
     return !!this.cover && !this.aiming && this.lastShot >= 0.6 && this.vel.x * this.vel.x + this.vel.z * this.vel.z > 0.6;
+  }
+
+  // True during the hip slide over deep low cover: aiming and shooting stay available.
+  isSliding() {
+    return this.snap?.vault === 'slide';
   }
 
   visualPos() {
@@ -154,6 +165,8 @@ export class Player {
     this.jetting = 0;
     this.cover = null;
     this.snap = null;
+    this.sliding = 0;
+    this.slideTail = 99;
     this.peek.set(0, 0, 0);
     this.shields = this.t.maxShields;
     this.health = this.t.maxHealth;
@@ -178,6 +191,9 @@ export class Player {
     // the re-entry cooldown only runs once out of cover (held full while in it)
     this.coverTimer = this.cover ? t.autoCoverCooldown : Math.max(0, this.coverTimer - dt);
     this.jetTimer = Math.max(0, this.jetTimer - dt);
+    const slide = this.isSliding();
+    this.sliding += ((slide ? 1 : 0) - this.sliding) * damp(VAULT.fovEase, dt);
+    this.slideTail = slide ? 0 : this.slideTail + dt;
 
     if (this.dead) {
       this.airborne = false;
@@ -195,7 +211,7 @@ export class Player {
 
     // behind a wall or high block away from its ends there's no line of fire: no aiming, no shooting
     this.pinned = !!this.cover && this.cover.type === 'high' && !this.cover.edgeL && !this.cover.edgeR;
-    this.aiming = controls.aiming && !this.snap && !this.pinned;
+    this.aiming = controls.aiming && (!this.snap || slide) && !this.pinned;
     if (weapon.firing) this.lastShot = 0;
     // sprint: forward only, not while aiming, shooting or in cover; pulling the trigger ends it
     this.sprinting = controls.running && ax.y > 0 && !this.aiming && !this.airborne && !this.cover && !this.snap && !controls.firing && this.lastShot > t.sprintCooldown;
@@ -517,6 +533,9 @@ export class Player {
       const a = Math.atan2(c.x - this.pos.x, c.z - this.pos.z) - this.facing;
       lookYaw = THREE.MathUtils.clamp(wrapAngle(a), -1.2, 1.2);
     }
+    // sliding over cover and shooting: hips stay on the slide yaw, the chest turns toward where the camera aims
+    const slideAim = combat && alive && (this.isSliding() || this.slideTail < VAULT.tail);
+    const aimTwist = slideAim ? THREE.MathUtils.clamp(wrapAngle(camRig.yaw + Math.PI - this.facing), -VAULT.twist, VAULT.twist) : 0;
     const speed = alive ? Math.hypot(this.vel.x, this.vel.z) : 0;
     this.animator.update(dt, {
       speed,
@@ -535,6 +554,8 @@ export class Player {
       vault: this.snap?.vault ?? null,
       vaultT: this.snap?.t ?? 0,
       lower: weaponLower,
+      slideAim: slideAim ? 1 : 0,
+      aimTwist,
       vel: this.vel,
       yaw: this.facing,
     });
