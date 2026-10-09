@@ -31,7 +31,7 @@ code, **derived** = computed from code numbers (formula given), **proposed** = r
 | Camera collision | ray pivot -> camera against all level boxes, pulled in to hit - 0.25 (min 0.2 from the pivot) | `camera.js:update` |
 | Jetpack burst | thrust 0.22 s to 5.5 m/s, then gravity 17.6; peak 1.46 above take-off; airtime 0.94 s; cooldown 0.9 s | `player.js:JET`, `TUNING.gravity` |
 | Jet horizontal distance | stand-still ~3.6, walking ~4.7, from a sprint ~5.4 (momentum eases to walk speed at 4/s) | derived (simulation of `JET.boost/airAccel`) |
-| Jet landing height | on a box with top <= apex + step, theory ~1.9; documented use is 1.1 | derived, **gym** |
+| Jet landing height | on a box with top <= apex + step, theory ~1.9; **intended reach 1.6** (owner decision: low cover 1.1 and the 1.6 platform) | derived, **gym** |
 | Ceiling during jet | rising head stops under any box; needs 1.8 + 1.46 = 3.3 free for a full burst | `player.js:#ceiling` |
 
 Camera clearances (derived from the table above):
@@ -75,18 +75,19 @@ Cover for AI needs the same floor level only (no stairs): a cover box on a platf
 | Pushed from cover | Space while pushing into low cover vaults it | `player.js:update` |
 
 ## 5. Spaces
-Legend: *hard min* = engine or camera breaks below it; *rec* = recommended for normal rooms. Existing values in brackets.
+Legend: *hard min* = engine or camera breaks below it; *rec* = the standard to build with. **Owner decision: the prototype
+arena's scale is the standard** — rec values are the arena's own sizes.
 | Item | Hard min | Rec | Why / source |
 |---|---|---|---|
-| Corridor width | 1.6 | **3.0** (2.2 keeps the camera free, 4.0 leaves room to pass and fight) | 2 bodies x 0.8; camera side 1.1 per side; derived. [no corridor exists; doorways are 4.0] |
-| Door width | 1.2 | **3.0**, [4.0 in code] | player 0.8 + peek lean; wall ends beside doors act as high-cover edges (peek) so keep the wall >= 0.9 wide there; `world.js` (doors at x -12, 16: 4 m) |
-| Door / lintel height | 1.8 (head box; `collideCircle` ignores boxes whose bottom >= feet + 1.8) | **3.0**, [4.0 in code] | `world.js:collideCircle`; jet needs 3.3 |
-| Ceiling (rooms) | 2.5 (camera pulls to the head) | **4.0**; open halls 5+, [7 in building] | camera height ~3.4 at pitch -0.5 and 3.4 normal; derived |
-| Ceiling for jet | 3.3 | 4.0 | 1.8 + 1.46 (`JET`) |
-| Stairs | rise <= 0.45 | rise 0.4, run 1.0, width >= 3 [3 steps, 0.4 / 1.0, 4 wide] | `player.js:TUNING.stepHeight`; `world.js:#buildLevel` stairs; AI uses the same 0.45 |
+| Corridor width | 1.6 | **4.0** (same as the arena doorways) | 2 bodies x 0.8; camera side 1.1 per side; derived. No corridor exists yet |
+| Door width | 1.2 | **4.0** (arena doors at x -12, 16) | player 0.8 + peek lean; wall ends beside doors act as high-cover edges (peek) so keep the wall >= 0.9 wide there |
+| Door / lintel height | 1.8 (head box; `collideCircle` ignores boxes whose bottom >= feet + 1.8) | **4.0** (arena doors) | `world.js:collideCircle`; jet needs 3.3 |
+| Ceiling (rooms) | 2.5 (camera pulls to the head) | **7.0** (arena building walls) | camera height ~3.4 at pitch -0.5 and 3.4 normal; derived |
+| Ceiling for jet | 3.3 | 7.0 | 1.8 + 1.46 (`JET`) |
+| Stairs | rise <= 0.45 | **rise 0.4, run 1.0, 4 wide** (arena stairs, 3 steps) | `player.js:TUNING.stepHeight`; `world.js:#buildLevel` stairs; AI uses the same 0.45 |
 | Ramps | -- | none: `groundAt` uses box tops, a ramp must be a stair of 0.4 m boxes | `world.js:groundAt` |
 | Raised floors | -- | 1.6 platform: stairs; parapets on it are LOW 1.1 x 0.6 thick; AI cover only works on the same level | `world.js` platform |
-| Tallest jumpable | -- | boxes <= 1.1 are jumped on safely; > 1.9 not jettable | derived, **gym** |
+| Tallest jumpable | -- | boxes up to **1.6** are jet-reachable **by design** (owner decision: the 1.6 platform may be jetted onto); > 1.9 not jettable | derived, **gym** (confirm 1.6 is reliable) |
 | Room width / depth | 4 x 4 | 8 x 8+ for a fight (cover spots need >= 6 m to the player) | `cover.js:minRange`; derived |
 | Open sky for drones | -- | flight band 3.5-5 + 0.6 radius: no roof below ~5.6 above a drone area; drones never enter `interiorZones` | `drone.js:TUNING`, `update` bounds |
 | Arena size | -- | see 7 | -- |
@@ -147,7 +148,7 @@ Each item: value, how the Gym measures it.
 17. **Spider space**: arena lane widths 5-9 m; wall-on-leg clipping; stomp / mortar blast against cover (3.6 and 7 radius).
 18. **Visual readability at 1 m / 2 m grid**: size reference props (player, trooper, door, stairs) at the camera distances above, to confirm that sizes read.
 19. **Camera against low cover when crouched**: camera height 1.23 over 1.1 cover, ray from pivot; check pop through cover on the shoulder swap.
-20. **Platform parapets and jump-ons**: whether jets onto the 1.6 platform are meant to be possible.
+20. **Platform jet-ons** (decided: intended): confirm a jet reliably lands on the 1.6 platform from stand and walk.
 
 ## 9. Change rule
 Once frozen, a metric changes only through an issue that lists: (a) the old and new value with the source symbol, (b) every kit
