@@ -21,8 +21,6 @@ const _ray = new THREE.Raycaster();
 const _move = { x: 0, y: 0 };
 const _jet = { point: new THREE.Vector3(), dir: new THREE.Vector3(0, -1, 0) }; // 'player:jet' payload (reused)
 
-export const SPAWN = new THREE.Vector3(0, 0, 38);
-
 const TUNING = {
   radius: 0.4,
   standHeight: 1.8,
@@ -65,15 +63,17 @@ const JET = { thrust: 0.22, lift: 5.5, gravity: 0.8, boost: 1.5, airAccel: 4, co
 const PEEK = { shift: 0.2, lean: 0.6 };
 
 export class Player {
-  constructor({ scene, world, events }) {
+  // spawn: { pos: [x, y, z], yaw } from the level file
+  constructor({ scene, world, events, spawn }) {
     this.scene = scene;
     this.world = world;
     this.events = events;
     this.t = TUNING;
-    this.pos = SPAWN.clone();
+    this.spawn = new THREE.Vector3(...spawn.pos);
+    this.pos = this.spawn.clone();
     this.vel = new THREE.Vector3();
     this.vy = 0;
-    this.facing = Math.PI;
+    this.facing = spawn.yaw;
     this.crouchBlend = 0;
     this.crouched = false;
     this.aiming = false;
@@ -160,7 +160,7 @@ export class Player {
   }
 
   respawn() {
-    this.pos.copy(SPAWN);
+    this.pos.copy(this.spawn);
     this.vel.set(0, 0, 0);
     this.vy = 0;
     this.airborne = false;
