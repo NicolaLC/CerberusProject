@@ -31,10 +31,12 @@ renderer, gamepad, pointer lock and audio behave exactly as in the Chromium the 
   `node_modules` is excluded (~0.7 MB archive; installer ~125 MB, mostly Chromium).
 
 ## Releases (GitHub)
-- `.github/workflows/release.yml` runs on a pushed tag `v<version>` (must equal package.json `version`):
+- `.github/workflows/release.yml` runs on a pushed commit whose message contains `[release]`, a pushed tag
+  `v<version>` (must equal package.json `version`) or a manual run; it tags the commit `v<version>`:
   web job (tests, `dist/` zip + single-file page), desktop matrix (ubuntu → AppImage, windows → NSIS exe,
   macos → universal dmg), then a GitHub prerelease with `RELEASE_NOTES.md` as the body.
-- To cut one: bump `version` in package.json, rewrite RELEASE_NOTES.md, commit, `git tag vX.Y.Z`, push the tag.
+- To cut one: bump `version` in package.json, rewrite RELEASE_NOTES.md, commit with `[release]` in the message,
+  push. (Claude cloud sessions can't push tags: the git proxy refuses them, so use `[release]`.)
 - File names: `Cerberus-<version>-<os>-<arch>.<ext>` (electron-builder `artifactName`).
 - Builds are unsigned (`mac.identity: null`, `CSC_IDENTITY_AUTO_DISCOVERY=false`).
 
