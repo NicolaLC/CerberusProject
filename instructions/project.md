@@ -5,7 +5,8 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 
 ## Stack
 - Three.js (`three`), plain ES modules, Vite for dev/build. No framework, no physics engine.
-- Everything procedural: geometry, textures (canvas), audio (WebAudio). No binary assets yet.
+- Everything procedural: geometry, textures (canvas), audio (WebAudio). Only binary assets: two UI fonts in `src/fonts/`
+  (demo licences under evaluation: `credits.md`, `before-shipping.md`), set as `--font-main` / `--font-num` in `src/style.css`.
 
 ## Commands
 - `npm run dev` — dev server on :5173
