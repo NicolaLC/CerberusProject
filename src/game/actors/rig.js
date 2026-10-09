@@ -508,12 +508,18 @@ export class Animator {
     const w = 1 - crouch;
     if (w <= 0.01) return;
     const rootQ = rig.root.getWorldQuaternion(_q2);
-    const pole = _knee.set(0, 0.15, 1).applyQuaternion(rootQ); // knees forward
     for (const side of SIDES) {
       const t = targets[side];
       const foot = B[side + 'Foot'];
       const now = foot.getWorldPosition(_b);
       const goal = _c.set(now.x, mix(now.y, t.ty, w), now.z);
+      // bend in the plane the pose already bends in (a sprint's heel kick has the foot behind and above the knee:
+      // forcing "knees forward" there swings the leg out sideways); a nearly straight leg: knees forward
+      const hip = B[side + 'UpLeg'].getWorldPosition(_a);
+      const axis = _e.copy(now).sub(hip).normalize();
+      const pole = B[side + 'Leg'].getWorldPosition(_knee).sub(hip);
+      pole.addScaledVector(axis, -pole.dot(axis));
+      if (pole.lengthSq() < 0.03 * 0.03) pole.set(0, 0.15, 1).applyQuaternion(rootQ);
       twoBone(B[side + 'UpLeg'], B[side + 'Leg'], foot, goal, pole);
     }
   }
