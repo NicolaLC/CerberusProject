@@ -7,7 +7,7 @@
 #   ./scripts/play-linux.sh -- --debug    everything after -- goes to the game
 #
 # One-liner (from a branch that has this script):
-#   curl -fsSL https://raw.githubusercontent.com/NicolaLC/CerberusProject/master/scripts/play-linux.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/NicolaLC/CerberusProject/main/scripts/play-linux.sh | bash
 set -euo pipefail
 
 REPO="NicolaLC/CerberusProject"

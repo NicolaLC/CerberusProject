@@ -13,6 +13,7 @@ Linux (x86_64), install or update from the latest release and start it:
 ```bash
 ./scripts/play-linux.sh            # Debian/Ubuntu: installs the .deb (sudo); elsewhere: portable build, no sudo
 ./scripts/play-linux.sh --portable # portable build in ~/.local/share/cerberus, never sudo
+curl -fsSL https://raw.githubusercontent.com/NicolaLC/CerberusProject/main/scripts/play-linux.sh | bash  # without cloning
 ```
 
 ## Run from source
