@@ -41,10 +41,10 @@ const BOLT_HIT = { point: null, normal: new THREE.Vector3() };
 const BOLT = { speed: 34, life: 3, damage: 7, radius: 0.06 };
 
 export class Enemies {
-  // level: parsed level file; registry: Registry holding ENEMY_PIECES.
-  constructor({ scene, world, events, level, registry }) {
-    Object.assign(this, { scene, world, events });
-    this.cover = new CoverMap(world);
+  // Permanent: bolt pool, stand geometry and material. Per level (load / unload): the spawn list, stands, cover map.
+  constructor({ scene, world, events, registry }) {
+    Object.assign(this, { scene, world, events, registry });
+    this.cover = null; // CoverMap of the loaded level
     this.flankCooldown = FLANK.firstAfter;
     this._engaged = [];
     this.player = null; // set on update
@@ -53,6 +53,9 @@ export class Enemies {
     this.bolts = [];
     this.dirty = true; // hit-mesh list needs a rebuild
     this.targets = [];
+    this.puppets = [];
+    this.boss = null;
+    this.bases = this.posts = null;
     const geo = new THREE.CapsuleGeometry(0.06, 0.5, 4, 8).rotateX(Math.PI / 2);
     const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff6a2a).multiplyScalar(6) });
     const glowGeo = new THREE.SphereGeometry(0.22, 12, 8);
@@ -69,21 +72,55 @@ export class Enemies {
     ).warm(16);
     this.standCount = 0;
     // pneumatic stands (puppets only): one instanced draw for all bases, one for all posts
-    const steel = new THREE.MeshStandardMaterial({ color: 0x55585e, metalness: 0.7, roughness: 0.35 });
-    const stand = (geo, count) => {
-      const m = new THREE.InstancedMesh(geo, steel, count);
+    this.standMat = new THREE.MeshStandardMaterial({ color: 0x55585e, metalness: 0.7, roughness: 0.35 });
+    this.standGeo = {
+      base: new THREE.CylinderGeometry(0.35, 0.4, 0.08, 16),
+      post: new THREE.CylinderGeometry(0.05, 0.05, 1, 8),
+    };
+  }
+
+  // Builds the enemies of a level file (registry pieces owned by 'enemies'). Unloads the current ones first.
+  load(level) {
+    this.unload();
+    const { registry } = this;
+    this.cover = new CoverMap(this.world);
+    const spawns = registry.piecesOf(level, 'enemies');
+    const stands = spawns.filter((d) => registry.meta(d.id).stand).length;
+    const stand = (geo) => {
+      const m = new THREE.InstancedMesh(geo, this.standMat, stands);
       m.castShadow = m.receiveShadow = true;
       m.frustumCulled = false; // instances spread over the whole arena
       this.scene.add(m);
       return m;
     };
-    const spawns = registry.piecesOf(level, 'enemies');
-    const stands = spawns.filter((d) => registry.meta(d.id).stand).length;
-    this.bases = stand(new THREE.CylinderGeometry(0.35, 0.4, 0.08, 16), stands);
-    this.posts = stand(new THREE.CylinderGeometry(0.05, 0.05, 1, 8), stands);
+    this.bases = stand(this.standGeo.base);
+    this.posts = stand(this.standGeo.post);
     // every enemy (puppets and troopers) lives in this one list
     this.puppets = spawns.map((d) => registry.build('enemies', this, d));
     this.boss = this.puppets.find((p) => p.kind === 'boss') ?? null;
+    return this;
+  }
+
+  // Frees every enemy of the level: actors (debris, rigs, skins, materials), stands, bolts in flight, squad state.
+  unload() {
+    for (const p of this.puppets) p.dispose();
+    this.puppets = [];
+    this.boss = null;
+    for (const b of this.bolts) this.boltPool.release(b); // pool meshes are permanent, just hidden
+    this.bolts.length = 0;
+    for (const m of [this.bases, this.posts]) {
+      m?.removeFromParent();
+      m?.dispose(); // instance buffer only: geometry and material are permanent
+    }
+    this.bases = this.posts = null;
+    this.cover = null;
+    this.standCount = 0;
+    this.kills = 0;
+    this.time = 0;
+    this.flankCooldown = FLANK.firstAfter;
+    this._engaged.length = 0;
+    this.targets.length = 0;
+    this.dirty = true;
   }
 
   setStand(i, pos, postH) {
