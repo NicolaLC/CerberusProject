@@ -1,6 +1,35 @@
 # Level & lighting
 
-## Layout (`world.js #buildLevel`)
+## Level file (`src/levels/arena.json`)
+Plain JSON (an editor can write it), imported by `game.js`, validated by `Registry.check`. Layout, enemies and
+pickups are data; sky, sun, fog and materials stay in code (`world.js`).
+```
+{ name, spawn: { pos, yaw }, interiorZones: [{ min, max }],
+  pieces: [ { id, pos: [x, y, z], yaw?, params?, name? }, ... ] }
+```
+- `pieces` is one ordered list; each system builds the ones it owns, in file order. Order matters: boxes are merged
+  per material in file order (draw calls, `render.browser.mjs`), enemies fill stands in order.
+- `spawn.yaw` is the player's initial facing (3.14159 = north, -Z). The boss arena bounds are data of `boss.spider`.
+- Add a piece: append `{ "id": ..., "pos": [...], "params": {...} }`. Add a new kind: put a builder in the owning
+  module's table (`WORLD_PIECES` / `ENEMY_PIECES` / `PICKUP_PIECES`) and document the id here. Never rename an id.
+- `name` lets a later piece refer to an earlier one (`light.point` `flicker.strip`).
+
+### Piece ids (public contract)
+| id | owner | params |
+|---|---|---|
+| `env.box` | world | `size [w,h,d]`, `mat` (key of `World.mats`), `faces?` `{px,nx,py,ny,pz,nz: mat}`, `cover?` `'low'\|'high'\|'wall'`, `collide?` `shadow?` (default true). `pos` = center x, bottom y, center z. Axis-aligned: no rotation |
+| `env.strip` | world | `size`, `mat`, `ownMaterial?` (clone the material; needed to flicker one strip alone). Emissive, no collision, no shadow |
+| `light.point` | world | `color '#rrggbb'`, `intensity`, `distance`, `flicker?: { strip: name }` (flickers the light, and the named earlier strip) |
+| `enemy.static` / `enemy.mover` / `enemy.shooter` | enemies | puppets on a stand. `yaw?`; mover: `to [x,y,z]`, `speed` |
+| `enemy.trooper` | enemies | cover-using soldier. `yaw?` |
+| `enemy.drone` | enemies | `pos` = the ground under it |
+| `boss.spider` | enemies | `yaw?`, `arena: { minX, maxX, minZ, maxZ }` (the boss stays inside; wakes when the player enters) |
+| `pickup.light` / `pickup.heavy` | pickups | respawning ammo crate of that class |
+
+Interior zones (camera exposure) are `interiorZones` boxes, not pieces. Dropped clips are runtime, not data.
+Loading only: no unloading or scene switching yet (issue #62).
+
+## Layout (the arena file; was `world.js #buildLevel`)
 - Yard: x -50..50, z -62..50, perimeter walls 6m. Player spawn (0, 0, 38) facing north (-Z).
 - Cover lines at z=25 (low), z=12 (high walls), z=0 / z=-14 (low), pillars at z=-20.
 - West platform 1.6m with stairs and low parapets. East shooting range behind a firing bench (z=32).

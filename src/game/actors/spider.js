@@ -32,8 +32,6 @@ const TUNING = {
 const LEG = { femur: 2.4, tibia: 3.8, step: 1.3, stepTime: 0.3, stepHeight: 0.7, lead: 0.35 };
 const HIPS = [[1.25, 1.2], [1.45, 0], [1.25, -1.2]]; // [|x|, z] on the hull, front to back
 const REST = [[3.3, 2.9], [4.0, 0], [3.3, -2.9]]; // foot rest offsets in the body's space
-// north-east arena (world.js): the boss stays inside, and wakes when the player walks in
-export const ARENA = { minX: 25, maxX: 49.5, minZ: -61.5, maxZ: -14.5 };
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
@@ -55,6 +53,7 @@ export class SpiderMech {
     this.name = TUNING.name;
     this.pos = new THREE.Vector3(...def.pos);
     this.yaw = def.yaw ?? 0;
+    this.arena = def.arena; // { minX, maxX, minZ, maxZ } from the level file: the boss stays inside, and wakes when the player walks in
     this.maxHealth = this.health = TUNING.core;
     this.alive = true;
     this.lift = 0;
@@ -392,7 +391,8 @@ export class SpiderMech {
     // wake when the player comes into the arena (or close with line of sight)
     if (!this.awake && !player.dead) {
       const p = player.pos;
-      const inArena = p.x > ARENA.minX && p.x < ARENA.maxX && p.z > ARENA.minZ && p.z < ARENA.maxZ;
+      const A = this.arena;
+      const inArena = p.x > A.minX && p.x < A.maxX && p.z > A.minZ && p.z < A.maxZ;
       if (inArena || (p.distanceTo(this.pos) < this.t.wakeRange && this.#sees(player))) this.#wake();
     }
 
@@ -467,8 +467,9 @@ export class SpiderMech {
     const before = _v.copy(this.pos);
     this.pos.addScaledVector(this.vel, dt);
     this.sys.world.collideCircle(this.pos, this.t.radius, 2.4, 1.3); // walks over low cover, not through walls
-    this.pos.x = THREE.MathUtils.clamp(this.pos.x, ARENA.minX + this.t.radius, ARENA.maxX - this.t.radius);
-    this.pos.z = THREE.MathUtils.clamp(this.pos.z, ARENA.minZ + this.t.radius, ARENA.maxZ - this.t.radius);
+    const A = this.arena;
+    this.pos.x = THREE.MathUtils.clamp(this.pos.x, A.minX + this.t.radius, A.maxX - this.t.radius);
+    this.pos.z = THREE.MathUtils.clamp(this.pos.z, A.minZ + this.t.radius, A.maxZ - this.t.radius);
     // blocked: turn around
     if (before.distanceTo(this.pos) < this.vel.length() * dt * 0.3 && this.vel.lengthSq() > 0.5) {
       this.strafe = -this.strafe;
