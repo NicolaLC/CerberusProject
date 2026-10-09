@@ -18,7 +18,7 @@ Most sounds are synthesized at runtime (`src/game/view/audio.js`). Recorded samp
 
 | Sound | File | Source | Licence |
 |---|---|---|---|
-| Assault rifle (KR-7) single shot | `src/assets/sfx/ar-shot.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Assault rifle (KR-7 Warden) single shot | `src/assets/sfx/ar-shot.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 
 ## Libraries
 
