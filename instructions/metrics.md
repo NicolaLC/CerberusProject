@@ -46,7 +46,7 @@ Camera clearances (derived from the table above):
 | Cover only if flagged | `box(..., { cover: 'low'\|'high'\|'wall' })`; unflagged boxes block but give no cover | `world.js:box` |
 | Low cover height | **1.1** (code); behind it crouch 1.05, so 0.05 margin | `world.js:LOW`, `TUNING.crouchHeight` |
 | High cover height | **2.8** (code); walls 2.2 (range separator), 3.2 (boss arena), 7 (building) | `world.js:HIGH`, `#buildLevel` |
-| Dead zone (proposed) | do not author cover tops between 1.2 and 2.0: 1.2-1.69 counts as low but hides nobody standing; 1.7-2.0 hides a 1.8 m trooper's head only barely and cannot be jetted (jet reach ~1.9) | derived |
+| Fixed cover heights (owner decision) | cover is **1.1 (low) or 2.8 (high)**, nothing in between: 1.2-1.69 counts as low but hides nobody standing; 1.7-2.0 hides a 1.8 m trooper's head only barely. Height-adaptive cover is a later idea (backlog), not a current rule | derived |
 | Auto cover reach | 0.35 beyond body radius (0.75 from centre), push within ~53 deg of the face normal | `TUNING.autoCoverReach` |
 | Cover slide | A/D; stops 0.2 before an edge | `player.js:#updateCover` (`margin` 0.2) |
 | Edge / peek clearance | edge flagged when no cover face 0.45 along the tangent; peek = 0.2 weight shift + 0.6 rad lean | `#updateCover`, `PEEK` |
