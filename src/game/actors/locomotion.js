@@ -51,11 +51,12 @@ export const GAITS = {
       [0.88, -0.85, 0.7, -0.05], // shin swings out
       [0.95, -0.62, 0.4, -0.08], // reach, pawing back for contact
     ],
+    // heights stay small: the bent support leg already sinks the hips, and the flight arc (rig.js) lifts them
     hips: [
-      [0.0, -0.02, 0.08],
-      [0.2, -0.06, 0.09], // compression: lowest
+      [0.0, 0.0, 0.08],
+      [0.2, -0.015, 0.09], // compression: lowest
       [0.5, 0.0, 0.08],
-      [0.75, 0.02, 0.07], // flight: highest
+      [0.75, 0.0, 0.07],
     ],
   },
 };

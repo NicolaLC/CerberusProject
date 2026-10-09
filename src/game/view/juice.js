@@ -11,6 +11,10 @@ const TUNING = {
   hurtTrauma: 0.38,
   coverTrauma: 0.16,
   landTrauma: 0.2,
+  jetTrauma: 0.05, // take-off kick (frequent action: subtle)
+  jetDip: -0.35, // camera sinks slightly, then springs back up
+  jetLandTrauma: 0.06, // landing after a jet: light dip instead of the vault slam
+  jetLandDip: 0.7,
 };
 
 export class Juice {
@@ -29,7 +33,8 @@ export class Juice {
     });
     events.on('player:hurt', () => this.hurt());
     events.on('player:coverSlam', () => this.coverSlam());
-    events.on('player:land', () => this.land());
+    events.on('player:jet', () => this.jet());
+    events.on('player:land', (kind) => this.land(kind));
     // boss: the ground shakes with distance
     const near = (p, r) => Math.max(0, 1 - this.camRig.pivot.distanceTo(p) / r);
     events.on('blast', (b) => this.camRig.addTrauma(0.5 * near(b.point, b.radius * 4)));
@@ -79,9 +84,15 @@ export class Juice {
     this.camRig.dip(0.9);
   }
 
-  land() {
-    this.camRig.addTrauma(this.t.landTrauma);
-    this.camRig.dip(1.4);
+  jet() {
+    this.camRig.addTrauma(this.t.jetTrauma);
+    this.camRig.dip(this.t.jetDip);
+  }
+
+  land(kind) {
+    const soft = kind === 'jet';
+    this.camRig.addTrauma(soft ? this.t.jetLandTrauma : this.t.landTrauma);
+    this.camRig.dip(soft ? this.t.jetLandDip : 1.4);
   }
 
   // returns the game time scale for this frame (real dt in)

@@ -26,12 +26,21 @@ const r = await p.evaluate(() => {
     let slide = 0;
     let planted = 0;
     let maxLift = 0;
+    let hipsPrev = null;
+    let hipsVel = 0;
+    let hipsJerk = 0; // largest frame-to-frame change of the hips' vertical speed (m/frame): pops show here
     for (let i = 0; i < 300; i++) {
       pos.addScaledVector(vel, 1 / 60);
       t.group.position.copy(pos);
       t.rig.root.rotation.y = yaw;
       t.group.updateMatrixWorld(true);
       t.animator.update(1 / 60, { speed: v, run, crouch: 0, aimPitch: 0, combat: false, vel, yaw });
+      const hy = t.rig.bones.Hips.getWorldPosition(new V()).y;
+      if (i > 60 && hipsPrev !== null) {
+        hipsJerk = Math.max(hipsJerk, Math.abs(hy - hipsPrev - hipsVel));
+        hipsVel = hy - hipsPrev;
+      }
+      hipsPrev = hy;
       for (const s of ['Left', 'Right']) {
         const f = t.rig.bones[s + 'Foot'].getWorldPosition(new V());
         f.st = t.animator.legs[s].stance;
@@ -45,13 +54,13 @@ const r = await p.evaluate(() => {
         prev[s] = f;
       }
     }
-    out[name] = { slideMm: +((1000 * slide) / Math.max(1, planted)).toFixed(2), planted, lift: +maxLift.toFixed(2) };
+    out[name] = { slideMm: +((1000 * slide) / Math.max(1, planted)).toFixed(2), planted, lift: +maxLift.toFixed(2), hipsJerkMm: +(1000 * hipsJerk).toFixed(1) };
   }
   return out;
 });
 
 // The player: stopping settles into idle without a pop, moving along cover turns into the move with feet on
-// the floor, and vaulting picks a jump (thin block) or a slide (deep block).
+// the floor, cover is automatic, and vaulting picks a jump (thin block) or a slide (deep block).
 const pl = await p.evaluate(() => {
   const g = window.game;
   const { engine, player, enemies, camRig } = g;
@@ -84,7 +93,7 @@ const pl = await p.evaluate(() => {
   // low cover, slide right
   player.pos.set(-24, 0, 1.3);
   step(20);
-  press('Space', 30);
+  press('KeyW', 30); // walking into the block snaps into cover (automatic)
   keys.add('KeyD'); step(12); // the block is 4 m long: measure mid-run, before its end
   out.coverMove = track(20);
   out.coverMove.crouch = +player.crouchBlend.toFixed(2);
@@ -100,13 +109,13 @@ const pl = await p.evaluate(() => {
   keys.add('KeyW'); press('Space'); keys.delete('KeyW'); // from that cover: a 1 m block -> jump
   step(60);
   out.coverVault = { kind: kinds.at(-1), z: +player.pos.z.toFixed(2), y: +player.pos.y.toFixed(2) };
-  player.pos.set(-2, 0, 8.5); // deep side of the 1 x 3 block at (-2, 4): run in -> slide
+  player.pos.set(-2, 0, 11); // deep side of the 1 x 3 block at (-2, 4): run in -> slide
   player.vel.set(0, 0, 0);
   camRig.yaw = 0;
   step(10);
   keys.add('ShiftLeft'); keys.add('KeyW');
   let peak = 0;
-  for (let i = 0; i < 120 && !player.snap; i++) { step(); if (i > 25) engine.input.pressed.add('Space'); }
+  for (let i = 0; i < 120 && !player.snap; i++) { step(); if (player.pos.z < 7.6) engine.input.pressed.add('Space'); } // Space inside the run-in reach (2.2 m from the face)
   for (let i = 0; i < 60; i++) { step(); peak = Math.max(peak, player.pos.y); }
   keys.delete('ShiftLeft'); keys.delete('KeyW');
   out.runVault = { kind: kinds.at(-1), z: +player.pos.z.toFixed(2), peak: +peak.toFixed(2) };
@@ -118,6 +127,7 @@ const expect = (name, ok) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`); i
 for (const [name, m] of Object.entries(r)) {
   expect(`${name}: planted feet stay put (${m.slideMm} mm/frame)`, m.planted > 30 && m.slideMm < 2);
   expect(`${name}: the swing foot leaves the ground (${m.lift} m)`, m.lift > 0.15);
+  expect(`${name}: the hips move smoothly (speed change ${m.hipsJerkMm} mm/frame)`, m.hipsJerkMm < 25);
 }
 expect(`player stops without a pop (${pl.stop.jumpMm} mm/frame)`, pl.stop.jumpMm < 120);
 expect('moving along low cover: crouch-run facing the move, feet on the floor', pl.coverMove.crouch < 0.6 && pl.coverMove.facingErr < 0.2 && pl.coverMove.low > 0.07);

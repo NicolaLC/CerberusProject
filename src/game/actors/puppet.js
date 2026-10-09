@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { EnemyBody, box } from './enemy.js';
+import { buildPuppet, puppetMaterials } from './looks.js';
 import { damp, wrapAngle } from '../../engine/math.js';
 
-// Training puppets: the shared humanoid rig hung on a pneumatic post.
+// Training puppets: the shared humanoid rig hung on a pneumatic post, dressed as a crash-test robot (looks.js).
 // kinds: 'static' (takes hits), 'mover' (slides on a rail), 'shooter' (pops up from fixed cover and fires).
 
 const HIDE = -0.95; // rig lift when retracted behind low cover
@@ -21,8 +22,9 @@ export class Puppet extends EnemyBody {
       pos: def.pos,
       yaw: def.yaw ?? 0,
       health: def.kind === 'shooter' ? 120 : 100,
-      colors: { body: def.kind === 'shooter' ? 0xd04a2a : 0xe8c23a },
+      mats: puppetMaterials(def.kind === 'shooter' ? 0xd04a2a : 0xe8c23a),
     });
+    buildPuppet(this.rig, this.mats, this.visor);
     this.home = this.pos.clone();
     this.to = def.to ? new THREE.Vector3(...def.to) : null;
     this.speed = def.speed ?? 0;

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RigidSkin } from '../../engine/batch.js';
 import { damp } from '../../engine/math.js';
+import { rb, cyl, ring, look, debrisCopy, disposeDebris } from './parts.js';
 
 // Attack drone: a small quad-rotor that hovers 3.5-5 m up, circles the player at range and fires short bolt
 // bursts. Light (dies fast) but hard to hit while it strafes; the glowing core underneath is its weak spot.
@@ -27,6 +28,7 @@ const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _ray = new THREE.Raycaster();
 const BLAST = { point: new THREE.Vector3(), radius: 1.5, kind: 'drone' };
+const HITBOX_MAT = new THREE.MeshBasicMaterial(); // never drawn
 
 export class Drone {
   constructor(sys, def) {
@@ -52,7 +54,7 @@ export class Drone {
     this.debris = [];
 
     const M = {
-      shell: new THREE.MeshStandardMaterial({ color: 0x3a3f47, roughness: 0.4, metalness: 0.7 }),
+      shell: new THREE.MeshStandardMaterial({ color: 0x464c55, roughness: 0.4, metalness: 0.65 }),
       plate: new THREE.MeshStandardMaterial({ color: 0xc8781e, roughness: 0.5, metalness: 0.35 }),
       eye: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff3020, emissiveIntensity: 2 }),
       weak: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2bd6, emissiveIntensity: 3 }),
@@ -61,6 +63,7 @@ export class Drone {
     M.eye.userData.lodGlow = 4;
     this.mats = M;
 
+    // bones: the body (tilts) and four rotors (spin). Invisible boxes are the hitboxes; the look is separate.
     this.root = new THREE.Group();
     const bones = [];
     const bone = (parent, x = 0, y = 0, z = 0) => {
@@ -71,32 +74,88 @@ export class Drone {
       return b;
     };
     this.hitMeshes = [];
-    const part = (b, geo, mat, x, y, z, zone) => {
-      const m = new THREE.Mesh(geo, mat);
+    const hitbox = (b, w, h, d, x, y, z, zone) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), HITBOX_MAT);
       m.position.set(x, y, z);
-      m.castShadow = true;
+      m.visible = false; // not drawn, still raycast
       m.userData = { enemy: this, zone };
       b.add(m);
       this.hitMeshes.push(m);
       return m;
     };
-    const boxGeo = (w, h, d) => new THREE.BoxGeometry(w, h, d);
     this.body = bone(this.root);
-    part(this.body, boxGeo(0.7, 0.32, 0.8), M.shell, 0, 0, 0, 'torso');
-    part(this.body, boxGeo(0.5, 0.1, 0.5), M.plate, 0, 0.2, -0.05, 'torso');
-    part(this.body, boxGeo(0.42, 0.1, 0.05), M.eye, 0, 0.02, 0.41, 'head');
-    part(this.body, boxGeo(0.3, 0.08, 0.3), M.weak, 0, -0.2, 0, 'weak'); // core underneath
-    part(this.body, boxGeo(0.08, 0.08, 0.35), M.shell, 0, -0.1, 0.5, 'torso'); // gun
+    hitbox(this.body, 0.7, 0.32, 0.8, 0, 0, 0, 'torso');
+    hitbox(this.body, 0.5, 0.1, 0.5, 0, 0.2, -0.05, 'torso');
+    hitbox(this.body, 0.42, 0.1, 0.05, 0, 0.02, 0.41, 'head'); // sensor
+    hitbox(this.body, 0.3, 0.08, 0.3, 0, -0.2, 0, 'weak'); // core underneath
+    hitbox(this.body, 0.08, 0.08, 0.35, 0, -0.1, 0.5, 'torso'); // gun
     this.muzzle = new THREE.Object3D();
     this.muzzle.position.set(0, -0.1, 0.72);
     this.body.add(this.muzzle);
     this.rotors = [];
-    for (const [x, z] of [[0.6, 0.55], [-0.6, 0.55], [0.6, -0.55], [-0.6, -0.55]]) {
-      const arm = part(this.body, boxGeo(Math.hypot(x, z), 0.06, 0.08), M.shell, x / 2, 0.05, z / 2, 'torso');
+    const R = Math.PI / 2;
+    const ROTORS = [[0.6, 0.55], [-0.6, 0.55], [0.6, -0.55], [-0.6, -0.55]];
+    for (const [x, z] of ROTORS) {
+      const arm = hitbox(this.body, Math.hypot(x, z), 0.06, 0.08, x / 2, 0.05, z / 2, 'torso');
       arm.rotation.y = Math.atan2(-z, x); // from the center out to the rotor
       const r = bone(this.body, x, 0.12, z);
-      part(r, boxGeo(0.62, 0.02, 0.07), M.plate, 0, 0, 0, 'torso');
+      hitbox(r, 0.62, 0.02, 0.07, 0, 0, 0, 'torso');
       this.rotors.push(r);
+    }
+
+    // look: armored pod with an orange spine plate, a lens cluster in front, a slung cannon, the glowing core
+    // underneath, four ducted rotors on struts
+    this.body.add(
+      look(
+        rb(M.shell, 0.62, 0.26, 0.74, 0.09, 0, 0, 0), // hull
+        rb(M.shell, 0.5, 0.12, 0.6, 0.05, 0, -0.14, -0.02), // belly
+        rb(M.plate, 0.44, 0.07, 0.52, 0.03, 0, 0.15, -0.05), // spine plate
+        rb(M.shell, 0.05, 0.075, 0.5, 0.015, 0.1, 0.16, -0.05), // plate stripes
+        rb(M.shell, 0.05, 0.075, 0.5, 0.015, -0.1, 0.16, -0.05),
+        rb(M.plate, 0.64, 0.05, 0.1, 0.02, 0, 0.06, 0.3), // front bumper
+        rb(M.shell, 0.18, 0.1, 0.12, 0.03, 0, 0.12, -0.38), // rear sensor block
+        cyl(M.shell, 0.006, 0.006, 0.26, 0.12, 0.28, -0.38, -0.35, 0, 0, 5), // antennas
+        cyl(M.shell, 0.006, 0.006, 0.2, -0.12, 0.25, -0.38, -0.35, 0, 0, 5),
+      ),
+      look(
+        cyl(M.shell, 0.13, 0.15, 0.1, 0, 0.02, 0.38, R, 0, 0, 16), // lens housing
+        cyl(M.eye, 0.085, 0.085, 0.02, 0, 0.02, 0.435, R, 0, 0, 16), // main lens
+        cyl(M.eye, 0.028, 0.028, 0.02, 0.19, 0.05, 0.37, R, 0, 0, 10), // side eyes
+        cyl(M.eye, 0.028, 0.028, 0.02, -0.19, 0.05, 0.37, R, 0, 0, 10),
+        cyl(M.eye, 0.018, 0.018, 0.02, 0.19, -0.02, 0.37, R, 0, 0, 8),
+        cyl(M.eye, 0.018, 0.018, 0.02, -0.19, -0.02, 0.37, R, 0, 0, 8),
+      ),
+      look(
+        rb(M.shell, 0.12, 0.08, 0.16, 0.02, 0, -0.17, 0.3), // gun mount
+        cyl(M.shell, 0.032, 0.036, 0.4, 0, -0.1, 0.5, R, 0, 0, 10), // barrel
+        cyl(M.plate, 0.045, 0.045, 0.06, 0, -0.1, 0.66, R, 0, 0, 10), // muzzle brake
+        cyl(M.shell, 0.042, 0.042, 0.02, 0, -0.1, 0.42, R, 0, 0, 10),
+      ),
+      look(
+        cyl(M.shell, 0.19, 0.17, 0.05, 0, -0.2, 0, 0, 0, 0, 16), // core housing
+        cyl(M.weak, 0.14, 0.12, 0.08, 0, -0.22, 0, 0, 0, 0, 16), // core
+      ),
+    );
+    for (const [x, z] of ROTORS) {
+      this.body.add(
+        look(
+          rb(M.shell, Math.hypot(x, z) - 0.1, 0.05, 0.07, 0.02, x * 0.5, 0.05, z * 0.5, 0, Math.atan2(-z, x), 0), // strut
+          cyl(M.shell, 0.055, 0.065, 0.14, x, 0.07, z, 0, 0, 0, 12), // motor
+          cyl(M.plate, 0.067, 0.067, 0.02, x, 0.04, z, 0, 0, 0, 12),
+          ring(M.shell, 0.29, 0.025, x, 0.12, z, R, 0, 0), // duct
+          ring(M.plate, 0.29, 0.012, x, 0.155, z, R, 0, 0), // duct rim
+          cyl(M.eye, 0.016, 0.016, 0.016, x * 1.39, 0.12, z * 1.39, 0, 0, 0, 8), // nav light
+        ),
+      );
+    }
+    for (const r of this.rotors) {
+      r.add(
+        look(
+          rb(M.shell, 0.52, 0.012, 0.06, 0.006, 0, 0, 0, 0.15, 0, 0), // blades
+          rb(M.shell, 0.06, 0.012, 0.52, 0.006, 0, 0, 0, 0, 0, 0.15),
+          cyl(M.plate, 0.035, 0.035, 0.03, 0, 0.01, 0, 0, 0, 0, 10), // hub
+        ),
+      );
     }
     this.skeleton = new THREE.Skeleton(bones);
     sys.scene.add(this.root);
@@ -281,14 +340,16 @@ export class Drone {
     // burst on impact
     BLAST.point.copy(this.root.position);
     this.sys.events.emit('blast', BLAST);
-    for (const m of this.hitMeshes) {
-      const d = new THREE.Mesh(m.geometry, m.material);
-      m.matrixWorld.decompose(d.position, d.quaternion, d.scale);
-      d.castShadow = true;
-      this.sys.scene.add(d);
-      const v = new THREE.Vector3((Math.random() - 0.5) * 6, 2 + Math.random() * 4, (Math.random() - 0.5) * 6);
-      const av = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(12);
-      this.debris.push({ obj: d, v, av, life: 4 });
+    for (const bone of this.skeleton.bones) {
+      for (const piece of bone.children) {
+        if (piece.isBone) continue;
+        const d = debrisCopy(piece);
+        if (!d) continue;
+        this.sys.scene.add(d);
+        const v = new THREE.Vector3((Math.random() - 0.5) * 6, 2 + Math.random() * 4, (Math.random() - 0.5) * 6);
+        const av = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(12);
+        this.debris.push({ obj: d, v, av, life: 4 });
+      }
     }
     this.root.visible = false;
     this.falling = null;
@@ -314,7 +375,7 @@ export class Drone {
       }
       if (d.life < 1) d.obj.scale.multiplyScalar(1 - dt * 3);
       if (d.life <= 0) {
-        this.sys.scene.remove(d.obj);
+        disposeDebris(d.obj);
         this.debris[i] = this.debris[this.debris.length - 1];
         this.debris.pop();
       }

@@ -45,7 +45,7 @@ export class Game {
     const weapon = new Weapon({ camera, rig: camRig, player, world, enemies, events });
     const fx = new FX(scene, camera, world).listen(events);
     const hud = new Hud().listen(events, camRig);
-    const audio = new Audio().listen(events);
+    const audio = new Audio(weapon, camera).listen(events);
     const post = new Post(renderer, scene, camera, events);
     applyQuality(settings.quality, { engine, post, world });
     const juice = new Juice({ camRig, post, fx }).listen(events);
@@ -56,6 +56,8 @@ export class Game {
       input.rumble(big ? 0.7 : s.heavy ? 0.3 : 0.12, big ? 0.5 : 0.35, big ? 140 : 50);
     });
     events.on('player:hurt', () => input.rumble(0.6, 0.5, 180));
+    events.on('player:jet', () => input.rumble(0.2, 0.3, 90));
+    fx.player = player; // jet flame follows the nozzle while thrusting
     events.on('blast', (b) => {
       const near = Math.max(0, 1 - b.point.distanceTo(player.pos) / (b.radius * 4));
       if (near > 0) input.rumble(near, near * 0.6, 260);

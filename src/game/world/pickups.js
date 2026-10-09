@@ -1,25 +1,29 @@
 import * as THREE from 'three';
 
 // Ammo pickups ("thermal clips"): fixed crates that respawn, plus clips dropped by destroyed puppets.
-// Walk over one to collect it. Full reserve = not collected. Emits 'pickup:collected' / 'pickup:full'.
+// Two ammo classes (guns.js `ammo`): light (cyan: AR, MG, BR, pistol) and heavy (orange: SR, RG). A pickup only
+// refills its own class. Walk over one to collect it; every gun of the class full = not collected.
+// Emits 'pickup:collected' / 'pickup:full'.
 const TUNING = {
   dropChance: 0.45,
+  heavyDropChance: 0.25, // share of drops that are heavy ammo
   dropLife: 25,
   respawn: 15,
   radius: 1.1,
 };
 
+// [x, y, z, type]: 7 light, 3 heavy, spread around the map
 const SPOTS = [
-  [6, 0, 34],
-  [-24, 0, 2.5],
-  [26, 0, 2.5],
-  [-40, 1.6, 4],
-  [44, 0, 34],
-  [0, 0, -24],
-  [-20, 0, -34],
-  [20, 0, -58],
-  [28, 0, -17], // boss arena: at the gate and at the back
-  [47, 0, -60],
+  [6, 0, 34, 'light'],
+  [-24, 0, 2.5, 'light'],
+  [26, 0, 2.5, 'heavy'], // range
+  [-40, 1.6, 4, 'light'],
+  [44, 0, 34, 'light'],
+  [0, 0, -24, 'light'],
+  [-20, 0, -34, 'heavy'], // interior
+  [20, 0, -58, 'light'],
+  [28, 0, -17, 'light'], // boss arena: at the gate and at the back
+  [47, 0, -60, 'heavy'],
 ];
 
 export class Pickups {
@@ -32,29 +36,44 @@ export class Pickups {
     this.fullCooldown = 0;
 
     const caseMat = new THREE.MeshStandardMaterial({ color: 0x2a2e35, metalness: 0.6, roughness: 0.4 });
-    const glowMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x38d8ff, emissiveIntensity: 3 });
-    this.makeModel = (scale) => {
+    const hex = { light: 0x38d8ff, heavy: 0xffa11c };
+    const looks = {
+      light: { glow: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: hex.light, emissiveIntensity: 3 }), body: [0.34, 0.2, 0.22], band: [0.36, 0.05, 0.24], bandY: [0] },
+      // heavy: taller, chunkier case with two bands
+      heavy: { glow: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: hex.heavy, emissiveIntensity: 4 }), body: [0.3, 0.34, 0.3], band: [0.33, 0.05, 0.33], bandY: [-0.08, 0.08] },
+    };
+    for (const l of Object.values(looks)) {
+      l.bodyGeo = new THREE.BoxGeometry(...l.body);
+      l.bandGeo = new THREE.BoxGeometry(...l.band);
+    }
+    this.makeModel = (scale, type) => {
+      const l = looks[type];
       const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.2, 0.22), caseMat);
-      const band = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.05, 0.24), glowMat);
+      const body = new THREE.Mesh(l.bodyGeo, caseMat);
       body.castShadow = true;
-      g.add(body, band);
+      g.add(body);
+      for (const y of l.bandY) {
+        const band = new THREE.Mesh(l.bandGeo, l.glow);
+        band.position.y = y;
+        g.add(band);
+      }
       g.scale.setScalar(scale);
       return g;
     };
     this.ringGeo = new THREE.RingGeometry(0.45, 0.55, 32).rotateX(-Math.PI / 2);
-    this.ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x38d8ff).multiplyScalar(2), transparent: true, opacity: 0.5, depthWrite: false });
+    const ringMat = (c) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(2), transparent: true, opacity: 0.5, depthWrite: false });
+    this.ringMats = { light: ringMat(hex.light), heavy: ringMat(hex.heavy) };
 
-    for (const p of SPOTS) this.#spawn(new THREE.Vector3(...p), { crate: true });
+    for (const [x, y, z, type] of SPOTS) this.#spawn(new THREE.Vector3(x, y, z), { crate: true, type });
   }
 
-  #spawn(pos, { crate }) {
-    const model = this.makeModel(crate ? 1.3 : 0.9);
-    const ring = new THREE.Mesh(this.ringGeo, this.ringMat);
+  #spawn(pos, { crate, type }) {
+    const model = this.makeModel(crate ? 1.3 : 0.9, type);
+    const ring = new THREE.Mesh(this.ringGeo, this.ringMats[type]);
     ring.position.copy(pos).y += 0.02;
     model.position.copy(pos);
     this.scene.add(model, ring);
-    const item = { pos: pos.clone(), model, ring, crate, active: true, timer: 0, phase: Math.random() * 6 };
+    const item = { pos: pos.clone(), model, ring, crate, type, active: true, timer: 0, phase: Math.random() * 6 };
     this.items.push(item);
     return item;
   }
@@ -62,7 +81,7 @@ export class Pickups {
   // a broken puppet may leave a clip behind
   drop(pos) {
     if (Math.random() > this.t.dropChance) return;
-    const item = this.#spawn(new THREE.Vector3(pos.x, pos.y, pos.z), { crate: false });
+    const item = this.#spawn(new THREE.Vector3(pos.x, pos.y, pos.z), { crate: false, type: Math.random() < this.t.heavyDropChance ? 'heavy' : 'light' });
     item.timer = this.t.dropLife;
   }
 
@@ -95,7 +114,7 @@ export class Pickups {
       const dx = player.pos.x - it.pos.x;
       const dz = player.pos.z - it.pos.z;
       if (dx * dx + dz * dz > this.t.radius ** 2 || Math.abs(player.pos.y - it.pos.y) > 1.2) continue;
-      const got = weapon.addAmmo(it.crate ? 'crate' : 'drop');
+      const got = weapon.addAmmo(it.crate ? 'crate' : 'drop', it.type);
       if (!got) {
         if (this.fullCooldown <= 0) this.events.emit('pickup:full');
         this.fullCooldown = 1.4;

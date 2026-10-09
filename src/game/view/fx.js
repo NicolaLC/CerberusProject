@@ -14,6 +14,10 @@ const MAX_SPARKS = 256;
 const MAX_CASINGS = 64;
 const _c = new THREE.Color();
 const _o = new THREE.Object3D();
+const _nz = new THREE.Vector3();
+const _jd = new THREE.Vector3();
+// Jetpack exhaust (see instructions/feel.md)
+const JET = { flame: 2, flameLife: 0.13, coreLife: 0.09, speed: 7, size: 0.38, smokeEvery: 0.045, up: 1.2, back: 0.25, dust: 5 };
 
 export class FX {
   constructor(scene, camera, world) {
@@ -44,6 +48,11 @@ export class FX {
     this.flash.visible = false;
     scene.add(this.flash);
     this.flashTime = 0;
+    this.player = null; // optional (set by game.js): lets the jet flame follow the nozzle while thrusting
+    this.jetT = 0;
+    this.jetSmoke = 0;
+    this.jetPoint = new THREE.Vector3();
+    this.jetDir = new THREE.Vector3(0, -1, 0);
 
     // Pools keyed by kind. Objects stay in the scene and are hidden when idle (no add/remove churn).
     const hidden = (obj) => {
@@ -52,7 +61,14 @@ export class FX {
       return obj;
     };
     const ringMat = new THREE.MeshBasicMaterial({ color: HDR(0x6fe3ff, 3), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const flameMat = (hex, k) => new THREE.SpriteMaterial({ map: this.smokeMat.map, color: HDR(hex, k), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+    const flameOrange = flameMat(0xff7a1c, 4);
+    const flameBlue = flameMat(0x58b4ff, 5);
+    const dustRingMat = new THREE.MeshBasicMaterial({ color: 0xc9b894, transparent: true, depthWrite: false, side: THREE.DoubleSide });
     this.pools = {
+      flame: new Pool(() => hidden(new THREE.Sprite(flameOrange.clone()))),
+      core: new Pool(() => hidden(new THREE.Sprite(flameBlue.clone()))),
+      dust: new Pool(() => hidden(new THREE.Mesh(this.ringGeo, dustRingMat.clone()))),
       spark: new Pool(() => Object.assign(new THREE.Object3D(), { color: new THREE.Color() })),
       smoke: new Pool(() => hidden(new THREE.Sprite(this.smokeMat.clone()))),
       tracer: new Pool(() => hidden(new THREE.Mesh(this.tracerGeo, this.tracerMat.clone()))),
@@ -68,6 +84,9 @@ export class FX {
     this.particlePool = new Pool(() => ({ vel: new THREE.Vector3(), spin: new THREE.Vector3() }));
     this.pools.spark.warm(64);
     this.pools.smoke.warm(16);
+    this.pools.flame.warm(10);
+    this.pools.core.warm(6);
+    this.pools.dust.warm(2);
     this.pools.tracer.warm(16);
     this.pools.casing.warm(24);
     this.decalNext = 0;
@@ -118,7 +137,65 @@ export class FX {
       for (let i = 0; i < 3; i++) this.impact(b.point, up, i ? 0xff6a2a : 0xff2bd6, 40, false);
       this.shockwave(b.point);
     });
+    // jetpack take-off: remember the nozzle, exhaust runs from update() while it lasts
+    events.on('player:jet', (j) => {
+      if (j?.point) this.jetPoint.copy(j.point);
+      if (j?.dir) this.jetDir.copy(j.dir);
+      this.jetT = 0.22;
+      this.jetSmoke = 0;
+      this.jetDust(this.jetPoint);
+    });
     return this;
+  }
+
+  // Dust ring + puffs on the ground under the nozzle at take-off.
+  jetDust(from) {
+    const gy = this.world.groundAt(from.x, from.z, from.y + 0.3) + 0.03;
+    const r = this.pools.dust.acquire();
+    r.position.set(from.x, gy, from.z);
+    r.rotation.set(-Math.PI / 2, 0, 0);
+    r.scale.setScalar(0.35);
+    r.material.opacity = 0.5;
+    this.#add('dust', r, 0.4, { grow: 4.5, fadeMat: true });
+    for (let i = 0; i < JET.dust; i++) {
+      const a = (i / JET.dust) * Math.PI * 2 + Math.random();
+      const s = this.pools.smoke.acquire();
+      s.position.set(from.x, gy + 0.08, from.z);
+      s.scale.setScalar(0.3);
+      s.material.opacity = 0.35;
+      this.#add('smoke', s, 0.55, { vel: _v.set(Math.cos(a) * 1.8, 0.25, Math.sin(a) * 1.8), grow: 1.5, fade: 0.35 });
+    }
+  }
+
+  // One frame of exhaust: flickering orange flames with a blue core, plus occasional smoke.
+  jetFlame(dt) {
+    const pl = this.player;
+    if (pl && pl.jetting > 0 && pl.pos && pl.facing !== undefined) {
+      const f = pl.facing;
+      _nz.set(pl.pos.x - Math.sin(f) * JET.back, pl.pos.y + JET.up, pl.pos.z - Math.cos(f) * JET.back);
+    } else _nz.copy(this.jetPoint);
+    _jd.copy(this.jetDir);
+    for (let i = 0; i < JET.flame; i++) {
+      const big = i === 0;
+      const m = (big ? this.pools.flame : this.pools.core).acquire();
+      m.position.copy(_nz).addScaledVector(_jd, Math.random() * 0.08);
+      const sz = JET.size * (big ? 1 : 0.55) * (0.75 + Math.random() * 0.5);
+      m.scale.setScalar(sz);
+      m.material.opacity = 1;
+      _v.copy(_jd).multiplyScalar(JET.speed * (0.7 + Math.random() * 0.6));
+      _v.x += (Math.random() - 0.5) * 0.8;
+      _v.z += (Math.random() - 0.5) * 0.8;
+      this.#add(big ? 'flame' : 'core', m, big ? JET.flameLife : JET.coreLife, { vel: _v, grow: -2.2, fadeMat: true });
+    }
+    this.jetSmoke -= dt;
+    if (this.jetSmoke <= 0) {
+      this.jetSmoke = JET.smokeEvery;
+      const s = this.pools.smoke.acquire();
+      s.position.copy(_nz).addScaledVector(_jd, 0.25);
+      s.scale.setScalar(0.18);
+      s.material.opacity = 0.3;
+      this.#add('smoke', s, 0.5, { vel: _v.copy(_jd).multiplyScalar(1.5).setX(_v.x + (Math.random() - 0.5) * 0.6), grow: 1.6, fade: 0.3 });
+    }
   }
 
   // Starts a particle from a pooled object. opts: vel, gravity, stretch, spin, bounce, grow, fade (max opacity), fadeMat.
@@ -232,6 +309,12 @@ export class FX {
   }
 
   update(dt) {
+    if (this.jetT > 0) {
+      this.jetT -= dt;
+      this.jetFlame(dt);
+    } else if (this.player?.jetting > 0 && this.player.jetting !== undefined) {
+      this.jetT = this.player.jetting; // thrust started without the event (older emitters)
+    }
     if (this.flashTime > 0) {
       this.flashTime -= dt;
       if (this.flashTime <= 0) {
