@@ -75,7 +75,7 @@ export class StatsPanel {
     this.el.style.display = v ? 'block' : 'none';
   }
 
-  update(dt, perf, renderer, systemsMs, backend = '') {
+  update(dt, perf, renderer, systemsMs) {
     if (!this.visible) return;
     this.acc += dt;
     if (this.acc < 0.25) return;
@@ -86,6 +86,6 @@ export class StatsPanel {
       .slice(0, 4)
       .map(([k, v]) => `${k} ${v.toFixed(2)}`)
       .join(' · ');
-    this.el.textContent = `${perf.fps.toFixed(0)} fps · ${perf.avg.toFixed(1)} ms · res ${Math.round(perf.scale * 100)}% · ${backend} · ${info.drawCalls} draws · ${(info.triangles / 1000).toFixed(0)}k tris\n${top}`;
+    this.el.textContent = `${perf.fps.toFixed(0)} fps · ${perf.avg.toFixed(1)} ms · res ${Math.round(perf.scale * 100)}% · ${info.calls} draws · ${(info.triangles / 1000).toFixed(0)}k tris\n${top}`;
   }
 }

@@ -71,3 +71,16 @@ repeats every caster). Budget: ≤ 140 calls per frame at the spawn view, ≤ 25
 ## Input
 - `Input` stores raw codes: `KeyW`, `ShiftLeft`, `Mouse0` (left), `Mouse2` (right), wheel deltas and notches.
 - `Actions` maps names to codes; the game's table is `BINDINGS` in `game/controls.js`.
+
+## Renderer: WebGL 2 (WebGPU evaluated 2026-10, not shipped)
+A full port to three.js `WebGPURenderer` (auto WebGPU, WebGL 2 fallback) is in history: commit `222ce04`
+(TSL post stack and sky, node LOD material, shadow-only meshes via `renderer.setRenderObjectFunction`, engine
+driven by `renderer.setAnimationLoop` with `nodeFrame.update()` in `step()`). All suites passed on both
+backends, visuals matched. Measured with `tests/bench.browser.mjs` (JS ms per frame, light view):
+classic WebGLRenderer 4.0, WebGPU 5.8-6.2, WebGPURenderer's WebGL 2 fallback 6.9. No gain for this
+content (≈125 draws, no compute), and the fallback (Linux Electron, older browsers) is slower than today.
+Revive it when GPU compute pays: GPU particles / debris, many dynamic lights, GPU-driven culling.
+Gotchas found: three's WebGPU build must be the only three instance (alias `three` → `three/webgpu`);
+`<canvas id="game">` makes `window.game` truthy before the game exists (tests wait for `window.game?.engine`);
+headless WebGPU needs `--enable-unsafe-webgpu --enable-features=Vulkan --use-vulkan=swiftshader
+--use-webgpu-adapter=swiftshader` and a secure origin (localhost); WebGPU MSAA is 1 or 4 samples only.

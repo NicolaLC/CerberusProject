@@ -5,7 +5,7 @@ import { setAnisotropy } from '../world/textures.js';
 export const QUALITY = {
   low: { label: 'Low', scale: 1, msaa: 0, bloom: false, shadow: 2048, aniso: 4 },
   high: { label: 'High', scale: 2, msaa: 4, bloom: true, shadow: 4096, aniso: 8 },
-  ultra: { label: 'Ultra', scale: 2, superSample: 1.5, msaa: 8, /* WebGPU: 4 */ bloom: true, shadow: 4096, aniso: 16 },
+  ultra: { label: 'Ultra', scale: 2, superSample: 1.5, msaa: 8, bloom: true, shadow: 4096, aniso: 16 },
 };
 
 export function applyQuality(name, { engine, post, world }) {
@@ -14,8 +14,13 @@ export function applyQuality(name, { engine, post, world }) {
   perf.maxScale = Math.min(devicePixelRatio * (q.superSample ?? 1), q.scale);
   perf.scale = perf.maxScale; // restart from the top; the scaler steps down again if frames run long
   post.setQuality(q);
-  setAnisotropy(Math.min(q.aniso, renderer.getMaxAnisotropy()));
-  world.sun.shadow.mapSize.set(q.shadow, q.shadow); // the shadow node resizes its map on the next shadow pass
+  setAnisotropy(Math.min(q.aniso, renderer.capabilities.getMaxAnisotropy()));
+  const sun = world.sun;
+  if (sun.shadow.mapSize.x !== q.shadow) {
+    sun.shadow.mapSize.set(q.shadow, q.shadow);
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null; // reallocated at the new size on the next shadow pass
+  }
   engine.resize();
   return q;
 }
