@@ -465,6 +465,7 @@ export class Player {
     const slide = depth > VAULT.hopDepth;
     to.y = this.world.groundAt(to.x, to.z, this.pos.y + this.t.stepHeight);
     this.cover = null;
+    this.crouched = false; // leaving low cover: the crouch would sink the hips into the block on top of the vault pose
     this.snap = slide
       ? { from: this.pos.clone(), to, toY: to.y, t: 0, dur: VAULT.slideTime + depth / VAULT.slideSpeed, hop: b.max.y - this.pos.y + 0.08, vault: 'slide', yaw: Math.atan2(-normal.x, -normal.z) }
       : { from: this.pos.clone(), to, toY: to.y, t: 0, dur: VAULT.hopTime, hop: b.max.y - this.pos.y + 0.3, vault: 'hop', yaw: Math.atan2(-normal.x, -normal.z) };
