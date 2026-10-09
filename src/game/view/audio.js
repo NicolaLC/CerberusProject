@@ -19,6 +19,8 @@ export class Audio {
     events.on('weapon:reload', (kind) => (kind === 'perfect' ? this.perfect() : kind === 'jam' ? this.jam() : this.click()));
     events.on('puppet:down', () => this.thud());
     events.on('player:hurt', () => this.thud());
+    events.on('player:jet', () => this.jet());
+    events.on('player:land', () => this.land());
     events.on('bolt:fired', () => this.zap(0.12));
     events.on('blast', (b) => this.boom(Math.min(1.2, 0.4 + b.radius / 6)));
     events.on('boss:leg', () => this.boom(0.8));
@@ -327,6 +329,51 @@ export class Audio {
     n.connect(f);
     this.#env(f, 0.8, 0.25);
     n.start(t, 0, 0.3);
+  }
+
+  // Jetpack burst: fast-attack bandpassed noise whoosh (sweeping down, ~0.35 s) plus a low thump.
+  jet() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const n = this.ctx.createBufferSource();
+    n.buffer = this.noise;
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.Q.value = 0.9;
+    f.frequency.setValueAtTime(1400 + Math.random() * 200, t);
+    f.frequency.exponentialRampToValueAtTime(420, t + 0.35);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(0.5, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+    n.connect(f).connect(g).connect(this.master);
+    n.start(t, 0, 0.4);
+    const o = this.ctx.createOscillator();
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + 0.18);
+    this.#env(o, 0.5, 0.22);
+    o.start(t);
+    o.stop(t + 0.24);
+  }
+
+  // Soft landing thud: low noise puff plus a short sub drop.
+  land() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const n = this.ctx.createBufferSource();
+    n.buffer = this.noise;
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 320;
+    n.connect(f);
+    this.#env(f, 0.45, 0.18);
+    n.start(t, 0, 0.2);
+    const o = this.ctx.createOscillator();
+    o.frequency.setValueAtTime(90, t);
+    o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
+    this.#env(o, 0.35, 0.15);
+    o.start(t);
+    o.stop(t + 0.16);
   }
 
   pickup() {
