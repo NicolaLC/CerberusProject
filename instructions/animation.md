@@ -25,6 +25,25 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
   RigidSkin batches it to one draw per material (keep to the 8 materials in `soldierMaterials`). The player rig is created with `dummy: false`; puppets keep the dummy.
 - Same contract as the dummy: each bone's group is its part, so `rig.setPart` swaps in a modeled piece.
 
+## Enemy looks (same style as the player)
+- Shared helpers in `parts.js` (`rb` rounded box, `cyl`, `cap`, `ring`, `group`; geometry cached by size), used by
+  `soldier.js` and every enemy. `look(...)` makes a visual-only group (`userData.noHit`).
+- Gameplay never depends on the look: humanoid enemies keep the rig's dummy boxes as invisible hitboxes (hit zones,
+  weak-spot placement), drone and spider keep their old boxes invisible (`HITBOX_MAT`); only weak parts (spider
+  knees and core) are drawn as their own hitbox. Looks are baked by RigidSkin like the player's parts.
+- `looks.js`: troopers (`buildTrooper`: gunmetal frame, slate armor, red faction plates, visor slit, power pack;
+  the visor material also lights the LEDs, so they flare with the aim telegraph) and puppets (`buildPuppet`:
+  crash-test mannequin in the kind's shell color, black hinge drums; chest front stays behind the bullseye at
+  z 0.155). Keep limb fronts near the dummy boxes' front faces: weak spots are placed there.
+- `drone.js`: armored pod, orange spine plate, lens cluster (eye material), slung cannon, core in a housing
+  underneath, ducted rotors (blades on the spinning rotor bones). `spider.js`: hull in pieces, hazard chevrons,
+  skirts with hip drums, turret with spider-eye cluster, twin barrels, mortar tube; legs with rams, shin guards,
+  foot pads. Leg bones twist arbitrarily (IK), so leg looks stay round-ish.
+- Death debris: `debrisCopy(piece)` merges the baked proxies of each piece on a bone (one chunk per look group,
+  weak spot or gun, one mesh per material); `disposeDebris` frees it. Split a look into several groups if it
+  should break into more chunks.
+- Each enemy owns its materials (hit flash is per enemy): keep to 3-4 look materials plus the glow.
+
 ## Dummy parts (pivots for modeled parts)
 - `rig.buildDummy(materials)` puts one placeholder box per bone (`DUMMY` table), material slots `body` / `plate`.
   Each dummy mesh stores its box size in `userData.size`.

@@ -22,9 +22,10 @@ src/
     controls.js           BINDINGS table + intents (move, look, aiming, running, firing, slots...)
     settings.js           player settings + start-panel bindings
     world/  world.js (level boxes, colliders, cover, sky, lights), textures.js, pickups.js
-    actors/ rig.js (skeleton, animator, IK), soldier.js (player model), player.js,
+    actors/ rig.js (skeleton, animator, IK), parts.js (model building blocks, debris), soldier.js (player model),
+            looks.js (trooper / puppet models), player.js,
             enemy.js (shared enemy body: hit zones, weak spots, flash, debris death),
-            puppet.js (training puppets), trooper.js (cover-using soldiers),
+            puppet.js (training puppets), trooper.js (cover-using soldiers), drone.js, spider.js (miniboss),
             enemies.js (system: spawn list, bolts, stands, target cache, squad alerts)
     ai/     cover.js (cover spots from cover boxes, protection test, spot choice + detour route)
     combat/ guns.js (gun table), weapon.js (controller, hitscan, aim probe), ballistics.js (pure shot math)
