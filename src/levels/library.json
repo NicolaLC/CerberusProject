@@ -1,5 +1,7 @@
 {
   "name": "library",
+  "title": "LIBRARY",
+  "demo": true,
   "spawn": { "pos": [0, 0, 34], "yaw": 3.141592653589793 },
   "interiorZones": [],
   "pieces": [

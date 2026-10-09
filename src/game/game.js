@@ -203,6 +203,7 @@ export class Game {
     if (this.sceneName) this.#unloadLevel();
     this.sceneName = key;
     this.level = level;
+    if (this.picker) this.picker.value = key;
     world.load(level, this.registry);
     enemies.load(level);
     pickups.load(level);
@@ -210,7 +211,7 @@ export class Game {
     camRig.reset(player.facing);
     weapon.reset();
     fx.reset();
-    hud.reset();
+    hud.reset(level);
     juice.reset();
     this.helpers = enemies.puppets.filter((p) => p.rig).map((p) => this.#helper(p.rig));
     return this;
@@ -253,6 +254,17 @@ export class Game {
     document.getElementById('start').addEventListener('click', () => {
       audio.init();
       input.lock();
+    });
+    // scene picker (start / pause panel): switches at once and keeps ?scene= in the URL so a reload stays there
+    const picker = (this.picker = document.getElementById('scene'));
+    for (const [key, level] of Object.entries(SCENES)) picker.add(new Option(level.title ?? key, key));
+    picker.value = this.sceneName;
+    picker.addEventListener('change', () => {
+      this.loadScene(picker.value);
+      const url = new URL(location.href);
+      url.searchParams.set('scene', this.sceneName);
+      history.replaceState(null, '', url);
+      picker.blur(); // keys go back to the game
     });
     // desktop build (desktop/preload.cjs): quit button in the panel
     const desktop = window.cerberusDesktop;

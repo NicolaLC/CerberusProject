@@ -40,7 +40,8 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 - `tests/gamepad.browser.mjs`: controller with a simulated standard gamepad (`navigator.getGamepads` replaced
   by an init script; set `window.__pad.axes` / `.buttons`).
 - `tests/scenes.browser.mjs`: every scene opens via `?scene=`; arena → gym → library → workshop → arena for 3 cycles in one page:
-  player at the spawn, enemy / pickup counts match the level file, boss bar / lock-on / kills / weapon reset, no console errors, and no leaks
+  player at the spawn, enemy / pickup counts match the level file, boss bar / lock-on / kills / weapon reset, HUD zone title per scene, the Library's demo enemies
+  never fire or wake (10 s in range), the panel's scene picker, no console errors, and no leaks
   (`renderer.info.memory.geometries` / `textures` and scene object count identical after every cycle, exact, no tolerance).
   This suite RENDERS (info.memory counts uploads) and, before each reading, draws once with culling off and both LOD variants,
   because three uploads lazily and the counts would otherwise follow what the camera happens to see.

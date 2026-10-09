@@ -1,5 +1,6 @@
 {
   "name": "arena",
+  "title": "TRAINING YARD",
   "spawn": { "pos": [0, 0, 38], "yaw": 3.141592653589793 },
   "interiorZones": [{"min":[-24,0,-62],"max":[24,7,-30.3]}],
   "pieces": [

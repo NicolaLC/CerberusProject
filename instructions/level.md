@@ -4,11 +4,14 @@
 Plain JSON (an editor can write it), imported by `scenes.js`, validated by `Registry.check`. Layout, enemies and
 pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 ```
-{ name, spawn: { pos, yaw }, interiorZones: [{ min, max }],
+{ name, title, demo?, spawn: { pos, yaw }, interiorZones: [{ min, max }],
   pieces: [ { id, pos: [x, y, z], yaw?, params?, name? }, ... ] }
 ```
 - `pieces` is one ordered list; each system builds the ones it owns, in file order. Order matters: boxes are merged
   per material in file order (draw calls, `render.browser.mjs`), enemies fill stands in order.
+- `title`: shown in the HUD zone label (outdoors; indoors it reads INTERIOR) and in the panel's scene picker.
+- `demo: true` (Library): enemies are exhibits: they idle and take hits but never wake, aim, fire or flank
+  (`Enemies` hands them a view of the player that reads `dead`).
 - `spawn.yaw` is the player's initial facing (3.14159 = north, -Z). The boss arena bounds are data of `boss.spider`.
 - Add a piece: append `{ "id": ..., "pos": [...], "params": {...} }`. Add a new kind: put a builder in the owning
   module's table (`WORLD_PIECES` / `ENEMY_PIECES` / `PICKUP_PIECES`) and document the id here. Never rename an id.
@@ -33,12 +36,13 @@ Interior zones (camera exposure) are `interiorZones` boxes, not pieces. Dropped 
 |---|---|---|
 | `arena` | `arena.json` | the training arena, default; no `?scene` = this |
 | `gym` | `gym.json` | placeholder: floor, low / high / wall cover, two ammo crates (real content: Gym epic #58) |
-| `library` | `library.json` | placeholder: one of each enemy kind standing in a row, far from the spawn (Library epic #59) |
+| `library` | `library.json` | placeholder, `demo`: one of each enemy kind in a row as harmless exhibits (Library epic #59) |
 | `workshop` | `workshop.json` | placeholder: floor and three cover boxes (Workshop epic #60) |
 
+- Players pick a scene in the start / pause panel (Scene list; it also sets `?scene=` so a reload stays there).
 - `?scene=<name>` (works with `?debug`) opens one; unknown → arena + `console.warn`. At runtime: `game.loadScene('gym')`
   (`window.game` exists with `?debug`). Switching frees the old level completely (architecture.md, Scenes).
-- Add a scene: write `src/levels/<name>.json` (spawn, `interiorZones` (may be `[]`), pieces), import it and list it in
+- Add a scene: write `src/levels/<name>.json` (title, spawn, `interiorZones` (may be `[]`), pieces), import it and list it in
   `SCENES` in `scenes.js`. Nothing else: `scenes.browser.mjs` loads every listed scene via `?scene=` (add it to its `SCENES` list too
   if you want it in the switching cycles).
 

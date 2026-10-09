@@ -1,5 +1,6 @@
 {
   "name": "workshop",
+  "title": "WORKSHOP",
   "spawn": { "pos": [0, 0, 12], "yaw": 3.141592653589793 },
   "interiorZones": [],
   "pieces": [
