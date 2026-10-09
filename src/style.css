@@ -1,8 +1,9 @@
-/* Fonts: Direction (main) and Space Nova (numbers), personal-use demo licences, under evaluation: see credits.md
-   and before-shipping.md. A glyph missing from a demo font falls back to the next family in the stack. */
-@font-face { font-family: 'Direction'; src: url('./fonts/direction.otf') format('opentype'); font-display: swap; }
+/* Fonts: Chakra Petch (main, SIL OFL 1.1) and Space Nova (numbers, personal-use demo licence under evaluation):
+   see credits.md and before-shipping.md. A glyph missing from a font falls back to the next family in the stack. */
+@font-face { font-family: 'Chakra Petch'; src: url('./fonts/chakra-petch-500.woff2') format('woff2'); font-weight: 100 500; font-display: swap; }
+@font-face { font-family: 'Chakra Petch'; src: url('./fonts/chakra-petch-700.woff2') format('woff2'); font-weight: 600 900; font-display: swap; }
 @font-face { font-family: 'Space Nova'; src: url('./fonts/space-nova.otf') format('opentype'); font-display: swap; }
-:root { --font-main: 'Direction', 'Segoe UI', system-ui, sans-serif; --font-num: 'Space Nova', 'Direction', 'Segoe UI', system-ui, sans-serif; }
+:root { --font-main: 'Chakra Petch', 'Segoe UI', system-ui, sans-serif; --font-num: 'Space Nova', 'Chakra Petch', 'Segoe UI', system-ui, sans-serif; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: var(--font-main); color: #e8f4ff; user-select: none; }
 #game { display: block; width: 100%; height: 100%; }
