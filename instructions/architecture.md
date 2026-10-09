@@ -69,7 +69,9 @@ Payload objects marked * are reused: copy what you keep.
 | `player:vault` | 'hop' \| 'slide' | – |
 | `puppet:down` | puppet | pickups (drop), audio |
 | `bolt:fired` / `bolt:impact` | position / *{ point, normal } | audio / fx |
-| `pickup:collected` / `pickup:full` | label / – | hud toast, audio |
+| `pickup:collected` / `pickup:full` | label ('LIGHT AMMO +n AR ...') / – (all guns of the class full) | hud toast, audio |
+| `weapon:charge` | true (railgun charge started) / false (cancelled) | audio (the HUD ring reads `weapon.charging`) |
+| `trooper:flank` | trooper | – (tests; no HUD message) |
 | `engine:resize` | { width, height, pixelRatio } | post |
 | `engine:systemFailed` | { name, error } | hud toast |
 

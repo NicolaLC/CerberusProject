@@ -15,6 +15,7 @@ export const GUNS = {
     reserve: 192,
     maxReserve: 384,
     pickup: { crate: 96, drop: 32 },
+    ammo: 'light', // pickup class: light (AR, MG, BR, PS) or heavy (SR, RG)
     reloadTime: 1.8,
     activeReload: { good: [0.32, 0.58], perfect: [0.4, 0.48] }, // fractions of the reload bar
     damage: 18,
@@ -65,6 +66,7 @@ export const GUNS = {
     reserve: 270,
     maxReserve: 450,
     pickup: { crate: 135, drop: 45 },
+    ammo: 'light', // pickup class: light (AR, MG, BR, PS) or heavy (SR, RG)
     reloadTime: 3.0,
     activeReload: { good: [0.42, 0.62], perfect: [0.5, 0.555] },
     damage: 13,
@@ -121,6 +123,7 @@ export const GUNS = {
     reserve: 25,
     maxReserve: 40,
     pickup: { crate: 10, drop: 3 },
+    ammo: 'heavy', // pickup class: light (AR, MG, BR, PS) or heavy (SR, RG)
     reloadTime: 2.4,
     activeReload: { good: [0.36, 0.56], perfect: [0.43, 0.49] },
     damage: 110,
@@ -180,6 +183,7 @@ export const GUNS = {
     reserve: 144,
     maxReserve: 288,
     pickup: { crate: 72, drop: 24 },
+    ammo: 'light', // pickup class: light (AR, MG, BR, PS) or heavy (SR, RG)
     reloadTime: 1.9,
     activeReload: { good: [0.34, 0.58], perfect: [0.42, 0.5] },
     damage: 24,
@@ -227,19 +231,20 @@ export const GUNS = {
     },
   },
   // Railgun: the shot charges for a moment after the pull (let go and it still fires), then a slug crosses
-  // the whole line, piercing every enemy on it until it meets a wall or armor. Light zoom, no scope.
+  // the whole line, hitting every enemy on it until it meets a wall or armor. Light zoom, no scope.
   rail: {
     name: 'ARC-9 TEMPEST',
     short: 'RG',
     semi: true,
     charge: 0.45, // s from the pull to the shot
-    pierce: 4, // enemies one slug can pass through
+    pierce: true, // the slug passes through every enemy on its line (once each); stops at walls and armor
     rpm: 55,
     spinUp: 0,
     mag: 4,
     reserve: 16,
     maxReserve: 24,
     pickup: { crate: 8, drop: 2 },
+    ammo: 'heavy', // pickup class: light (AR, MG, BR, PS) or heavy (SR, RG)
     reloadTime: 2.6,
     activeReload: { good: [0.38, 0.58], perfect: [0.45, 0.51] },
     damage: 100, // a body shot destroys a puppet; a headshot drops a trooper
@@ -297,6 +302,7 @@ export const GUNS = {
     reserve: 72,
     maxReserve: 120,
     pickup: { crate: 36, drop: 12 },
+    ammo: 'light', // pickup class: light (AR, MG, BR, PS) or heavy (SR, RG)
     reloadTime: 1.2,
     activeReload: { good: [0.3, 0.6], perfect: [0.4, 0.5] },
     damage: 32,

@@ -32,10 +32,13 @@
 - Animator `air`: knees bent (0.5 rad), hips pitched forward, no foot locks / feet IK while it shows.
 
 ## Ammo
-- Pickups fill every gun at once (`pickup.crate` / `pickup.drop` per gun: AR 96/32, MG 135/45). Cases at fixed `SPOTS`
-  in `game/world/pickups.js` respawn after 15s.
-- Broken puppets drop a clip 45% of the time (vanishes after 25s, blinks at the end).
-- Walk within 1.1m to collect; a full reserve leaves it there ("AMMO FULL").
+- Two classes (`ammo` field per gun in `GUNS`): light = AR, MG, BR, pistol; heavy = SR, RG. A pickup refills only its own
+  class, each gun by its own `pickup.crate` / `pickup.drop` amounts (AR 96/32, MG 135/45, SR 10/3, RG 8/2...).
+  Light is the cyan glow (small case, one band), heavy the orange/amber glow (taller case, two bands, brighter).
+- Cases at fixed `SPOTS` in `game/world/pickups.js` (7 light, 3 heavy: range, interior west, boss arena back) respawn after 15s.
+- Broken puppets drop a clip 45% of the time (25% of drops are heavy; vanishes after 25s, blinks at the end).
+- Walk within 1.1m to collect; toast "LIGHT AMMO +n AR ..." / "HEAVY AMMO +n SR ...". If every gun of that class is
+  full the pickup stays ("AMMO FULL").
 
 ## Cover
 - Automatic: from free, grounded movement, pushing into a cover face snaps to it (`TUNING.autoCoverReach` 0.35 m beyond
@@ -89,8 +92,11 @@
   bursts (holding repeats), mag 24, 24 dmg, aim spread 0.0015, tiny bloom; the recoil pattern restarts every burst.
   A started burst finishes even if the trigger is released (`weapon.burstLeft`).
 - ARC-9 Tempest (RG, railgun): semi; a pull starts a 0.45 s `charge` (`weapon.charging`, event `weapon:charge`),
-  then the slug fires. `pierce: 4`: it passes through up to 4 enemies (each once) and stops at the first wall or
-  armored part. The slug follows the muzzle-to-crosshair line past the aim point. 100 dmg, mag 4, no falloff, light zoom without scope overlay (`zoom.scope` only on the sniper).
+  then the slug fires. A ring around the crosshair (`#charge`) fills over the charge and disappears when it fires or
+  cancels. `pierce: true` (Spartan-laser style): the slug hits EVERY enemy on its line (no limit, drones, puppets,
+  troopers, spider legs), each once, with the best zone (highest damage multiplier) the line crosses on that enemy,
+  and stops at the first wall, cover box or armored part (boss hull / turret / closed shutters: it can't reach the
+  core through the shell). The trail is drawn to where it stops. The slug follows the muzzle-to-crosshair line past the aim point. 100 dmg, mag 4, no falloff, light zoom without scope overlay (`zoom.scope` only on the sniper).
   `beam: true` draws a thick lingering trail. Charge cancels on reload/switch/sprint.
 - M-6 Paladin (PS, sidearm): semi, 330 rpm, mag 12, reload 1.2 s, 32 dmg, aim spread 0.002. Held out front.
 - Add a gun: new entry in `GUNS` (stats, sockets, `build()` model) and its id in `GUN_ORDER`.
@@ -174,4 +180,4 @@
     flanker, see the player from its firing position, and lie outside ~70° of the player's front: the
     direction their cover box faces (away from it) if in cover, else where they face. The trooper already
     most to the side goes first. Flankers sprint (5.4 m/s, up to 30 m) and open fire on arrival; the rest
-    keep the player pinned. HUD: "⚠ ENEMY FLANKING".
+    keep the player pinned.

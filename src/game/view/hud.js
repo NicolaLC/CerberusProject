@@ -9,6 +9,8 @@ const $ = (id) => document.getElementById(id);
 const LAST = new WeakMap();
 // the ammo counter turns red at this fraction of the gun's magazine (at least the last round)
 const LOW_AMMO = 0.25;
+// circumference of the charge ring's circle (r = 28 in index.html)
+const RING = 2 * Math.PI * 28;
 function changed(el, key, value) {
   let last = LAST.get(el);
   if (!last) LAST.set(el, (last = {}));
@@ -27,6 +29,8 @@ export class Hud {
   constructor() {
     this.el = {
       cross: $('crosshair'),
+      charge: $('charge'),
+      chargeArc: document.querySelector('#charge .arc'),
       hit: $('hitmarker'),
       ammo: $('ammo'),
       reserve: $('reserve'),
@@ -66,7 +70,6 @@ export class Hud {
     events.on('pickup:collected', (msg) => this.toast(msg));
     events.on('pickup:full', () => this.toast('AMMO FULL'));
     events.on('arena:clear', () => this.toast('ARENA CLEAR', 6));
-    events.on('trooper:flank', () => this.toast('⚠ ENEMY FLANKING', 2));
     events.on('boss:wake', (b) => this.toast(`⚠ ${b.name}`, 3));
     events.on('boss:down', () => this.toast('CORE EXPOSED', 2));
     events.on('boss:dead', () => this.toast('MECH DESTROYED', 3));
@@ -144,6 +147,14 @@ export class Hud {
     // scoped gun: the overlay follows the zoom; the crosshair dims while the bolt cycles
     css(e.scope, 'opacity', weapon.t.zoom?.scope ? weapon.aimBlend().toFixed(2) : 0);
     e.cross.classList.toggle('cycling', !!weapon.t.semi && weapon.cooldown > 0.05);
+
+    // railgun charge ring: fills over the charge time, gone once the slug leaves or the charge cancels
+    const charge = weapon.charging > 0 && weapon.t.charge ? 1 - weapon.charging / weapon.t.charge : 0;
+    css(e.charge, 'opacity', charge > 0 ? 1 : 0);
+    if (charge > 0) {
+      css(e.chargeArc, 'strokeDashoffset', (RING * (1 - charge)).toFixed(1));
+      e.charge.classList.toggle('full', charge > 0.9);
+    }
 
     this.hitTime -= dt;
     const hk = this.hitTime > 0 ? this.hitTime / this.hitMax : 0;

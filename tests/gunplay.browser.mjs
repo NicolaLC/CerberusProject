@@ -219,6 +219,135 @@ const result = await p.evaluate(() => {
   keys.delete('Mouse2');
   out.rail.pierce = { hits: railHits.length, a: A.alive, b: B.alive };
 
+  // --- railgun charge ring: visible mid-charge, filling, gone after the shot ---
+  weapon.state.rail.ammo = 4;
+  for (const e of enemies.puppets) e.alive = false;
+  enemies.dirty = true;
+  camRig.pitch = 0.3;
+  step(60);
+  const ring = document.getElementById('charge');
+  const ringArc = ring.querySelector('.arc');
+  const ringOp = () => +getComputedStyle(ring).opacity;
+  out.ring = { before: ringOp() };
+  press('Mouse0', 1);
+  step(10);
+  out.ring.mid = ringOp();
+  out.ring.midOffset = +ringArc.style.strokeDashoffset;
+  step(10);
+  out.ring.lateOffset = +ringArc.style.strokeDashoffset;
+  step(30);
+  out.ring.after = ringOp();
+  // a cancelled charge (sprint / switch) hides it too
+  step(40); press('Mouse0', 1); step(8);
+  out.ring.cancelMid = ringOp();
+  press('Digit1'); step(40);
+  out.ring.cancelled = ringOp();
+  press('Digit5'); step(40);
+
+  // --- railgun line: 6 targets in a row all hit by one slug; a wall in between stops it ---
+  const targets = enemies.puppets.filter((x) => x.kind === 'static' && x.debris.length === 0).slice(0, 6);
+  const V3 = player.pos.constructor;
+  const chestOf = (e) => e.rig.bones.Spine2.getWorldPosition(new V3());
+  const trackPoint = (at) => {
+    const c = camRig.camera.position;
+    camRig.yaw = Math.atan2(-(at.x - c.x), -(at.z - c.z));
+    camRig.pitch = Math.atan2(at.y - c.y, Math.hypot(at.x - c.x, at.z - c.z));
+  };
+  const revive = (e) => { e.alive = true; e.health = 100; e.rig.root.visible = true; };
+  player.pos.set(0, 0, 36);
+  camRig.yaw = 0;
+  step(30);
+  targets.forEach(revive);
+  targets[0].pos.set(0, 0, 30);
+  enemies.dirty = true;
+  keys.add('Mouse2');
+  for (let i = 0; i < 40; i++) { trackPoint(chestOf(targets[0])); step(); }
+  // put the rest on the muzzle -> chest line, 2.5 m apart, chests on the line (so each is hit on the torso)
+  const M = player.muzzle.getWorldPosition(new V3());
+  const C0 = chestOf(targets[0]);
+  const lineDir = C0.clone().sub(M).normalize();
+  const chestH = C0.y - targets[0].pos.y;
+  const L0 = C0.distanceTo(M);
+  const lineAt = (d) => M.clone().addScaledVector(lineDir, d);
+  targets.forEach((e, i) => {
+    if (i === 0) return;
+    const q = lineAt(L0 + i * 2.5);
+    e.pos.set(q.x, q.y - chestH, q.z);
+  });
+  step(5);
+  for (let i = 0; i < 20; i++) { trackPoint(chestOf(targets[0])); step(); }
+  const shoot = () => {
+    weapon.state.rail.ammo = 4;
+    weapon.cooldown = 0;
+    step(30);
+    let hits = 0;
+    let to = null;
+    const off1 = engine.events.on('weapon:hit', () => hits++);
+    const off2 = engine.events.on('weapon:shot', (s2) => { to = s2.to.clone(); });
+    press('Mouse0'); step(40);
+    off1(); off2();
+    return { hits, to };
+  };
+  const clear = shoot();
+  out.line = { n: targets.length, hits: clear.hits, alive: targets.filter((e) => e.alive).length, endZ: clear.to ? +clear.to.z.toFixed(1) : null };
+  // a wall between the 3rd and 4th target: only the first three are hit, the trail ends at the wall
+  targets.forEach(revive);
+  enemies.dirty = true;
+  const wp = lineAt(L0 + 2.5 * 2.5);
+  const wallMesh = g.world.box(wp.x, 0, wp.z, 8, 4, 0.4, g.world.meshes[0].material);
+  step(5);
+  const walled = shoot();
+  out.line.wall = { hits: walled.hits, alive: targets.filter((e) => e.alive).length, endDist: walled.to ? +walled.to.distanceTo(M).toFixed(1) : null, wallDist: +wp.distanceTo(M).toFixed(1) };
+  g.world.meshes.splice(g.world.meshes.indexOf(wallMesh), 1);
+  g.world.colliders.splice(g.world.colliders.indexOf(wallMesh.userData.collider), 1);
+  wallMesh.removeFromParent();
+  keys.delete('Mouse2');
+  for (const e of targets) e.alive = false;
+  enemies.dirty = true;
+  step(20);
+
+  // --- ammo classes: light pickups refill only light guns, heavy only heavy guns ---
+  const { pickups } = g;
+  const light = ['rifle', 'mg', 'burst', 'pistol'];
+  const heavy = ['sniper', 'rail'];
+  const setRes = (ids, v) => { for (const id of ids) weapon.state[id].reserve = v; };
+  const res = (ids) => ids.map((id) => weapon.state[id].reserve);
+  const full = (ids) => { for (const id of ids) weapon.state[id].reserve = 9999; };
+  const toasts = [];
+  engine.events.on('pickup:collected', (m) => toasts.push(m));
+  let fulls = 0;
+  engine.events.on('pickup:full', () => fulls++);
+  const itemAt = (x, z) => pickups.items.find((i) => i.pos.x === x && i.pos.z === z);
+  const stand = (x, z, y = 0) => { player.pos.set(x, y, z); step(3); };
+  out.ammo = {};
+  setRes([...light, ...heavy], 0);
+  stand(6, 34); // light crate
+  out.ammo.lightType = itemAt(6, 34).type;
+  out.ammo.lightGot = { light: res(light), heavy: res(heavy), active: itemAt(6, 34).active };
+  out.ammo.lightToast = toasts.at(-1);
+  stand(26, 2.5); // heavy crate
+  out.ammo.heavyType = itemAt(26, 2.5).type;
+  out.ammo.heavyGot = { light: res(light), heavy: res(heavy), active: itemAt(26, 2.5).active };
+  out.ammo.heavyToast = toasts.at(-1);
+  // all light guns full: a light crate stays and says so; the heavy guns are not touched
+  setRes(heavy, 0);
+  full(light);
+  stand(-24, 2.5);
+  step(3);
+  out.ammo.lightFull = { stays: itemAt(-24, 2.5).active, fulls, heavy: res(heavy) };
+  // heavy crate with full heavy guns but empty light guns: stays, light guns not touched
+  setRes(light, 0);
+  full(heavy);
+  player.pos.set(-30, 0, 34); // away from the clips the line shots dropped
+  step(100); // the "full" message has a cooldown
+  const f0 = fulls;
+  stand(-20, -34);
+  out.ammo.heavyFull = { type: itemAt(-20, -34).type, stays: itemAt(-20, -34).active, fulls: fulls - f0, light: res(light) };
+  out.ammo.counts = { light: pickups.items.filter((i) => i.crate && i.type === 'light').length, heavy: pickups.items.filter((i) => i.crate && i.type === 'heavy').length };
+  player.pos.set(-30, 0, 34);
+  step(3);
+  setRes([...light, ...heavy], 50);
+
   press('Digit6'); step(40);
   const p0 = weapon.ammo;
   press('Mouse0', 60); // held a second: still one round
@@ -254,6 +383,14 @@ expect('burst rifle: held trigger repeats bursts', result.burst.held === 6);
 expect('burst rifle aimed is precise', result.burst.aimSpread < 0.002);
 expect('railgun charges before the shot', result.rail.gun === 'rail' && result.rail.early === 0 && result.rail.fired === 1);
 expect('railgun slug pierces two enemies on one line', result.rail.pierce.hits === 2 && !result.rail.pierce.a && !result.rail.pierce.b);
+expect('charge ring: hidden before, visible and filling mid-charge, gone after the shot', result.ring.before === 0 && result.ring.mid === 1 && result.ring.lateOffset < result.ring.midOffset && result.ring.midOffset < 175 && result.ring.after === 0);
+expect('charge ring: gone when the charge is cancelled', result.ring.cancelMid === 1 && result.ring.cancelled === 0);
+expect('railgun: one slug hits all 6 targets on the line', result.line.n >= 6 && result.line.hits === 6 && result.line.alive === 0);
+expect('railgun: a wall stops the slug (only targets in front hit, trail ends at the wall)', result.line.wall.hits === 3 && result.line.wall.alive === result.line.n - 3 && Math.abs(result.line.wall.endDist - result.line.wall.wallDist) < 0.5);
+expect('ammo: crate spots are typed (7 light, 3 heavy)', result.ammo.counts.light === 7 && result.ammo.counts.heavy === 3);
+expect('ammo: light pickup refills light guns only', result.ammo.lightType === 'light' && result.ammo.lightGot.light.every((v) => v > 0) && result.ammo.lightGot.heavy.every((v) => v === 0) && !result.ammo.lightGot.active && /^LIGHT AMMO/.test(result.ammo.lightToast));
+expect('ammo: heavy pickup refills sniper and railgun only', result.ammo.heavyType === 'heavy' && result.ammo.heavyGot.heavy.every((v) => v > 0) && !result.ammo.heavyGot.active && /^HEAVY AMMO/.test(result.ammo.heavyToast));
+expect('ammo: full class leaves the pickup ("AMMO FULL"), other class untouched', result.ammo.lightFull.stays && result.ammo.lightFull.fulls === 1 && result.ammo.lightFull.heavy.every((v) => v === 0) && result.ammo.heavyFull.stays && result.ammo.heavyFull.fulls === 1 && result.ammo.heavyFull.light.every((v) => v === 0));
 expect('pistol is semi-auto', result.pistol.gun === 'pistol' && result.pistol.held === 1);
 expect('no page errors', errors.length === 0);
 if (errors.length) console.log(errors);
