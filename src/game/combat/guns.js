@@ -7,7 +7,7 @@ import { pattern } from './ballistics.js';
 // Grips must stay within arm reach: see instructions/animation.md.
 export const GUNS = {
   rifle: {
-    name: 'M-8 AVENGER',
+    name: 'KR-7 WARDEN',
     short: 'AR',
     rpm: 540,
     spinUp: 0, // seconds to reach full rpm
@@ -58,7 +58,7 @@ export const GUNS = {
     },
   },
   mg: {
-    name: 'M-76 REVENANT',
+    name: 'KM-90 BULWARK',
     short: 'MG',
     rpm: 780,
     spinUp: 0.4,
@@ -114,7 +114,7 @@ export const GUNS = {
   // Precision rifle: semi-auto (one round per click), a slow bolt cycle, pin-point when scoped,
   // poor from the hip. Body shot kills a puppet, headshot kills a trooper.
   sniper: {
-    name: 'M-29 LANCE',
+    name: 'KS-5 FARSIGHT',
     short: 'SR',
     semi: true,
     rpm: 70, // bolt cycle ~0.86 s
@@ -173,7 +173,7 @@ export const GUNS = {
   // Burst rifle: one pull = 3 rounds at a high cyclic rate, then a short pause (holding repeats bursts).
   // Tight cone and a small, mostly vertical kick: the mid-range precision gun.
   burst: {
-    name: 'M-15 VINDICATOR',
+    name: 'KB-3 TRIBUNE',
     short: 'BR',
     burst: 3,
     burstDelay: 0.3, // s between bursts
@@ -233,7 +233,7 @@ export const GUNS = {
   // Railgun: the shot charges for a moment after the pull (let go and it still fires), then a slug crosses
   // the whole line, hitting every enemy on it until it meets a wall or armor. Light zoom, no scope.
   rail: {
-    name: 'ARC-9 TEMPEST',
+    name: 'KX-9 HALBERD',
     short: 'RG',
     semi: true,
     charge: 0.45, // s from the pull to the shot
@@ -293,7 +293,7 @@ export const GUNS = {
   },
   // Sidearm: semi-auto, accurate, quick to reload. Held out in front with both hands.
   pistol: {
-    name: 'M-6 PALADIN',
+    name: 'KP-12 EMBER',
     short: 'PS',
     semi: true,
     rpm: 330,

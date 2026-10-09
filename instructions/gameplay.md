@@ -79,26 +79,26 @@
   outside = jam, +1s, and the bar disappears (nothing left to read: the reload just runs on). One try per reload. The magazine auto-reloads when it hits 0 (also after switching to an empty gun).
 - 1–6 (AR, MG, SR, BR burst, RG railgun, PS pistol) or mouse wheel switches (0.45s lower/raise, model swaps at the bottom). Ammo is tracked per gun.
 - The ammo counter turns red at 25% of the magazine or less (`LOW_AMMO` in hud.js, at least the last round): AR ≤ 8, MG ≤ 22, SR / RG ≤ 1, pistol ≤ 3.
-- M-8 Avenger (AR): 540 rpm, mag 32, reserve 192/384, reload 1.8s, 18 dmg, head ×2.5, weak ×3, limbs ×0.8.
+- KR-7 Warden (AR): 540 rpm, mag 32, reserve 192/384, reload 1.8s, 18 dmg, head ×2.5, weak ×3, limbs ×0.8.
   Spread hip 0.022 / aim 0.004 + bloom 0.007 per shot.
-- M-76 Revenant (MG): 780 rpm after a 0.4s spin-up (starts at 35%), mag 90, reserve 270/450, reload 3.0s,
+- KM-90 Bulwark (MG): 780 rpm after a 0.4s spin-up (starts at 35%), mag 90, reserve 270/450, reload 3.0s,
   13 dmg, head ×2, weak ×3. Wider spread, more sideways recoil and shake; walking slows to 2.2 m/s while firing.
-- M-29 Lance (SR, precision): semi-auto (`semi: true`: one round per click; a click within 0.25 s before the bolt
+- KS-5 Farsight (SR, precision): semi-auto (`semi: true`: one round per click; a click within 0.25 s before the bolt
   is back is buffered), 70 rpm, mag 5, reserve 25/40, reload 2.4s, 110 dmg (no falloff), head ×3: body shot destroys
   a puppet, headshot a trooper. Aimed spread 0, hip 0.045, moving +0.03. One big kick per shot, 95% recovered after
   0.18 s (`recoil.hold`). Scope: `zoom` { fov 24, dist 1.5, sens ×0.45 } replaces the aim FOV/distance/sensitivity
   (CameraRig.zoom, set by Weapon on switch); a vignette overlay follows the zoom; the crosshair dims while cycling.
-- M-15 Vindicator (BR, precision mid-range): `burst: 3` rounds at 900 rpm per pull, `burstDelay` 0.3 s between
+- KB-3 Tribune (BR, precision mid-range): `burst: 3` rounds at 900 rpm per pull, `burstDelay` 0.3 s between
   bursts (holding repeats), mag 24, 24 dmg, aim spread 0.0015, tiny bloom; the recoil pattern restarts every burst.
   A started burst finishes even if the trigger is released (`weapon.burstLeft`).
-- ARC-9 Tempest (RG, railgun): semi; a pull starts a 0.45 s `charge` (`weapon.charging`, event `weapon:charge`),
+- KX-9 Halberd (RG, railgun): semi; a pull starts a 0.45 s `charge` (`weapon.charging`, event `weapon:charge`),
   then the slug fires. A ring around the crosshair (`#charge`) fills over the charge and disappears when it fires or
   cancels. `pierce: true` (Spartan-laser style): the slug hits EVERY enemy on its line (no limit, drones, puppets,
   troopers, spider legs), each once, with the best zone (highest damage multiplier) the line crosses on that enemy,
   and stops at the first wall, cover box or armored part (boss hull / turret / closed shutters: it can't reach the
   core through the shell). The trail is drawn to where it stops. The slug follows the muzzle-to-crosshair line past the aim point. 100 dmg, mag 4, no falloff, light zoom without scope overlay (`zoom.scope` only on the sniper).
   `beam: true` draws a thick lingering trail. Charge cancels on reload/switch/sprint.
-- M-6 Paladin (PS, sidearm): semi, 330 rpm, mag 12, reload 1.2 s, 32 dmg, aim spread 0.002. Held out front.
+- KP-12 Ember (PS, sidearm): semi, 330 rpm, mag 12, reload 1.2 s, 32 dmg, aim spread 0.002. Held out front.
 - Add a gun: new entry in `GUNS` (stats, sockets, `build()` model) and its id in `GUN_ORDER`.
 - Hit = camera ray (starts at player distance), then re-cast from muzzle; muzzle hit wins.
 
