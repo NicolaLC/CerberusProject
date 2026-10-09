@@ -141,8 +141,8 @@
 ## Spider mech miniboss (`game/actors/spider.js` TUNING, arena `ARENA`)
 - Six-legged walker in the north-east arena (x 25..49.5, z -61.5..-14.5). Dormant (crouched, eye dim) until the
   player enters the arena or comes within 28 m with line of sight, or shoots it. Boss bar: core health, leg pips.
-- Armor: the hull, turret and closed shutters take no damage (`armor()` returns 0: sparks + an "ARMORED" hint, the
-  crosshair doesn't turn red). Legs take damage (limb ×0.8), the glowing knee joints are weak spots (×3).
+- Armor: the hull, turret and closed shutters take no damage (`armor()` returns 0: sparks only, the crosshair
+  doesn't turn red; `weapon:armored` is emitted but nothing shows a hint). Legs take damage (limb ×0.8), the glowing knee joints are weak spots (×3).
   Legs have 160 HP; a broken leg falls off and the body tilts toward the gap; it slows 12% per lost leg.
 - Every second leg lost (and the 5th) collapses it for 7 s (forever with none left): the back shutters open and the
   core (900 HP, weak ×3) can be shot. Destroying the core kills it.

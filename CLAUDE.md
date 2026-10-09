@@ -7,6 +7,7 @@
 
 ## Index
 
+- `gdd.md` — game design document: what the player experiences, rules, tuning numbers (code wins on numbers)
 - `instructions/project.md` — goal, stack, run/build, testing
 - `instructions/architecture.md` — layers, modules, frame order, events, conventions
 - `instructions/engine.md` — runtime loop, fault isolation, performance rules
