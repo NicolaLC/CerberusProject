@@ -178,6 +178,10 @@ const _bp = new THREE.Vector3();
 const _bdir = new THREE.Vector3();
 const _bq = new THREE.Quaternion();
 const _fq = new THREE.Quaternion();
+const _hq = new THREE.Quaternion(); // slide aiming: hips rotation before the vault pose, and scratch
+const _tq = new THREE.Quaternion();
+const _uq = new THREE.Quaternion();
+const _wq = new THREE.Quaternion();
 const SIDES = ['Left', 'Right'];
 const CROUCH_DROP = 0.38; // m the hips sink when crouched
 // [LeftUpLeg x, LeftLeg x, RightUpLeg x, RightLeg x], hips [pitch, roll, height], extra spine pitch per bone
@@ -187,7 +191,10 @@ const VAULT_POSE = {
 };
 // Jetpack burst pose: [LeftUpLeg x, LeftLeg x, RightUpLeg x, RightLeg x], hips pitch. Knees bent, hips forward a bit.
 const AIR_POSE = { legs: [-0.35, 0.5, -0.2, 0.55], hips: 0.12 };
-const FLIGHT = 0.09; // m the hips rise at the top of a running stride's flight (full run speed)
+const FLIGHT = 0.1; // m the hips rise at the top of a running stride's flight (full run speed)
+const FLIGHT_LEAD = 0.1; // cycle fraction before toe-off the rise starts (as the heel peels up)
+const FLIGHT_TAIL = 0.04; // cycle fraction after heel strike it settles
+const HIPS_SPRING = 40; // 1/s: hips height follows its target through a critically damped spring
 const HUNCH = 0.55; // rad of forward spine bend moving along cover
 const KNEEL_L = [-1.45, 1.45, 0]; // low cover kneel: thigh, knee, toes
 const KNEEL_R = [0.15, 1.5, 0.9];
@@ -216,6 +223,8 @@ export class Animator {
     this.hipYaw = 0;
     this.legYaw = 0; // the rest of the turn, taken by the thighs: steps always go where the body moves
     this.drop = 0; // hips lowered so the supporting foot reaches the floor
+    this.hipsY = 0; // smoothed hips height offset (m) and its velocity
+    this.hipsYV = 0;
     this.weaponPitch = 0.4;
     this.spinePitch = 0;
     this.hipsOffset = 0;
@@ -335,10 +344,22 @@ export class Animator {
     const amt = Math.min(1, ve / 4) * (1 - c);
     // flight (running: both feet off the ground between one toe-off and the next heel strike): the body rises
     // and falls on an arc instead of staying sunk on the last support leg
-    const half = this.phase % 0.5;
-    const fl = duty < 0.5 && half > duty ? (half - duty) / (0.5 - duty) : 0;
-    const arc = 4 * fl * (1 - fl) * FLIGHT * g * Math.min(1, ve / R.ref) * m;
-    B.Hips.position.y += -CROUCH_DROP * c - this.drop * m + bob + arc;
+    // the rise starts as the back foot peels off (stance taper) and settles just after the next heel strike,
+    // so it spans a good part of the step instead of popping up over the few frames of pure flight
+    let arc = 0;
+    if (duty < 0.5) {
+      const from = duty - FLIGHT_LEAD;
+      const fl = ((((this.phase % 0.5) - from) % 0.5) + 0.5) % 0.5 / (0.5 - from + FLIGHT_TAIL);
+      if (fl < 1) arc = Math.sin(Math.PI * fl) ** 2 * FLIGHT * g * Math.min(1, ve / R.ref) * m;
+    }
+    // hips height through a critically damped spring: gait blends, starts, stops and crouching never step it
+    const hy = -CROUCH_DROP * c - this.drop * m + bob + arc;
+    const x = this.hipsY - hy;
+    const e = Math.exp(-HIPS_SPRING * dt);
+    const k = (this.hipsYV + HIPS_SPRING * x) * dt;
+    this.hipsY = hy + (x + k) * e;
+    this.hipsYV = (this.hipsYV - HIPS_SPRING * k) * e;
+    B.Hips.position.y += this.hipsY;
     const twist = sw * mix(mix(W.twist, R.twist, g), RUN.twist, r) * m;
     B.Hips.rotation.set(hipsPitch + RUN.hipsLean * r * amt, this.hipYaw + twist, -sw * mix(W.roll, R.roll, g) * m);
 
@@ -452,6 +473,9 @@ export class Animator {
     }
     // vault over low cover: a tucked jump, or a slide across the top on the hip (legs forward, leaning back)
     const vw = s.vault ? smoothstep(0, 0.22, s.vaultT) * (1 - smoothstep(0.78, 1, s.vaultT)) : 0;
+    // slide aiming (s.slideAim, s.aimTwist): the chest ignores the hips' pose and turns by aimTwist toward the camera
+    const sa = (this.slideAim = mix(this.slideAim ?? 0, s.slideAim ?? 0, kk));
+    _hq.copy(B.Hips.quaternion);
     if (vw > 0.001) {
       const P = VAULT_POSE[s.vault];
       blendTo(B.LeftUpLeg, P.legs[0], 0, 0, vw);
@@ -461,8 +485,22 @@ export class Animator {
       B.Hips.rotation.x += P.hips[0] * vw;
       B.Hips.rotation.z += P.hips[1] * vw;
       B.Hips.position.y += P.hips[2] * vw;
-      B.Spine1.rotation.x += P.spine * vw;
-      B.Spine2.rotation.x += P.spine * vw;
+      B.Spine1.rotation.x += P.spine * vw * (1 - sa); // (the lean-back would tilt the gun)
+      B.Spine2.rotation.x += P.spine * vw * (1 - sa);
+    }
+    if (sa > 0.001) {
+      // Spine2 keeps the world rotation it had before the hips took the pose (so the gun follows aimPitch as in
+      // normal combat) plus a yaw twist; the correction is shared over the three spine bones, the last one fixes
+      // the small residual so the chest lands exactly on target.
+      _tq.setFromAxisAngle(_yAxis, s.aimTwist ?? 0).multiply(_hq); // twist (about the root's up) * hips before the pose
+      _uq.copy(B.Hips.quaternion).invert().multiply(_tq); // correction in the hips frame
+      _tq.identity().slerp(_uq, sa);
+      _wq.copy(B.Hips.quaternion).multiply(_tq).multiply(B.Spine.quaternion).multiply(B.Spine1.quaternion).multiply(B.Spine2.quaternion);
+      _uq.identity().slerp(_tq, 1 / 3);
+      B.Spine.quaternion.premultiply(_uq);
+      B.Spine1.quaternion.premultiply(_uq);
+      B.Spine2.quaternion.premultiply(_uq);
+      B.Spine2.quaternion.copy(_tq.copy(B.Hips.quaternion).multiply(B.Spine.quaternion).multiply(B.Spine1.quaternion).invert().multiply(_wq));
     }
     // jetpack burst: knees bent, hips forward; the feet are not planted (no foot IK) while it shows
     if (aw > 0.001) {

@@ -26,12 +26,21 @@ const r = await p.evaluate(() => {
     let slide = 0;
     let planted = 0;
     let maxLift = 0;
+    let hipsPrev = null;
+    let hipsVel = 0;
+    let hipsJerk = 0; // largest frame-to-frame change of the hips' vertical speed (m/frame): pops show here
     for (let i = 0; i < 300; i++) {
       pos.addScaledVector(vel, 1 / 60);
       t.group.position.copy(pos);
       t.rig.root.rotation.y = yaw;
       t.group.updateMatrixWorld(true);
       t.animator.update(1 / 60, { speed: v, run, crouch: 0, aimPitch: 0, combat: false, vel, yaw });
+      const hy = t.rig.bones.Hips.getWorldPosition(new V()).y;
+      if (i > 60 && hipsPrev !== null) {
+        hipsJerk = Math.max(hipsJerk, Math.abs(hy - hipsPrev - hipsVel));
+        hipsVel = hy - hipsPrev;
+      }
+      hipsPrev = hy;
       for (const s of ['Left', 'Right']) {
         const f = t.rig.bones[s + 'Foot'].getWorldPosition(new V());
         f.st = t.animator.legs[s].stance;
@@ -45,7 +54,7 @@ const r = await p.evaluate(() => {
         prev[s] = f;
       }
     }
-    out[name] = { slideMm: +((1000 * slide) / Math.max(1, planted)).toFixed(2), planted, lift: +maxLift.toFixed(2) };
+    out[name] = { slideMm: +((1000 * slide) / Math.max(1, planted)).toFixed(2), planted, lift: +maxLift.toFixed(2), hipsJerkMm: +(1000 * hipsJerk).toFixed(1) };
   }
   return out;
 });
@@ -118,6 +127,7 @@ const expect = (name, ok) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`); i
 for (const [name, m] of Object.entries(r)) {
   expect(`${name}: planted feet stay put (${m.slideMm} mm/frame)`, m.planted > 30 && m.slideMm < 2);
   expect(`${name}: the swing foot leaves the ground (${m.lift} m)`, m.lift > 0.15);
+  expect(`${name}: the hips move smoothly (speed change ${m.hipsJerkMm} mm/frame)`, m.hipsJerkMm < 25);
 }
 expect(`player stops without a pop (${pl.stop.jumpMm} mm/frame)`, pl.stop.jumpMm < 120);
 expect('moving along low cover: crouch-run facing the move, feet on the floor', pl.coverMove.crouch < 0.6 && pl.coverMove.facingErr < 0.2 && pl.coverMove.low > 0.07);
