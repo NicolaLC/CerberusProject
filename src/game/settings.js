@@ -8,14 +8,16 @@ const DEFAULTS = {
   aimAssist: true,
   padInvertY: false, // controller right stick
   quality: 'high', // graphics preset (view/quality.js)
+  renderer: 'auto', // 'auto': WebGPU where available, else WebGL 2; 'webgl': always WebGL 2 (applies on reload)
 };
 
 export const settings = { ...DEFAULTS, ...loadJSON(KEY) };
 
 export const saveSettings = () => saveJSON(KEY, settings);
 
-// Wires the controls in the start/pause panel. onQuality(name) applies a graphics preset.
-export function bindSettingsUI({ onQuality } = {}) {
+// Wires the controls in the start/pause panel. onQuality(name) applies a graphics preset; onRenderer() after
+// the renderer choice is saved (it needs a reload).
+export function bindSettingsUI({ onQuality, onRenderer } = {}) {
   const $ = (id) => document.getElementById(id);
   const sens = $('sens');
   const sensOut = $('sens-out');
@@ -23,6 +25,7 @@ export function bindSettingsUI({ onQuality } = {}) {
   const assist = $('assist');
   const invert = $('invert');
   const quality = $('quality');
+  const renderer = $('renderer');
   const sync = () => {
     sens.value = settings.sensitivity;
     sensOut.textContent = `${Number(settings.sensitivity).toFixed(1)}×`;
@@ -30,6 +33,7 @@ export function bindSettingsUI({ onQuality } = {}) {
     assist.checked = settings.aimAssist;
     invert.checked = settings.padInvertY;
     quality.value = settings.quality;
+    renderer.value = settings.renderer;
   };
   sens.addEventListener('input', () => {
     settings.sensitivity = Number(sens.value);
@@ -54,6 +58,11 @@ export function bindSettingsUI({ onQuality } = {}) {
     settings.quality = quality.value;
     onQuality?.(settings.quality);
     saveSettings();
+  });
+  renderer.addEventListener('change', () => {
+    settings.renderer = renderer.value;
+    saveSettings();
+    onRenderer?.(settings.renderer);
   });
   sync();
 }

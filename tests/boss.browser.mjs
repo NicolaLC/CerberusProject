@@ -4,12 +4,12 @@
 import { chromium } from 'playwright';
 
 const URL = process.env.URL ?? 'http://localhost:5173/?debug';
-const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader'] });
 const p = await b.newPage({ viewport: { width: 320, height: 180 } });
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 await p.goto(URL);
-await p.waitForFunction(() => window.game);
+await p.waitForFunction(() => window.game?.engine);
 const r = await p.evaluate(() => {
   const g = window.game;
   const { engine, enemies, player, world } = g;

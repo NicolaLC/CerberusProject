@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { dot, max, mix, normalize, positionLocal, pow, select, uniform, vec3 } from 'three/tsl';
 import { gridTexture, applyWorldUVs } from './textures.js';
 import { mergeStatic } from '../../engine/batch.js';
 
@@ -52,37 +53,17 @@ export class World {
 
   #buildSky() {
     const geo = new THREE.SphereGeometry(900, 32, 16);
-    const mat = new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      depthWrite: false,
-      fog: false,
-      uniforms: {
-        top: { value: new THREE.Color('#2f6fd1') },
-        horizon: { value: new THREE.Color('#cfe4f7') },
-        ground: { value: new THREE.Color('#9a8a78') },
-        sunDir: { value: SUN_DIR },
-      },
-      vertexShader: /* glsl */ `
-        varying vec3 vDir;
-        void main() {
-          vDir = normalize(position);
-          vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          gl_Position = p.xyww;
-        }`,
-      fragmentShader: /* glsl */ `
-        uniform vec3 top; uniform vec3 horizon; uniform vec3 ground; uniform vec3 sunDir;
-        varying vec3 vDir;
-        void main() {
-          vec3 d = normalize(vDir);
-          float h = d.y;
-          vec3 col = h > 0.0 ? mix(horizon, top, pow(h, 0.55)) : mix(horizon, ground, pow(-h, 0.4));
-          float s = max(dot(d, sunDir), 0.0);
-          col += vec3(1.0, 0.92, 0.75) * (pow(s, 900.0) * 30.0 + pow(s, 24.0) * 0.45);
-          gl_FragColor = vec4(col, 1.0);
-          #include <tonemapping_fragment>
-          #include <colorspace_fragment>
-        }`,
-    });
+    // gradient sky + sun disc and glow; HDR (> 1 feeds bloom), tone mapped by the post stack's output
+    const top = uniform(new THREE.Color('#2f6fd1'));
+    const horizon = uniform(new THREE.Color('#cfe4f7'));
+    const ground = uniform(new THREE.Color('#9a8a78'));
+    const sunDir = uniform(SUN_DIR);
+    const d = normalize(positionLocal);
+    const h = d.y;
+    const sky = select(h.greaterThan(0), mix(horizon, top, pow(h.max(0), 0.55)), mix(horizon, ground, pow(h.negate().max(0), 0.4)));
+    const s = max(dot(d, sunDir), 0);
+    const mat = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, depthWrite: false, fog: false });
+    mat.colorNode = sky.add(vec3(1.0, 0.92, 0.75).mul(pow(s, 900).mul(30).add(pow(s, 24).mul(0.45))));
     this.sky = new THREE.Mesh(geo, mat);
     this.sky.frustumCulled = false;
     this.scene.add(this.sky);

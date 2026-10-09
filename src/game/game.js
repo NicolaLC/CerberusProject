@@ -31,7 +31,9 @@ const beyond = (d2, on, band) => d2 > (on ? band.near : band.far) ** 2;
 
 export class Game {
   constructor({ canvas, debug = false }) {
-    const engine = (this.engine = new Engine({ canvas, fov: 70 }));
+    // renderer backend: ?renderer=webgl|webgpu overrides the saved setting (tests, comparisons)
+    const backend = new URLSearchParams(location.search).get('renderer') ?? settings.renderer;
+    const engine = (this.engine = new Engine({ canvas, fov: 70, backend }));
     const { scene, camera, events, renderer, input } = engine;
     this.debug = debug;
 
@@ -46,8 +48,7 @@ export class Game {
     const fx = new FX(scene, camera, world).listen(events);
     const hud = new Hud().listen(events, camRig);
     const audio = new Audio().listen(events);
-    const post = new Post(renderer, scene, camera, events);
-    applyQuality(settings.quality, { engine, post, world });
+    const post = new Post(renderer, scene, camera);
     const juice = new Juice({ camRig, post, fx }).listen(events);
     events.on('puppet:down', (p) => pickups.drop(p.pos));
     // controller rumble (only while the pad is the device in use)
@@ -185,7 +186,8 @@ export class Game {
     const { engine, audio } = this;
     const { input, canvas } = engine;
     const overlay = document.getElementById('overlay');
-    bindSettingsUI({ onQuality: (q) => applyQuality(q, this) });
+    bindSettingsUI({ onQuality: (q) => applyQuality(q, this), onRenderer: () => location.reload() });
+    this.showBackend = (b) => (document.getElementById('renderer-now').textContent = b === 'webgpu' ? 'WebGPU' : 'WebGL 2');
     const setRunning = (running) => {
       engine.paused = !running;
       overlay.style.display = running ? 'none' : 'flex';
@@ -231,6 +233,14 @@ export class Game {
       input.free = false;
       this.setRunning(false);
     }
+  }
+
+  // GPU device first (async), then everything that depends on the backend.
+  async init() {
+    await this.engine.init();
+    applyQuality(settings.quality, this);
+    this.showBackend?.(this.engine.backend);
+    return this;
   }
 
   start() {
