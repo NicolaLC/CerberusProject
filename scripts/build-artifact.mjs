@@ -13,7 +13,8 @@ const out = await build({
   external: ['three', 'three/addons/*'],
 });
 const js = out.outputFiles[0].text.replaceAll('</script', '<\\/script');
-const css = readFileSync('src/style.css', 'utf8');
+// fonts referenced from the stylesheet are inlined as data URIs (the page is a single file)
+const css = readFileSync('src/style.css', 'utf8').replace(/url\('\.\/fonts\/([\w.-]+\.otf)'\)/g, (_, f) => `url('data:font/otf;base64,${readFileSync(`src/fonts/${f}`).toString('base64')}')`);
 const html = readFileSync('index.html', 'utf8');
 const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script type="module"'));
 const importmap = {

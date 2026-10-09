@@ -1,5 +1,10 @@
+/* Fonts: Direction (main) and Space Nova (numbers), personal-use demo licences, under evaluation: see credits.md
+   and before-shipping.md. A glyph missing from a demo font falls back to the next family in the stack. */
+@font-face { font-family: 'Direction'; src: url('./fonts/direction.otf') format('opentype'); font-display: swap; }
+@font-face { font-family: 'Space Nova'; src: url('./fonts/space-nova.otf') format('opentype'); font-display: swap; }
+:root { --font-main: 'Direction', 'Segoe UI', system-ui, sans-serif; --font-num: 'Space Nova', 'Direction', 'Segoe UI', system-ui, sans-serif; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', system-ui, sans-serif; color: #e8f4ff; user-select: none; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: var(--font-main); color: #e8f4ff; user-select: none; }
 #game { display: block; width: 100%; height: 100%; }
 
 #hud { position: fixed; inset: 0; pointer-events: none; }
@@ -43,7 +48,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #dmg-dir { position: absolute; left: 50%; top: 50%; width: 260px; height: 260px; opacity: 0; transform: translate(-50%, -50%); }
 #dmg-dir::before { content: ''; position: absolute; left: 50%; top: 0; transform: translateX(-50%); border: 14px solid transparent; border-bottom: 22px solid rgba(255, 60, 40, 0.9); }
 
-#numbers .dmg { position: absolute; left: 0; top: 0; font: 700 16px monospace; color: #fff; text-shadow: 0 0 3px #000, 0 0 6px #000; }
+#numbers .dmg { position: absolute; left: 0; top: 0; font: 700 16px var(--font-main); color: #fff; text-shadow: 0 0 3px #000, 0 0 6px #000; }
 #numbers .dmg.crit { color: #ffd23a; font-size: 20px; }
 
 #status { position: absolute; left: 32px; bottom: 32px; width: 280px; }
@@ -52,7 +57,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 .shield > div { background: linear-gradient(90deg, #2aa8ff, #7fe8ff); box-shadow: 0 0 8px #3ac0ff; }
 .health > div { background: linear-gradient(90deg, #d82a2a, #ff6a4a); }
 
-#weapon { position: absolute; right: 32px; bottom: 28px; text-align: right; font-family: monospace; }
+#weapon { position: absolute; right: 32px; bottom: 28px; text-align: right; font-family: var(--font-main); }
 #weapon .name { font-size: 12px; letter-spacing: 2px; color: #9fc8e8; }
 #ammo { font-size: 42px; font-weight: 700; }
 #ammo.low { color: #ff5a4a; }
@@ -60,7 +65,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #reserve { font-size: 22px; color: #9fc8e8; }
 #reload { display: none; color: #ffd23a; letter-spacing: 3px; font-size: 13px; }
 
-#top { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 28px; font: 12px monospace; letter-spacing: 3px; color: #9fc8e8; text-shadow: 0 0 4px #000; }
+#top { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 28px; font: 12px var(--font-main); letter-spacing: 3px; color: #9fc8e8; text-shadow: 0 0 4px #000; }
 #top b { color: #fff; }
 
 
@@ -68,22 +73,22 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #overlay .panel { padding: 32px 40px; background: rgba(5, 15, 30, 0.85); border: 1px solid rgba(90, 190, 255, 0.4); box-shadow: 0 0 40px rgba(40, 160, 255, 0.15); width: min(520px, 100%); }
 #overlay h1 { font-size: 40px; letter-spacing: 12px; color: #fff; }
 #overlay h2 { font-size: 12px; letter-spacing: 4px; color: #6fc8ff; font-weight: 400; margin-bottom: 20px; text-transform: uppercase; }
-#overlay table { width: 100%; font: 13px monospace; border-collapse: collapse; margin-bottom: 22px; }
+#overlay table { width: 100%; font: 13px var(--font-main); border-collapse: collapse; margin-bottom: 22px; }
 #overlay td { padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
 #overlay td:first-child, #overlay td:nth-child(2) { color: #ffd23a; width: 82px; }
 #overlay td:nth-child(2) { color: #8fd8ff; }
 #overlay tr.head td { color: #6f8fa8; font-size: 11px; letter-spacing: 2px; }
-#overlay .note { font: 12px monospace; color: #6f8fa8; margin-bottom: 12px; }
-#start { width: 100%; padding: 12px; font: 700 14px monospace; letter-spacing: 4px; color: #001522; background: #3ac0ff; border: 0; cursor: pointer; }
+#overlay .note { font: 12px var(--font-main); color: #6f8fa8; margin-bottom: 12px; }
+#start { width: 100%; padding: 12px; font: 700 14px var(--font-main); letter-spacing: 4px; color: #001522; background: #3ac0ff; border: 0; cursor: pointer; }
 #start:hover { background: #7fe8ff; }
-#quit { width: 100%; margin-top: 8px; padding: 8px; font: 700 12px monospace; letter-spacing: 3px; color: #9fc4dd; background: transparent; border: 1px solid #3ac0ff44; cursor: pointer; }
+#quit { width: 100%; margin-top: 8px; padding: 8px; font: 700 12px var(--font-main); letter-spacing: 3px; color: #9fc4dd; background: transparent; border: 1px solid #3ac0ff44; cursor: pointer; }
 #quit:hover { color: #e8f4ff; border-color: #3ac0ff; }
 #quit[hidden] { display: none; }
 
-#death { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; font: 700 22px monospace; letter-spacing: 6px; color: #ff6a5a; background: rgba(60, 0, 0, 0.35); pointer-events: none; }
+#death { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; font: 700 22px var(--font-main); letter-spacing: 6px; color: #ff6a5a; background: rgba(60, 0, 0, 0.35); pointer-events: none; }
 
 /* boss bar: core health, one pip per leg, state */
-#boss { position: absolute; left: 50%; top: 64px; width: min(460px, 70vw); transform: translateX(-50%); font: 700 12px monospace; letter-spacing: 3px; color: #ffb48a; text-align: center; opacity: 0; transition: opacity 0.4s; }
+#boss { position: absolute; left: 50%; top: 64px; width: min(460px, 70vw); transform: translateX(-50%); font: 700 12px var(--font-main); letter-spacing: 3px; color: #ffb48a; text-align: center; opacity: 0; transition: opacity 0.4s; }
 #boss.on { opacity: 1; }
 #boss .bar { height: 8px; margin: 4px 0; background: rgba(40, 10, 0, 0.6); border: 1px solid #ff7a3a; }
 #boss-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff5a1a, #ffb04a); box-shadow: 0 0 8px rgba(255, 110, 40, 0.8); }
@@ -91,12 +96,12 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #boss .legs i { display: inline-block; width: 12px; height: 6px; margin-right: 4px; background: #ff2bd6; box-shadow: 0 0 6px #ff2bd6; }
 #boss .legs i.gone { background: #3a2a30; box-shadow: none; }
 #boss .state { color: #ff6af0; }
-#toast { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font: 700 16px monospace; letter-spacing: 3px; color: #7fe8ff; text-shadow: 0 0 8px rgba(56, 216, 255, 0.7); opacity: 0; }
-#overlay .settings { display: grid; gap: 10px; margin-bottom: 18px; font: 12px monospace; }
+#toast { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font: 700 16px var(--font-main); letter-spacing: 3px; color: #7fe8ff; text-shadow: 0 0 8px rgba(56, 216, 255, 0.7); opacity: 0; }
+#overlay .settings { display: grid; gap: 10px; margin-bottom: 18px; font: 12px var(--font-main); }
 #overlay .row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 #overlay .row span { flex: 1; }
 #overlay input[type='range'] { flex: 1; accent-color: #3ac0ff; }
-#overlay select { font: 12px monospace; color: #e8f4ff; background: #0b1a26; border: 1px solid #3ac0ff66; padding: 3px 6px; }
+#overlay select { font: 12px var(--font-main); color: #e8f4ff; background: #0b1a26; border: 1px solid #3ac0ff66; padding: 3px 6px; }
 #overlay input[type='checkbox'] { accent-color: #3ac0ff; width: 16px; height: 16px; }
 #overlay output { width: 40px; text-align: right; color: #ffd23a; }
 #overlay .panel { max-height: 100%; overflow-y: auto; max-width: calc(100vw - 32px); }
@@ -110,7 +115,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #areload .good { background: rgba(80, 200, 255, 0.45); }
 #areload .perfect { background: #f4fbff; box-shadow: 0 0 8px #bff0ff; }
 #areload .cursor { width: 3px; top: -4px; bottom: -4px; margin-left: -1px; background: #ffd23a; box-shadow: 0 0 6px #ffd23a; }
-#areload .label { margin-top: 6px; text-align: center; font: 700 12px monospace; letter-spacing: 4px; color: #9fc8e8; }
+#areload .label { margin-top: 6px; text-align: center; font: 700 12px var(--font-main); letter-spacing: 4px; color: #9fc8e8; }
 #areload[data-state='perfect'] .label { color: #f4fbff; text-shadow: 0 0 10px #7fe8ff; font-size: 15px; }
 #areload[data-state='good'] .label { color: #7fe8ff; }
 #ammo.boost { color: #f4fbff; text-shadow: 0 0 12px #7fe8ff, 0 0 4px #7fe8ff; }
@@ -122,9 +127,12 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
   bottom: 8px;
   z-index: 50;
   padding: 4px 8px;
-  font: 11px/1.4 ui-monospace, monospace;
+  font: 11px/1.4 ui-var(--font-main), var(--font-main);
   white-space: pre;
   color: #9fe8ff;
   background: rgba(0, 0, 0, 0.55);
   pointer-events: none;
 }
+
+/* numbers: ammo, reserve, damage numbers, counters, settings values */
+#ammo, #reserve, #numbers .dmg, #top b, #overlay output { font-family: var(--font-num); }
