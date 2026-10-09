@@ -187,6 +187,7 @@ const VAULT_POSE = {
 };
 // Jetpack burst pose: [LeftUpLeg x, LeftLeg x, RightUpLeg x, RightLeg x], hips pitch. Knees bent, hips forward a bit.
 const AIR_POSE = { legs: [-0.35, 0.5, -0.2, 0.55], hips: 0.12 };
+const FLIGHT = 0.09; // m the hips rise at the top of a running stride's flight (full run speed)
 const HUNCH = 0.55; // rad of forward spine bend moving along cover
 const KNEEL_L = [-1.45, 1.45, 0]; // low cover kneel: thigh, knee, toes
 const KNEEL_R = [0.15, 1.5, 0.9];
@@ -318,10 +319,11 @@ export class Animator {
       B[side + 'UpLeg'].rotation.y = this.legYaw;
       setX(B[side + 'Leg'], L.knee);
       // stance weight: ramps in after heel strike and out before toe off
-      L.stance = u < duty ? Math.min(1, u / 0.05) * Math.min(1, (duty - u) / 0.08) : 0;
+      L.stance = u < duty ? Math.min(1, u / 0.05) * Math.min(1, (duty - u) / 0.12) : 0;
       // how much shorter this leg is than straight: the hips sink by that on the supporting leg
       wSum += L.stance;
-      dSum += L.stance * (LEG_REST - ankleDown(L.thigh, L.knee));
+      // (less the heel lift: late in stance the foot is up on its toes, which carries the ankle higher)
+      dSum += L.stance * (LEG_REST - ankleDown(L.thigh, L.knee) - FOOT * Math.sin(Math.max(0, L.pitch)));
     }
     if (wSum > 0.05) this.drop = mix(this.drop, dSum / wSum, 1 - Math.exp(-dt * 25));
     sampleCyclic(W.hips, (this.phase * 2) % 1, _pw);
@@ -331,7 +333,12 @@ export class Animator {
     // left leg forward -> -1 (drives hips twist and the arm swing)
     const sw = -Math.cos(this.phase * Math.PI * 2);
     const amt = Math.min(1, ve / 4) * (1 - c);
-    B.Hips.position.y += -CROUCH_DROP * c - this.drop * m + bob;
+    // flight (running: both feet off the ground between one toe-off and the next heel strike): the body rises
+    // and falls on an arc instead of staying sunk on the last support leg
+    const half = this.phase % 0.5;
+    const fl = duty < 0.5 && half > duty ? (half - duty) / (0.5 - duty) : 0;
+    const arc = 4 * fl * (1 - fl) * FLIGHT * g * Math.min(1, ve / R.ref) * m;
+    B.Hips.position.y += -CROUCH_DROP * c - this.drop * m + bob + arc;
     const twist = sw * mix(mix(W.twist, R.twist, g), RUN.twist, r) * m;
     B.Hips.rotation.set(hipsPitch + RUN.hipsLean * r * amt, this.hipYaw + twist, -sw * mix(W.roll, R.roll, g) * m);
 

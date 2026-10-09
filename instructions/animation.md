@@ -53,6 +53,12 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
     ankle travels back exactly at ground speed (stance travel measured from the keys at load).
   - Hips sink by how much the supporting leg is bent (weighted by stance), so a straight leg vaults the body and
     a bent one lowers it: the bob comes from the poses, not a sine.
+    The heel lift late in stance (foot on its toes) counts too, so toe-off doesn't sink the body.
+    The foot lock fades out over the last 0.12 of the cycle before toe-off (the sprint stride is longer than the
+    leg can reach from that height: locked to the end, the foot would slip).
+  - Flight (run: duty < 0.5, both feet off the ground between toe-off and the next heel strike): the hips rise on
+    an arc, `FLIGHT` 0.09 m at the top (scaled by run blend and speed up to the run's ref). Sprint hips: ~0.85 m
+    mid-stance, ~0.95 m (standing height) in the air. The run's hips keys only add a 1.5 cm dip at compression.
   - Foot lock: when a foot's stance starts its world position is latched; while it carries weight the leg is IK'd
     to it (blend in after heel strike, out before toe off), y on the floor plus the heel roll. A lock more than
     0.45 m off its pose (spinning on the spot) lets go until the next step. Planted feet slip < 1 mm/frame
