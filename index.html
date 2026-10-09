@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cerberus — Training Arena</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud">
+      <div id="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="dot"></i></div>
+      <div id="hitmarker"></div>
+      <div id="blockmark"></div>
+      <div id="scope"></div>
+      <div id="lockmark"></div>
+      <div id="dmg-dir"></div>
+      <div id="vignette"></div>
+      <div id="numbers"></div>
+
+      <div id="boss">
+        <div class="name" id="boss-name"></div>
+        <div class="bar"><div id="boss-fill"></div></div>
+        <div class="row"><span class="legs" id="boss-legs"></span><span class="state" id="boss-state"></span></div>
+      </div>
+
+      <div id="status">
+        <div class="bar shield"><div id="shield-fill"></div></div>
+        <div class="bar health"><div id="health-fill"></div></div>
+      </div>
+
+      <div id="weapon">
+        <div class="name" id="gun-name">M-8 AVENGER</div>
+        <div class="slots"><span id="slot-rifle">1 AR</span><span id="slot-mg">2 MG</span><span id="slot-sniper">3 SR</span><span id="slot-burst">4 BR</span><span id="slot-rail">5 RG</span><span id="slot-pistol">6 PS</span></div>
+        <div><span id="ammo">32</span><span class="sep">/</span><span id="reserve">256</span></div>
+        <div id="reload">RELOADING</div>
+      </div>
+
+      <div id="top">
+        <span id="zone">TRAINING YARD</span>
+        <span>TARGETS DOWN <b id="kills">0</b></span>
+      </div>
+
+      <div id="areload"><div class="track"><i class="good"></i><i class="perfect"></i><i class="cursor"></i></div><div class="label">R</div></div>
+      <div id="toast"></div>
+    </div>
+
+    <div id="overlay">
+      <div class="panel">
+        <h1>CERBERUS</h1>
+        <h2>combat training arena · prototype</h2>
+        <table>
+          <tr class="head"><td>keys</td><td>pad</td><td></td></tr>
+          <tr><td>WASD</td><td>L stick</td><td>move</td></tr>
+          <tr><td>Mouse</td><td>R stick</td><td>look</td></tr>
+          <tr><td>Shift</td><td>L3 click</td><td>sprint (hold Shift moving forward · L3 sprints until you let go of the stick)</td></tr>
+          <tr><td>RMB</td><td>LT</td><td>hold to aim (zoom) · pops up / peeks from cover</td></tr>
+          <tr><td>LMB / F</td><td>RT</td><td>fire</td></tr>
+          <tr><td>R</td><td>X</td><td>reload · press again in the white zone for a perfect reload</td></tr>
+          <tr><td>1 – 6</td><td>d-pad ← ↑ → ↓</td><td>assault rifle / machine gun / sniper / burst rifle / railgun / pistol (pad: AR / MG / SR / pistol; wheel, Y or RB: next)</td></tr>
+          <tr><td>Space</td><td>A</td><td>take / leave cover · + forward: vault low cover</td></tr>
+          <tr><td>Q</td><td>LB</td><td>swap shoulder</td></tr>
+          <tr><td>←↑↓→</td><td></td><td>look (keyboard)</td></tr>
+          <tr><td>H / F3</td><td>View</td><td>skeleton debug / performance stats</td></tr>
+          <tr><td>Esc</td><td>Menu</td><td>pause</td></tr>
+        </table>
+        <p class="note">Ammo: walk over the glowing cyan cases. Broken puppets sometimes drop clips. Shoot the pulsing magenta weak spots for triple damage.</p>
+        <div class="settings">
+          <label class="row" for="sens"><span>Look sensitivity</span><input id="sens" type="range" min="0.3" max="3" step="0.1" /><output id="sens-out">1.0×</output></label>
+          <label class="row" for="trackpad"><input id="trackpad" type="checkbox" /><span>Trackpad mode: two-finger swipe to look, E toggles aim</span></label>
+          <label class="row" for="assist"><input id="assist" type="checkbox" /><span>Aim assist</span></label>
+          <label class="row" for="quality"><span>Graphics</span><select id="quality"><option value="low">Low · fastest</option><option value="high">High</option><option value="ultra">Ultra · supersampled, 8× MSAA</option></select></label>
+          <label class="row" for="invert"><input id="invert" type="checkbox" /><span>Invert look Y (controller)</span></label>
+        </div>
+        <p class="note">Keyboard plus mouse or trackpad, or a controller. <span id="pad-status">Controller: press any button to connect.</span></p>
+        <button id="start">CLICK TO DEPLOY · A / MENU ON A CONTROLLER</button>
+        <button id="quit" hidden>QUIT TO DESKTOP</button>
+      </div>
+    </div>
+
+    <div id="death"><div>SHIELDS DOWN — RESPAWNING</div></div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
