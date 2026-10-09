@@ -7,6 +7,8 @@ const _p = new THREE.Vector3();
 // Writes go through text()/css(), which skip unchanged values: no style recalc or layout for a static HUD.
 const $ = (id) => document.getElementById(id);
 const LAST = new WeakMap();
+// the ammo counter turns red at this fraction of the gun's magazine (at least the last round)
+const LOW_AMMO = 0.25;
 function changed(el, key, value) {
   let last = LAST.get(el);
   if (!last) LAST.set(el, (last = {}));
@@ -152,7 +154,7 @@ export class Hud {
     text(e.gunName, weapon.t.name);
     for (const [id, el] of Object.entries(e.slots)) el.classList.toggle('on', id === (weapon.pending ?? weapon.current));
     text(e.reserve, weapon.reserve);
-    e.ammo.classList.toggle('low', weapon.ammo <= 6);
+    e.ammo.classList.toggle('low', weapon.ammo <= Math.max(1, Math.floor(weapon.t.mag * LOW_AMMO)));
     css(e.reload, 'display', weapon.reloading > 0 ? 'block' : 'none');
     e.ammo.classList.toggle('boost', weapon.boosted);
 
