@@ -68,7 +68,9 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
 - Kneel (low cover) blends over everything with `crouch`.
 - Arms: two-bone IK to the grip sockets, elbows down and slightly out. `lower` (weapon switch) drops the gun.
 - Feet IK (when `ground(x, z, maxY)` is given; the player has it, hanging puppets don't): hips drop to the
-  lowest foot's floor, each leg is IK'd to its floor plus its animated lift, knees forward, planted feet kept flat.
+  lowest foot's floor, each leg is IK'd to its floor plus its animated lift, the knee kept in the plane the pose
+  bends it in ("knees forward" only for a near-straight leg: forced on a sprint's heel kick it swung the leg out
+  sideways), planted feet kept flat.
 - `lookYaw` turns neck + head (used in cover: back to the wall, head toward the camera).
 - `animator.impulse(pitch, roll)` kicks the hit-reaction spring.
 - Check pose changes from the side and front (see project.md testing), not only from behind.
