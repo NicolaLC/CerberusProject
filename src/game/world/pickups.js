@@ -12,22 +12,16 @@ const TUNING = {
   radius: 1.1,
 };
 
-// [x, y, z, type]: 7 light, 3 heavy, spread around the map
-const SPOTS = [
-  [6, 0, 34, 'light'],
-  [-24, 0, 2.5, 'light'],
-  [26, 0, 2.5, 'heavy'], // range
-  [-40, 1.6, 4, 'light'],
-  [44, 0, 34, 'light'],
-  [0, 0, -24, 'light'],
-  [-20, 0, -34, 'heavy'], // interior
-  [20, 0, -58, 'light'],
-  [28, 0, -17, 'light'], // boss arena: at the gate and at the back
-  [47, 0, -60, 'heavy'],
-];
+// Pickup pieces (registry ids, a public contract: instructions/level.md). Data: { id, pos } for a respawning crate
+// of that ammo class. Spots live in the level file (7 light, 3 heavy in the arena).
+export const PICKUP_PIECES = {
+  'pickup.light': (pickups, d) => pickups.addCrate(d.pos, 'light'),
+  'pickup.heavy': (pickups, d) => pickups.addCrate(d.pos, 'heavy'),
+};
 
 export class Pickups {
-  constructor({ scene, events }) {
+  // level: parsed level file; registry: Registry holding PICKUP_PIECES.
+  constructor({ scene, events, level, registry }) {
     this.scene = scene;
     this.events = events;
     this.t = TUNING;
@@ -64,7 +58,12 @@ export class Pickups {
     const ringMat = (c) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(2), transparent: true, opacity: 0.5, depthWrite: false });
     this.ringMats = { light: ringMat(hex.light), heavy: ringMat(hex.heavy) };
 
-    for (const [x, y, z, type] of SPOTS) this.#spawn(new THREE.Vector3(x, y, z), { crate: true, type });
+    for (const piece of registry.piecesOf(level, 'pickups')) registry.build('pickups', this, piece);
+  }
+
+  // a fixed crate that respawns after it is collected
+  addCrate(pos, type) {
+    return this.#spawn(new THREE.Vector3(...pos), { crate: true, type });
   }
 
   #spawn(pos, { crate, type }) {
