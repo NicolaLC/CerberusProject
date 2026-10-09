@@ -15,7 +15,7 @@ export const BINDINGS = {
   aimToggle: ['KeyE'], // trackpad mode only
   fire: ['Mouse0', 'KeyF', 'Pad7'],
   reload: ['KeyR', 'Pad2'],
-  cover: ['Space', 'Pad0'],
+  jump: ['Space', 'Pad0'], // jetpack burst, or vault over low cover
   shoulder: ['KeyQ', 'Pad4'],
   nextGun: ['Pad3', 'Pad5'],
   slot1: ['Digit1', 'Pad14'],
@@ -120,8 +120,8 @@ export class Controls {
     return this.actions.pressed('reload');
   }
 
-  get coverPressed() {
-    return this.actions.pressed('cover');
+  get jumpPressed() {
+    return this.actions.pressed('jump');
   }
 
   pressed(action) {

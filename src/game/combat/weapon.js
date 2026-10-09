@@ -22,6 +22,7 @@ const _targets = [];
 const _kick = [0, 0];
 const _probeDir = new THREE.Vector3();
 const _passed = [];
+const _bestHit = [];
 // payloads are reused: listeners must copy what they keep
 const SHOT = { from: _muz, to: new THREE.Vector3(), dir: _toAim, right: null, heavy: false, beam: false, gun: '', flash: 1, mag: 1 };
 const HIT = { point: null, normal: new THREE.Vector3(), dir: _toAim, zone: '', amount: 0, crit: false, weak: false, killed: false, distance: 0 };
@@ -141,17 +142,19 @@ export class Weapon {
     return _targets;
   }
 
-  // Fills every gun from a pickup (kind: 'crate' | 'drop'). Returns a short label, or '' if all were full.
-  addAmmo(kind) {
-    const parts = [];
+  // Fills the guns of one ammo class from a pickup (kind: 'crate' | 'drop', type: 'light' | 'heavy').
+  // Returns a short label, or '' if every gun of that class was already full.
+  addAmmo(kind, type = 'light') {
+    let parts = '';
     for (const id of GUN_ORDER) {
       const g = GUNS[id];
+      if (g.ammo !== type) continue;
       const s = this.state[id];
-      const got = Math.min(g.pickup[kind], g.maxReserve - s.reserve);
+      const got = Math.max(0, Math.min(g.pickup[kind], g.maxReserve - s.reserve));
       s.reserve += got;
-      if (got > 0) parts.push(`+${got} ${g.short}`);
+      if (got > 0) parts += `  +${got} ${g.short}`;
     }
-    return parts.join('  ');
+    return parts ? `${type.toUpperCase()} AMMO${parts}` : '';
   }
 
   switchTo(id) {
@@ -270,7 +273,7 @@ export class Weapon {
     this.queued = controls.firePressed ? 0.25 : this.queued - dt;
     const pull = t.semi ? this.queued > 0 : trigger;
     this.spin = t.spinUp > 0 ? THREE.MathUtils.clamp(this.spin + (trigger ? dt / t.spinUp : -dt * 2), 0, 1) : 1;
-    const canFire = !p.dead && !p.snap && !p.sprinting && !p.pinned && this.reloading <= 0 && this.switching <= 0;
+    const canFire = !p.dead && (!p.snap || p.isSliding()) && !p.sprinting && !p.pinned && this.reloading <= 0 && this.switching <= 0;
     // a started charge or burst finishes whether or not the trigger is still held
     if (this.charging > 0) {
       if (!canFire) {
@@ -386,20 +389,25 @@ export class Weapon {
     _ray.far = t.pierce ? t.range : Math.max(0.01, dist - 0.02);
     const muzHits = _ray.intersectObjects(_targets, false);
     if (t.pierce) {
-      // every enemy on the line takes the slug (once each), up to the first wall or armor
+      // every enemy on the line takes the slug once, with the best zone (highest damage multiplier) the line
+      // crosses on it, up to the first wall or armored part (anything behind that is not reached)
       hit = null;
       _aim.copy(_muz).addScaledVector(toAim, t.range);
-      _passed.length = 0;
+      _passed.length = _bestHit.length = 0;
       for (const h of muzHits) {
         if (!this.#passes(h)) {
           hit = h;
           break;
         }
         const e = h.object.userData.enemy;
-        if (!e.alive || _passed.includes(e) || _passed.length >= t.pierce) continue;
-        _passed.push(e);
-        this.#hit(h, toAim, e);
+        if (!e.alive) continue;
+        const i = _passed.indexOf(e);
+        if (i < 0) {
+          _passed.push(e);
+          _bestHit.push(h);
+        } else if (this.#zoneMult(h) > this.#zoneMult(_bestHit[i])) _bestHit[i] = h;
       }
+      for (let i = 0; i < _passed.length; i++) this.#hit(_bestHit[i], toAim, _passed[i]);
     } else if (muzHits[0]) hit = muzHits[0];
 
     SHOT.to.copy(hit ? hit.point : _aim);
@@ -427,6 +435,12 @@ export class Weapon {
     return !!e && (!e.armor || e.armor(h.object.userData.zone, h.object) > 0);
   }
 
+  #zoneMult(h) {
+    const t = this.t;
+    const zone = h.object.userData.zone;
+    return zone === 'weak' ? t.weakMult : zone === 'head' ? t.headMult : zone === 'limb' ? t.limbMult : 1;
+  }
+
   #hit(hit, toAim, enemy) {
     const t = this.t;
     const armor = enemy?.armor ? enemy.armor(hit.object.userData.zone, hit.object) : 1;
@@ -439,7 +453,7 @@ export class Weapon {
     } else if (enemy) {
       const zone = hit.object.userData.zone;
       const boost = this.boosted ? ACTIVE.boostMult : 1;
-      const mult = boost * (zone === 'weak' ? t.weakMult : zone === 'head' ? t.headMult : zone === 'limb' ? t.limbMult : 1);
+      const mult = boost * this.#zoneMult(hit);
       HIT.distance = _muz.distanceTo(hit.point);
       HIT.amount = t.damage * mult * armor * falloff(t.falloff, HIT.distance);
       HIT.killed = enemy.damage(HIT.amount, hit.point, toAim, zone, hit.object);

@@ -22,9 +22,10 @@ src/
     controls.js           BINDINGS table + intents (move, look, aiming, running, firing, slots...)
     settings.js           player settings + start-panel bindings
     world/  world.js (level boxes, colliders, cover, sky, lights), textures.js, pickups.js
-    actors/ rig.js (skeleton, animator, IK), soldier.js (player model), player.js,
+    actors/ rig.js (skeleton, animator, IK), parts.js (model building blocks, debris), soldier.js (player model),
+            looks.js (trooper / puppet models), player.js,
             enemy.js (shared enemy body: hit zones, weak spots, flash, debris death),
-            puppet.js (training puppets), trooper.js (cover-using soldiers),
+            puppet.js (training puppets), trooper.js (cover-using soldiers), drone.js, spider.js (miniboss),
             enemies.js (system: spawn list, bolts, stands, target cache, squad alerts)
     ai/     cover.js (cover spots from cover boxes, protection test, spot choice + detour route)
     combat/ guns.js (gun table), weapon.js (controller, hitscan, aim probe), ballistics.js (pure shot math)
@@ -58,16 +59,22 @@ Payload objects marked * are reused: copy what you keep.
 | `weapon:impact` | *{ point, normal } | fx |
 | `weapon:reload` | 'start' \| 'done' \| 'good' \| 'perfect' \| 'jam' | audio, juice |
 | `weapon:switch` / `weapon:dry` | gun id / – | audio |
-| `weapon:armored` | enemy | hud hint |
+| `weapon:armored` | enemy | – (no listener: the HUD shows no hint) |
 | `boss:wake` / `boss:down` | boss | hud toast, audio |
 | `blast` / `boss:leg` / `boss:dead` | *{ point, radius, kind } (blast kind: mortar, stomp, drone) | fx, juice, audio |
 | `boss:step` | *{ point, big } | juice, audio |
 | `boss:charge` / `boss:stomp` / `boss:mortar` | boss / boss / position | audio |
 | `player:hurt` | *{ amount, dir } | hud (direction), juice, audio |
-| `player:coverSlam` / `player:land` | – | juice |
+| `player:coverSlam` / `player:land` | – / 'vault' \| 'jet' | juice, audio (land) |
+| `player:jet` | *{ point, dir } (nozzle, exhaust direction) | fx, audio, juice |
+| `player:vault` | 'hop' \| 'slide' | – |
+| `player:step` | *{ run, raised } (each heel strike; not in the air) | audio |
+| `enemy:step` | position (trooper / moving puppet heel strike) | audio (fades out by 28 m from the camera) |
 | `puppet:down` | puppet | pickups (drop), audio |
 | `bolt:fired` / `bolt:impact` | position / *{ point, normal } | audio / fx |
-| `pickup:collected` / `pickup:full` | label / – | hud toast, audio |
+| `pickup:collected` / `pickup:full` | label ('LIGHT AMMO +n AR ...') / – (all guns of the class full) | hud toast, audio |
+| `weapon:charge` | true (railgun charge started) / false (cancelled) | audio (the HUD ring reads `weapon.charging`) |
+| `trooper:flank` | trooper | – (tests; no HUD message) |
 | `engine:resize` | { width, height, pixelRatio } | post |
 | `engine:systemFailed` | { name, error } | hud toast |
 

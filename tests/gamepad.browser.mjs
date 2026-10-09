@@ -1,5 +1,5 @@
 // Controller support with a simulated standard gamepad (navigator.getGamepads is replaced before load):
-// sticks move and look, triggers aim and fire, buttons reload / switch / cover, Menu pauses and A deploys.
+// sticks move and look, triggers aim and fire, buttons reload / switch / jump, Menu pauses and A deploys.
 // Needs the dev server: `npm run dev`, then `node tests/gamepad.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 

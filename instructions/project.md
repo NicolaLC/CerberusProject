@@ -5,7 +5,9 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 
 ## Stack
 - Three.js (`three`), plain ES modules, Vite for dev/build. No framework, no physics engine.
-- Everything procedural: geometry, textures (canvas), audio (WebAudio). No binary assets yet.
+- Everything procedural: geometry, textures (canvas), audio (WebAudio, plus recorded samples in `src/assets/sfx/` that
+  replace a synth sound once decoded: `SAMPLES` in audio.js). Other binary assets: two UI fonts in `src/fonts/`
+  (Chakra Petch, OFL; Space Nova, demo licence under evaluation: `credits.md`, `before-shipping.md`), set as `--font-main` / `--font-num` in `src/style.css`.
 
 ## Commands
 - `npm run dev` — dev server on :5173
@@ -33,6 +35,7 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 - `tests/enemies.browser.mjs`: destroyed puppets stay destroyed, shooters engage only within range, troopers.
 - `tests/boss.browser.mjs`: spider mech (wake, lock-on camera, attacks, arena bounds, armor, legs, core).
 - `tests/animation.browser.mjs`: planted feet don't slide at walk / jog / sprint / strafe / backpedal.
+- `tests/movement.browser.mjs`: automatic cover (enter, along-wall, exits, cooldown), jetpack burst, jump onto low cover, vault, ceiling.
 - `tests/gamepad.browser.mjs`: controller with a simulated standard gamepad (`navigator.getGamepads` replaced
   by an init script; set `window.__pad.axes` / `.buttons`).
 - Key presses in tests: add the code to `engine.input.keys` and `engine.input.pressed` (edges come from events).

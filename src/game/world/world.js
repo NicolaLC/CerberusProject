@@ -267,7 +267,8 @@ export class World {
     // ---------- West platform with stairs ----------
     const PH = 1.6;
     this.box(-40, 0, 0, 16, PH, 22, m.platform);
-    for (let i = 0; i < 4; i++) this.box(-31.5 + i, 0, 0, 1, PH - (i + 1) * 0.4, 4, m.platform);
+    // three 0.4 m steps down from the platform (a fourth would be 0 m tall: a flat box z-fighting the floor)
+    for (let i = 0; i < 3; i++) this.box(-31.5 + i, 0, 0, 1, PH - (i + 1) * 0.4, 4, m.platform);
     this.box(-32.4, PH, -7, 0.6, LOW, 7, m.low, { cover: 'low' });
     this.box(-32.4, PH, 7, 0.6, LOW, 7, m.low, { cover: 'low' });
     this.box(-40, PH, -10.7, 8, LOW, 0.6, m.low, { cover: 'low' });

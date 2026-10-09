@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RigidSkin } from '../../engine/batch.js';
 import { damp, wrapAngle, lerpAngle } from '../../engine/math.js';
+import { rbox, rb, cyl, look, debrisCopy, disposeDebris } from './parts.js';
 
 // Miniboss: a six-legged spider mech guarding the north-east arena.
 // The hull is armored (shots bounce). Each leg has a glowing knee joint: break legs to bring it down.
@@ -12,7 +13,7 @@ import { damp, wrapAngle, lerpAngle } from '../../engine/math.js';
 // Built from bones like the humanoids: one RigidSkin draw per material, the part meshes stay as hitboxes.
 
 const TUNING = {
-  name: 'KR-6 HARVESTER',
+  name: 'SX-6 TARANTULA',
   core: 900, // health of the core (the boss dies with it)
   legHealth: 160,
   height: 2.6, // body height standing
@@ -44,6 +45,7 @@ const _yAxis = new THREE.Vector3(0, 1, 0);
 const _ray = new THREE.Raycaster();
 const BLAST = { point: new THREE.Vector3(), radius: 0, kind: '' };
 const STEP = { point: new THREE.Vector3(), big: false };
+const HITBOX_MAT = new THREE.MeshBasicMaterial(); // never drawn
 
 export class SpiderMech {
   constructor(sys, def) {
@@ -72,8 +74,9 @@ export class SpiderMech {
     this.orbs = [];
 
     const M = {
-      hull: new THREE.MeshStandardMaterial({ color: 0x2c3036, roughness: 0.45, metalness: 0.65 }),
+      hull: new THREE.MeshStandardMaterial({ color: 0x3a3f47, roughness: 0.45, metalness: 0.6 }),
       plate: new THREE.MeshStandardMaterial({ color: 0xc8781e, roughness: 0.5, metalness: 0.35 }),
+      trim: new THREE.MeshStandardMaterial({ color: 0x17181b, roughness: 0.45, metalness: 0.65 }), // black frame, rams
       eye: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff3020, emissiveIntensity: 1 }),
       weak: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2bd6, emissiveIntensity: 3 }),
     };
@@ -94,15 +97,18 @@ export class SpiderMech {
       return b;
     };
     this.hitMeshes = [];
+    // hitboxes: invisible boxes (not drawn, still raycast), except the glowing weak parts, drawn as they are
     const part = (b, w, h, d, mat, x, y, z, zone, partId) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      const weak = mat === M.weak;
+      const m = new THREE.Mesh(weak ? rbox(w, h, d, 0.08) : new THREE.BoxGeometry(w, h, d), weak ? mat : HITBOX_MAT);
       m.position.set(x, y, z);
-      m.castShadow = m.receiveShadow = true;
+      m.visible = weak;
       m.userData = { enemy: this, zone, part: partId };
       b.add(m);
       this.hitMeshes.push(m);
       return m;
     };
+    const R = Math.PI / 2;
 
     this.body = bone(this.root, 0, this.height, 0);
     part(this.body, 2.6, 0.8, 3.2, M.hull, 0, 0, 0, 'torso', 'hull');
@@ -113,24 +119,98 @@ export class SpiderMech {
       part(this.body, 0.12, 0.6, 2.9, M.plate, s * 1.33, 0, 0, 'torso', 'hull'); // side skirts
       for (const [hx, hz] of HIPS) part(this.body, 0.5, 0.5, 0.5, M.hull, s * hx, -0.1, hz, 'torso', 'hull'); // hip mounts
     }
+    // look, in pieces so it breaks apart: hull and belly, front armor, side skirts with hip mounts, tail
+    this.body.add(
+      look(
+        rb(M.hull, 2.5, 0.72, 3.1, 0.2, 0, 0, 0), // hull
+        rb(M.hull, 2.1, 0.36, 2.5, 0.14, 0, -0.52, 0), // belly
+        rb(M.trim, 1.6, 0.12, 1.8, 0.05, 0, -0.74, 0), // belly frame
+        rb(M.trim, 1.0, 0.1, 0.4, 0.04, 0, 0.37, 0.05), // dorsal vents (between core and turret)
+        rb(M.hull, 0.94, 0.06, 0.06, 0.02, 0, 0.42, 0.0),
+        rb(M.hull, 0.94, 0.06, 0.06, 0.02, 0, 0.42, 0.12),
+        rb(M.trim, 1.3, 0.12, 1.3, 0.05, 0, 0.33, -0.75), // core well
+      ),
+      look(
+        rb(M.plate, 2.8, 0.14, 1.2, 0.05, 0, 0.42, 0.9), // front armor
+        rb(M.trim, 0.42, 0.15, 0.12, 0.03, 0.85, 0.43, 1.25, 0, 0.5, 0), // hazard chevrons
+        rb(M.trim, 0.42, 0.15, 0.12, 0.03, -0.85, 0.43, 1.25, 0, -0.5, 0),
+        rb(M.hull, 2.4, 0.28, 0.3, 0.1, 0, 0.05, 1.5), // nose
+        cyl(M.eye, 0.06, 0.06, 0.04, 0.9, 0.05, 1.66, R, 0, 0, 10), // running lights
+        cyl(M.eye, 0.06, 0.06, 0.04, -0.9, 0.05, 1.66, R, 0, 0, 10),
+      ),
+      look(
+        rb(M.hull, 0.5, 0.5, 0.6, 0.1, 0, 0.1, -1.85), // tail
+        cyl(M.trim, 0.12, 0.1, 0.3, 0.13, 0.15, -2.15, R, 0, 0, 12), // exhausts
+        cyl(M.trim, 0.12, 0.1, 0.3, -0.13, 0.15, -2.15, R, 0, 0, 12),
+        cyl(M.eye, 0.07, 0.07, 0.02, 0.13, 0.15, -2.3, R, 0, 0, 12),
+        cyl(M.eye, 0.07, 0.07, 0.02, -0.13, 0.15, -2.3, R, 0, 0, 12),
+        cyl(M.trim, 0.02, 0.02, 0.9, 0.3, 0.6, -1.7, -0.3, 0, 0, 6), // antenna
+      ),
+    );
+    for (const s of [1, -1]) {
+      const skirt = [
+        rb(M.plate, 0.12, 0.58, 2.9, 0.04, s * 1.33, 0, 0), // side skirt
+        rb(M.trim, 0.13, 0.08, 2.92, 0.02, s * 1.335, 0.25, 0), // top rail
+      ];
+      for (const z of [-0.9, 0.9]) skirt.push(rb(M.trim, 0.13, 0.42, 0.14, 0.03, s * 1.335, -0.02, z, 0.6, 0, 0)); // hazard stripes
+      for (const [hx, hz] of HIPS) {
+        skirt.push(
+          cyl(M.hull, 0.27, 0.27, 0.5, s * hx, -0.1, hz, 0, 0, R, 14), // hip drum
+          cyl(M.trim, 0.29, 0.29, 0.08, s * (hx + 0.2), -0.1, hz, 0, 0, R, 14),
+          cyl(M.plate, 0.12, 0.12, 0.06, s * (hx + 0.27), -0.1, hz, 0, 0, R, 10), // cap
+        );
+      }
+      this.body.add(look(...skirt));
+    }
     // core on the back, under two armored shutters
     this.core = part(this.body, 0.9, 0.3, 0.9, M.weak, 0, 0.45, -0.75, 'weak', 'core');
     this.shutters = [1, -1].map((s) => {
       const b = bone(this.body, s * 0.62, 0.62, -0.75);
       part(b, 0.64, 0.12, 1.15, M.plate, -s * 0.32, 0, 0, 'torso', 'hull');
+      b.add(
+        look(
+          rb(M.plate, 0.64, 0.12, 1.15, 0.04, -s * 0.32, 0, 0), // shutter
+          rb(M.trim, 0.58, 0.05, 0.08, 0.02, -s * 0.32, 0.07, -0.3), // ribs
+          rb(M.trim, 0.58, 0.05, 0.08, 0.02, -s * 0.32, 0.07, 0),
+          rb(M.trim, 0.58, 0.05, 0.08, 0.02, -s * 0.32, 0.07, 0.3),
+          cyl(M.hull, 0.06, 0.06, 1.1, 0, -0.02, 0, R, 0, 0, 10), // hinge
+        ),
+      );
       b.userData.side = s;
       return b;
     });
-    // turret: twin cannons and the eye
+    // turret: twin cannons, a cluster of spider eyes, a mortar tube on the back
     this.turret = bone(this.body, 0, 0.62, 0.95);
     part(this.turret, 1.4, 0.6, 1.3, M.hull, 0, 0.2, 0, 'torso', 'hull');
     part(this.turret, 1.0, 0.12, 0.06, M.eye, 0, 0.25, 0.66, 'torso', 'hull');
     for (const s of [1, -1]) part(this.turret, 0.16, 0.16, 1.4, M.hull, s * 0.38, 0.12, 1.2, 'torso', 'hull');
+    const turret = [
+      rb(M.hull, 1.4, 0.56, 1.3, 0.16, 0, 0.2, 0), // housing
+      rb(M.plate, 1.2, 0.08, 1.0, 0.04, 0, 0.5, -0.05), // roof plate
+      rb(M.trim, 1.0, 0.28, 0.08, 0.04, 0, 0.25, 0.63), // eye visor
+      cyl(M.trim, 0.42, 0.46, 0.12, 0, -0.05, 0, 0, 0, 0, 18), // turret ring
+      cyl(M.trim, 0.18, 0.22, 0.6, 0, 0.6, -0.4, -0.35, 0, 0, 12), // mortar tube
+      cyl(M.plate, 0.2, 0.2, 0.06, 0, 0.82, -0.48, -0.35, 0, 0, 12),
+    ];
+    for (const [x, y, r] of [[0.16, 0.28, 0.08], [-0.16, 0.28, 0.08], [0.36, 0.3, 0.05], [-0.36, 0.3, 0.05], [0.28, 0.18, 0.035], [-0.28, 0.18, 0.035]]) {
+      turret.push(cyl(M.eye, r, r, 0.04, x, y, 0.67, R, 0, 0, 12)); // eyes
+    }
+    for (const s of [1, -1]) {
+      turret.push(
+        rb(M.hull, 0.3, 0.3, 0.5, 0.06, s * 0.38, 0.12, 0.7), // cannon breech
+        cyl(M.hull, 0.075, 0.085, 1.3, s * 0.38, 0.12, 1.25, R, 0, 0, 12), // barrel
+        cyl(M.trim, 0.1, 0.1, 0.06, s * 0.38, 0.12, 1.1, R, 0, 0, 12), // cooling rings
+        cyl(M.trim, 0.1, 0.1, 0.06, s * 0.38, 0.12, 1.3, R, 0, 0, 12),
+        cyl(M.plate, 0.11, 0.1, 0.18, s * 0.38, 0.12, 1.86, R, 0, 0, 12), // muzzle brake
+      );
+    }
+    this.turret.add(look(...turret));
     this.muzzle = new THREE.Object3D();
     this.muzzle.position.set(0, 0.12, 1.95);
     this.turret.add(this.muzzle);
 
-    // legs: femur and tibia bones are posed by IK every frame (root space)
+    // legs: femur and tibia bones are posed by IK every frame (root space), +Y along the segment; their twist is
+    // arbitrary, so the leg looks stay round-ish
     this.legs = [];
     for (let i = 0; i < 6; i++) {
       const side = i < 3 ? 1 : -1; // +X = the mech's left
@@ -138,11 +218,35 @@ export class SpiderMech {
       const femur = bone(this.root);
       const tibia = bone(this.root);
       const id = i;
-      part(femur, 0.32, LEG.femur, 0.36, M.hull, 0, LEG.femur / 2, 0, 'limb', id);
-      part(femur, 0.36, LEG.femur * 0.6, 0.12, M.plate, 0, LEG.femur * 0.5, 0.2, 'limb', id);
+      const F = LEG.femur;
+      const T = LEG.tibia;
+      part(femur, 0.32, F, 0.36, M.hull, 0, F / 2, 0, 'limb', id);
+      part(femur, 0.36, F * 0.6, 0.12, M.plate, 0, F * 0.5, 0.2, 'limb', id);
+      femur.add(
+        look(
+          rb(M.hull, 0.3, F - 0.2, 0.34, 0.1, 0, F / 2, 0), // femur beam
+          rb(M.plate, 0.36, F * 0.6, 0.1, 0.04, 0, F * 0.5, 0.2), // armor
+          rb(M.trim, 0.37, 0.08, 0.11, 0.03, 0, F * 0.32, 0.21),
+          rb(M.trim, 0.37, 0.08, 0.11, 0.03, 0, F * 0.68, 0.21),
+          cyl(M.trim, 0.06, 0.06, F * 0.7, 0, F * 0.48, -0.24, 0, 0, 0, 8), // hydraulic ram
+          cyl(M.hull, 0.035, 0.035, F * 0.5, 0, F * 0.76, -0.24, 0, 0, 0, 8),
+          cyl(M.plate, 0.075, 0.075, 0.05, 0, F * 0.18, -0.24, 0, 0, 0, 8),
+        ),
+      );
       const knee = part(tibia, 0.42, 0.42, 0.42, M.weak, 0, 0, 0, 'weak', id);
-      part(tibia, 0.24, LEG.tibia, 0.26, M.hull, 0, LEG.tibia / 2, 0, 'limb', id);
-      part(tibia, 0.4, 0.25, 0.4, M.plate, 0, LEG.tibia, 0, 'limb', id); // foot
+      part(tibia, 0.24, T, 0.26, M.hull, 0, T / 2, 0, 'limb', id);
+      part(tibia, 0.4, 0.25, 0.4, M.plate, 0, T, 0, 'limb', id); // foot
+      tibia.add(
+        look(
+          cyl(M.trim, 0.27, 0.27, 0.12, 0, 0, 0, 0, 0, R, 14), // knee collar
+          rb(M.hull, 0.24, T - 0.5, 0.26, 0.08, 0, T * 0.45, 0), // shin
+          rb(M.plate, 0.3, T * 0.35, 0.3, 0.06, 0, T * 0.3, 0), // shin guard
+          rb(M.trim, 0.31, 0.06, 0.31, 0.02, 0, T * 0.47, 0),
+          cyl(M.hull, 0.1, 0.16, 0.5, 0, T - 0.2, 0, 0, 0, 0, 10), // ankle
+          rb(M.plate, 0.42, 0.18, 0.42, 0.06, 0, T - 0.02, 0), // foot pad
+          cyl(M.trim, 0.1, 0.02, 0.22, 0, T + 0.18, 0, 0, 0, 0, 8), // spike
+        ),
+      );
       const hip = new THREE.Vector3(side * HIPS[row][0], -0.1, HIPS[row][1]);
       const rest = new THREE.Vector3(side * REST[row][0], 0, REST[row][1]);
       const foot = this.root.localToWorld(rest.clone());
@@ -249,11 +353,11 @@ export class SpiderMech {
     }
   }
 
-  #debris(m, dir) {
-    if (!m.isMesh) return;
-    const d = new THREE.Mesh(m.geometry, m.material);
-    m.matrixWorld.decompose(d.position, d.quaternion, d.scale);
-    d.castShadow = true;
+  // A piece on a bone (its look, a weak part) flies off as a debris chunk.
+  #debris(piece, dir) {
+    if (piece.isBone) return;
+    const d = debrisCopy(piece);
+    if (!d) return;
     this.sys.scene.add(d);
     const v = dir.clone().multiplyScalar(3 + Math.random() * 3);
     v.y += 3 + Math.random() * 3;
@@ -275,7 +379,7 @@ export class SpiderMech {
     this.sys.events.emit('boss:dead', BLAST);
     this.sys.events.emit('puppet:down', this);
     if (this.sys.kills === this.sys.puppets.length) this.sys.events.emit('arena:clear');
-    for (const m of this.hitMeshes) this.#debris(m, dir);
+    for (const b of this.skeleton.bones) if (b.scale.x > 0.01) for (const m of b.children) this.#debris(m, dir); // broken legs already burst
     this.root.visible = false;
     for (const o of this.orbs) o.obj.visible = o.ring.visible = false;
   }
@@ -334,6 +438,7 @@ export class SpiderMech {
     const e = this.flash > 0 ? 0.6 : 0;
     this.mats.hull.emissive.setScalar(e);
     this.mats.plate.emissive.setScalar(e);
+    this.mats.trim.emissive.setScalar(e);
     const charge = this.gun.state === 'charge' ? 1 - this.gun.timer / this.t.burst.charge : 0;
     this.mats.eye.emissiveIntensity = this.awake ? 1.5 + charge * 10 : 0.3;
     this.mats.weak.emissiveIntensity = (isDown ? 4 : 2.4) + Math.sin(this.time * (isDown ? 14 : 8)) * 1.4;
@@ -598,7 +703,7 @@ export class SpiderMech {
       }
       if (d.life < 1) d.obj.scale.multiplyScalar(1 - dt * 3);
       if (d.life <= 0) {
-        this.sys.scene.remove(d.obj);
+        disposeDebris(d.obj);
         this.debris[i] = this.debris[this.debris.length - 1];
         this.debris.pop();
       }

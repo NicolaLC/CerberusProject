@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { rb, cyl, cap, group } from './parts.js';
 
 // Procedural military combat robot (mood: olive drab plate carrier and pads over a mechanical frame).
 // Every part hangs on a rig bone (the bone is the pivot), so it moves with the body; RigidSkin batches them.
@@ -19,31 +19,6 @@ export function soldierMaterials() {
     glowRed: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff3b2a, emissiveIntensity: 2.5 }),
   };
 }
-
-const geoCache = new Map();
-function rbox(w, h, d, r) {
-  const key = `${w}|${h}|${d}|${r}`;
-  if (!geoCache.has(key)) geoCache.set(key, new RoundedBoxGeometry(w, h, d, 2, Math.min(r, w / 2, h / 2, d / 2) - 1e-4));
-  return geoCache.get(key);
-}
-
-// part(geometry, material, x, y, z, rx, ry, rz)
-function part(geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
-  const m = new THREE.Mesh(geo, mat);
-  m.position.set(x, y, z);
-  m.rotation.set(rx, ry, rz);
-  return m;
-}
-
-const rb = (m, w, h, d, r, x, y, z, rx, ry, rz) => part(rbox(w, h, d, r), m, x, y, z, rx, ry, rz);
-const cyl = (m, rt, rbot, h, x, y, z, rx, ry, rz, seg = 12) => part(new THREE.CylinderGeometry(rt, rbot, h, seg), m, x, y, z, rx, ry, rz);
-const cap = (m, r, len, x, y, z) => part(new THREE.CapsuleGeometry(r, len, 4, 10), m, x, y, z);
-
-const group = (...children) => {
-  const g = new THREE.Group();
-  for (const c of children) g.add(c);
-  return g;
-};
 
 export function buildSoldier(rig, M = soldierMaterials()) {
   const P = (bone, ...children) => rig.setPart(bone, group(...children));
