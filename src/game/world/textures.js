@@ -4,6 +4,7 @@ import * as THREE from 'three';
 export const TILE_METERS = 2;
 
 const cache = new Map();
+let anisotropy = 8; // graphics quality (view/quality.js)
 
 export function gridTexture({
   base = '#8a8d92',
@@ -59,7 +60,7 @@ export function gridTexture({
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.anisotropy = 8;
+  tex.anisotropy = anisotropy;
   cache.set(key, tex);
   return tex;
 }
@@ -90,4 +91,14 @@ export function applyWorldUVs(geometry, offset) {
     else uv.setXY(i, Math.sign(nz) * x * s, y * s);
   }
   uv.needsUpdate = true;
+}
+
+// Texture filtering quality for every grid texture, existing and future (graphics quality preset).
+export function setAnisotropy(n) {
+  anisotropy = n;
+  for (const tex of cache.values()) {
+    if (tex.anisotropy === n) continue;
+    tex.anisotropy = n;
+    tex.needsUpdate = true;
+  }
 }

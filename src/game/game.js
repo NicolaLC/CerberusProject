@@ -13,6 +13,7 @@ import { Post } from './view/post.js';
 import { Juice } from './view/juice.js';
 import { Controls } from './controls.js';
 import { settings, bindSettingsUI } from './settings.js';
+import { applyQuality } from './view/quality.js';
 
 // Composition root: builds every game system on top of the engine, wires events and declares the
 // frame order. This is the only file that knows about all systems; they only know their direct
@@ -46,6 +47,7 @@ export class Game {
     const hud = new Hud().listen(events, camRig);
     const audio = new Audio().listen(events);
     const post = new Post(renderer, scene, camera, events);
+    applyQuality(settings.quality, { engine, post, world });
     const juice = new Juice({ camRig, post, fx }).listen(events);
     events.on('puppet:down', (p) => pickups.drop(p.pos));
     // controller rumble (only while the pad is the device in use)
@@ -183,7 +185,7 @@ export class Game {
     const { engine, audio } = this;
     const { input, canvas } = engine;
     const overlay = document.getElementById('overlay');
-    bindSettingsUI();
+    bindSettingsUI({ onQuality: (q) => applyQuality(q, this) });
     const setRunning = (running) => {
       engine.paused = !running;
       overlay.style.display = running ? 'none' : 'flex';
@@ -196,6 +198,11 @@ export class Game {
       audio.init();
       input.lock();
     });
+    // desktop build (desktop/preload.cjs): quit button in the panel
+    const desktop = window.cerberusDesktop;
+    const quit = document.getElementById('quit');
+    quit.hidden = !desktop;
+    quit.addEventListener('click', () => desktop?.quit());
     document.addEventListener('pointerlockchange', () => setRunning(input.locked || input.free || this.padPlay || this.debug));
     addEventListener('keydown', (e) => {
       // Esc pauses in free-mouse mode (pointer lock handles it otherwise)

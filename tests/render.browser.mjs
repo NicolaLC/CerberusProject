@@ -57,6 +57,21 @@ const r = await p.evaluate(() => {
   };
 });
 console.log(r);
+// graphics presets: each one renders, and the targets / shadow map / bloom follow the preset
+const q = await p.evaluate(async () => {
+  const g = window.game;
+  const { applyQuality } = await import('/src/game/view/quality.js');
+  const out = {};
+  for (const name of ['low', 'ultra', 'high']) {
+    applyQuality(name, g);
+    g.engine.step(1 / 60);
+    g.engine.step(1 / 60);
+    const rt = g.post.composer.renderTarget1;
+    out[name] = { samples: rt.samples, bloom: g.post.bloom.enabled, shadow: g.world.sun.shadow.map?.width, maxScale: g.engine.perf.maxScale, calls: g.engine.renderer.info.render.calls };
+  }
+  return out;
+});
+console.log(q);
 const fail = [];
 const expect = (name, ok) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`); if (!ok) fail.push(name); };
 expect(`draw calls within budget (${r.calls} <= ${BUDGET})`, r.calls <= BUDGET);
@@ -67,6 +82,9 @@ expect('a far LOD puppet is still hittable', r.hittable);
 expect('shadow-only meshes never drawn in the color pass', r.shadowOnlyHidden);
 expect('skinned meshes have a real culling sphere', r.minCullRadius > 0.5);
 expect('world and hitbox proxies are not drawn', r.proxiesHidden && r.hitMeshesHidden);
+expect('low preset: no MSAA, no bloom, 2048 shadows, 1x', q.low.samples === 0 && !q.low.bloom && q.low.shadow === 2048 && q.low.maxScale <= 1 && q.low.calls > 0);
+expect('ultra preset: supersampled, MSAA >= high (capped by the GPU), 4096 shadows', q.ultra.maxScale > q.high.maxScale && q.ultra.samples >= q.high.samples && q.ultra.shadow === 4096);
+expect('high preset restores the defaults', q.high.samples === 4 && q.high.bloom && q.high.shadow === 4096 && q.high.calls > 0);
 expect('no page errors', errors.length === 0);
 await b.close();
 process.exit(fail.length ? 1 : 0);

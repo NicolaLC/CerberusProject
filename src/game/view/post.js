@@ -70,6 +70,7 @@ export class Post {
     this.exposure = EXPOSURE.outside;
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
     const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+    this.maxSamples = renderer.capabilities.maxSamples;
     this.composer = new EffectComposer(renderer, rt);
     this.composer.addPass(new RenderPass(scene, camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.45, 0.55, 0.92);
@@ -89,6 +90,17 @@ export class Post {
 
   kill() {
     this.flash = 1;
+  }
+
+  // Graphics quality: MSAA samples of the HDR scene target (0 = off) and bloom on/off.
+  setQuality({ msaa, bloom }) {
+    const samples = Math.min(msaa, this.maxSamples);
+    for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) {
+      if (rt.samples === samples) continue;
+      rt.samples = samples;
+      rt.dispose(); // reallocated with the new sample count on the next render
+    }
+    this.bloom.enabled = bloom;
   }
 
   setSize(w, h, pixelRatio = this.renderer.getPixelRatio()) {
