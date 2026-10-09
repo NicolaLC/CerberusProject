@@ -51,7 +51,7 @@ const r = await p.evaluate(() => {
 });
 
 // The player: stopping settles into idle without a pop, moving along cover turns into the move with feet on
-// the floor, and vaulting picks a jump (thin block) or a slide (deep block).
+// the floor, cover is automatic, and vaulting picks a jump (thin block) or a slide (deep block).
 const pl = await p.evaluate(() => {
   const g = window.game;
   const { engine, player, enemies, camRig } = g;
@@ -84,7 +84,7 @@ const pl = await p.evaluate(() => {
   // low cover, slide right
   player.pos.set(-24, 0, 1.3);
   step(20);
-  press('Space', 30);
+  press('KeyW', 30); // walking into the block snaps into cover (automatic)
   keys.add('KeyD'); step(12); // the block is 4 m long: measure mid-run, before its end
   out.coverMove = track(20);
   out.coverMove.crouch = +player.crouchBlend.toFixed(2);
@@ -100,13 +100,13 @@ const pl = await p.evaluate(() => {
   keys.add('KeyW'); press('Space'); keys.delete('KeyW'); // from that cover: a 1 m block -> jump
   step(60);
   out.coverVault = { kind: kinds.at(-1), z: +player.pos.z.toFixed(2), y: +player.pos.y.toFixed(2) };
-  player.pos.set(-2, 0, 8.5); // deep side of the 1 x 3 block at (-2, 4): run in -> slide
+  player.pos.set(-2, 0, 11); // deep side of the 1 x 3 block at (-2, 4): run in -> slide
   player.vel.set(0, 0, 0);
   camRig.yaw = 0;
   step(10);
   keys.add('ShiftLeft'); keys.add('KeyW');
   let peak = 0;
-  for (let i = 0; i < 120 && !player.snap; i++) { step(); if (i > 25) engine.input.pressed.add('Space'); }
+  for (let i = 0; i < 120 && !player.snap; i++) { step(); if (player.pos.z < 7.6) engine.input.pressed.add('Space'); } // Space inside the run-in reach (2.2 m from the face)
   for (let i = 0; i < 60; i++) { step(); peak = Math.max(peak, player.pos.y); }
   keys.delete('ShiftLeft'); keys.delete('KeyW');
   out.runVault = { kind: kinds.at(-1), z: +player.pos.z.toFixed(2), peak: +peak.toFixed(2) };

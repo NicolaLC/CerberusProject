@@ -6,17 +6,30 @@
 - Shields 100 (regen 45/s after 3.5s), health 100 (regen 12/s after 6s). Death → respawn at spawn after 3s.
 
 ## Input (bindings: `BINDINGS` in `game/controls.js`)
-- Aim (zoom): hold RMB. Sprint: Shift. Fire: LMB or F. Arrow keys look. F3: performance stats.
+- Aim (zoom): hold RMB. Sprint: Shift. Jump / vault: Space. Fire: LMB or F. Arrow keys look. F3: performance stats.
 - Trackpad mode: two-finger swipe (wheel events) looks; E toggles aim (right click and LT always aim only while held); aim assist
   stronger (1.6 vs 0.8). E does nothing outside trackpad mode.
 - Aim assist (`camRig.assist`): within ~4-8° of a visible puppet's chest the look slows (friction) and eases toward it.
 - Look sensitivity multiplier lives in settings.
 - Controller (standard mapping, Xbox names): L stick move (analog: partial tilt walks slower), R stick look,
-  LT aim, RT fire, X reload, A cover / vault, LB swap shoulder, Y or RB next gun, d-pad ← ↑ → ↓ = AR / MG / SR / pistol,
+  LT aim, RT fire, X reload, A jump / vault, LB swap shoulder, Y or RB next gun, d-pad ← ↑ → ↓ = AR / MG / SR / pistol,
   L3 click sprints until the stick is released or pulled back, View = stats, Menu = pause (A or Menu deploys from
   the start panel, no pointer lock needed). Look: 15% radial dead zone, response curve ^2.2, ×1.7 turn boost after
   0.25 s at the rim (`PAD_LOOK`), optional invert Y. Aim assist uses the stronger trackpad profile (friction + pull).
   Rumble on shots (sniper hardest), hits taken, nearby blasts and boss footsteps.
+
+## Jump = jetpack burst (`JET` in player.js)
+- Space / A on the ground (not in a snap, dead, or within the cooldown) fires a short burst, not a real jump. Order on
+  press: low cover pushing into it → vault; running fast at low cover within 2.2 m → vault; else the burst (leaves cover).
+- Thrust 0.22 s lifts vy linearly to 5.5 m/s (gravity off meanwhile), then gravity ×0.8 (17.6 m/s²): peak ~1.5 m above
+  take-off, ~0.95 s airtime, enough to land on low cover (1.1 m). +1.5 m/s along the move input at take-off; air
+  control eases at 4 (ground 14); no sprinting in the air (momentum is kept); aiming and firing work.
+- Cooldown 0.9 s counted from take-off (and the player must be grounded). `player.airborne` from take-off until landed,
+  `player.jetting` = seconds of thrust left. Events: `player:jet` { point (nozzle: +1.2 m up, 0.25 m behind), dir },
+  `player:land`.
+- Ceiling: a rising head stops under a collider box (roof, ceiling), vy and thrust zeroed. Landing on a box top works
+  because `groundAt` / `collideCircle` use feet + step height; walking off its edge falls normally.
+- Animator `air`: knees bent (0.5 rad), hips pitched forward, no foot locks / feet IK while it shows.
 
 ## Ammo
 - Pickups fill every gun at once (`pickup.crate` / `pickup.drop` per gun: AR 96/32, MG 135/45). Cases at fixed `SPOTS`
@@ -25,7 +38,13 @@
 - Walk within 1.1m to collect; a full reserve leaves it there ("AMMO FULL").
 
 ## Cover
-- `Space` near a cover box (reach 2.2m, move dir or camera forward, then 8 directions) snaps to it.
+- Automatic: from free, grounded movement, pushing into a cover face snaps to it (`TUNING.autoCoverReach` 0.35 m beyond
+  the body radius, wish within ~53° of the face normal: walking along or grazing a wall never snaps; never while
+  airborne). A sprint at low cover leaves room for the run-in vault (no snap until touching it); at high cover it slams in.
+- Exit, no button: move away (wish·normal > 0.5, so a diagonal backward push counts), push along the cover past its end
+  (stopped at the edge and still pushing for `coverEdgeExit` 0.15 s, not while aiming: that peeks), vault, or jump.
+  After any exit auto cover waits `autoCoverCooldown` 0.4 s (the timer runs only out of cover) and needs a push
+  into the face again, so neither exit snaps straight back.
 - No on-screen hints or button prompts: the HUD shows state (ammo, health, boss bar, warnings), never instructions.
 - Cover type from height above feet: < 1.7m = low, else high. Boxes are cover only if created with `{ cover }`:
   `'low'` / `'high'` cover blocks, or `'wall'` for walls (building walls, the range separator, the boss arena's
@@ -35,7 +54,7 @@
   (Animator `hunch`: chest folded forward, shoulders down, head up looking ahead, gun low); behind low cover
   the hips come half up (crouch 0.45) and it is a quick short-step walk with the feet IK'd to the floor.
   Stopping turns the back to the wall again.
-- Low: crouched; aim or fire pops up (fire waits until standing). `Space` + W vaults over.
+- Low: crouched; aim or fire pops up (fire waits until standing). `Space` + W (pushing into it) vaults over.
 - Vault (`VAULT` in player.js): a block up to 1.2 m deep (its short side) is jumped (tucked hop, 0.5 s); a deeper
   one (its long side) is slid across on the hip (0.3 s + depth / 5.5 m/s, linear, keeps momentum). Running
   (> 3.5 m/s) straight at low cover within 2.2 m and pressing `Space` vaults without stopping. Heights come

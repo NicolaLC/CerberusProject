@@ -6,7 +6,8 @@ import { damp, lerpAngle, wrapAngle } from '../../engine/math.js';
 import { RigidSkin, mergeGroup } from '../../engine/batch.js';
 
 // The player character: movement, collision, cover state machine, health; drives its rig animator.
-// Reads intents from Controls; reports what happened through events ('player:coverSlam', 'player:land').
+// Reads intents from Controls; reports what happened through events ('player:coverSlam', 'player:land',
+// 'player:jet', 'player:vault').
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _f = new THREE.Vector3();
@@ -16,8 +17,7 @@ const _prev = new THREE.Vector3();
 const _n = new THREE.Vector3();
 const _ray = new THREE.Raycaster();
 const _move = { x: 0, y: 0 };
-// probe directions for the wide cover search (8 compass points)
-const RING = Array.from({ length: 8 }, (_, i) => new THREE.Vector3(Math.sin((i * Math.PI) / 4), 0, Math.cos((i * Math.PI) / 4)));
+const _jet = { point: new THREE.Vector3(), dir: new THREE.Vector3(0, -1, 0) }; // 'player:jet' payload (reused)
 
 export const SPAWN = new THREE.Vector3(0, 0, 38);
 
@@ -33,7 +33,10 @@ const TUNING = {
   coverSlide: 3.2,
   accel: 14,
   gravity: 22,
-  coverReach: 2.2,
+  coverReach: 2.2, // run-in vault probe distance
+  autoCoverReach: 0.35, // m beyond the body radius: pushing into a cover face this close snaps into cover
+  autoCoverCooldown: 0.4, // s after leaving cover before it can grab again
+  coverEdgeExit: 0.15, // s of pushing along the cover while stopped at its end before walking on past it
   maxShields: 100,
   maxHealth: 100,
   shieldDelay: 3.5,
@@ -45,6 +48,12 @@ const TUNING = {
 // Vaulting low cover: blocks up to `hopDepth` deep are jumped, deeper ones slid across on the hip.
 // Space while running (> runIn m/s) straight at low cover within runInReach m vaults without stopping.
 const VAULT = { hopDepth: 1.2, hopTime: 0.5, slideTime: 0.3, slideSpeed: 5.5, runIn: 3.5, runInReach: 2.2 };
+
+// Jump = a short jetpack burst, not a real jump. Thrust lifts vy linearly to `lift` over `thrust` s (gravity is
+// ignored meanwhile), then `gravity` x normal pulls back (floaty). Peak ~1.46 m: enough to land on low cover.
+// `boost` m/s is added along the move input at take-off; in the air movement eases at `airAccel` (ground: accel).
+// `cooldown` s counts from take-off, and the player must be on the ground (so it is ready ~at landing).
+const JET = { thrust: 0.22, lift: 5.5, gravity: 0.8, boost: 1.5, airAccel: 4, cooldown: 0.9, nozzleUp: 1.2, nozzleBack: 0.25 };
 
 // High cover corner peek: sideways weight shift (m) and torso lean (rad, split over the spine).
 const PEEK = { shift: 0.2, lean: 0.6 };
@@ -67,6 +76,11 @@ export class Player {
     this.lastShot = 99;
     this.cover = null; // { normal, tangent, type, edgeL, edgeR }
     this.snap = null; // smooth move into cover / vault
+    this.airborne = false; // jetpack burst: true from take-off until landed
+    this.jetting = 0; // seconds of thrust left
+    this.jetTimer = 0; // seconds until the next burst is allowed
+    this.coverTimer = 0; // seconds until auto cover may grab again
+    this.edgeTime = 0; // seconds pushing along cover while stopped at its end
     this.peek = new THREE.Vector3();
     this.shields = TUNING.maxShields;
     this.health = TUNING.maxHealth;
@@ -136,6 +150,8 @@ export class Player {
     this.pos.copy(SPAWN);
     this.vel.set(0, 0, 0);
     this.vy = 0;
+    this.airborne = false;
+    this.jetting = 0;
     this.cover = null;
     this.snap = null;
     this.peek.set(0, 0, 0);
@@ -159,7 +175,13 @@ export class Player {
     if (this.sinceHit > t.shieldDelay) this.shields = Math.min(t.maxShields, this.shields + t.shieldRate * dt);
     if (this.sinceHit > t.healthDelay) this.health = Math.min(t.maxHealth, this.health + t.healthRate * dt);
 
+    // the re-entry cooldown only runs once out of cover (held full while in it)
+    this.coverTimer = this.cover ? t.autoCoverCooldown : Math.max(0, this.coverTimer - dt);
+    this.jetTimer = Math.max(0, this.jetTimer - dt);
+
     if (this.dead) {
+      this.airborne = false;
+      this.jetting = 0;
       this.deadTime += dt;
       this.#animate(dt, rig, 0);
       return;
@@ -176,7 +198,7 @@ export class Player {
     this.aiming = controls.aiming && !this.snap && !this.pinned;
     if (weapon.firing) this.lastShot = 0;
     // sprint: forward only, not while aiming, shooting or in cover; pulling the trigger ends it
-    this.sprinting = controls.running && ax.y > 0 && !this.aiming && !this.cover && !this.snap && !controls.firing && this.lastShot > t.sprintCooldown;
+    this.sprinting = controls.running && ax.y > 0 && !this.aiming && !this.airborne && !this.cover && !this.snap && !controls.firing && this.lastShot > t.sprintCooldown;
     const combat = this.aiming || this.lastShot < 0.6;
 
     // ----- smooth snap (enter cover / vault) -----
@@ -197,7 +219,8 @@ export class Player {
       }
       if (s.t >= 1) {
         this.snap = null;
-        this.events.emit(s.hop ? 'player:land' : 'player:coverSlam');
+        if (s.hop) this.events.emit('player:land', 'vault');
+        else this.events.emit('player:coverSlam');
         this.pos.y = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.stepHeight);
       }
       this.#animate(dt, rig, 1, weapon.lowered());
@@ -206,19 +229,28 @@ export class Player {
 
     // ----- cover -----
 
-    if (controls.coverPressed) {
+    const grounded = !this.airborne && this.vy === 0;
+    if (controls.jumpPressed) {
+      let done = false;
       if (this.cover) {
         const into = -wish.dot(this.cover.normal);
-        if (this.cover.type === 'low' && into > 0.5) this.#tryVault(this.cover.normal, this.cover.collider, this.t.radius + 0.05);
-        else this.cover = null;
-      } else {
-        const c = this.#findCover(wish, _f, true); // move direction, camera forward, then all around
+        done = this.cover.type === 'low' && into > 0.5 && this.#tryVault(this.cover.normal, this.cover.collider, this.t.radius + 0.05);
+      } else if (grounded && this.vel.x * this.vel.x + this.vel.z * this.vel.z > VAULT.runIn * VAULT.runIn && wish.lengthSq() > 0.1) {
         // running straight at low cover: vault it in one go instead of stopping behind it
-        const fast = this.vel.x * this.vel.x + this.vel.z * this.vel.z > VAULT.runIn * VAULT.runIn;
+        const c = this.#castCover(_n.copy(wish).normalize(), t.coverReach);
         const dist = c ? _v.subVectors(this.pos, c.point).dot(c.normal) : 0;
-        if (c && c.type === 'low' && fast && -wish.dot(c.normal) > 0.7 && dist < VAULT.runInReach && this.#tryVault(c.normal, c.collider, dist)) {
-          // vaulted
-        } else if (c) this.#enterCover(c);
+        done = !!c && c.type === 'low' && -wish.dot(c.normal) > 0.7 && dist < VAULT.runInReach && this.#tryVault(c.normal, c.collider, dist);
+      }
+      if (!done && grounded && this.jetTimer <= 0) this.#jetBurst(wish);
+    }
+
+    // auto cover: pushing into a cover face from free, grounded movement snaps to it
+    if (!this.snap && !this.cover && grounded && this.coverTimer <= 0 && wish.lengthSq() > 0.09) {
+      const c = this.#castCover(_n.copy(wish).normalize(), t.radius + t.autoCoverReach);
+      if (c && -_n.dot(c.normal) > 0.6) {
+        // sprinting at low cover: leave room for the run-in vault (Space) until we are touching it
+        const fast = this.vel.x * this.vel.x + this.vel.z * this.vel.z > VAULT.runIn * VAULT.runIn;
+        if (!(c.type === 'low' && fast && _v.subVectors(this.pos, c.point).dot(c.normal) > t.radius + 0.1)) this.#enterCover(c);
       }
     }
 
@@ -265,7 +297,7 @@ export class Player {
     let speed = this.aiming ? t.aimWalk : this.sprinting ? t.sprint : t.walk;
     // heavy guns slow you down while they fire
     if (this.gun?.fireMoveSpeed && this.lastShot < 0.25) speed = Math.min(speed, this.gun.fireMoveSpeed);
-    const k = damp(t.accel, dt);
+    const k = damp(this.airborne ? JET.airAccel : t.accel, dt);
     this.vel.x += (wish.x * speed - this.vel.x) * k;
     this.vel.z += (wish.z * speed - this.vel.z) * k;
 
@@ -274,12 +306,21 @@ export class Player {
     this.#collide();
 
     const ground = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.stepHeight, t.radius * 0.5);
-    if (this.pos.y > ground + 0.01) {
-      this.vy -= t.gravity * dt;
+    if (this.airborne || this.pos.y > ground + 0.01) {
+      if (this.jetting > 0) {
+        this.jetting = Math.max(0, this.jetting - dt);
+        this.vy = Math.min(JET.lift, this.vy + (JET.lift / JET.thrust) * dt);
+      } else this.vy -= t.gravity * (this.airborne ? JET.gravity : 1) * dt;
+      const before = this.pos.y;
       this.pos.y += this.vy * dt;
-      if (this.pos.y <= ground) {
+      if (this.vy > 0) this.#ceiling(before);
+      if (this.pos.y <= ground && this.vy <= 0) {
         this.pos.y = ground;
         this.vy = 0;
+        if (this.airborne) {
+          this.airborne = false;
+          this.events.emit('player:land', 'jet');
+        }
       }
     } else {
       this.pos.y = ground;
@@ -294,8 +335,8 @@ export class Player {
     c.tangent.set(c.normal.z, 0, -c.normal.x);
     if (c.tangent.dot(rig.right) < 0) c.tangent.negate();
 
-    if (wish.dot(c.normal) > 0.75) {
-      this.cover = null;
+    if (wish.dot(c.normal) > 0.5) {
+      this.cover = null; // moving away (also a diagonal push back) leaves cover
       return;
     }
 
@@ -311,6 +352,14 @@ export class Player {
         this.pos.x = hit.point.x + c.normal.x * (t.radius + 0.05);
         this.pos.z = hit.point.z + c.normal.z * (t.radius + 0.05);
       }
+    }
+    // stopped at the end of the cover and still pushing along it: walk on past the end (not while aiming: peek)
+    const blocked = Math.abs(step) > 1e-4 && before.distanceToSquared(this.pos) < 1e-8;
+    this.edgeTime = blocked && !this.aiming && Math.abs(wish.dot(c.tangent)) > 0.3 ? this.edgeTime + dt : 0;
+    if (this.edgeTime >= t.coverEdgeExit) {
+      this.cover = null;
+      this.edgeTime = 0;
+      return;
     }
     // real slide velocity (eased like free movement), so the legs step along the wall and settle at its end
     const k = damp(t.accel, dt);
@@ -329,28 +378,51 @@ export class Player {
     return hit;
   }
 
+  // First cover face along horizontal direction d (unit) within `reach` m of the body center, facing us.
   // Must not allocate unless it finds something.
-  #findCover(wish, fwd, wide) {
-    const hasWish = wish.lengthSq() > 0.1;
-    const count = (hasWish ? 1 : 0) + 1 + (wide ? RING.length : 0);
-    for (let i = 0; i < count; i++) {
-      const j = hasWish ? i : i + 1;
-      const d = j === 0 ? _n.copy(wish).normalize() : j === 1 ? fwd : RING[j - 2];
-      _ray.set(_o.set(this.pos.x, this.pos.y + 0.5, this.pos.z), d);
-      _ray.far = this.t.coverReach;
-      const hit = _ray.intersectObjects(this.world.coverMeshes, false)[0];
-      if (!hit || !hit.face) continue;
-      const n = hit.face.normal;
-      if (Math.abs(n.y) > 0.3 || n.dot(d) > -0.5) continue;
-      // something solid between us and the cover? (another collider)
-      _ray.far = hit.distance;
-      const block = _ray.intersectObjects(this.world.meshes, false)[0];
-      if (block && block.object !== hit.object && block.distance < hit.distance - 0.05) continue;
-      const col = hit.object.userData.collider;
-      const type = col.box.max.y - this.pos.y < 1.7 ? 'low' : 'high';
-      return { point: hit.point, normal: n.clone(), type, collider: col };
+  #castCover(d, reach) {
+    _ray.set(_o.set(this.pos.x, this.pos.y + 0.5, this.pos.z), d);
+    _ray.far = reach;
+    const hit = _ray.intersectObjects(this.world.coverMeshes, false)[0];
+    if (!hit || !hit.face) return null;
+    const n = hit.face.normal;
+    if (Math.abs(n.y) > 0.3 || n.dot(d) > -0.5) return null;
+    // something solid between us and the cover? (another collider)
+    _ray.far = hit.distance;
+    const block = _ray.intersectObjects(this.world.meshes, false)[0];
+    if (block && block.object !== hit.object && block.distance < hit.distance - 0.05) return null;
+    const col = hit.object.userData.collider;
+    const type = col.box.max.y - this.pos.y < 1.7 ? 'low' : 'high';
+    return { point: hit.point, normal: n.clone(), type, collider: col };
+  }
+
+  // Jetpack burst: leave cover, start the thrust, a small push along the move input.
+  #jetBurst(wish) {
+    this.cover = null;
+    this.airborne = true;
+    this.jetting = JET.thrust;
+    this.jetTimer = JET.cooldown;
+    this.vy = 0;
+    this.vel.x += wish.x * JET.boost;
+    this.vel.z += wish.z * JET.boost;
+    const sn = Math.sin(this.facing);
+    const cs = Math.cos(this.facing);
+    _jet.point.set(this.pos.x - sn * JET.nozzleBack, this.pos.y + JET.nozzleUp, this.pos.z - cs * JET.nozzleBack);
+    this.events.emit('player:jet', _jet);
+  }
+
+  // Rising head stops under a box that was above it (building ceilings, roofs): clamp and cancel the thrust.
+  #ceiling(prevY) {
+    const r = this.t.radius;
+    const h = this.t.standHeight;
+    for (const c of this.world.colliders) {
+      const b = c.box;
+      if (b.min.y < prevY + h - 0.05 || b.min.y >= this.pos.y + h) continue;
+      if (this.pos.x < b.min.x - r || this.pos.x > b.max.x + r || this.pos.z < b.min.z - r || this.pos.z > b.max.z + r) continue;
+      this.pos.y = b.min.y - h;
+      this.vy = 0;
+      this.jetting = 0;
     }
-    return null;
   }
 
   #enterCover(c) {
@@ -459,6 +531,7 @@ export class Player {
       leftHanded: camRig.peekSide < 0 && alive, // peeking a left corner: the gun comes around on the left
       lookYaw,
       hunch: moving && alive ? 1 : 0, // head ahead, shoulders down, gun low
+      air: this.airborne && alive ? 1 : 0,
       vault: this.snap?.vault ?? null,
       vaultT: this.snap?.t ?? 0,
       lower: weaponLower,

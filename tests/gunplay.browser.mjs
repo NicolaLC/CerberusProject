@@ -112,7 +112,7 @@ const result = await p.evaluate(() => {
   player.pos.set(34, 0, -21.3); // south face of the arena wall at (34, -23), 6 m long
   camRig.yaw = 0;
   step(10);
-  press('Space', 30);
+  press('KeyW', 30); // walk into the wall: automatic cover
   const wallAmmo = weapon.ammo;
   keys.add('Mouse2');
   keys.add('Mouse0');
@@ -140,7 +140,7 @@ const result = await p.evaluate(() => {
   player.pos.set(33, 0, -21.3);
   camRig.yaw = 0;
   step(10);
-  press('Space', 30);
+  press('KeyW', 30);
   const legs = player.animator.legs;
   let swing = 0;
   const x0 = player.pos.x;
@@ -148,7 +148,7 @@ const result = await p.evaluate(() => {
   for (let i = 0; i < 60; i++) { step(); swing = Math.max(swing, Math.abs(legs.Left.thigh - legs.Right.thigh)); }
   keys.delete('KeyD');
   out.slide = { cover: player.cover?.type, moved: +(player.pos.x - x0).toFixed(2), swing: +swing.toFixed(2) };
-  press('Space', 20);
+  press('KeyS', 20); // moving away leaves cover
 
   // --- aim is held, never latched (also in trackpad mode) ---
   const s = g.settings ?? null;

@@ -151,7 +151,7 @@ export class Rig {
 
 // ---------------------------------------------------------------------------
 // Procedural animation. Character state in, bone transforms out.
-// state: { speed, run, crouch 0..1, aimPitch, combat, recoil, lean, lookYaw, lower 0..1 }
+// state: { speed, run, air (jetpack burst), crouch 0..1, aimPitch, combat, recoil, lean, lookYaw, lower 0..1 }
 // Layers: rest → hit spring → gait key poses (locomotion.js) → torso → arms (IK or run pump) → foot locks + kneel → feet IK.
 // ---------------------------------------------------------------------------
 
@@ -185,6 +185,8 @@ const VAULT_POSE = {
   hop: { legs: [-1.25, 1.9, -0.75, 1.7], hips: [0.25, 0, 0.1], spine: 0.12 },
   slide: { legs: [-1.45, 0.2, -1.05, 1.15], hips: [-0.35, 0.45, -0.8], spine: 0.2 }, // hips down onto the top
 };
+// Jetpack burst pose: [LeftUpLeg x, LeftLeg x, RightUpLeg x, RightLeg x], hips pitch. Knees bent, hips forward a bit.
+const AIR_POSE = { legs: [-0.35, 0.5, -0.2, 0.55], hips: 0.12 };
 const HUNCH = 0.55; // rad of forward spine bend moving along cover
 const KNEEL_L = [-1.45, 1.45, 0]; // low cover kneel: thigh, knee, toes
 const KNEEL_R = [0.15, 1.5, 0.9];
@@ -220,6 +222,7 @@ export class Animator {
     this.gaitW = 0; // 0 standing .. 1 full gait, eased
     this.holdV = 0; // last moving speed (the cadence a stop winds down from)
     this.hunch = 0;
+    this.air = 0; // jetpack burst pose weight 0..1
     this.hand = 1; // 1 = gun on the right shoulder, -1 = mirrored to the left (peeking a left corner)
     this.hit = new THREE.Vector2(); // spring-driven hit reaction (x: pitch, y: roll)
     this.hitVel = new THREE.Vector2();
@@ -280,7 +283,9 @@ export class Animator {
     const cw = c * mv; // crouch-walk weight
     // crouched steps are shorter and quicker (the cadence rises so planted feet still keep pace with the ground)
     const short = 1 - 0.5 * cw;
-    const m = mv * (1 - ck) * short; // how much of the gait shows (0 = standing)
+    this.air = mix(this.air, s.air ? 1 : 0, 1 - Math.exp(-dt * 14));
+    const aw = this.air;
+    const m = mv * (1 - ck) * short * (1 - aw); // how much of the gait shows (0 = standing; none in the air)
     // strafing: the hips turn toward the movement (up to HIP_YAW); backpedaling plays the cycle in reverse
     const back = this.dirZ < -0.25;
     const dirYaw = back ? Math.atan2(-this.dirX, -this.dirZ) : Math.atan2(this.dirX, this.dirZ);
@@ -452,10 +457,18 @@ export class Animator {
       B.Spine1.rotation.x += P.spine * vw;
       B.Spine2.rotation.x += P.spine * vw;
     }
+    // jetpack burst: knees bent, hips forward; the feet are not planted (no foot IK) while it shows
+    if (aw > 0.001) {
+      blendTo(B.LeftUpLeg, AIR_POSE.legs[0], 0, 0, aw);
+      blendTo(B.LeftLeg, AIR_POSE.legs[1], 0, 0, aw);
+      blendTo(B.RightUpLeg, AIR_POSE.legs[2], 0, 0, aw);
+      blendTo(B.RightLeg, AIR_POSE.legs[3], 0, 0, aw);
+      B.Hips.rotation.x += AIR_POSE.hips * aw;
+    }
     rig.root.updateMatrixWorld(true);
 
-    if (this.ground && vw < 0.05) this.#feetIK(dt, ck);
-    this.#orientFeet(baseQ, 1 - ck);
+    if (this.ground && vw < 0.05 && aw < 0.05) this.#feetIK(dt, ck);
+    this.#orientFeet(baseQ, (1 - ck) * (1 - aw));
   }
 
   // Feet keep the pose's pitch relative to the hips' walking direction (flat when planted), not the shin's.

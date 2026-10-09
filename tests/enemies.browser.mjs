@@ -72,11 +72,10 @@ const r = await p.evaluate(() => {
   player.pos.set(-6, 0, 1.6);
   g.camRig.yaw = 0;
   step(0.3);
-  engine.input.keys.add('Space');
-  engine.input.pressed.add('Space');
-  step(0.2);
-  engine.input.keys.delete('Space');
+  engine.input.keys.add('KeyW'); // walk into the low block: automatic cover
   step(0.5);
+  engine.input.keys.delete('KeyW');
+  step(0.3);
   out.playerInCover = !!player.cover;
   const front = player.cover.normal.clone().negate(); // the side the player defends
   for (const t of enemies.puppets) if (t.kind === 'trooper' && t.alive) t.alert();

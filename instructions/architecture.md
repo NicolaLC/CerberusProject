@@ -64,7 +64,9 @@ Payload objects marked * are reused: copy what you keep.
 | `boss:step` | *{ point, big } | juice, audio |
 | `boss:charge` / `boss:stomp` / `boss:mortar` | boss / boss / position | audio |
 | `player:hurt` | *{ amount, dir } | hud (direction), juice, audio |
-| `player:coverSlam` / `player:land` | – | juice |
+| `player:coverSlam` / `player:land` | – / 'vault' \| 'jet' | juice, audio (land) |
+| `player:jet` | *{ point, dir } (nozzle, exhaust direction) | fx, audio, juice |
+| `player:vault` | 'hop' \| 'slide' | – |
 | `puppet:down` | puppet | pickups (drop), audio |
 | `bolt:fired` / `bolt:impact` | position / *{ point, normal } | audio / fx |
 | `pickup:collected` / `pickup:full` | label / – | hud toast, audio |

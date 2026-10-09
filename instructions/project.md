@@ -33,6 +33,7 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 - `tests/enemies.browser.mjs`: destroyed puppets stay destroyed, shooters engage only within range, troopers.
 - `tests/boss.browser.mjs`: spider mech (wake, lock-on camera, attacks, arena bounds, armor, legs, core).
 - `tests/animation.browser.mjs`: planted feet don't slide at walk / jog / sprint / strafe / backpedal.
+- `tests/movement.browser.mjs`: automatic cover (enter, along-wall, exits, cooldown), jetpack burst, jump onto low cover, vault, ceiling.
 - `tests/gamepad.browser.mjs`: controller with a simulated standard gamepad (`navigator.getGamepads` replaced
   by an init script; set `window.__pad.axes` / `.buttons`).
 - Key presses in tests: add the code to `engine.input.keys` and `engine.input.pressed` (edges come from events).
