@@ -17,24 +17,25 @@ import switchGun from '../../assets/sfx/switch.mp3';
 // SFX: synthesized at runtime, plus recorded samples (ElevenLabs, see credits.md) where one exists.
 // A sample replaces its synth sound once decoded; until then (or if loading fails) the synth plays.
 // Context is created on first user gesture.
-// [url, gain, pitch spread (±, playback rate)] per sample id
+// [url, gain, pitch spread (±, playback rate)] per sample id. Every play also varies its volume by ±GAIN_SPREAD.
 const SAMPLES = {
-  rifle: [arShot, 0.6, 0.04], // shots are keyed by gun id
-  mg: [mgShot, 0.5, 0.05],
-  sniper: [sniperShot, 0.75, 0.02],
-  burst: [burstShot, 0.55, 0.04],
-  rail: [railShot, 0.7, 0.02],
-  pistol: [pistolShot, 0.55, 0.04],
-  sniperBolt: [sniperBolt, 0.5, 0.03],
-  railCharge: [railCharge, 0.6, 0],
+  rifle: [arShot, 0.6, 0.09], // shots are keyed by gun id
+  mg: [mgShot, 0.5, 0.08],
+  sniper: [sniperShot, 0.75, 0.06],
+  burst: [burstShot, 0.55, 0.09],
+  rail: [railShot, 0.7, 0.06],
+  pistol: [pistolShot, 0.55, 0.1],
+  sniperBolt: [sniperBolt, 0.5, 0.07],
+  railCharge: [railCharge, 0.6, 0.04],
   mgSpin: [mgSpin, 0.35, 0], // looped, pitch and volume follow the spin
-  dry: [dryFire, 0.5, 0.04],
-  reload: [reloadRifle, 0.5, 0.02], // every gun but the MG
-  reloadMg: [reloadMg, 0.5, 0.02],
-  perfect: [reloadPerfect, 0.5, 0],
-  jam: [reloadJam, 0.5, 0],
-  switch: [switchGun, 0.9, 0.03],
+  dry: [dryFire, 0.5, 0.1],
+  reload: [reloadRifle, 0.5, 0.06], // every gun but the MG
+  reloadMg: [reloadMg, 0.5, 0.05],
+  perfect: [reloadPerfect, 0.5, 0.04],
+  jam: [reloadJam, 0.5, 0.06],
+  switch: [switchGun, 0.9, 0.1],
 };
+const GAIN_SPREAD = 0.12;
 const BOLT_DELAY = 0.22; // s after a sniper shot before the bolt is worked
 
 // Sample bytes. The single-file artifact build inlines samples as base64 data: URLs, which its page's content
@@ -139,7 +140,7 @@ export class Audio {
     src.buffer = buf;
     src.playbackRate.value = 1 + (Math.random() * 2 - 1) * spread;
     src.gain = this.ctx.createGain();
-    src.gain.gain.value = gain;
+    src.gain.gain.value = gain * (1 + (Math.random() * 2 - 1) * GAIN_SPREAD);
     src.connect(src.gain).connect(this.master);
     src.start(this.ctx.currentTime + delay);
     return src;
@@ -274,7 +275,9 @@ export class Audio {
   // Machine gun barrel spin, 0..1 (continuous voice, created on first use): the recorded loop once decoded,
   // pitched up with the spin, else a synth whine.
   spin(level) {
-    if (!this.ctx || Math.abs(level - (this.spinLevel ?? -1)) < 0.02) return;
+    if (level < 0.01) level = 0;
+    // small changes are skipped, but reaching 0 never is (else at > 60 fps it could stop on a faint, endless hum)
+    if (!this.ctx || (Math.abs(level - (this.spinLevel ?? -1)) < 0.02 && (level > 0 || this.spinLevel === 0))) return;
     this.spinLevel = level;
     if (!this.spinLoop && this.samples.mgSpin) {
       this.spinLoop = this.sample('mgSpin');
