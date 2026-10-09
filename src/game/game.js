@@ -56,6 +56,8 @@ export class Game {
       input.rumble(big ? 0.7 : s.heavy ? 0.3 : 0.12, big ? 0.5 : 0.35, big ? 140 : 50);
     });
     events.on('player:hurt', () => input.rumble(0.6, 0.5, 180));
+    events.on('player:jet', () => input.rumble(0.2, 0.3, 90));
+    fx.player = player; // jet flame follows the nozzle while thrusting
     events.on('blast', (b) => {
       const near = Math.max(0, 1 - b.point.distanceTo(player.pos) / (b.radius * 4));
       if (near > 0) input.rumble(near, near * 0.6, 260);
