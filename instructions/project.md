@@ -5,7 +5,8 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 
 ## Stack
 - Three.js (`three`), plain ES modules, Vite for dev/build. No framework, no physics engine.
-- Everything procedural: geometry, textures (canvas), audio (WebAudio). Only binary assets: two UI fonts in `src/fonts/`
+- Everything procedural: geometry, textures (canvas), audio (WebAudio, plus recorded samples in `src/assets/sfx/` that
+  replace a synth sound once decoded: `SAMPLES` in audio.js). Other binary assets: two UI fonts in `src/fonts/`
   (Chakra Petch, OFL; Space Nova, demo licence under evaluation: `credits.md`, `before-shipping.md`), set as `--font-main` / `--font-num` in `src/style.css`.
 
 ## Commands
