@@ -33,11 +33,15 @@ renderer, gamepad, pointer lock and audio behave exactly as in the Chromium the 
 ## Releases (GitHub)
 - `.github/workflows/release.yml` runs on a pushed commit whose message contains `[release]`, a pushed tag
   `v<version>` (must equal package.json `version`) or a manual run; it tags the commit `v<version>`:
-  web job (tests, `dist/` zip + single-file page), desktop matrix (ubuntu → AppImage, windows → NSIS exe,
+  web job (tests, `dist/` zip + single-file page), desktop matrix (ubuntu → AppImage + deb + tar.gz, windows → NSIS exe,
   macos → universal dmg), then a GitHub prerelease with `RELEASE_NOTES.md` as the body.
 - To cut one: bump `version` in package.json, rewrite RELEASE_NOTES.md, commit with `[release]` in the message,
   push. (Claude cloud sessions can't push tags: the git proxy refuses them, so use `[release]`.)
 - File names: `Cerberus-<version>-<os>-<arch>.<ext>` (electron-builder `artifactName`).
+- Linux: the AppImage needs FUSE 2 (missing by default on Ubuntu 22.04+), and portable builds (AppImage, tar.gz)
+  can't ship a SUID sandbox helper, so Ubuntu 24.04+ (AppArmor blocks unprivileged user namespaces) needs
+  `--no-sandbox`. The `.deb` avoids both (postinst sets chrome-sandbox / installs an AppArmor profile): recommend it.
+  `--no-sandbox` can't be added from main.js: Chromium checks the sandbox before any app JS runs.
 - Builds are unsigned (`mac.identity: null`, `CSC_IDENTITY_AUTO_DISCOVERY=false`).
 
 ## Not done yet

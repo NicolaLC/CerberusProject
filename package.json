@@ -1,7 +1,7 @@
 {
   "name": "cerberus-project",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "license": "UNLICENSED",
   "scripts": {
@@ -71,10 +71,32 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64"
+          ]
         }
       ],
-      "category": "Game"
+      "category": "Game",
+      "executableName": "cerberus",
+      "synopsis": "Third-person sci-fi cover shooter"
     },
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
-  }
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "deb": {
+      "packageName": "cerberus"
+    }
+  },
+  "author": {
+    "name": "NicolaLC",
+    "email": "3704156+NicolaLC@users.noreply.github.com"
+  },
+  "homepage": "https://github.com/NicolaLC/CerberusProject"
 }
