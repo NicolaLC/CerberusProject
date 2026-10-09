@@ -19,24 +19,32 @@ src/
     random.js             seedable RNG streams
   game/
     game.js               COMPOSITION ROOT: builds systems, wires events, declares frame order, start/pause shell
+    registry.js           piece registry: stable string id -> how a piece is built from data (ids: level.md)
     controls.js           BINDINGS table + intents (move, look, aiming, running, firing, slots...)
     settings.js           player settings + start-panel bindings
-    world/  world.js (level boxes, colliders, cover, sky, lights), textures.js, pickups.js
+    world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), textures.js, pickups.js (pickup.* pieces)
     actors/ rig.js (skeleton, animator, IK), parts.js (model building blocks, debris), soldier.js (player model),
             looks.js (trooper / puppet models), player.js,
             enemy.js (shared enemy body: hit zones, weak spots, flash, debris death),
             puppet.js (training puppets), trooper.js (cover-using soldiers), drone.js, spider.js (miniboss),
-            enemies.js (system: spawn list, bolts, stands, target cache, squad alerts)
+            enemies.js (system: builds enemy.* / boss.* pieces, bolts, stands, target cache, squad alerts)
     ai/     cover.js (cover spots from cover boxes, protection test, spot choice + detour route)
     combat/ guns.js (gun table), weapon.js (controller, hitscan, aim probe), ballistics.js (pure shot math)
     view/   camera.js, fx.js, hud.js, audio.js, juice.js, post.js   (presentation only)
 ```
+
+`src/levels/` holds level files (plain JSON, see `level.md`); `game.js` imports one and hands it to the systems.
 
 ## Dependency rules
 - Gameplay (`world`, `actors`, `combat`) never calls presentation (`view`). It emits events; view modules
   subscribe in their `listen(events)` method. Exception: the camera rig is gameplay state (aim ray, recoil).
 - Systems get their direct dependencies through the constructor. Only `game.js` sees everything.
 - Gameplay reads input only through `Controls` (no key codes outside `controls.js`).
+- Levels are data, built through the piece registry: each system module exports a table of the pieces it owns
+  (`WORLD_PIECES`, `ENEMY_PIECES`, `PICKUP_PIECES`: id -> builder run against that system); `game.js` registers the
+  tables in a `Registry` and passes `{ level, registry }` to the constructors. `registry.js` imports nothing, so
+  gameplay modules never reach each other through it. Piece ids are a public contract (levels, saves, tools): never rename or reuse one.
+- Systems build in small steps from the level data (materials, sky, lights, pieces) so a later `dispose()` can mirror them.
 - Cross-system reactions (puppet dies → pickup drop) are wired in `game.js` with `events.on`.
 
 ## Frame order (declared in `game.js`)

@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { Engine } from '../engine/engine.js';
-import { World } from './world/world.js';
-import { Pickups } from './world/pickups.js';
+import { Registry } from './registry.js';
+import { World, WORLD_PIECES } from './world/world.js';
+import { Pickups, PICKUP_PIECES } from './world/pickups.js';
 import { Player } from './actors/player.js';
-import { Enemies } from './actors/enemies.js';
+import { Enemies, ENEMY_PIECES } from './actors/enemies.js';
 import { Weapon } from './combat/weapon.js';
 import { CameraRig } from './view/camera.js';
 import { FX } from './view/fx.js';
@@ -14,6 +15,7 @@ import { Juice } from './view/juice.js';
 import { Controls } from './controls.js';
 import { settings, bindSettingsUI } from './settings.js';
 import { applyQuality } from './view/quality.js';
+import arena from '../levels/arena.json';
 
 // Composition root: builds every game system on top of the engine, wires events and declares the
 // frame order. This is the only file that knows about all systems; they only know their direct
@@ -35,13 +37,18 @@ export class Game {
     const { scene, camera, events, renderer, input } = engine;
     this.debug = debug;
 
+    // ---- level + piece registry: every system builds its part of the level from data ----
+    const registry = new Registry().register('world', WORLD_PIECES).register('enemies', ENEMY_PIECES).register('pickups', PICKUP_PIECES);
+    const level = (this.level = registry.check(arena));
+    this.registry = registry;
+
     // ---- systems ----
-    const world = new World(scene);
+    const world = new World(scene, { level, registry });
     const controls = new Controls(input);
     const camRig = new CameraRig(camera, world);
-    const player = new Player({ scene, world, events });
-    const enemies = new Enemies({ scene, world, events });
-    const pickups = new Pickups({ scene, events });
+    const player = new Player({ scene, world, events, spawn: level.spawn });
+    const enemies = new Enemies({ scene, world, events, level, registry });
+    const pickups = new Pickups({ scene, events, level, registry });
     const weapon = new Weapon({ camera, rig: camRig, player, world, enemies, events });
     const fx = new FX(scene, camera, world).listen(events);
     const hud = new Hud().listen(events, camRig);
