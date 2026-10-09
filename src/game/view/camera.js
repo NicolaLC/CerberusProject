@@ -62,6 +62,22 @@ export class CameraRig {
     this.bob = 0;
   }
 
+  // Back behind the player at a level start: looking the way the spawn faces (player.facing - PI), no leftover
+  // shake, kick, lock-on or zoom; the follow point snaps to the player on the next update.
+  reset(facing = Math.PI) {
+    this.yaw = facing - Math.PI;
+    this.pitch = -0.08;
+    this.peekSide = 0;
+    this.zoom = null;
+    this.focus = null;
+    this.focusBlend = 0;
+    this.lookIdle = 99;
+    this.smoothPivot = null;
+    this.trauma = this.fovKick = this.roll = 0;
+    this.recoilDebt = this.recoilYawDebt = this.kickPitch = this.kickYaw = 0;
+    this.dipY = this.dipV = this.bob = 0;
+  }
+
   addTrauma(a) {
     this.trauma = Math.min(1, this.trauma + a);
   }

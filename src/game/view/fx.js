@@ -108,6 +108,28 @@ export class FX {
     this.decalMesh = instanced(this.decalGeo, this.decalMat, MAX_DECALS);
   }
 
+  // Drops everything tied to the level that just went: particles, decals, damage numbers, flashes.
+  // The pooled objects, geometry and materials are permanent.
+  reset() {
+    for (const p of this.live) {
+      p.obj.visible = false;
+      this.pools[p.kind].release(p.obj);
+      this.particlePool.release(p);
+    }
+    this.live.length = 0;
+    for (const n of this.numbers) {
+      this.pools.number.release(n.el);
+      this.numberPool.release(n);
+    }
+    this.numbers.length = 0;
+    this.sparks.count = this.casings.count = 0;
+    this.decalMesh.count = this.decalCount = this.decalNext = 0;
+    this.flashTime = 0;
+    this.flash.visible = false;
+    this.flashLight.intensity = 0;
+    this.jetT = 0;
+  }
+
   // Visual reactions to gameplay events.
   listen(events) {
     const back = new THREE.Vector3();

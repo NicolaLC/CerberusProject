@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Rig, Animator, HIT_ZONE } from './rig.js';
 import { RigidSkin } from '../../engine/batch.js';
 import { debrisCopy, disposeDebris } from './parts.js';
+import { disposeTree } from '../../engine/dispose.js';
 
 // Shared body of every enemy (training puppets, troopers): rig + animator, hit zones, glowing weak spots,
 // hit flash and the break-apart death. Subclasses add their look in their constructor (visual-only `look()`
@@ -133,6 +134,14 @@ export class EnemyBody {
       }
     }
     this.rig.root.visible = false;
+  }
+
+  // Removes the enemy from the scene and frees everything it owns (rig, baked skin + LOD, own materials, debris).
+  dispose() {
+    for (const d of this.debris) disposeDebris(d.obj);
+    this.debris.length = 0;
+    disposeTree(this.group);
+    for (const m of [...Object.values(this.mats), this.visor, this.weakMat, this.haloMat, this.skin?.lodMaterial]) m?.dispose();
   }
 
   update(dt, player) {

@@ -21,7 +21,8 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 
 ## Testing
 - `?debug` URL flag: no start panel, stats readout on, `window.game` is the `Game` (`player`, `camRig`, `weapon`,
-  `enemies`, `controls`, `engine` with `scene`, `input`, `events`, `timings`, `perf`).
+  `enemies`, `controls`, `engine` with `scene`, `input`, `events`, `timings`, `perf`; `loadScene(name)`, `sceneName`).
+- `?scene=<name>` URL flag: opens `arena` (default) / `gym` / `library` / `workshop` directly; unknown name → arena + console warning (`instructions/level.md`).
 - Headless check: Playwright with Chromium (`--use-angle=swiftshader`); real keyboard/mouse events work once the
   start button is clicked (pointer lock). SwiftShader runs at 3-15 fps and frames are clamped to 0.1 s,
   so count frames, not milliseconds.
@@ -38,5 +39,11 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 - `tests/movement.browser.mjs`: automatic cover (enter, along-wall, exits, cooldown), jetpack burst, jump onto low cover, vault, ceiling.
 - `tests/gamepad.browser.mjs`: controller with a simulated standard gamepad (`navigator.getGamepads` replaced
   by an init script; set `window.__pad.axes` / `.buttons`).
+- `tests/scenes.browser.mjs`: every scene opens via `?scene=`; arena → gym → library → workshop → arena for 3 cycles in one page:
+  player at the spawn, enemy / pickup counts match the level file, boss bar / lock-on / kills / weapon reset, HUD zone title per scene, the Library's demo enemies
+  never fire or wake (10 s in range), the panel's scene picker, no console errors, and no leaks
+  (`renderer.info.memory.geometries` / `textures` and scene object count identical after every cycle, exact, no tolerance).
+  This suite RENDERS (info.memory counts uploads) and, before each reading, draws once with culling off and both LOD variants,
+  because three uploads lazily and the counts would otherwise follow what the camera happens to see.
 - Key presses in tests: add the code to `engine.input.keys` and `engine.input.pressed` (edges come from events).
 - Fault injection: `game.engine.add({ name: 'bad', update() { throw 1 } })` must get disabled while the game runs on.
