@@ -7,11 +7,10 @@ original and procedural. Keep this file in sync whenever an external asset or li
 
 | Font | Use | Designer | Files | Licence |
 |---|---|---|---|---|
-| Direction | main UI font (HUD labels, menus) | Brandsemut — https://brandsemut.com | `src/fonts/direction.otf` | **Demo: personal use only, no commercial use.** Under evaluation; commercial licence: https://brandsemut.com/product/direction/ |
+| Chakra Petch | main UI font (HUD labels, menus) | Cadson Demak (Chakra Petch Project Authors) — https://github.com/m4rc1e/Chakra-Petch | `src/fonts/chakra-petch-500.woff2`, `chakra-petch-700.woff2` (latin subset, via Fontsource) | SIL Open Font License 1.1, text in `public/licenses/chakra-petch-OFL.txt` (copied into every build). Free for commercial use; the licence must ship with the font. |
 | Space Nova | numbers (ammo, damage numbers, counters) | Maknastudio — https://maknastudio.com | `src/fonts/space-nova.otf` | **Freeware, non-commercial: personal use only.** Under evaluation; commercial licence: https://maknastudio.com/product/space-nova/ |
 
-Source pages: https://www.fontspace.com/direction-font-f139984, https://www.fontspace.com/space-nova-font-f130563.
-Both are demo licences: see `before-shipping.md` before any release.
+Space Nova source: https://www.fontspace.com/space-nova-font-f130563 (demo licence: see `before-shipping.md`).
 
 ## Libraries
 
