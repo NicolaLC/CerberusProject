@@ -7,6 +7,7 @@
 ## Index
 
 - `instructions/project.md` — goal, stack, run/build, testing
+- `instructions/production.md` — foundations first: Gym / Library / Workshop, phases, GitHub epics
 - `instructions/architecture.md` — layers, modules, frame order, events, conventions
 - `instructions/engine.md` — runtime loop, fault isolation, performance rules
 - `instructions/gameplay.md` — controls, mechanics, tuning tables
