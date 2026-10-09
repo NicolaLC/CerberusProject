@@ -5,21 +5,20 @@ import { chromium } from 'playwright';
 const URL = process.env.URL ?? 'http://localhost:5173/?debug';
 const BUDGET = 140; // draw calls at the spawn view (~1200 before batching, ~240 before shadow batching, ~187 before puppet LOD)
 const SHADOW_BUDGET = 25; // of which the sun shadow pass (was ~60 before shadow-only meshes)
-const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader'] });
 const p = await b.newPage({ viewport: { width: 640, height: 360 } });
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 await p.goto(URL);
-await p.waitForFunction(() => window.game);
+await p.waitForFunction(() => window.game?.engine);
 const r = await p.evaluate(() => {
   const g = window.game;
   g.engine.stop();
   for (let i = 0; i < 10; i++) g.engine.step(1 / 60);
-  const info = g.engine.renderer.info.render;
-  const calls = info.calls;
+  const calls = g.engine.drawCalls;
   g.world.sun.castShadow = false;
   g.engine.step(1 / 60);
-  const shadowCalls = calls - info.calls;
+  const shadowCalls = calls - g.engine.drawCalls;
   g.world.sun.castShadow = true;
   g.engine.step(1 / 60);
   const far = g.enemies.puppets.filter((pp) => pp.pos.distanceTo(g.engine.camera.position) > 40);
@@ -44,13 +43,14 @@ const r = await p.evaluate(() => {
   }
   const skins = [g.player.skin, ...g.enemies.puppets.map((pp) => pp.skin)];
   return {
+    backend: g.engine.backend,
     calls,
     lodOk,
     lodCount: lodFar.length,
     hittable,
     shadowCalls,
     farCasting: far.filter((pp) => pp.skin.castShadow).length,
-    shadowOnlyHidden: skins.every((s) => !s.shadow || !s.shadow.visible),
+    shadowOnlyFlagged: skins.every((s) => !s.shadow || s.shadow.userData.shadowOnly),
     minCullRadius: Math.min(...skins.flatMap((s) => s.meshes.map((m) => m.boundingSphere.radius))),
     proxiesHidden: g.world.meshes.every((m) => !m.visible),
     hitMeshesHidden: g.enemies.puppets.every((pp) => pp.hitMeshes.every((m) => !m.visible)),
@@ -66,8 +66,7 @@ const q = await p.evaluate(async () => {
     applyQuality(name, g);
     g.engine.step(1 / 60);
     g.engine.step(1 / 60);
-    const rt = g.post.composer.renderTarget1;
-    out[name] = { samples: rt.samples, bloom: g.post.bloom.enabled, shadow: g.world.sun.shadow.map?.width, maxScale: g.engine.perf.maxScale, calls: g.engine.renderer.info.render.calls };
+    out[name] = { samples: g.post.samples, bloom: !!g.post.bloom, shadow: g.world.sun.shadow.mapSize.x, maxScale: g.engine.perf.maxScale, calls: g.engine.drawCalls };
   }
   return out;
 });
@@ -79,11 +78,11 @@ expect(`shadow pass within budget (${r.shadowCalls} <= ${SHADOW_BUDGET})`, r.sha
 expect('far puppets do not cast', r.farCasting === 0);
 expect(`far puppets use the one-draw LOD (${r.lodCount})`, r.lodOk && r.lodCount > 0);
 expect('a far LOD puppet is still hittable', r.hittable);
-expect('shadow-only meshes never drawn in the color pass', r.shadowOnlyHidden);
+expect('shadow-only meshes flagged (skipped outside the shadow pass)', r.shadowOnlyFlagged);
 expect('skinned meshes have a real culling sphere', r.minCullRadius > 0.5);
 expect('world and hitbox proxies are not drawn', r.proxiesHidden && r.hitMeshesHidden);
 expect('low preset: no MSAA, no bloom, 2048 shadows, 1x', q.low.samples === 0 && !q.low.bloom && q.low.shadow === 2048 && q.low.maxScale <= 1 && q.low.calls > 0);
-expect('ultra preset: supersampled, MSAA >= high (capped by the GPU), 4096 shadows', q.ultra.maxScale > q.high.maxScale && q.ultra.samples >= q.high.samples && q.ultra.shadow === 4096);
+expect('ultra preset: supersampled, MSAA >= high, 4096 shadows', q.ultra.maxScale > q.high.maxScale && q.ultra.samples >= q.high.samples && q.ultra.shadow === 4096 && q.ultra.calls > 0);
 expect('high preset restores the defaults', q.high.samples === 4 && q.high.bloom && q.high.shadow === 4096 && q.high.calls > 0);
 expect('no page errors', errors.length === 0);
 await b.close();

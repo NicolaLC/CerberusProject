@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { attribute, materialEmissive } from 'three/tsl';
 
 // Draw-call batching. Every visible mesh costs one draw call per material per pass (color + shadow),
 // and a WebGL frame is CPU-bound on draw calls long before it is bound on triangles.
@@ -13,9 +14,9 @@ import * as THREE from 'three';
 // Shadows: the shadow pass only needs depth, so material splits are wasted there. Each batch also builds ONE
 // shadow-only mesh (all opaque casters merged, material irrelevant); the color meshes stop casting.
 // Result: 1 shadow draw per rig / per level instead of one per material.
-// Shadow-only meshes stay `visible = false` (so the color pass never lists them) and installShadowOnly()
-// makes them visible only while the renderer draws shadow maps. (Layers can't do this: three's shadow pass
-// tests layers against the main camera.)
+// Shadow-only meshes (userData.shadowOnly) are ordinary visible meshes that installShadowOnly() refuses to draw
+// in every pass but the shadow pass: the renderer's render-object hook skips them, and the shadow pass swaps in
+// its own hook (casters only) while it renders. `visible` turns a rig's shadow on and off.
 
 const _m = new THREE.Matrix4();
 const _inv = new THREE.Matrix4();
@@ -26,37 +27,20 @@ const noRaycast = () => {};
 
 // depth pass ignores color; FrontSide matches the merged sources (shadow pass renders back faces of it)
 const SHADOW_MAT = new THREE.MeshBasicMaterial();
-const shadowOnlyMeshes = new Set();
 
-// Wraps renderer.shadowMap.render so shadow-only meshes exist only during the shadow pass.
+// Skips shadow-only meshes outside the shadow pass (which installs its own render-object function meanwhile).
 export function installShadowOnly(renderer) {
-  const sm = renderer.shadowMap;
-  const render = sm.render.bind(sm);
-  sm.render = (lights, scene, camera) => {
-    for (const m of shadowOnlyMeshes) m.visible = m.userData.castEnabled;
-    render(lights, scene, camera);
-    for (const m of shadowOnlyMeshes) m.visible = false;
-  };
+  renderer.setRenderObjectFunction((object, ...rest) => {
+    if (!object.userData.shadowOnly) renderer.renderObject(object, ...rest);
+  });
 }
 
 // Far-detail LOD: one material for a whole rig. Per-vertex color (diffuse) and lodEmissive (glow, baked from
 // each part's material) keep the silhouette and the readable glows (visor, weak spots) at range.
-// One program for every rig; each rig gets its own instance so a hit flash (`emissive`) stays per rig.
-const LOD_BASE = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.1 });
-LOD_BASE.onBeforeCompile = (shader) => {
-  shader.vertexShader = shader.vertexShader
-    .replace('#include <common>', '#include <common>\nattribute vec3 lodEmissive;\nvarying vec3 vLodEmissive;')
-    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLodEmissive = lodEmissive;');
-  shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vLodEmissive;')
-    .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vLodEmissive;');
-};
-LOD_BASE.customProgramCacheKey = () => 'rig-lod';
-
+// Same node graph for every rig (one pipeline); each rig gets its own instance so a hit flash (`emissive`) stays per rig.
 export function makeLodMaterial() {
-  const m = LOD_BASE.clone();
-  m.onBeforeCompile = LOD_BASE.onBeforeCompile;
-  m.customProgramCacheKey = LOD_BASE.customProgramCacheKey;
+  const m = new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.1 });
+  m.emissiveNode = materialEmissive.add(attribute('lodEmissive', 'vec3'));
   return m;
 }
 
@@ -94,9 +78,7 @@ function shadowBucket(buckets) {
 }
 
 function shadowOnly(mesh) {
-  mesh.visible = false; // see installShadowOnly
-  mesh.userData.castEnabled = true;
-  shadowOnlyMeshes.add(mesh);
+  mesh.userData.shadowOnly = true; // see installShadowOnly
   mesh.castShadow = true;
   mesh.receiveShadow = false;
   mesh.raycast = noRaycast;
@@ -243,7 +225,6 @@ export class RigidSkin {
     if (this.shadow) {
       this.shadow.removeFromParent();
       this.shadow.geometry.dispose();
-      shadowOnlyMeshes.delete(this.shadow);
       this.shadow = null;
     }
     if (this.lodMesh) {
@@ -285,7 +266,7 @@ export class RigidSkin {
       this.shadow = shadowOnly(new THREE.SkinnedMesh(toGeometry(sb), SHADOW_MAT));
       this.root.add(this.shadow);
       this.shadow.bind(this.skeleton, this.shadow.matrixWorld.copy(this.root.matrixWorld));
-      this.shadow.userData.castEnabled = this.castShadow;
+      this.shadow.visible = this.castShadow;
     }
     const lb = this.lodMaterial && lodBucket(buckets, this.lodMaterial);
     if (lb) {
@@ -321,6 +302,6 @@ export class RigidSkin {
   // Shadow LOD: turn the rig's single shadow draw on/off (e.g. by distance).
   setCastShadow(on) {
     this.castShadow = on;
-    if (this.shadow) this.shadow.userData.castEnabled = on;
+    if (this.shadow) this.shadow.visible = on;
   }
 }

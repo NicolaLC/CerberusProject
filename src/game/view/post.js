@@ -1,87 +1,88 @@
 import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { Fn, dot, fract, mix, pass, sin, smoothstep, uniform, uv, vec2, vec3, vec4 } from 'three/tsl';
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 
-// Post stack: scene (MSAA, HDR) -> bloom -> grade (vignette, CA, grain, damage/kill flashes) -> output (ACES + sRGB).
-const GradeShader = {
-  uniforms: {
-    tDiffuse: { value: null },
-    time: { value: 0 },
-    aberration: { value: 0.0015 },
-    vignette: { value: 0.35 },
-    grain: { value: 0.035 },
-    saturation: { value: 1.08 },
-    contrast: { value: 1.06 },
-    tint: { value: new THREE.Color(1.0, 0.98, 0.95) },
-    damage: { value: 0 },
-    lowHealth: { value: 0 },
-    flash: { value: 0 },
-    aim: { value: 0 },
-  },
-  vertexShader: /* glsl */ `
-    varying vec2 vUv;
-    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse;
-    uniform float time, aberration, vignette, grain, saturation, contrast, damage, lowHealth, flash, aim;
-    uniform vec3 tint;
-    varying vec2 vUv;
-    float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233)) + time * 61.0) * 43758.5453); }
-    void main() {
-      vec2 c = vUv - 0.5;
-      float r2 = dot(c, c);
-      float ca = aberration + damage * 0.012 + lowHealth * 0.004;
-      vec2 off = c * ca * (0.5 + r2 * 4.0);
-      vec3 col;
-      col.r = texture2D(tDiffuse, vUv + off).r;
-      col.g = texture2D(tDiffuse, vUv).g;
-      col.b = texture2D(tDiffuse, vUv - off).b;
-
-      // grade
-      col *= tint;
-      float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
-      col = mix(vec3(l), col, saturation * (1.0 - lowHealth * 0.75));
-      col = (col - 0.18) * contrast + 0.18;
-      col = max(col, 0.0);
-
-      // vignette (stronger while aiming / hurt)
-      float v = smoothstep(0.85, 0.15, r2 * (1.6 + aim * 0.8));
-      col *= mix(1.0 - vignette, 1.0, v);
-      col = mix(col, col * vec3(1.6, 0.25, 0.2), (1.0 - v) * clamp(damage + lowHealth * 0.6, 0.0, 1.0));
-
-      // kill / hit flash
-      col += vec3(1.0, 0.95, 0.85) * flash * 0.35;
-
-      // grain
-      col += (hash(vUv * 1000.0) - 0.5) * grain * (0.6 + l);
-      gl_FragColor = vec4(col, 1.0);
-    }`,
-};
-
-// Post stack + auto exposure. Follows the engine's dynamic resolution through 'engine:resize'.
+// Post stack (node based, WebGPU or WebGL 2 backend):
+// scene pass (MSAA, HDR half float) -> bloom -> grade (chromatic aberration, tint, saturation, contrast,
+// vignette, damage/kill flashes, grain) -> output (ACES tone mapping + sRGB, applied by PostProcessing).
+// Pass targets follow the renderer's size and pixel ratio by themselves (dynamic resolution needs nothing here).
+const BLOOM = { strength: 0.45, radius: 0.55, threshold: 0.92 };
 const EXPOSURE = { outside: 1.0, inside: 1.9, rate: 1.2 };
 
 export class Post {
-  constructor(renderer, scene, camera, events) {
+  constructor(renderer, scene, camera) {
     this.renderer = renderer;
+    this.scene = scene;
+    this.camera = camera;
     this.exposure = EXPOSURE.outside;
-    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-    const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
-    this.maxSamples = renderer.capabilities.maxSamples;
-    this.composer = new EffectComposer(renderer, rt);
-    this.composer.addPass(new RenderPass(scene, camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.45, 0.55, 0.92);
-    this.composer.addPass(this.bloom);
-    this.grade = new ShaderPass(GradeShader);
-    this.composer.addPass(this.grade);
-    this.composer.addPass(new OutputPass());
-    this.u = this.grade.uniforms;
+    this.u = {
+      time: uniform(0),
+      aberration: uniform(0.0015),
+      vignette: uniform(0.35),
+      grain: uniform(0.035),
+      saturation: uniform(1.08),
+      contrast: uniform(1.06),
+      tint: uniform(new THREE.Color(1.0, 0.98, 0.95)),
+      damage: uniform(0),
+      lowHealth: uniform(0),
+      flash: uniform(0),
+      aim: uniform(0),
+    };
+    this.pipeline = new THREE.PostProcessing(renderer);
     this.flash = 0;
     this.damage = 0;
-    events.on('engine:resize', ({ width, height, pixelRatio }) => this.setSize(width, height, pixelRatio));
+    this.quality = { msaa: 4, bloom: true };
+    this.#build();
+  }
+
+  // Graphics quality: MSAA samples of the scene pass (0 = off; WebGPU allows 1 or 4) and bloom on/off.
+  setQuality({ msaa, bloom }) {
+    const webgpu = this.renderer.backend.isWebGPUBackend;
+    const samples = webgpu ? (msaa > 0 ? 4 : 0) : msaa;
+    if (samples === this.quality.msaa && bloom === this.quality.bloom) return;
+    this.quality = { msaa: samples, bloom };
+    this.#build();
+  }
+
+  get samples() {
+    return this.quality.msaa;
+  }
+
+  // (Re)builds the node graph: the scene pass owns its MSAA target, so a sample change means a new pass.
+  #build() {
+    this.scenePass?.dispose();
+    this.bloom?.dispose();
+    const u = this.u;
+    this.scenePass = pass(this.scene, this.camera, { samples: this.quality.msaa });
+    const sceneTex = this.scenePass.getTextureNode('output');
+    this.bloom = this.quality.bloom ? bloom(sceneTex, BLOOM.strength, BLOOM.radius, BLOOM.threshold) : null;
+    const bloomTex = this.bloom?.getTextureNode();
+    const at = (p) => (bloomTex ? sceneTex.sample(p).add(bloomTex.sample(p)) : sceneTex.sample(p));
+    const grade = Fn(() => {
+      const p = uv();
+      const c = p.sub(0.5);
+      const r2 = dot(c, c);
+      const ca = u.aberration.add(u.damage.mul(0.012)).add(u.lowHealth.mul(0.004));
+      const off = c.mul(ca).mul(r2.mul(4).add(0.5));
+      const col = vec3(at(p.add(off)).r, at(p).g, at(p.sub(off)).b).toVar();
+      // grade
+      col.mulAssign(u.tint);
+      const l = dot(col, vec3(0.2126, 0.7152, 0.0722)).toVar();
+      col.assign(mix(vec3(l), col, u.saturation.mul(u.lowHealth.mul(-0.75).add(1))));
+      col.assign(col.sub(0.18).mul(u.contrast).add(0.18).max(0));
+      // vignette (stronger while aiming / hurt)
+      const v = smoothstep(0.15, 0.85, r2.mul(u.aim.mul(0.8).add(1.6))).oneMinus();
+      col.mulAssign(mix(u.vignette.oneMinus(), 1, v));
+      col.assign(mix(col, col.mul(vec3(1.6, 0.25, 0.2)), v.oneMinus().mul(u.damage.add(u.lowHealth.mul(0.6)).clamp(0, 1))));
+      // kill / hit flash
+      col.addAssign(vec3(1.0, 0.95, 0.85).mul(u.flash).mul(0.35));
+      // grain
+      const n = fract(sin(dot(p.mul(1000), vec2(12.9898, 78.233)).add(u.time.mul(61))).mul(43758.5453));
+      col.addAssign(n.sub(0.5).mul(u.grain).mul(l.add(0.6)));
+      return vec4(col, 1);
+    });
+    this.pipeline.outputNode = grade();
+    this.pipeline.needsUpdate = true;
   }
 
   hit(amount = 1) {
@@ -90,22 +91,6 @@ export class Post {
 
   kill() {
     this.flash = 1;
-  }
-
-  // Graphics quality: MSAA samples of the HDR scene target (0 = off) and bloom on/off.
-  setQuality({ msaa, bloom }) {
-    const samples = Math.min(msaa, this.maxSamples);
-    for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) {
-      if (rt.samples === samples) continue;
-      rt.samples = samples;
-      rt.dispose(); // reallocated with the new sample count on the next render
-    }
-    this.bloom.enabled = bloom;
-  }
-
-  setSize(w, h, pixelRatio = this.renderer.getPixelRatio()) {
-    this.composer.setPixelRatio(pixelRatio);
-    this.composer.setSize(w, h);
   }
 
   render(dt, { player, inside }) {
@@ -125,7 +110,7 @@ export class Post {
     u.tint.value.r += (t[0] - u.tint.value.r) * dt * 2;
     u.tint.value.g += (t[1] - u.tint.value.g) * dt * 2;
     u.tint.value.b += (t[2] - u.tint.value.b) * dt * 2;
-    this.bloom.strength = inside ? 0.7 : 0.4;
-    this.composer.render(dt);
+    if (this.bloom) this.bloom.strength.value = inside ? 0.7 : 0.4;
+    this.pipeline.render();
   }
 }
