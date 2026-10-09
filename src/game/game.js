@@ -15,7 +15,8 @@ import { Juice } from './view/juice.js';
 import { Controls } from './controls.js';
 import { settings, bindSettingsUI } from './settings.js';
 import { applyQuality } from './view/quality.js';
-import arena from '../levels/arena.json';
+import { SCENES, resolveScene } from './scenes.js';
+import { disposeTree } from '../engine/dispose.js';
 
 // Composition root: builds every game system on top of the engine, wires events and declares the
 // frame order. This is the only file that knows about all systems; they only know their direct
@@ -32,23 +33,24 @@ const LOD = {
 const beyond = (d2, on, band) => d2 > (on ? band.near : band.far) ** 2;
 
 export class Game {
-  constructor({ canvas, debug = false }) {
+  // scene: name from scenes.js (`?scene=`); unknown or missing = the default arena.
+  constructor({ canvas, debug = false, scene: sceneName = null }) {
     const engine = (this.engine = new Engine({ canvas, fov: 70 }));
     const { scene, camera, events, renderer, input } = engine;
     this.debug = debug;
 
     // ---- level + piece registry: every system builds its part of the level from data ----
     const registry = new Registry().register('world', WORLD_PIECES).register('enemies', ENEMY_PIECES).register('pickups', PICKUP_PIECES);
-    const level = (this.level = registry.check(arena));
     this.registry = registry;
+    const first = resolveScene(sceneName);
 
     // ---- systems ----
-    const world = new World(scene, { level, registry });
+    const world = new World(scene);
     const controls = new Controls(input);
     const camRig = new CameraRig(camera, world);
-    const player = new Player({ scene, world, events, spawn: level.spawn });
-    const enemies = new Enemies({ scene, world, events, level, registry });
-    const pickups = new Pickups({ scene, events, level, registry });
+    const player = new Player({ scene, world, events, spawn: registry.check(SCENES[first]).spawn });
+    const enemies = new Enemies({ scene, world, events, registry });
+    const pickups = new Pickups({ scene, events, registry });
     const weapon = new Weapon({ camera, rig: camRig, player, world, enemies, events });
     const fx = new FX(scene, camera, world).listen(events);
     const hud = new Hud().listen(events, camRig);
@@ -76,12 +78,11 @@ export class Game {
     addEventListener('pointerdown', () => audio.init()); // resumes audio started from a controller
     Object.assign(this, { world, controls, camRig, player, enemies, pickups, weapon, fx, hud, audio, post, juice, settings });
 
-    // skeleton debug overlay (H)
-    const helpers = [player.rigModel, ...enemies.puppets.filter((p) => p.rig).map((p) => p.rig)].map((r) => r.helper());
-    for (const h of helpers) {
-      h.visible = false;
-      scene.add(h);
-    }
+    // skeleton debug overlay (H): the player's helper is permanent, the enemies' come and go with the level
+    this.skeletons = false;
+    this.playerHelper = this.#helper(player.rigModel);
+    this.helpers = [];
+    this.loadScene(first);
 
     // ---- frame order ----
     const look = { x: 0, y: 0 };
@@ -103,7 +104,7 @@ export class Game {
         const k = settings.sensitivity * friction;
         camRig.look(look.x * k, look.y * k, player.aiming);
         if (controls.pressed('shoulder')) camRig.shoulder *= -1;
-        if (controls.pressed('skeleton')) for (const h of helpers) h.visible = !h.visible;
+        if (controls.pressed('skeleton')) this.#toggleSkeletons();
       },
     });
     engine.add({
@@ -187,6 +188,52 @@ export class Game {
 
     this.#bindShell();
     if (debug) engine.stats.visible = true;
+  }
+
+  // ---- scenes: one level at a time; every per-level system loads from and unloads to its level file ----
+
+  // Switches to another scene (a key of scenes.js; unknown names warn and open the default). Call it between
+  // frames (a test, the console, a menu), never from inside a system update. The old level is freed completely
+  // (instructions/architecture.md: every per-level system must be disposable), the player is put at the new spawn
+  // with full health, the camera and weapon are reset. A malformed level file throws and leaves the old scene up.
+  loadScene(name) {
+    const key = resolveScene(name);
+    const level = this.registry.check(SCENES[key]);
+    const { world, enemies, pickups, player, camRig, weapon, fx, hud, juice } = this;
+    if (this.sceneName) this.#unloadLevel();
+    this.sceneName = key;
+    this.level = level;
+    world.load(level, this.registry);
+    enemies.load(level);
+    pickups.load(level);
+    player.place(level.spawn);
+    camRig.reset(player.facing);
+    weapon.reset();
+    fx.reset();
+    hud.reset();
+    juice.reset();
+    this.helpers = enemies.puppets.filter((p) => p.rig).map((p) => this.#helper(p.rig));
+    return this;
+  }
+
+  #unloadLevel() {
+    for (const h of this.helpers) disposeTree(h);
+    this.helpers.length = 0;
+    this.enemies.unload();
+    this.pickups.unload();
+    this.world.unload();
+  }
+
+  #helper(rig) {
+    const h = rig.helper();
+    h.visible = this.skeletons;
+    this.engine.scene.add(h);
+    return h;
+  }
+
+  #toggleSkeletons() {
+    this.skeletons = !this.skeletons;
+    for (const h of [this.playerHelper, ...this.helpers]) h.visible = this.skeletons;
   }
 
   // Start / pause overlay and pointer lock.
