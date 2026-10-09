@@ -59,6 +59,10 @@
   one (its long side) is slid across on the hip (0.3 s + depth / 5.5 m/s, linear, keeps momentum). Running
   (> 3.5 m/s) straight at low cover within 2.2 m and pressing `Space` vaults without stopping. Heights come
   from the take-off and landing floors (the floor under the arc is the block's top). Event `player:vault`.
+  During the slide only (`player.isSliding()`, not the hop or the cover-entry snap) aiming and shooting work as usual
+  (spread, recoil, probe, crosshair; reload and weapon switch too) and firing never ends the slide. The hips keep the
+  slide yaw, the chest twists toward the camera yaw (clamped ±1.2 rad, `VAULT.twist`). `player.sliding` (0..1, eased
+  at 20/s) drives the camera FOV. Slide timing is unchanged.
 - Out of combat the character turns its back to the wall and looks at the camera.
 - High: standing; aiming at an edge peeks: the feet stay behind cover (0.2 m weight shift, `PEEK` in player.js), the torso
   leans out 0.6 rad so head and gun clear the edge, at a left edge the gun hold mirrors to the left shoulder

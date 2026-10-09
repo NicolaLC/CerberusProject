@@ -96,4 +96,10 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
   that drop, never below the floor), with shorter quicker steps (`short`) and walk keys only.
 - Vault poses (`VAULT_POSE`): `hop` tucks both legs, `slide` puts the legs forward and the hips down onto the
   block's top, rolled onto one side; weight eases in/out over the vault, foot IK is off meanwhile.
+- Slide aiming (`slideAim` 0/1 + `aimTwist` rad in the state, set by the player while sliding and aiming or having shot
+  within 0.6 s, plus 0.25 s after so the twist unwinds as the body turns to the camera): after the vault pose, Spine /
+  Spine1 / Spine2 get the correction that restores Spine2's pre-pose world rotation plus a yaw twist (a third each, the
+  last bone fixes the residual). The hips and legs keep the slide pose; the gun follows `aimPitch` as in normal combat.
+  The pose's own spine lean-back is dropped meanwhile (it would tilt the gun). Arm IK is solved before the vault pose;
+  the arms hang off Spine2, so the grips stay valid. The twist is clamped to ±1.2 rad by the player.
 

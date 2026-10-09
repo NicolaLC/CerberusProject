@@ -270,7 +270,7 @@ export class Weapon {
     this.queued = controls.firePressed ? 0.25 : this.queued - dt;
     const pull = t.semi ? this.queued > 0 : trigger;
     this.spin = t.spinUp > 0 ? THREE.MathUtils.clamp(this.spin + (trigger ? dt / t.spinUp : -dt * 2), 0, 1) : 1;
-    const canFire = !p.dead && !p.snap && !p.sprinting && !p.pinned && this.reloading <= 0 && this.switching <= 0;
+    const canFire = !p.dead && (!p.snap || p.isSliding()) && !p.sprinting && !p.pinned && this.reloading <= 0 && this.switching <= 0;
     // a started charge or burst finishes whether or not the trigger is still held
     if (this.charging > 0) {
       if (!canFire) {

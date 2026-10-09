@@ -140,7 +140,7 @@ export class Hud {
       }
     }
     css(e.block, 'opacity', blockVisible ? 1 : 0);
-    css(e.cross, 'opacity', player.snap || player.sprinting ? 0.15 : 1);
+    css(e.cross, 'opacity', (player.snap && !player.isSliding()) || player.sprinting ? 0.15 : 1);
     // scoped gun: the overlay follows the zoom; the crosshair dims while the bolt cycles
     css(e.scope, 'opacity', weapon.t.zoom?.scope ? weapon.aimBlend().toFixed(2) : 0);
     e.cross.classList.toggle('cycling', !!weapon.t.semi && weapon.cooldown > 0.05);
