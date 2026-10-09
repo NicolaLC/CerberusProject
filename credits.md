@@ -12,6 +12,14 @@ original and procedural. Keep this file in sync whenever an external asset or li
 
 Space Nova source: https://www.fontspace.com/space-nova-font-f130563 (demo licence: see `before-shipping.md`).
 
+## Sounds
+
+Most sounds are synthesized at runtime (`src/game/view/audio.js`). Recorded samples:
+
+| Sound | File | Source | Licence |
+|---|---|---|---|
+| Assault rifle (KR-7) single shot | `src/assets/sfx/ar-shot.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+
 ## Libraries
 
 | Library | Version | Use | Licence |

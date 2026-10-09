@@ -1,7 +1,17 @@
-// Tiny synthesized SFX (no assets). Context is created on first user gesture.
+import arShot from '../../assets/sfx/ar-shot.mp3';
+
+// SFX: synthesized at runtime, plus recorded samples (ElevenLabs, see credits.md) where one exists.
+// A sample replaces its synth sound once decoded; until then (or if loading fails) the synth plays.
+// Context is created on first user gesture.
+// [url, gain, pitch spread (±, playback rate)] per sample id
+const SAMPLES = {
+  rifle: [arShot, 0.6, 0.04], // KR-7 / AR single shot
+};
+
 export class Audio {
   constructor() {
     this.ctx = null;
+    this.samples = {}; // id -> decoded AudioBuffer
   }
 
   // Sound reactions to gameplay events.
@@ -9,7 +19,7 @@ export class Audio {
     events.on('weapon:shot', (s) => {
       if (s.gun === 'sniper') this.snipe();
       else if (s.beam) this.rail();
-      else this.shot(s.heavy);
+      else if (!this.sample(s.gun)) this.shot(s.heavy);
       if (s.mag <= 0.2) this.lowMag(s.mag); // last rounds: a rising click warns before the mag runs dry
     });
     events.on('weapon:hit', (h) => (h.killed ? this.kill() : this.hit(h.weak ? 'weak' : h.crit ? 'head' : 'body')));
@@ -47,6 +57,29 @@ export class Audio {
     this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = this.noise.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    for (const [id, [url]] of Object.entries(SAMPLES)) {
+      fetch(url)
+        .then((r) => r.arrayBuffer())
+        .then((b) => this.ctx.decodeAudioData(b))
+        .then((buf) => (this.samples[id] = buf))
+        .catch(() => {}); // keep the synth sound
+    }
+  }
+
+  // Plays the recorded sample for `id` (slightly detuned each time so repeats don't sound like a loop).
+  // False if there is none (yet): the caller falls back to its synth sound.
+  sample(id) {
+    const buf = this.ctx && this.samples[id];
+    if (!buf) return false;
+    const [, gain, spread] = SAMPLES[id];
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = 1 + (Math.random() * 2 - 1) * spread;
+    const g = this.ctx.createGain();
+    g.gain.value = gain;
+    src.connect(g).connect(this.master);
+    src.start();
+    return true;
   }
 
   #env(node, peak, decay, gainNode = this.ctx.createGain()) {

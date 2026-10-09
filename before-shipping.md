@@ -15,5 +15,7 @@ workflow; see `instructions/desktop.md`). Tick them off here and remove an item 
 - [ ] While Space Nova is demo-licensed, don't push a `[release]` commit or `v*` tag, and don't share the preview
       artifact or builds publicly. If the GitHub repository is public, the font file in it is publicly
       downloadable: make it private or keep the font out of it until licensed.
+- [ ] **ElevenLabs sounds** (`src/assets/sfx/`): confirm they were generated on a plan that grants commercial use
+      (free-tier output requires attribution and isn't licensed for commercial use) and note the plan in `credits.md`.
 - [ ] Check `credits.md` lists every third-party asset and library actually shipped, and that OFL fonts ship with
       their licence text (`public/licenses/`, copied into `dist/` and the desktop builds).

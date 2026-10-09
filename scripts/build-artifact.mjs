@@ -11,6 +11,7 @@ const out = await build({
   minify: true,
   write: false,
   external: ['three', 'three/addons/*'],
+  loader: { '.mp3': 'dataurl' }, // sound samples are inlined (single file)
 });
 const js = out.outputFiles[0].text.replaceAll('</script', '<\\/script');
 // fonts referenced from the stylesheet are inlined as data URIs (the page is a single file)
