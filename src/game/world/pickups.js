@@ -12,24 +12,19 @@ const TUNING = {
   radius: 1.1,
 };
 
-// [x, y, z, type]: 7 light, 3 heavy, spread around the map
-const SPOTS = [
-  [6, 0, 34, 'light'],
-  [-24, 0, 2.5, 'light'],
-  [26, 0, 2.5, 'heavy'], // range
-  [-40, 1.6, 4, 'light'],
-  [44, 0, 34, 'light'],
-  [0, 0, -24, 'light'],
-  [-20, 0, -34, 'heavy'], // interior
-  [20, 0, -58, 'light'],
-  [28, 0, -17, 'light'], // boss arena: at the gate and at the back
-  [47, 0, -60, 'heavy'],
-];
+// Pickup pieces (registry ids, a public contract: instructions/level.md). Data: { id, pos } for a respawning crate
+// of that ammo class. Spots live in the level file (7 light, 3 heavy in the arena).
+export const PICKUP_PIECES = {
+  'pickup.light': (pickups, d) => pickups.addCrate(d.pos, 'light'),
+  'pickup.heavy': (pickups, d) => pickups.addCrate(d.pos, 'heavy'),
+};
 
 export class Pickups {
-  constructor({ scene, events }) {
+  // Permanent: shared geometry and materials. Per level (load / unload): the crates and dropped clips (items).
+  constructor({ scene, events, registry }) {
     this.scene = scene;
     this.events = events;
+    this.registry = registry;
     this.t = TUNING;
     this.items = [];
     this.time = 0;
@@ -63,8 +58,26 @@ export class Pickups {
     this.ringGeo = new THREE.RingGeometry(0.45, 0.55, 32).rotateX(-Math.PI / 2);
     const ringMat = (c) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(2), transparent: true, opacity: 0.5, depthWrite: false });
     this.ringMats = { light: ringMat(hex.light), heavy: ringMat(hex.heavy) };
+  }
 
-    for (const [x, y, z, type] of SPOTS) this.#spawn(new THREE.Vector3(x, y, z), { crate: true, type });
+  // Builds the crates of a level file (registry pieces owned by 'pickups'). Unloads the current items first.
+  load(level) {
+    this.unload();
+    for (const piece of this.registry.piecesOf(level, 'pickups')) this.registry.build('pickups', this, piece);
+    return this;
+  }
+
+  // Removes every crate and dropped clip. Their geometry and materials are shared by all items: nothing to free.
+  unload() {
+    for (const it of this.items) this.scene.remove(it.model, it.ring);
+    this.items.length = 0;
+    this.time = 0;
+    this.fullCooldown = 0;
+  }
+
+  // a fixed crate that respawns after it is collected
+  addCrate(pos, type) {
+    return this.#spawn(new THREE.Vector3(...pos), { crate: true, type });
   }
 
   #spawn(pos, { crate, type }) {

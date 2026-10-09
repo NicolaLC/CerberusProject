@@ -10,49 +10,19 @@ import { CoverMap } from '../ai/cover.js';
 // The enemy system: spawns every enemy (training puppets and troopers, one list), owns enemy projectiles,
 // the cover map, the instanced puppet stands and the cached raycast target list.
 
-const SPAWNS = [
-  // outdoor shooters behind the z=-14 low cover line, facing the spawn
-  { kind: 'shooter', pos: [-16, 0, -15.3] },
-  { kind: 'shooter', pos: [2, 0, -15.3] },
-  { kind: 'shooter', pos: [18, 0, -15.3] },
-  { kind: 'shooter', pos: [-34, 1.6, -4] },
-  // outdoor statics
-  { kind: 'static', pos: [-10, 0, 18], yaw: 0 },
-  { kind: 'static', pos: [10, 0, 18], yaw: 0 },
-  { kind: 'static', pos: [-6, 0, -24], yaw: 0 },
-  { kind: 'static', pos: [6, 0, -26], yaw: 0 },
-  // range
-  { kind: 'static', pos: [34, 0, 20], yaw: 0 },
-  { kind: 'static', pos: [38, 0, 10], yaw: 0 },
-  { kind: 'static', pos: [42, 0, 0], yaw: 0 },
-  { kind: 'static', pos: [46, 0, -10], yaw: 0 },
-  { kind: 'mover', pos: [33, 0, 8], to: [47, 0, 8], speed: 3, yaw: 0 },
-  { kind: 'mover', pos: [47, 0, -4], to: [33, 0, -4], speed: 5, yaw: 0 },
-  // interior
-  { kind: 'shooter', pos: [-6, 0, -55.3] },
-  { kind: 'shooter', pos: [3.3, 0, -44] },
-  { kind: 'static', pos: [-10, 0, -48], yaw: 0 },
-  { kind: 'shooter', pos: [13, 0, -55.3] },
-  { kind: 'static', pos: [20, 0, -36], yaw: -1.2 },
-  { kind: 'mover', pos: [12, 0, -42], to: [21, 0, -42], speed: 2.2, yaw: 0 },
-  // troopers: move between cover and shoot back (actors/trooper.js)
-  { kind: 'trooper', pos: [-3, 0, -27], yaw: 0 },
-  { kind: 'trooper', pos: [14, 0, -27], yaw: 0 },
-  { kind: 'trooper', pos: [22, 0, -6], yaw: 0 },
-  { kind: 'trooper', pos: [-12, 0, -44], yaw: 0 },
-  { kind: 'trooper', pos: [16, 0, -50], yaw: 0 },
-  // drones: hover and strafe, shoot short bursts (actors/drone.js); pos = the ground under them
-  { kind: 'drone', pos: [-20, 0, -4] },
-  { kind: 'drone', pos: [12, 0, 6] },
-  { kind: 'drone', pos: [-36, 0, 24] },
-  { kind: 'drone', pos: [40, 0, 20] },
-  { kind: 'drone', pos: [30, 0, -30] }, // boss arena escorts
-  { kind: 'drone', pos: [46, 0, -40] },
-  // miniboss: spider mech in the north-east arena (actors/spider.js)
-  { kind: 'boss', pos: [38, 0, -46], yaw: 0 },
-];
-const STAND_KINDS = ['static', 'mover', 'shooter']; // puppets on a pneumatic stand
-const MAKE = { trooper: Trooper, boss: SpiderMech, drone: Drone };
+// Enemy pieces (registry ids, a public contract: instructions/level.md). Data: { id, pos, yaw?, params? }.
+// The spawn list lives in the level file; builders run against this system and return the actor.
+// params: mover { to: [x, y, z], speed }, drone: pos = the ground under it, boss.spider { arena: { minX, maxX, minZ, maxZ } }.
+// `stand`: puppets on a pneumatic stand (one instanced base + post each).
+const def = (kind, d) => ({ kind, pos: d.pos, yaw: d.yaw, ...d.params });
+export const ENEMY_PIECES = {
+  'enemy.static': { stand: true, build: (sys, d) => new Puppet(sys, def('static', d)) },
+  'enemy.mover': { stand: true, build: (sys, d) => new Puppet(sys, def('mover', d)) },
+  'enemy.shooter': { stand: true, build: (sys, d) => new Puppet(sys, def('shooter', d)) },
+  'enemy.trooper': (sys, d) => new Trooper(sys, def('trooper', d)), // moves between cover and shoots back
+  'enemy.drone': (sys, d) => new Drone(sys, def('drone', d)), // hovers and strafes, short bursts
+  'boss.spider': (sys, d) => new SpiderMech(sys, def('boss', d)), // miniboss
+};
 
 // Flank director: with 2+ troopers engaged, every FLANK_EVERY s one of them is sent around the player.
 const FLANK = { every: 9, firstAfter: 5, retry: 2.5, engagedRange: 35 };
@@ -71,9 +41,10 @@ const BOLT_HIT = { point: null, normal: new THREE.Vector3() };
 const BOLT = { speed: 34, life: 3, damage: 7, radius: 0.06 };
 
 export class Enemies {
-  constructor({ scene, world, events }) {
-    Object.assign(this, { scene, world, events });
-    this.cover = new CoverMap(world);
+  // Permanent: bolt pool, stand geometry and material. Per level (load / unload): the spawn list, stands, cover map.
+  constructor({ scene, world, events, registry }) {
+    Object.assign(this, { scene, world, events, registry });
+    this.cover = null; // CoverMap of the loaded level
     this.flankCooldown = FLANK.firstAfter;
     this._engaged = [];
     this.player = null; // set on update
@@ -82,6 +53,9 @@ export class Enemies {
     this.bolts = [];
     this.dirty = true; // hit-mesh list needs a rebuild
     this.targets = [];
+    this.puppets = [];
+    this.boss = null;
+    this.bases = this.posts = null;
     const geo = new THREE.CapsuleGeometry(0.06, 0.5, 4, 8).rotateX(Math.PI / 2);
     const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff6a2a).multiplyScalar(6) });
     const glowGeo = new THREE.SphereGeometry(0.22, 12, 8);
@@ -98,20 +72,56 @@ export class Enemies {
     ).warm(16);
     this.standCount = 0;
     // pneumatic stands (puppets only): one instanced draw for all bases, one for all posts
-    const steel = new THREE.MeshStandardMaterial({ color: 0x55585e, metalness: 0.7, roughness: 0.35 });
-    const stand = (geo, count) => {
-      const m = new THREE.InstancedMesh(geo, steel, count);
+    this.standMat = new THREE.MeshStandardMaterial({ color: 0x55585e, metalness: 0.7, roughness: 0.35 });
+    this.standGeo = {
+      base: new THREE.CylinderGeometry(0.35, 0.4, 0.08, 16),
+      post: new THREE.CylinderGeometry(0.05, 0.05, 1, 8),
+    };
+  }
+
+  // Builds the enemies of a level file (registry pieces owned by 'enemies'). Unloads the current ones first.
+  load(level) {
+    this.unload();
+    const { registry } = this;
+    this.demo = !!level.demo;
+    this.cover = new CoverMap(this.world);
+    const spawns = registry.piecesOf(level, 'enemies');
+    const stands = spawns.filter((d) => registry.meta(d.id).stand).length;
+    const stand = (geo) => {
+      const m = new THREE.InstancedMesh(geo, this.standMat, stands);
       m.castShadow = m.receiveShadow = true;
       m.frustumCulled = false; // instances spread over the whole arena
       this.scene.add(m);
       return m;
     };
-    const stands = SPAWNS.filter((d) => STAND_KINDS.includes(d.kind)).length;
-    this.bases = stand(new THREE.CylinderGeometry(0.35, 0.4, 0.08, 16), stands);
-    this.posts = stand(new THREE.CylinderGeometry(0.05, 0.05, 1, 8), stands);
+    this.bases = stand(this.standGeo.base);
+    this.posts = stand(this.standGeo.post);
     // every enemy (puppets and troopers) lives in this one list
-    this.puppets = SPAWNS.map((d) => new (MAKE[d.kind] ?? Puppet)(this, d));
+    this.puppets = spawns.map((d) => registry.build('enemies', this, d));
     this.boss = this.puppets.find((p) => p.kind === 'boss') ?? null;
+    return this;
+  }
+
+  // Frees every enemy of the level: actors (debris, rigs, skins, materials), stands, bolts in flight, squad state.
+  unload() {
+    for (const p of this.puppets) p.dispose();
+    this.puppets = [];
+    this.boss = null;
+    for (const b of this.bolts) this.boltPool.release(b); // pool meshes are permanent, just hidden
+    this.bolts.length = 0;
+    for (const m of [this.bases, this.posts]) {
+      m?.removeFromParent();
+      m?.dispose(); // instance buffer only: geometry and material are permanent
+    }
+    this.bases = this.posts = null;
+    this.cover = null;
+    this.standCount = 0;
+    this.kills = 0;
+    this.time = 0;
+    this.flankCooldown = FLANK.firstAfter;
+    this._engaged.length = 0;
+    this.targets.length = 0;
+    this.dirty = true;
   }
 
   setStand(i, pos, postH) {
@@ -225,8 +235,12 @@ export class Enemies {
   update(dt, player) {
     this.time += dt;
     this.player = player;
-    this.#flankDirector(dt, player);
-    for (const p of this.puppets) p.update(dt, player);
+    // Demo level (`"demo": true`, e.g. the Library): enemies are exhibits. Every enemy already stands down while
+    // the player is dead, so they get a read-only view of the player that reports `dead`: no waking, aiming,
+    // firing or flanking, while they still idle, animate and take hits.
+    const target = this.demo ? (this.ghost ??= Object.create(player, { dead: { value: true } })) : player;
+    this.#flankDirector(dt, target);
+    for (const p of this.puppets) p.update(dt, target);
 
     const cap = player.dead ? null : player.capsule();
     for (let i = this.bolts.length - 1; i >= 0; i--) {
