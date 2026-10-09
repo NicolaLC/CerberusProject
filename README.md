@@ -4,7 +4,18 @@ Sci-fi third-person cover shooter prototype for the browser (Three.js + Vite).
 A training arena with prototype grid textures, a bright sunlit yard, a dark interior
 and puppet enemies to shoot.
 
-## Run
+## Play
+
+Downloads for Windows, macOS, Linux and the web: [Releases](https://github.com/NicolaLC/CerberusProject/releases).
+
+Linux (x86_64), install or update from the latest release and start it:
+
+```bash
+./scripts/play-linux.sh            # Debian/Ubuntu: installs the .deb (sudo); elsewhere: portable build, no sudo
+./scripts/play-linux.sh --portable # portable build in ~/.local/share/cerberus, never sudo
+```
+
+## Run from source
 
 ```bash
 npm install

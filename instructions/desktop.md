@@ -42,6 +42,11 @@ renderer, gamepad, pointer lock and audio behave exactly as in the Chromium the 
   can't ship a SUID sandbox helper, so Ubuntu 24.04+ (AppArmor blocks unprivileged user namespaces) needs
   `--no-sandbox`. The `.deb` avoids both (postinst sets chrome-sandbox / installs an AppArmor profile): recommend it.
   `--no-sandbox` can't be added from main.js: Chromium checks the sandbox before any app JS runs.
+- `scripts/play-linux.sh`: installs/updates from the newest GitHub release (prereleases included) and starts the
+  game. apt systems get the .deb (on failure: `apt-get update` + retry, then portable fallback); others, or
+  `--portable`, get the tar.gz in `~/.local/share/cerberus/<version>` with a `~/.local/bin/cerberus` launcher and a
+  menu entry, adding `--no-sandbox` only when `unshare --user` fails and there is no root SUID chrome-sandbox.
+  Safe for `curl … | bash` (apt reads /dev/null, not the piped script).
 - Builds are unsigned (`mac.identity: null`, `CSC_IDENTITY_AUTO_DISCOVERY=false`).
 
 ## Not done yet
