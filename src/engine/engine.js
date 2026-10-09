@@ -1,4 +1,4 @@
-import * as THREE from 'three'; // the WebGPU build (vite.config.js alias)
+import * as THREE from 'three';
 import { Events } from './events.js';
 import { Input } from './input.js';
 import { Perf, StatsPanel } from './perf.js';
@@ -24,13 +24,10 @@ const TUNING = {
 };
 
 export class Engine {
-  // backend: 'auto' (WebGPU, falling back to WebGL 2 where the browser has no WebGPU) or 'webgl' (force WebGL 2).
-  // Call `await init()` before the first frame.
-  constructor({ canvas, fov = 70, near = 0.05, far = 2000, backend = 'auto' }) {
+  constructor({ canvas, fov = 70, near = 0.05, far = 2000 }) {
     this.t = TUNING;
     this.canvas = canvas;
-    this.renderer = new THREE.WebGPURenderer({ canvas, antialias: false, powerPreference: 'high-performance', forceWebGL: backend === 'webgl' });
-    this.backend = null; // 'webgpu' | 'webgl' once init() resolves
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -67,21 +64,13 @@ export class Engine {
     this.resize();
   }
 
-  // Creates the GPU device (WebGPU adapter or WebGL 2 context).
-  async init() {
-    await this.renderer.init();
-    this.backend = this.renderer.backend.isWebGPUBackend ? 'webgpu' : 'webgl';
-    this.renderer.onDeviceLost = (info) => {
-      this.contextLost = true;
-      console.error('[engine] GPU device lost', info);
-      this.events.emit('engine:contextLost');
-    };
-    return this;
+  get backend() {
+    return 'webgl';
   }
 
   // Draw calls of the last frame (all passes: shadow, scene, post).
   get drawCalls() {
-    return this.renderer.info.render.drawCalls;
+    return this.renderer.info.render.calls;
   }
 
   add(system) {
@@ -105,26 +94,26 @@ export class Engine {
     this.events.emit('engine:resize', { width: innerWidth, height: innerHeight, pixelRatio: this.perf.scale });
   }
 
-  // The renderer's own rAF loop drives the frame: it advances three's node frame (per-frame passes such as
-  // the post stack's scene pass run once per node frame) right before calling us.
   start() {
     this.running = true;
-    this.last = 0;
-    this.renderer.setAnimationLoop((now) => {
-      if (!this.last) this.last = now;
-      else this.#frame(now);
+    const tick = (now) => {
+      if (!this.running) return;
+      requestAnimationFrame(tick);
+      this.#frame(now);
+    };
+    requestAnimationFrame((now) => {
+      this.last = now;
+      tick(now);
     });
   }
 
   // Stops the browser-driven loop (tests, tools). Resume with start().
   stop() {
     this.running = false;
-    this.renderer.setAnimationLoop(null);
   }
 
   // Runs exactly one frame of `dt` seconds, independent of wall time: deterministic tests and replays.
   step(dt = 1 / 60) {
-    this.renderer._nodes.nodeFrame.update(); // what the renderer's rAF loop does before each frame
     this.#tick(dt);
   }
 
@@ -167,7 +156,7 @@ export class Engine {
     else if (!this.contextLost) this.#run('render', realDt);
 
     input.endFrame();
-    this.stats.update(realDt, this.perf, this.renderer, this.timings, this.backend);
+    this.stats.update(realDt, this.perf, this.renderer, this.timings);
   }
 
   #run(phase, dt) {

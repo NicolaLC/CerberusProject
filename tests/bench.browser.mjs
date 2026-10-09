@@ -1,45 +1,53 @@
 import { chromium } from 'playwright';
 
-// Renderer benchmark (not a pass/fail test): main-thread ms per frame at the spawn view and in a fight view,
-// for the URL given (default WebGL). SwiftShader numbers only compare renderers relative to each other.
-// Usage: [CPU=1] [W=.. H=..] node tests/bench.browser.mjs [url-suffix]   e.g. '&renderer=webgl'
-const URL = `http://localhost:5173/?debug${process.argv[2] ?? ''}`;
-const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader'] });
-const p = await b.newPage({ viewport: { width: +(process.env.W ?? 1280), height: +(process.env.H ?? 720) } });
-const errors = [];
-p.on('pageerror', (e) => errors.push(e.message));
-p.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-await p.goto(URL);
+// Renderer CPU benchmark (not pass/fail): main-thread JavaScript ms per frame, from a CPU profile, with idle time
+// left out. A tiny canvas and shadow map keep the software GPU's work small, so the number is the renderer's own
+// cost (scene traversal, state, uniforms, draw submission) plus the game systems.
+// Caveat: SwiftShader WebGL calls can block when its GPU falls behind (seen as uniformMatrix4fv time), so compare
+// renderers on a light view (TURN=1: facing the yard) and read heavy-view WebGL numbers as upper bounds.
+// Usage: [TURN=1] [HEADED=1 xvfb-run -a] node tests/bench.browser.mjs   (BASE=http://localhost:5174 for another build)
+const BASE = process.env.BASE ?? 'http://localhost:5173';
+const b = await chromium.launch({
+  headless: !process.env.HEADED,
+  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader'],
+});
+const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
+await p.goto(`${BASE}/?debug${process.argv[2] ?? ''}`);
 await p.waitForFunction(() => window.game?.engine);
-const r = await p.evaluate(async (cpu) => {
+await p.evaluate(async (turn) => {
   const g = window.game;
   const e = g.engine;
   e.stop();
-  e.perf.enabled = false; // fixed resolution
-  // CPU mode: a tiny canvas and shadow map make the (software) GPU work negligible, leaving the renderer's
-  // main-thread cost per frame: scene traversal, state, uniforms, draw submission.
-  if (cpu) {
-    g.world.sun.shadow.mapSize.set(64, 64);
-    e.perf.scale = e.perf.maxScale = 0.1;
-    e.resize();
+  e.perf.enabled = false;
+  const sh = g.world.sun.shadow;
+  sh.mapSize.set(64, 64);
+  if (sh.map) {
+    sh.map.dispose();
+    sh.map = null;
   }
-  const run = async (n) => {
-    for (let i = 0; i < 20; i++) e.step(1 / 60); // warm up (pipelines, uploads)
-    await new Promise((r) => setTimeout(r, 500));
-    const t0 = performance.now();
-    let draws = 0;
-    for (let i = 0; i < n; i++) {
-      e.step(1 / 60);
-      draws = e.drawCalls;
-    }
-    const top = Object.entries(e.timings).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => k + ' ' + v.toFixed(1)).join(', ');
-    return { ms: +((performance.now() - t0) / n).toFixed(2), draws, top, render: +Object.entries(e.timings).filter(([k]) => /render|post/.test(k)).reduce((a, [, v]) => a + v, 0).toFixed(2) };
-  };
-  const spawn = await run(120);
-  // turn toward the yard full of puppets
-  g.camRig.yaw += Math.PI;
-  const turned = await run(120);
-  return { backend: e.backend, spawn, turned };
-}, !!process.env.CPU);
-console.log(JSON.stringify({ url: URL, ...r, errors: errors.slice(0, 3) }));
+  e.perf.scale = e.perf.maxScale = 0.1;
+  e.resize();
+  if (turn) g.camRig.yaw += Math.PI;
+  for (let i = 0; i < 30; i++) e.step(1 / 60); // warm up
+  await new Promise((r) => setTimeout(r, 500));
+}, !!process.env.TURN);
+const cdp = await p.context().newCDPSession(p);
+await cdp.send('Profiler.enable');
+await cdp.send('Profiler.start');
+const FRAMES = 60;
+const info = await p.evaluate((n) => {
+  const e = window.game.engine;
+  for (let i = 0; i < n; i++) e.step(1 / 60);
+  return { backend: e.backend, draws: e.drawCalls };
+}, FRAMES);
+const { profile } = await cdp.send('Profiler.stop');
+const byId = new Map(profile.nodes.map((n) => [n.id, n]));
+let total = 0;
+let idle = 0;
+profile.samples.forEach((id, i) => {
+  const t = profile.timeDeltas[i] || 0;
+  total += t;
+  if (/^\((program|idle|garbage collector)\)$/.test(byId.get(id).callFrame.functionName)) idle += t;
+});
+console.log(JSON.stringify({ ...info, view: process.env.TURN ? 'yard' : 'spawn', jsMsPerFrame: +((total - idle) / 1000 / FRAMES).toFixed(2) }));
 await b.close();
