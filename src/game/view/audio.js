@@ -37,6 +37,18 @@ const SAMPLES = {
 };
 const BOLT_DELAY = 0.22; // s after a sniper shot before the bolt is worked
 
+// Sample bytes. The single-file artifact build inlines samples as base64 data: URLs, which its page's content
+// policy won't fetch, so those are decoded here instead.
+function bytes(url) {
+  if (!url.startsWith('data:')) return fetch(url).then((r) => r.arrayBuffer());
+  return new Promise((resolve) => {
+    const bin = atob(url.slice(url.indexOf(',') + 1));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    resolve(out.buffer);
+  });
+}
+
 export class Audio {
   // weapon: read for the gun being reloaded (the reload event carries no gun id)
   constructor(weapon) {
@@ -109,8 +121,7 @@ export class Audio {
     const d = this.noise.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     for (const [id, [url]] of Object.entries(SAMPLES)) {
-      fetch(url)
-        .then((r) => r.arrayBuffer())
+      bytes(url)
         .then((b) => this.ctx.decodeAudioData(b))
         .then((buf) => (this.samples[id] = buf))
         .catch(() => {}); // keep the synth sound
