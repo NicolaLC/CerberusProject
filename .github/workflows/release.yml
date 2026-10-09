@@ -1,0 +1,72 @@
+# Builds the web app and the desktop apps (Windows, macOS, Linux) and publishes them as a GitHub release.
+# Trigger: push a tag `v<version>` matching package.json (e.g. v0.0.1), or run it by hand on a tag.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm test
+      - run: npm run build && npm run build:artifact
+      - name: Package web build
+        run: |
+          V=$(node -p "require('./package.json').version")
+          mkdir -p out
+          (cd dist && zip -qr "../out/Cerberus-$V-web.zip" . -x 'artifact/*')
+          cp dist/artifact/cerberus.html "out/Cerberus-$V-web-single-file.html"
+      - uses: actions/upload-artifact@v4
+        with: { name: web, path: out/* }
+
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Build installer
+        run: npm run desktop:dist -- --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false' # unsigned builds (no certificates yet)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+          if-no-files-found: error
+
+  release:
+    needs: [web, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: assets, merge-multiple: true }
+      - name: Check tag matches package.json
+        run: |
+          V=$(node -p "require('./package.json').version")
+          test "${GITHUB_REF_NAME}" = "v$V" || { echo "tag ${GITHUB_REF_NAME} != v$V"; exit 1; }
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Cerberus ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
+          prerelease: true
+          files: assets/*

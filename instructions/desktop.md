@@ -30,9 +30,17 @@ renderer, gamepad, pointer lock and audio behave exactly as in the Chromium the 
 - The app archive holds only `dist/` (minus `dist/artifact`) and `desktop/`: three.js is bundled by Vite, so
   `node_modules` is excluded (~0.7 MB archive; installer ~125 MB, mostly Chromium).
 
+## Releases (GitHub)
+- `.github/workflows/release.yml` runs on a pushed tag `v<version>` (must equal package.json `version`):
+  web job (tests, `dist/` zip + single-file page), desktop matrix (ubuntu → AppImage, windows → NSIS exe,
+  macos → universal dmg), then a GitHub prerelease with `RELEASE_NOTES.md` as the body.
+- To cut one: bump `version` in package.json, rewrite RELEASE_NOTES.md, commit, `git tag vX.Y.Z`, push the tag.
+- File names: `Cerberus-<version>-<os>-<arch>.<ext>` (electron-builder `artifactName`).
+- Builds are unsigned (`mac.identity: null`, `CSC_IDENTITY_AUTO_DISCOVERY=false`).
+
 ## Not done yet
 - App icon (default Electron icon), code signing (Windows certificate, Apple Developer ID + notarization),
-  Steam integration, CI builds per OS.
+  Steam integration.
 
 ## Testing
 - Headless: `xvfb-run -a` + Playwright `_electron.launch({ executablePath: 'node_modules/electron/dist/electron',
