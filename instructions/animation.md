@@ -86,6 +86,8 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
     to it (blend in after heel strike, out before toe off), y on the floor plus the heel roll. A lock more than
     0.45 m off its pose (spinning on the spot) lets go until the next step. Planted feet slip < 1 mm/frame
     (`tests/animation.browser.mjs`).
+  - Footsteps: `animator.onStep(side, gait)` is called when a leg's stance starts (heel strike) while the gait
+    shows (`m > 0.3`). The player emits `player:step`, enemies `enemy:step`; audio plays the footstep sounds.
   - Direction: pass `vel` and `yaw`. The hips turn toward the movement (up to 0.9 rad), the thighs take the rest
     (UpLeg rotation order YXZ: yaw, then swing), the spine undoes the hips' yaw so the chest keeps facing.
     Backpedaling plays the cycle in reverse.

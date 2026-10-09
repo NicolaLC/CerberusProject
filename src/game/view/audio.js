@@ -13,11 +13,15 @@ import reloadMg from '../../assets/sfx/reload-mg.mp3';
 import reloadPerfect from '../../assets/sfx/reload-perfect.mp3';
 import reloadJam from '../../assets/sfx/reload-jam.mp3';
 import switchGun from '../../assets/sfx/switch.mp3';
+import stepWalk1 from '../../assets/sfx/step-walk-1.mp3';
+import stepRun1 from '../../assets/sfx/step-run-1.mp3';
+import stepMetal1 from '../../assets/sfx/step-metal-1.mp3';
+import stepRobot1 from '../../assets/sfx/step-robot-1.mp3';
 
 // SFX: synthesized at runtime, plus recorded samples (ElevenLabs, see credits.md) where one exists.
 // A sample replaces its synth sound once decoded; until then (or if loading fails) the synth plays.
 // Context is created on first user gesture.
-// [url, gain, pitch spread (±, playback rate)] per sample id. Every play also varies its volume by ±GAIN_SPREAD.
+// [url or [takes...], gain, pitch spread (±, playback rate)] per sample id; with takes, one is picked at random. Every play also varies its volume by ±GAIN_SPREAD.
 const SAMPLES = {
   rifle: [arShot, 0.6, 0.09], // shots are keyed by gun id
   mg: [mgShot, 0.5, 0.08],
@@ -34,7 +38,12 @@ const SAMPLES = {
   perfect: [reloadPerfect, 0.5, 0.04],
   jam: [reloadJam, 0.5, 0.06],
   switch: [switchGun, 0.9, 0.1],
+  stepWalk: [[stepWalk1], 0.55, 0.1], // player on the floor
+  stepRun: [[stepRun1], 0.45, 0.1],
+  stepMetal: [[stepMetal1], 0.4, 0.1], // player on anything raised (platform, stairs, blocks)
+  stepRobot: [[stepRobot1], 0.45, 0.12], // troopers and moving puppets, quieter with distance
 };
+const ENEMY_STEP_RANGE = 28; // m from the camera where enemy steps fade out
 const GAIN_SPREAD = 0.12;
 const BOLT_DELAY = 0.22; // s after a sniper shot before the bolt is worked
 
@@ -52,10 +61,12 @@ function bytes(url) {
 
 export class Audio {
   // weapon: read for the gun being reloaded (the reload event carries no gun id)
-  constructor(weapon) {
+  // listener: where the ears are (the camera), for distance falloff of enemy steps
+  constructor(weapon, listener) {
     this.weapon = weapon;
+    this.listener = listener;
     this.ctx = null;
-    this.samples = {}; // id -> decoded AudioBuffer
+    this.samples = {}; // id -> decoded AudioBuffers (one per take)
     this.voice = {}; // id -> playing source that may be cut short (reload, rail charge)
   }
 
@@ -105,6 +116,12 @@ export class Audio {
     events.on('boss:mortar', () => this.zap(0.25));
     events.on('boss:wake', () => this.charge());
     events.on('pickup:collected', () => this.pickup());
+    events.on('player:step', (s) => this.sample(s.raised ? 'stepMetal' : s.run ? 'stepRun' : 'stepWalk'));
+    events.on('enemy:step', (pos) => {
+      if (!this.listener) return;
+      const f = 1 - this.listener.position.distanceTo(pos) / ENEMY_STEP_RANGE;
+      if (f > 0.1) this.sample('stepRobot', 0, f * f);
+    });
     return this;
   }
 
@@ -121,26 +138,28 @@ export class Audio {
     this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = this.noise.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-    for (const [id, [url]] of Object.entries(SAMPLES)) {
-      bytes(url)
-        .then((b) => this.ctx.decodeAudioData(b))
-        .then((buf) => (this.samples[id] = buf))
-        .catch(() => {}); // keep the synth sound
+    for (const [id, [urls]] of Object.entries(SAMPLES)) {
+      for (const url of [urls].flat()) {
+        bytes(url)
+          .then((b) => this.ctx.decodeAudioData(b))
+          .then((buf) => (this.samples[id] ??= []).push(buf))
+          .catch(() => {}); // keep the synth sound
+      }
     }
   }
 
   // Plays the recorded sample for `id` (slightly detuned each time so repeats don't sound like a loop),
-  // `delay` seconds from now. Returns its source node, or null if there is no sample (yet): the caller
-  // falls back to its synth sound.
-  sample(id, delay = 0) {
-    const buf = this.ctx && this.samples[id];
-    if (!buf) return null;
+  // `delay` seconds from now, at `volume` times its gain. Returns its source node, or null if there is no
+  // sample (yet): the caller falls back to its synth sound.
+  sample(id, delay = 0, volume = 1) {
+    const takes = this.ctx && this.samples[id];
+    if (!takes) return null;
     const [, gain, spread] = SAMPLES[id];
     const src = this.ctx.createBufferSource();
-    src.buffer = buf;
+    src.buffer = takes[(Math.random() * takes.length) | 0];
     src.playbackRate.value = 1 + (Math.random() * 2 - 1) * spread;
     src.gain = this.ctx.createGain();
-    src.gain.gain.value = gain * (1 + (Math.random() * 2 - 1) * GAIN_SPREAD);
+    src.gain.gain.value = gain * volume * (1 + (Math.random() * 2 - 1) * GAIN_SPREAD);
     src.connect(src.gain).connect(this.master);
     src.start(this.ctx.currentTime + delay);
     return src;

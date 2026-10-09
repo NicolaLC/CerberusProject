@@ -446,6 +446,9 @@ loading fails.
   charge is cancelled), MG barrel spin (a loop whose pitch and volume follow the spin), dry fire, weapon switch,
   reload (MG has its own, every other gun shares the rifle one; cut short by a good/perfect active reload, a jam or
   a switch), perfect reload, reload jam.
+- **Footsteps (recorded):** one per heel strike from the animator. Player: walk, sprint, or a metallic step when
+  standing on anything raised (platform, stairs, blocks). Troopers and moving puppets: a robot step that fades out
+  by 28 m from the camera. Each footstep sound can have several takes; one is picked at random per step.
 - **Synth:** low-magazine rising click, hit tick / head double ping / weak-spot sparkle, kill chime, boom (blasts,
   boss legs and death), zap (enemy bolts, mortar), boss charge (also stomp and wake), thud (puppet down, hurt, boss
   steps), jet whoosh + thump, landing thud, pickup, good-reload click.

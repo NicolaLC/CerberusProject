@@ -43,6 +43,7 @@ export class EnemyBody {
     this.rig = new Rig({ materials: { body: HITBOX_MAT } });
     for (const p of Object.values(this.rig.parts)) p.visible = false; // hitboxes only: not baked, still raycast
     this.animator = new Animator(this.rig, { armed, ground: armed ? (x, z, maxY) => sys.world.groundAt(x, z, maxY) : null });
+    this.animator.onStep = () => this.alive && sys.events.emit('enemy:step', this.pos);
     this.group.add(this.rig.root);
     sys.scene.add(this.group);
   }

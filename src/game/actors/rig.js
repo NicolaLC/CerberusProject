@@ -236,9 +236,10 @@ export class Animator {
     this.hand = 1; // 1 = gun on the right shoulder, -1 = mirrored to the left (peeking a left corner)
     this.hit = new THREE.Vector2(); // spring-driven hit reaction (x: pitch, y: roll)
     this.hitVel = new THREE.Vector2();
+    this.onStep = null; // (side, gait 0 walk..1 run): called at each heel strike while walking or running
     // thighs: yaw first, then swing (the swing plane turns with the step direction)
     for (const side of SIDES) rig.bones[side + 'UpLeg'].rotation.order = 'YXZ';
-    const leg = () => ({ thigh: 0, knee: 0, pitch: 0, stance: 0, locked: false, released: false, lw: 0, lock: new THREE.Vector3() });
+    const leg = () => ({ thigh: 0, knee: 0, pitch: 0, stance: 0, planted: false, locked: false, released: false, lw: 0, lock: new THREE.Vector3() });
     this.legs = { Left: leg(), Right: leg() };
   }
 
@@ -329,6 +330,8 @@ export class Animator {
       setX(B[side + 'Leg'], L.knee);
       // stance weight: ramps in after heel strike and out before toe off
       L.stance = u < duty ? Math.min(1, u / 0.05) * Math.min(1, (duty - u) / 0.12) : 0;
+      if (L.stance > 0 && !L.planted && m > 0.3 && this.onStep) this.onStep(side, g);
+      L.planted = L.stance > 0;
       // how much shorter this leg is than straight: the hips sink by that on the supporting leg
       wSum += L.stance;
       // (less the heel lift: late in stance the foot is up on its toes, which carries the ankle higher)

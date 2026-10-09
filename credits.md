@@ -33,6 +33,10 @@ Most sounds are synthesized at runtime (`src/game/view/audio.js`). Recorded samp
 | Reload jam | `src/assets/sfx/reload-jam.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Dry fire | `src/assets/sfx/dry-fire.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Weapon switch | `src/assets/sfx/switch.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Player footstep, walking | `src/assets/sfx/step-walk-1.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Player footstep, sprinting | `src/assets/sfx/step-run-1.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Player footstep on raised surfaces | `src/assets/sfx/step-metal-1.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Robot footstep (troopers, puppets) | `src/assets/sfx/step-robot-1.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 
 ## Libraries
 
