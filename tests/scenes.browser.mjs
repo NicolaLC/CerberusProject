@@ -186,5 +186,69 @@ for (const name of SCENES) {
   await p.close();
 }
 
+// ---- 4. HUD title, demo (Library) enemies are harmless exhibits, scene picker in the panel ----
+{
+  const p = await b.newPage({ viewport: { width: 320, height: 180 } });
+  const errors = [];
+  p.on('pageerror', (e) => errors.push(e.message));
+  p.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  await p.goto(withScene(null));
+  await p.waitForFunction(() => window.game?.engine);
+  const r = await p.evaluate((names) => {
+    const g = window.game;
+    const { engine, player, enemies } = g;
+    engine.stop();
+    engine.headless = true;
+    const step = (n) => { for (let i = 0; i < n; i++) engine.step(1 / 60); };
+    const out = { zones: {} };
+    for (const n of names) {
+      g.loadScene(n);
+      step(2);
+      out.zones[n] = [document.getElementById('zone').textContent, g.level.title];
+    }
+    // Library: stand in front of the exhibit row (every enemy in range and in sight) for 10 s
+    g.loadScene('library');
+    player.pos.set(0, 0, -4);
+    player.facing = Math.PI;
+    let maxBolts = 0;
+    for (let i = 0; i < 600; i++) {
+      engine.step(1 / 60);
+      maxBolts = Math.max(maxBolts, enemies.bolts.length);
+    }
+    out.demo = enemies.demo;
+    out.maxBolts = maxBolts;
+    out.unhurt = player.health === 100 && player.shields === player.t.maxShields && !player.dead;
+    out.awake = enemies.puppets.filter((x) => x.awake).map((x) => x.kind);
+    // exhibits still take hits
+    const pup = enemies.puppets.find((x) => x.kind === 'static');
+    pup.damage(999, pup.pos.clone(), pup.pos.clone().set(0, 0, 1), 'torso');
+    step(2);
+    out.hitWorks = enemies.kills === 1;
+    // picker: one option per scene, follows loadScene, and switching through it updates the URL
+    const picker = document.getElementById('scene');
+    out.options = [...picker.options].map((o) => o.value);
+    out.pickerFollows = picker.value === 'library';
+    picker.value = 'gym';
+    picker.dispatchEvent(new Event('change'));
+    out.pickedScene = g.sceneName;
+    out.url = new URL(location.href).searchParams.get('scene');
+    g.loadScene('arena');
+    out.arenaHostile = !enemies.demo;
+    return out;
+  }, SCENES);
+  for (const n of SCENES) {
+    const [shown, title] = r.zones[n];
+    expect(`HUD zone label in "${n}" is its title "${title}"`, !!title && shown === title, shown);
+  }
+  expect('library is a demo level: 10 s in front of every enemy, no bolts, no damage', r.demo && r.maxBolts === 0 && r.unhurt, JSON.stringify(r));
+  expect('  no exhibit woke up (drones, boss)', r.awake.length === 0, JSON.stringify(r.awake));
+  expect('  exhibits still take hits', r.hitWorks);
+  expect('scene picker lists every scene', JSON.stringify(r.options) === JSON.stringify(SCENES), JSON.stringify(r.options));
+  expect('  it follows loadScene, switches the scene and updates ?scene=', r.pickerFollows && r.pickedScene === 'gym' && r.url === 'gym', JSON.stringify(r));
+  expect('arena is not a demo level', r.arenaHostile);
+  expect('  no page or console errors', errors.length === 0, errors.join(' | '));
+  await p.close();
+}
+
 await b.close();
 process.exit(fail.length ? 1 : 0);

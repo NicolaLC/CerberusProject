@@ -83,6 +83,7 @@ export class Enemies {
   load(level) {
     this.unload();
     const { registry } = this;
+    this.demo = !!level.demo;
     this.cover = new CoverMap(this.world);
     const spawns = registry.piecesOf(level, 'enemies');
     const stands = spawns.filter((d) => registry.meta(d.id).stand).length;
@@ -234,8 +235,12 @@ export class Enemies {
   update(dt, player) {
     this.time += dt;
     this.player = player;
-    this.#flankDirector(dt, player);
-    for (const p of this.puppets) p.update(dt, player);
+    // Demo level (`"demo": true`, e.g. the Library): enemies are exhibits. Every enemy already stands down while
+    // the player is dead, so they get a read-only view of the player that reports `dead`: no waking, aiming,
+    // firing or flanking, while they still idle, animate and take hits.
+    const target = this.demo ? (this.ghost ??= Object.create(player, { dead: { value: true } })) : player;
+    this.#flankDirector(dt, target);
+    for (const p of this.puppets) p.update(dt, target);
 
     const cap = player.dead ? null : player.capsule();
     for (let i = this.bolts.length - 1; i >= 0; i--) {

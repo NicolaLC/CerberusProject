@@ -64,7 +64,9 @@ export class Hud {
   }
 
   // Level change: no boss bar, lock-on, toast or hit feedback left over from the last one.
-  reset() {
+  // Per-scene reset; the zone label shows the level's title (outdoors) or INTERIOR.
+  reset(level) {
+    this.zoneName = level?.title ?? level?.name?.toUpperCase() ?? '';
     this.hitTime = this.dmgTime = this.toastTime = 0;
     this.bossLegs = null;
     this.el.boss.root.classList.remove('on');
@@ -200,7 +202,7 @@ export class Hud {
 
 
     text(e.kills, `${enemies.kills} / ${enemies.puppets.length}`);
-    text(e.zone, world.isInterior(player.pos) ? 'INTERIOR' : 'TRAINING YARD');
+    text(e.zone, world.isInterior(player.pos) ? 'INTERIOR' : this.zoneName);
 
     this.dmgTime -= dt;
     const lowHp = player.shields <= 0 ? 0.35 + (1 - player.health / 100) * 0.5 : 0;
