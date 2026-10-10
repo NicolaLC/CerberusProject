@@ -229,11 +229,10 @@ for (const name of SCENES) {
     step(2);
     out.hitWorks = enemies.kills === 1;
     // picker: one option per scene, follows loadScene, and switching through it updates the URL
-    const picker = document.getElementById('scene');
-    out.options = [...picker.options].map((o) => o.value);
-    out.pickerFollows = picker.value === 'library';
-    picker.value = 'gym';
-    picker.dispatchEvent(new Event('change'));
+    const buttons = [...document.querySelectorAll('#scenes button')];
+    out.options = buttons.map((b) => b.dataset.scene);
+    out.pickerFollows = buttons.filter((b) => b.classList.contains('on')).map((b) => b.dataset.scene).join() === 'library';
+    buttons.find((b) => b.dataset.scene === 'gym').click();
     out.pickedScene = g.sceneName;
     out.url = new URL(location.href).searchParams.get('scene');
     g.loadScene('arena');
@@ -264,8 +263,8 @@ for (const name of SCENES) {
   expect('library is a demo level: 10 s in front of every enemy, no bolts, no damage', r.demo && r.maxBolts === 0 && r.unhurt, JSON.stringify(r));
   expect('  no exhibit woke up (drones, boss)', r.awake.length === 0, JSON.stringify(r.awake));
   expect('  exhibits still take hits', r.hitWorks);
-  expect('scene picker lists every scene', JSON.stringify(r.options) === JSON.stringify(SCENES), JSON.stringify(r.options));
-  expect('  it follows loadScene, switches the scene and updates ?scene=', r.pickerFollows && r.pickedScene === 'gym' && r.url === 'gym', JSON.stringify(r));
+  expect('scene buttons: one per scene', JSON.stringify(r.options) === JSON.stringify(SCENES), JSON.stringify(r.options));
+  expect('  the current one is lit, follows loadScene, a click switches the scene and updates ?scene=', r.pickerFollows && r.pickedScene === 'gym' && r.url === 'gym', JSON.stringify(r));
   expect('arena is not a demo level', r.arenaHostile);
   expect('  no page or console errors', errors.length === 0, errors.join(' | '));
   await p.close();
