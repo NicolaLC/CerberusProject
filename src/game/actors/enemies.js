@@ -48,6 +48,7 @@ export class Enemies {
     this.flankCooldown = FLANK.firstAfter;
     this._engaged = [];
     this.player = null; // set on update
+    this.frozen = false; // Gym AI room (K): enemies stop thinking and moving, bolts in flight still fly
     this.kills = 0;
     this.time = 0;
     this.bolts = [];
@@ -294,8 +295,10 @@ export class Enemies {
     // the player is dead, so they get a read-only view of the player that reports `dead`: no waking, aiming,
     // firing or flanking, while they still idle, animate and take hits.
     const target = this.demo ? (this.ghost ??= Object.create(player, { dead: { value: true } })) : player;
-    this.#flankDirector(dt, target);
-    for (const p of this.puppets) p.update(dt, target);
+    if (!this.frozen) {
+      this.#flankDirector(dt, target);
+      for (const p of this.puppets) p.update(dt, target);
+    }
 
     const cap = player.dead ? null : player.capsule();
     for (let i = this.bolts.length - 1; i >= 0; i--) {
