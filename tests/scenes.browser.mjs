@@ -12,7 +12,7 @@ const withScene = (scene) => {
   if (scene != null) u.searchParams.set('scene', scene);
   return u.href;
 };
-const SCENES = ['arena', 'gym', 'library', 'workshop'];
+const SCENES = ['arena', 'gym', 'gym-range', 'gym-ai', 'gym-stress', 'library', 'workshop'];
 const CYCLES = 3;
 
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader'] });

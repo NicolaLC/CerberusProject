@@ -68,6 +68,50 @@ repeats every caster). Budget: ≤ 140 calls per frame at the spawn view, ≤ 25
   under 30 m). `RigidSkin.setCastShadow(on)` toggles a rig's shadow draw.
 - The sun's shadow frustum (±48 m, 4096²) follows the player in 2 m snaps (`world.updateSun`).
 
+## Per-encounter budget
+Measured in `?scene=gym-stress` (`tests/gym-stress.browser.mjs`, instructions/gym.md). Draw calls and triangles are hardware independent
+(the numbers below are asserted linear in the test); frame times in SwiftShader are not GPU times and are not used.
+Costs are WORST CASE per unit: in view, near LOD, sun shadow pass included (draws and triangles are counted over the whole frame).
+
+| unit | draws (near) | tris (near) | geometries | draws / tris far (> 32 m) | when destroyed |
+|---|---|---|---|---|---|
+| puppet (`enemy.static`) | 7 | 15.3k | 8 | 1 / 7.5k | + 75 draws for 5 s (debris), then the stand sinks |
+| trooper (`enemy.trooper`) | 9 | 47.4k | 10 | 1 / 23.7k | + 119 draws for 5 s |
+| drone (`enemy.drone`) | 4 | 9.2k | 5 | 1 / 9.2k (shadow stays) | + 2 (falls in one piece) |
+| point light (`light.point`) | 0 | 0 | 0 | | cost is per lit fragment, not per draw; adding / removing one recompiles shaders |
+| effect burst (`blast`: sparks, smoke, ring) | 3 | 0.4k | 0 | | sparks capped at 256 (16 bursts); lives 0.3-0.6 s |
+
+Triangles are doubled by the shadow pass (a trooper is ~23.7k triangles drawn twice). The empty room (floor, 16 cover boxes, the
+player, post) is 45 draws / 66k tris. Debris is the surprise: every chunk is its own mesh and it casts shadows, so a destroyed puppet
+or trooper costs 10-15 times what it did alive until it expires. A mission that kills many at once spikes the draw count.
+
+**Current budget.** `tests/render.browser.mjs`: <= 140 draws at the arena spawn view (128 today), <= 25 in the shadow pass (14 today).
+Quality tiers (`quality.js`) do not change geometry draws, only pixels: low 84 draws, high and ultra 97 at the same view (bloom adds ~13
+post draws; MSAA, shadow map size 2048 / 4096 and resolution scale are fill-rate costs).
+
+**Proposed caps** per encounter (enemies alive at once, near; far ones count 1 draw each, so up to 3x as many beyond 32 m).
+Assumptions, stated plainly:
+- the frame is CPU / draw-call bound: total draws <= 180 (low), 240 (high), 300 (ultra); ~60 are the level, player and post, the rest
+  is the encounter (120 / 180 / 240);
+- triangles <= 0.8M / 1.5M / 2.5M per frame incl. shadows (guesses for integrated / mid / high-end GPUs, not measured on hardware; the
+  caps below stay well under them, draws are what binds);
+- the encounter's draws are split 40% troopers, 20% puppets, 25% drones, 15% effects; a different mix is fine while
+  `9 T + 7 P + 4 D + 3 B + debris <= encounter draws` (T troopers, P puppets, D drones, B bursts alive);
+- lights have no draw cost, so their cap is a fragment-cost guess (each forward point light loops in every lit material) and must be checked on hardware.
+
+| tier | troopers | puppets | drones | point lights (level + dynamic) | effect bursts alive | destroyed puppets / troopers with live debris |
+|---|---|---|---|---|---|---|
+| low | 5 | 3 | 7 | 4 | 6 | 1 |
+| high | 8 | 5 | 11 | 8 | 9 | 2 |
+| ultra | 10 | 6 | 15 | 12 | 12 | 3 |
+
+Debris is the first thing to fix if kills must be dense: merge a body's chunks into one mesh per material (one draw, like `mergeGroup`),
+stop them casting, or shorten `DEBRIS_LIFE`; the caps above assume today's behaviour. Never add or remove lights during play
+(shader recompiles); the light cap counts the level's lights.
+
+**Frame-time budgets must be confirmed by running `?scene=gym-stress` on the target hardware** (press P: the sweep prints avg / p95 ms,
+draws and triangles for 0-64 of each kind); the caps above are draw and triangle derived, not GPU measured.
+
 ## Input
 - `Input` stores raw codes: `KeyW`, `ShiftLeft`, `Mouse0` (left), `Mouse2` (right), wheel deltas and notches.
 - `Actions` maps names to codes; the game's table is `BINDINGS` in `game/controls.js`.

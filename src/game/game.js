@@ -16,6 +16,7 @@ import { Controls } from './controls.js';
 import { settings, bindSettingsUI } from './settings.js';
 import { applyQuality } from './view/quality.js';
 import { SCENES, resolveScene } from './scenes.js';
+import { TOOLS } from './gym/tools.js';
 import { disposeTree } from '../engine/dispose.js';
 
 // Composition root: builds every game system on top of the engine, wires events and declares the
@@ -138,6 +139,8 @@ export class Game {
         camRig.update(dt, player, engine.realDt);
       },
     });
+    // the Gym room's tool, if the level has one (gym/tools.js)
+    engine.add({ name: 'gymTool', phase: 'late', update: (dt) => this.tool?.update(dt) });
     engine.add({ name: 'aimProbe', phase: 'late', update: () => weapon.probe() });
     engine.add({ name: 'fx', phase: 'present', update: (dt) => fx.update(dt) });
     engine.add({
@@ -213,11 +216,15 @@ export class Game {
     fx.reset();
     hud.reset(level);
     juice.reset();
+    if (level.tool && !TOOLS[level.tool]) throw new Error(`level "${key}": unknown tool "${level.tool}"`);
+    this.tool = level.tool ? new TOOLS[level.tool](this, level) : null;
     this.helpers = enemies.puppets.filter((p) => p.rig).map((p) => this.#helper(p.rig));
     return this;
   }
 
   #unloadLevel() {
+    this.tool?.dispose();
+    this.tool = null;
     for (const h of this.helpers) disposeTree(h);
     this.helpers.length = 0;
     this.enemies.unload();

@@ -43,6 +43,10 @@ export const WORLD_PIECES = {
     }
     return world.pointLight(d.pos[0], d.pos[1], d.pos[2], color, intensity, distance, f);
   },
+  // Unlit text sign (Gym / Library markers), no collision, no shadow. pos = bottom center of the text.
+  // params: text, size? (letter height in m, default 0.6), yaw? (rad, default 0 = readable from +Z),
+  // flat? (lie on the floor, readable walking toward -Z, rotated by yaw), color? '#rrggbb', bg? css color
+  'env.label': (world, d) => world.label(d.pos, d.params),
 };
 
 export class World {
@@ -59,6 +63,7 @@ export class World {
     this.flickerLights = [];
     this.staticMeshes = []; // every level box; merged per material for rendering, kept as raycast proxies
     this.lights = []; // the level's point lights
+    this.labels = []; // env.label meshes: own geometry, material and canvas texture each
     this.batches = [];
 
     this.mats = this.#makeMaterials();
@@ -81,8 +86,13 @@ export class World {
     for (const m of this.staticMeshes) disposeTree(m, { keep: this.keep });
     for (const m of [...this.batches, this.batches.shadow]) if (m) disposeTree(m, { keep: this.keep });
     for (const l of this.lights) disposeTree(l);
+    // disposeTree leaves textures alone (shared caches); a label's canvas texture is its own
+    for (const m of this.labels) {
+      m.material.map.dispose();
+      disposeTree(m);
+    }
     this.batches = [];
-    for (const list of [this.staticMeshes, this.colliders, this.meshes, this.coverMeshes, this.interiorZones, this.flickerLights, this.lights]) list.length = 0;
+    for (const list of [this.staticMeshes, this.colliders, this.meshes, this.coverMeshes, this.interiorZones, this.flickerLights, this.lights, this.labels]) list.length = 0;
     this.named.clear();
   }
 
@@ -300,6 +310,43 @@ export class World {
     this.lights.push(l);
     if (flicker) this.flickerLights.push({ light: l, base: intensity, seed: Math.random() * 100, strip: flicker.strip });
     return l;
+  }
+
+  // Text sign, see env.label. Not merged into the static batches (one texture per sign).
+  label(pos, { text, size = 0.6, yaw = 0, flat = false, color = '#ffffff', bg = 'rgba(0,0,0,0.55)' }) {
+    const px = 64; // canvas pixels per letter height
+    const c = document.createElement('canvas');
+    const g = c.getContext('2d');
+    const font = `bold ${px}px monospace`;
+    g.font = font;
+    const lines = String(text).split('\n');
+    const pad = px * 0.25;
+    c.width = Math.ceil(Math.max(...lines.map((l) => g.measureText(l).width)) + pad * 2);
+    c.height = Math.ceil(lines.length * px * 1.15 + pad * 2);
+    g.fillStyle = bg;
+    g.fillRect(0, 0, c.width, c.height);
+    g.font = font;
+    g.fillStyle = color;
+    g.textBaseline = 'top';
+    lines.forEach((l, i) => g.fillText(l, pad, pad + i * px * 1.15));
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const k = size / px;
+    const geo = new THREE.PlaneGeometry(c.width * k, c.height * k);
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, polygonOffset: true, polygonOffsetFactor: -2 });
+    const mesh = new THREE.Mesh(geo, mat);
+    if (flat) {
+      mesh.rotation.set(-Math.PI / 2, yaw, 0, 'YXZ');
+      mesh.position.set(pos[0], pos[1] + 0.02, pos[2]);
+    } else {
+      mesh.rotation.y = yaw;
+      mesh.position.set(pos[0], pos[1] + (c.height * k) / 2, pos[2]);
+    }
+    mesh.matrixAutoUpdate = false;
+    mesh.updateMatrix();
+    this.scene.add(mesh);
+    this.labels.push(mesh);
+    return mesh;
   }
 
   #buildLevel(level, registry) {

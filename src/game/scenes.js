@@ -1,11 +1,15 @@
 import arena from '../levels/arena.json';
 import gym from '../levels/gym.json';
+import gymRange from '../levels/gym-range.json';
+import gymAi from '../levels/gym-ai.json';
+import gymStress from '../levels/gym-stress.json';
 import library from '../levels/library.json';
 import workshop from '../levels/workshop.json';
 
 // Scene list: name -> level file. `?scene=<name>` opens one directly, `game.loadScene(name)` switches at runtime
 // (instructions/level.md). Add a scene: put the level file in src/levels/ and list it here.
-export const SCENES = { arena, gym, library, workshop };
+// The Gym is four rooms (Gym epic #58): gym = traversal and cover, then weapon range, enemy rooms, stress test.
+export const SCENES = { arena, gym, 'gym-range': gymRange, 'gym-ai': gymAi, 'gym-stress': gymStress, library, workshop };
 export const DEFAULT_SCENE = 'arena';
 
 // Valid scene name for `name` (null / undefined / '' = default). Unknown names warn and fall back to the default.
