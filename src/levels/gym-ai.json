@@ -1,6 +1,7 @@
 {
   "name": "gym-ai",
   "title": "GYM · ENEMIES",
+  "tool": "ai",
   "spawn": {"pos": [0, 0, 14], "yaw": 3.141592653589793},
   "interiorZones": [],
   "pieces": [
