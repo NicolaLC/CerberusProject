@@ -20,7 +20,11 @@ renderer, gamepad, pointer lock and audio behave exactly as in the Chromium the 
     switches off), discrete GPU on dual-GPU Macs (`force_high_performance_gpu`)
   - no navigation, no popups, single instance
   - `--debug`: windowed, `?debug`, DevTools
-- `desktop/preload.cjs`: `window.cerberusDesktop` = `{ platform, quit(), toggleFullscreen() }`; the start
+- Level files (Workshop, #72): IPC `desktop:saveLevel(name, text)` and `desktop:openLevel()` (`ipcMain.handle`). The page never
+  sends a path: `name` must match `[a-z0-9-]+` and the file is written to `<repo>/src/levels/<name>.json` (resolved from
+  `main.js`, directory checked). A packaged app (`app.isPackaged`, or no `src/levels`) asks with a save dialog instead.
+  Text is capped at 8 MB. Open shows a dialog and returns `{ name, text }`; the page parses it (`workshop/io.js`).
+- `desktop/preload.cjs`: `window.cerberusDesktop` = `{ platform, quit(), toggleFullscreen(), saveLevel(name, text), openLevel() }`; the start
   panel shows QUIT TO DESKTOP only when it exists. Context isolation and sandbox stay on.
 
 ## Commands

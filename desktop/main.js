@@ -1,4 +1,5 @@
-import { app, BrowserWindow, Menu, net, protocol, ipcMain } from 'electron';
+import { app, BrowserWindow, Menu, net, protocol, ipcMain, dialog } from 'electron';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -6,7 +7,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // in localStorage persist across launches — in a fullscreen window that never throttles the game loop.
 // `--debug` (after `--` on npm scripts) loads ?debug and opens DevTools.
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
-const debug = process.argv.includes('--debug');
+const LEVELS = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'levels'); // the repo's level files
+const debug =process.argv.includes('--debug');
 
 // the game is the foreground app: full frame rate when unfocused or covered, discrete GPU on dual-GPU Macs
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
@@ -63,6 +65,36 @@ function createWindow() {
 
 ipcMain.on('desktop:quit', () => app.quit());
 ipcMain.on('desktop:fullscreen', () => win?.setFullScreen(!win.isFullScreen()));
+
+// Workshop level files (#72). The renderer sends a name and text, never a path: the name must match [a-z0-9-]+ and
+// the file lands in src/levels. A packaged app has no repo folder, so it asks with a save dialog instead.
+const LEVEL_NAME = /^[a-z0-9-]+$/;
+const LEVEL_MAX = 8 * 1024 * 1024;
+const JSON_FILTER = [{ name: 'Level', extensions: ['json'] }];
+
+ipcMain.handle('desktop:saveLevel', async (_e, name, text) => {
+  if (typeof name !== 'string' || !LEVEL_NAME.test(name)) throw new Error(`level name "${name}" is not a file name (a-z, 0-9, -)`);
+  if (typeof text !== 'string' || text.length > LEVEL_MAX) throw new Error('level text is missing or too large');
+  const repo = !app.isPackaged && (await fs.stat(LEVELS).then((s) => s.isDirectory(), () => false));
+  if (repo) {
+    const file = path.join(LEVELS, `${name}.json`);
+    if (path.dirname(file) !== LEVELS) throw new Error('refused: outside src/levels');
+    await fs.writeFile(file, text);
+    return { where: 'repo', path: path.join('src', 'levels', `${name}.json`) };
+  }
+  const res = await dialog.showSaveDialog(win, { defaultPath: `${name}.json`, filters: JSON_FILTER });
+  if (res.canceled || !res.filePath) return { canceled: true };
+  await fs.writeFile(res.filePath, text);
+  return { where: 'dialog', path: res.filePath };
+});
+
+ipcMain.handle('desktop:openLevel', async () => {
+  const res = await dialog.showOpenDialog(win, { defaultPath: app.isPackaged ? undefined : LEVELS, filters: JSON_FILTER, properties: ['openFile'] });
+  if (res.canceled || !res.filePaths[0]) return null;
+  const file = res.filePaths[0];
+  if ((await fs.stat(file)).size > LEVEL_MAX) throw new Error('level file is too large');
+  return { name: path.basename(file), text: await fs.readFile(file, 'utf8') };
+});
 
 app.on('second-instance', () => {
   if (!win) return;

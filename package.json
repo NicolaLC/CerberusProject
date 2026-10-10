@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "build:artifact": "node scripts/build-artifact.mjs",
-    "test": "node tests/ballistics.test.mjs",
+    "test": "node tests/ballistics.test.mjs && node tests/levelio.test.mjs",
     "desktop": "vite build && electron .",
     "desktop:dist": "vite build && electron-builder"
   },
