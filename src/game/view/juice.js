@@ -1,4 +1,11 @@
 import * as THREE from 'three';
+import { 
+  isReducedMotionEnabled, 
+  getReducedTraumaValue,
+  getReducedHitstopValue,
+  getReducedMotionValue,
+  getCurrentMotionFactor 
+} from '../accessibility.js';
 
 // Game-feel hub: turns gameplay events into hitstop, camera trauma, FOV punch and post flashes.
 // Owns the game time scale (engine.timeScale) through update().
@@ -15,7 +22,34 @@ const TUNING = {
   jetDip: -0.35, // camera sinks slightly, then springs back up
   jetLandTrauma: 0.06, // landing after a jet: light dip instead of the vault slam
   jetLandDip: 0.7,
+  killPunch: 3,
+  perfectReloadPunch: 2.5,
+  coverDip: 0.9,
 };
+
+// Helper to get trauma value with reduced motion support
+function getTrauma(key, baseValue) {
+  if (!isReducedMotionEnabled()) return baseValue;
+  const reduced = getReducedTraumaValue(key);
+  if (reduced !== null) return reduced;
+  return baseValue * getCurrentMotionFactor();
+}
+
+// Helper to get hitstop value with reduced motion support
+function getHitstop(key, baseValue) {
+  if (!isReducedMotionEnabled()) return baseValue;
+  const reduced = getReducedHitstopValue(key);
+  if (reduced !== null) return reduced;
+  return baseValue * getCurrentMotionFactor();
+}
+
+// Helper to get motion value (punch, dip) with reduced motion support
+function getMotion(key, baseValue) {
+  if (!isReducedMotionEnabled()) return baseValue;
+  const reduced = getReducedMotionValue(key);
+  if (reduced !== null) return reduced;
+  return baseValue * getCurrentMotionFactor();
+}
 
 export class Juice {
   constructor({ camRig, post, fx }) {
@@ -35,7 +69,7 @@ export class Juice {
     events.on('weapon:hit', (h) => (h.killed ? this.kill(h.point, h.dir) : this.hit(h.crit)));
     events.on('weapon:reload', (kind) => {
       if (kind === 'perfect') this.perfectReload();
-      else if (kind === 'jam') this.camRig.addTrauma(0.15);
+      else if (kind === 'jam') this.camRig.addTrauma(getTrauma('jamTrauma', 0.15));
     });
     events.on('player:hurt', () => this.hurt());
     events.on('player:coverSlam', () => this.coverSlam());
@@ -43,15 +77,15 @@ export class Juice {
     events.on('player:land', (kind) => this.land(kind));
     // boss: the ground shakes with distance
     const near = (p, r) => Math.max(0, 1 - this.camRig.pivot.distanceTo(p) / r);
-    events.on('blast', (b) => this.camRig.addTrauma(0.5 * near(b.point, b.radius * 4)));
-    events.on('boss:step', (s) => this.camRig.addTrauma(0.08 * near(s.point, 14)));
+    events.on('blast', (b) => this.camRig.addTrauma(getTrauma('blastTrauma', 0.5) * near(b.point, b.radius * 4)));
+    events.on('boss:step', (s) => this.camRig.addTrauma(getTrauma('bossStepTrauma', 0.08) * near(s.point, 14)));
     events.on('boss:leg', (b) => {
-      this.hitstop(this.t.hitstopKill);
-      this.camRig.addTrauma(0.3 * near(b.point, 40));
+      this.hitstop(getHitstop('hitstopKill', this.t.hitstopKill));
+      this.camRig.addTrauma(getTrauma('bossLegTrauma', 0.3) * near(b.point, 40));
     });
     events.on('boss:dead', (b) => {
-      this.hitstop(0.15);
-      this.camRig.addTrauma(0.7 * near(b.point, 60));
+      this.hitstop(getHitstop('bossDeadHitstop', 0.15));
+      this.camRig.addTrauma(getTrauma('bossDeadTrauma', 0.7) * near(b.point, 60));
       this.post.kill();
     });
     return this;
@@ -62,43 +96,45 @@ export class Juice {
   }
 
   hit(crit) {
-    if (crit) this.hitstop(this.t.hitstopHead);
+    if (crit) this.hitstop(getHitstop('hitstopHead', this.t.hitstopHead));
   }
 
   kill(point, dir) {
-    this.hitstop(this.t.hitstopKill);
-    this.camRig.addTrauma(this.t.killTrauma);
-    this.camRig.punch(3);
+    this.hitstop(getHitstop('hitstopKill', this.t.hitstopKill));
+    this.camRig.addTrauma(getTrauma('killTrauma', this.t.killTrauma));
+    this.camRig.punch(getMotion('killPunch', this.t.killPunch));
     this.post.kill();
     this.fx.shockwave(point);
     this.fx.impact(point, _n.copy(dir).negate(), 0x6fe3ff, 24, false);
   }
 
   perfectReload() {
-    this.camRig.punch(2.5);
-    this.camRig.addTrauma(0.1);
-    this.post.flash = Math.max(this.post.flash, 0.4);
+    this.camRig.punch(getMotion('perfectReloadPunch', this.t.perfectReloadPunch));
+    this.camRig.addTrauma(getTrauma('perfectReloadTrauma', 0.1));
+    if (!isReducedMotionEnabled()) {
+      this.post.flash = Math.max(this.post.flash, 0.4);
+    }
   }
 
   hurt() {
-    this.camRig.addTrauma(this.t.hurtTrauma);
+    this.camRig.addTrauma(getTrauma('hurtTrauma', this.t.hurtTrauma));
     this.post.hit();
   }
 
   coverSlam() {
-    this.camRig.addTrauma(this.t.coverTrauma);
-    this.camRig.dip(0.9);
+    this.camRig.addTrauma(getTrauma('coverTrauma', this.t.coverTrauma));
+    this.camRig.dip(getMotion('coverDip', this.t.coverDip));
   }
 
   jet() {
-    this.camRig.addTrauma(this.t.jetTrauma);
-    this.camRig.dip(this.t.jetDip);
+    this.camRig.addTrauma(getTrauma('jetTrauma', this.t.jetTrauma));
+    this.camRig.dip(getMotion('jetDip', this.t.jetDip));
   }
 
   land(kind) {
     const soft = kind === 'jet';
-    this.camRig.addTrauma(soft ? this.t.jetLandTrauma : this.t.landTrauma);
-    this.camRig.dip(soft ? this.t.jetLandDip : 1.4);
+    this.camRig.addTrauma(getTrauma(soft ? 'jetLandTrauma' : 'landTrauma', soft ? this.t.jetLandTrauma : this.t.landTrauma));
+    this.camRig.dip(getMotion('landDip', soft ? this.t.jetLandDip : 1.4));
   }
 
   // returns the game time scale for this frame (real dt in)

@@ -1,37 +1,9 @@
 import { Actions } from '../engine/actions.js';
 import { settings } from './settings.js';
+import { getCurrentBindings, initBindings } from './accessibility.js';
 
-// Every binding in the game lives here. Gameplay reads intents from Controls, never device codes.
 // Gamepad buttons use the W3C standard layout (Xbox names): Pad0 A, Pad1 B, Pad2 X, Pad3 Y, Pad4 LB, Pad5 RB,
 // Pad6 LT, Pad7 RT, Pad8 View/Back, Pad9 Menu/Start, Pad10 L3, Pad11 R3, Pad12-15 d-pad up/down/left/right.
-export const BINDINGS = {
-  forward: ['KeyW'],
-  back: ['KeyS'],
-  left: ['KeyA'],
-  right: ['KeyD'],
-  run: ['ShiftLeft', 'ShiftRight'],
-  padSprint: ['Pad10'], // L3 click: sprint until the stick is released
-  aim: ['Mouse2', 'Pad6'], // hold (mouse, LT), always
-  aimToggle: ['KeyE'], // trackpad mode only
-  fire: ['Mouse0', 'KeyF', 'Pad7'],
-  reload: ['KeyR', 'Pad2'],
-  jump: ['Space', 'Pad0'], // jetpack burst, or vault over low cover
-  shoulder: ['KeyQ', 'Pad4'],
-  nextGun: ['Pad3', 'Pad5'],
-  slot1: ['Digit1', 'Pad14'],
-  slot2: ['Digit2', 'Pad12'],
-  slot3: ['Digit3', 'Pad15'],
-  slot4: ['Digit4'],
-  slot5: ['Digit5'],
-  slot6: ['Digit6', 'Pad13'], // d-pad down: sidearm
-  pause: ['Pad9'],
-  lookLeft: ['ArrowLeft'],
-  lookRight: ['ArrowRight'],
-  lookUp: ['ArrowUp'],
-  lookDown: ['ArrowDown'],
-  skeleton: ['KeyH'],
-  stats: ['F3', 'Backquote', 'Pad8'],
-};
 
 const KEY_LOOK = { x: 900, y: 500 }; // px/s equivalent for arrow-key look
 // Right stick look, in mouse px/s at full tilt: a curve for fine aim near the center, and a turn boost when the
@@ -41,7 +13,9 @@ const PAD_LOOK = { x: 1150, y: 650, curve: 2.2, boostAfter: 0.25, boost: 1.7, bo
 export class Controls {
   constructor(input) {
     this.input = input;
-    this.actions = new Actions(input, BINDINGS);
+    // Get current bindings (user + defaults)
+    this.bindings = getCurrentBindings();
+    this.actions = new Actions(input, this.bindings);
     this.aimLatched = false; // trackpad aim toggle
     this.sprintLatched = false; // gamepad: L3 starts a sprint that lasts while the stick is pushed
     this.rim = 0; // seconds the right stick has been at the rim
@@ -99,50 +73,7 @@ export class Controls {
     } else this.rim = 0;
     return out;
   }
-
-  get aiming() {
-    return this.actions.held('aim') || (settings.trackpad && this.aimLatched);
-  }
-
-  get running() {
-    return this.actions.held('run') || this.sprintLatched;
-  }
-
-  get firing() {
-    return this.actions.held('fire');
-  }
-
-  get firePressed() {
-    return this.actions.pressed('fire');
-  }
-
-  get reloadPressed() {
-    return this.actions.pressed('reload');
-  }
-
-  get jumpPressed() {
-    return this.actions.pressed('jump');
-  }
-
-  pressed(action) {
-    return this.actions.pressed(action);
-  }
-
-  // Weapon slot index pressed this frame (0-based) or -1.
-  get slotPressed() {
-    if (this.actions.pressed('slot1')) return 0;
-    if (this.actions.pressed('slot2')) return 1;
-    if (this.actions.pressed('slot3')) return 2;
-    if (this.actions.pressed('slot4')) return 3;
-    if (this.actions.pressed('slot5')) return 4;
-    if (this.actions.pressed('slot6')) return 5;
-    return -1;
-  }
-
-  // Mouse wheel cycles weapons (+1 / -1) except in trackpad mode, where the wheel looks around; Y / RB: next.
-  get cycle() {
-    if (this.actions.pressed('nextGun')) return 1;
-    if (settings.trackpad || !this.input.edges) return 0;
-    return Math.sign(this.input.wheelSteps);
-  }
 }
+
+// Re-export for backward compatibility
+export { initBindings, getCurrentBindings } from './accessibility.js';

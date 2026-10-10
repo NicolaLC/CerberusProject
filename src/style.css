@@ -3,7 +3,68 @@
 @font-face { font-family: 'Chakra Petch'; src: url('./fonts/chakra-petch-500.woff2') format('woff2'); font-weight: 100 500; font-display: swap; }
 @font-face { font-family: 'Chakra Petch'; src: url('./fonts/chakra-petch-700.woff2') format('woff2'); font-weight: 600 900; font-display: swap; }
 @font-face { font-family: 'Space Nova'; src: url('./fonts/space-nova.otf') format('opentype'); font-display: swap; }
-:root { --font-main: 'Chakra Petch', 'Segoe UI', system-ui, sans-serif; --font-num: 'Space Nova', 'Chakra Petch', 'Segoe UI', system-ui, sans-serif; }
+:root { 
+  --font-main: 'Chakra Petch', 'Segoe UI', system-ui, sans-serif; 
+  --font-num: 'Space Nova', 'Chakra Petch', 'Segoe UI', system-ui, sans-serif;
+  
+  /* Accessibility: Color Blind Palettes */
+  --color-crosshair-default: #e8f4ff;
+  --color-crosshair-aim: #7fe8ff;
+  --color-crosshair-enemy: #ff4a3a;
+  --color-crosshair-weak: #ff6af0;
+  --color-crosshair-blocked: rgba(190, 200, 210, 0.45);
+  --color-crosshair-cycling: #e8f4ff;
+  
+  --color-charge-track: rgba(127, 232, 255, 0.18);
+  --color-charge-arc: #7fe8ff;
+  --color-charge-full-arc: #f4fbff;
+  --color-charge-full-filter: 0 0 6px #bff0ff;
+  
+  --color-blockmark: #ff5a3a;
+  
+  --color-hitmarker-normal: #fff;
+  --color-hitmarker-crit: #ffd23a;
+  --color-hitmarker-kill: #ff3a3a;
+  
+  --color-weak-spot: #ff6af0;
+  --color-weak-spot-text: #ff6af0;
+  
+  --color-health-low: #d82a2a;
+  --color-health-high: #ff6a4a;
+  --color-shield-low: #2aa8ff;
+  --color-shield-high: #7fe8ff;
+  --color-shield-glow: #3ac0ff;
+  
+  --color-boss-health-low: #ff5a1a;
+  --color-boss-health-high: #ffb04a;
+  --color-boss-health-glow: rgba(255, 110, 40, 0.8);
+  --color-boss-legs: #ff2bd6;
+  --color-boss-legs-glow: #ff2bd6;
+  --color-boss-state: #ff6af0;
+  
+  --color-lockmark-border: rgba(255, 140, 70, 0.8);
+  --color-lockmark-glow: rgba(255, 110, 40, 0.6);
+  
+  --color-dmg-dir: rgba(255, 60, 40, 0.9);
+  
+  --color-ammo-low: #ff5a4a;
+  --color-ammo-boost: #f4fbff;
+  --color-ammo-boost-glow: 0 0 12px #7fe8ff, 0 0 4px #7fe8ff;
+  
+  --color-areload-good: rgba(80, 200, 255, 0.45);
+  --color-areload-perfect: #f4fbff;
+  --color-areload-perfect-glow: 0 0 8px #bff0ff;
+  --color-areload-cursor: #ffd23a;
+  --color-areload-cursor-glow: 0 0 6px #ffd23a;
+  
+  --color-toast: #7fe8ff;
+  --color-toast-glow: 0 0 8px rgba(56, 216, 255, 0.7);
+  
+  --subtitle-font-size: 14px;
+  --subtitle-line-height: 1.3;
+  --subtitle-background-opacity: 0;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: var(--font-main); color: #e8f4ff; user-select: none; }
 #game { display: block; width: 100%; height: 100%; }
@@ -11,7 +72,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #hud { position: fixed; inset: 0; pointer-events: none; }
 
 #crosshair { --gap: 8px; position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
-#crosshair i { position: absolute; background: #e8f4ff; box-shadow: 0 0 2px #000; }
+#crosshair i { position: absolute; background: var(--color-crosshair-default); box-shadow: 0 0 2px #000; }
 #crosshair .t, #crosshair .b { width: 2px; height: 9px; left: -1px; }
 #crosshair .l, #crosshair .r { width: 9px; height: 2px; top: -1px; }
 #crosshair .t { bottom: var(--gap); }
@@ -21,25 +82,25 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #crosshair .dot { width: 2px; height: 2px; left: -1px; top: -1px; }
 #charge { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; opacity: 0; pointer-events: none; overflow: visible; }
 #charge circle { fill: none; stroke-width: 3; }
-#charge .track { stroke: rgba(127, 232, 255, 0.18); }
-#charge .arc { stroke: #7fe8ff; stroke-linecap: round; stroke-dasharray: 175.93; stroke-dashoffset: 175.93; transform: rotate(-90deg); filter: drop-shadow(0 0 4px #7fe8ff); }
-#charge.full .arc { stroke: #f4fbff; filter: drop-shadow(0 0 6px #bff0ff); }
-#crosshair.aim i { background: #7fe8ff; }
-#crosshair.enemy i { background: #ff4a3a; }
-#crosshair.weak i { background: #ff6af0; }
-#crosshair.blocked i { background: rgba(190, 200, 210, 0.45); }
+#charge .track { stroke: var(--color-charge-track); }
+#charge .arc { stroke: var(--color-charge-arc); stroke-linecap: round; stroke-dasharray: 175.93; stroke-dashoffset: 175.93; transform: rotate(-90deg); filter: drop-shadow(0 0 4px var(--color-charge-arc)); }
+#charge.full .arc { stroke: var(--color-charge-full-arc); filter: drop-shadow(var(--color-charge-full-filter)); }
+#crosshair.aim i { background: var(--color-crosshair-aim); }
+#crosshair.enemy i { background: var(--color-crosshair-enemy); }
+#crosshair.weak i { background: var(--color-crosshair-weak); }
+#crosshair.blocked i { background: var(--color-crosshair-blocked); }
 /* where the round will really hit when the muzzle is obstructed */
 #blockmark { position: absolute; left: 0; top: 0; width: 14px; height: 14px; opacity: 0; pointer-events: none; }
-#blockmark::before, #blockmark::after { content: ''; position: absolute; left: 6px; top: -1px; width: 2px; height: 16px; background: #ff5a3a; box-shadow: 0 0 3px #000; }
+#blockmark::before, #blockmark::after { content: ''; position: absolute; left: 6px; top: -1px; width: 2px; height: 16px; background: var(--color-blockmark); box-shadow: 0 0 3px #000; }
 #blockmark::before { transform: rotate(45deg); }
 #blockmark::after { transform: rotate(-45deg); }
 
 #hitmarker { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%) rotate(45deg); opacity: 0; }
-#hitmarker::before, #hitmarker::after { content: ''; position: absolute; background: #fff; }
+#hitmarker::before, #hitmarker::after { content: ''; position: absolute; background: var(--color-hitmarker-normal); }
 #hitmarker::before { left: 10px; top: 0; width: 2px; height: 22px; }
 #hitmarker::after { top: 10px; left: 0; height: 2px; width: 22px; }
-#hitmarker.crit::before, #hitmarker.crit::after { background: #ffd23a; }
-#hitmarker.kill::before, #hitmarker.kill::after { background: #ff3a3a; }
+#hitmarker.crit::before, #hitmarker.crit::after { background: var(--color-hitmarker-crit); }
+#hitmarker.kill::before, #hitmarker.kill::after { background: var(--color-hitmarker-kill); }
 
 /* sniper scope: dark ring outside a circle plus fine full-screen hairlines, faded in with the zoom */
 #scope { position: absolute; inset: 0; opacity: 0; pointer-events: none;
@@ -49,24 +110,25 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
     radial-gradient(circle at center, transparent 0 34vmin, rgba(0, 0, 0, 0.55) 35vmin, rgba(0, 0, 0, 0.92) 46vmin); }
 #crosshair.cycling i { opacity: 0.35; }
 /* boss lock-on marker: a diamond on the boss */
-#lockmark { position: absolute; left: 0; top: 0; width: 26px; height: 26px; border: 2px solid rgba(255, 140, 70, 0.8); box-shadow: 0 0 8px rgba(255, 110, 40, 0.6); opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+#lockmark { position: absolute; left: 0; top: 0; width: 26px; height: 26px; border: 2px solid var(--color-lockmark-border); box-shadow: 0 0 8px var(--color-lockmark-glow); opacity: 0; pointer-events: none; transition: opacity 0.3s; }
 #vignette { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(200, 20, 20, 0.75) 100%); }
 #dmg-dir { position: absolute; left: 50%; top: 50%; width: 260px; height: 260px; opacity: 0; transform: translate(-50%, -50%); }
-#dmg-dir::before { content: ''; position: absolute; left: 50%; top: 0; transform: translateX(-50%); border: 14px solid transparent; border-bottom: 22px solid rgba(255, 60, 40, 0.9); }
+#dmg-dir::before { content: ''; position: absolute; left: 50%; top: 0; transform: translateX(-50%); border: 14px solid transparent; border-bottom: 22px solid var(--color-dmg-dir); }
 
 #numbers .dmg { position: absolute; left: 0; top: 0; font: 700 16px var(--font-main); color: #fff; text-shadow: 0 0 3px #000, 0 0 6px #000; }
-#numbers .dmg.crit { color: #ffd23a; font-size: 20px; }
+#numbers .dmg.crit { color: var(--color-hitmarker-crit); font-size: 20px; }
+#numbers .dmg.weak { color: var(--color-weak-spot-text); font-size: 22px; text-shadow: 0 0 6px rgba(255, 43, 214, 0.9), 0 0 3px #000; }
 
 #status { position: absolute; left: 32px; bottom: 32px; width: 280px; }
 .bar { height: 10px; background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(160, 220, 255, 0.35); margin-top: 6px; transform: skewX(-20deg); }
 .bar > div { height: 100%; transition: width 0.1s; }
-.shield > div { background: linear-gradient(90deg, #2aa8ff, #7fe8ff); box-shadow: 0 0 8px #3ac0ff; }
-.health > div { background: linear-gradient(90deg, #d82a2a, #ff6a4a); }
+.shield > div { background: linear-gradient(90deg, var(--color-shield-low), var(--color-shield-high)); box-shadow: 0 0 8px var(--color-shield-glow); }
+.health > div { background: linear-gradient(90deg, var(--color-health-low), var(--color-health-high)); }
 
 #weapon { position: absolute; right: 32px; bottom: 28px; text-align: right; font-family: var(--font-main); }
 #weapon .name { font-size: 12px; letter-spacing: 2px; color: #9fc8e8; }
 #ammo { font-size: 42px; font-weight: 700; }
-#ammo.low { color: #ff5a4a; }
+#ammo.low { color: var(--color-ammo-low); }
 #weapon .sep { margin: 0 6px; color: #6f8fa8; font-size: 24px; }
 #reserve { font-size: 22px; color: #9fc8e8; }
 #reload { display: none; color: #ffd23a; letter-spacing: 3px; font-size: 13px; }
@@ -97,12 +159,12 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #boss { position: absolute; left: 50%; top: 64px; width: min(460px, 70vw); transform: translateX(-50%); font: 700 12px var(--font-main); letter-spacing: 3px; color: #ffb48a; text-align: center; opacity: 0; transition: opacity 0.4s; }
 #boss.on { opacity: 1; }
 #boss .bar { height: 8px; margin: 4px 0; background: rgba(40, 10, 0, 0.6); border: 1px solid #ff7a3a; }
-#boss-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff5a1a, #ffb04a); box-shadow: 0 0 8px rgba(255, 110, 40, 0.8); }
+#boss-fill { height: 100%; width: 100%; background: linear-gradient(90deg, var(--color-boss-health-low), var(--color-boss-health-high)); box-shadow: 0 0 8px var(--color-boss-health-glow); }
 #boss .row { display: flex; justify-content: space-between; font-size: 11px; }
-#boss .legs i { display: inline-block; width: 12px; height: 6px; margin-right: 4px; background: #ff2bd6; box-shadow: 0 0 6px #ff2bd6; }
+#boss .legs i { display: inline-block; width: 12px; height: 6px; margin-right: 4px; background: var(--color-boss-legs); box-shadow: 0 0 6px var(--color-boss-legs-glow); }
 #boss .legs i.gone { background: #3a2a30; box-shadow: none; }
-#boss .state { color: #ff6af0; }
-#toast { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font: 700 16px var(--font-main); letter-spacing: 3px; color: #7fe8ff; text-shadow: 0 0 8px rgba(56, 216, 255, 0.7); opacity: 0; }
+#boss .state { color: var(--color-boss-state); }
+#toast { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font: 700 16px var(--font-main); letter-spacing: 3px; color: var(--color-toast); text-shadow: var(--color-toast-glow); opacity: 0; }
 #overlay .settings { display: grid; gap: 10px; margin-bottom: 18px; font: 12px var(--font-main); }
 #overlay .row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 #overlay .row span { flex: 1; }
@@ -113,18 +175,17 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #overlay .panel { max-height: 100%; overflow-y: auto; max-width: calc(100vw - 32px); }
 #weapon .slots { display: flex; gap: 8px; justify-content: flex-end; font-size: 11px; color: #4f6f88; margin-top: 2px; }
 #weapon .slots .on { color: #7fe8ff; text-shadow: 0 0 6px rgba(56, 216, 255, 0.6); }
-#numbers .dmg.weak { color: #ff6af0; font-size: 22px; text-shadow: 0 0 6px rgba(255, 43, 214, 0.9), 0 0 3px #000; }
 
 #areload { position: absolute; left: 50%; top: calc(50% + 56px); width: 220px; transform: translateX(-50%); opacity: 0; transition: opacity 0.12s; }
 #areload .track { position: relative; height: 8px; background: rgba(0, 10, 20, 0.6); border: 1px solid rgba(160, 220, 255, 0.4); }
 #areload i { position: absolute; top: 0; bottom: 0; }
-#areload .good { background: rgba(80, 200, 255, 0.45); }
-#areload .perfect { background: #f4fbff; box-shadow: 0 0 8px #bff0ff; }
-#areload .cursor { width: 3px; top: -4px; bottom: -4px; margin-left: -1px; background: #ffd23a; box-shadow: 0 0 6px #ffd23a; }
+#areload .good { background: var(--color-areload-good); }
+#areload .perfect { background: var(--color-areload-perfect); box-shadow: var(--color-areload-perfect-glow); }
+#areload .cursor { width: 3px; top: -4px; bottom: -4px; margin-left: -1px; background: var(--color-areload-cursor); box-shadow: var(--color-areload-cursor-glow); }
 #areload .label { margin-top: 6px; text-align: center; font: 700 12px var(--font-main); letter-spacing: 4px; color: #9fc8e8; }
 #areload[data-state='perfect'] .label { color: #f4fbff; text-shadow: 0 0 10px #7fe8ff; font-size: 15px; }
 #areload[data-state='good'] .label { color: #7fe8ff; }
-#ammo.boost { color: #f4fbff; text-shadow: 0 0 12px #7fe8ff, 0 0 4px #7fe8ff; }
+#ammo.boost { color: var(--color-ammo-boost); text-shadow: var(--color-ammo-boost-glow); }
 
 /* engine stats readout (F3 / ` / ?debug) */
 #stats {
@@ -145,3 +206,197 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #keyhints { position: fixed; left: 50%; top: 46px; transform: translateX(-50%); z-index: 50; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; max-width: 70vw; padding: 4px 10px; font: 11px/1.4 var(--font-main); color: #cfe4f7; background: rgba(0, 0, 0, 0.45); pointer-events: none; }
 #keyhints[hidden] { display: none; }
 #keyhints b { color: #7fe8ff; padding: 0 4px; border: 1px solid #7fe8ff66; border-radius: 3px; }
+
+/* ============================================
+   Accessibility: High Contrast Mode
+   ============================================ */
+.high-contrast #crosshair i {
+  background: #ffffff !important;
+  box-shadow: 0 0 4px #000 !important;
+}
+
+.high-contrast #crosshair.aim i {
+  background: #ffff00 !important;
+}
+
+.high-contrast #crosshair.enemy i {
+  background: #ff0000 !important;
+}
+
+.high-contrast #crosshair.weak i {
+  background: #00ffff !important;
+}
+
+.high-contrast #crosshair.blocked i {
+  background: rgba(200, 200, 200, 0.6) !important;
+}
+
+.high-contrast #blockmark::before,
+.high-contrast #blockmark::after {
+  background: #ff0000 !important;
+}
+
+.high-contrast #hitmarker::before,
+.high-contrast #hitmarker::after {
+  background: #ffffff !important;
+}
+
+.high-contrast #hitmarker.crit::before,
+.high-contrast #hitmarker.crit::after {
+  background: #ffff00 !important;
+}
+
+.high-contrast #hitmarker.kill::before,
+.high-contrast #hitmarker.kill::after {
+  background: #ff0000 !important;
+}
+
+.high-contrast .bar {
+  background: rgba(0, 0, 0, 0.8) !important;
+  border: 2px solid #ffffff !important;
+}
+
+.high-contrast .shield > div {
+  background: linear-gradient(90deg, #00ffff, #00ffff) !important;
+  box-shadow: 0 0 8px #00ffff !important;
+}
+
+.high-contrast .health > div {
+  background: linear-gradient(90deg, #ff0000, #ff0000) !important;
+}
+
+.high-contrast #boss-fill {
+  background: linear-gradient(90deg, #ff8000, #ff0000) !important;
+  box-shadow: 0 0 8px rgba(255, 128, 0, 0.8) !important;
+}
+
+.high-contrast #boss .legs i {
+  background: #ff00ff !important;
+  box-shadow: 0 0 6px #ff00ff !important;
+}
+
+.high-contrast #boss .state {
+  color: #ffff00 !important;
+}
+
+.high-contrast #toast {
+  color: #ffffff !important;
+  text-shadow: 0 0 8px #ffff00 !important;
+}
+
+.high-contrast #numbers .dmg {
+  color: #ffffff !important;
+  text-shadow: 0 0 3px #000, 0 0 6px #000 !important;
+}
+
+.high-contrast #numbers .dmg.crit {
+  color: #ffff00 !important;
+}
+
+.high-contrast #numbers .dmg.weak {
+  color: #00ffff !important;
+}
+
+.high-contrast #ammo.low {
+  color: #ff0000 !important;
+}
+
+.high-contrast #ammo.boost {
+  color: #ffff00 !important;
+  text-shadow: 0 0 12px #ffff00, 0 0 4px #ffff00 !important;
+}
+
+.high-contrast #areload .good {
+  background: rgba(0, 255, 255, 0.6) !important;
+}
+
+.high-contrast #areload .perfect {
+  background: #ffff00 !important;
+  box-shadow: 0 0 8px #ffff00 !important;
+}
+
+.high-contrast #areload .cursor {
+  background: #ff0000 !important;
+  box-shadow: 0 0 6px #ff0000 !important;
+}
+
+.high-contrast #overlay .panel {
+  background: rgba(0, 0, 0, 0.95) !important;
+  border: 2px solid #ffffff !important;
+  box-shadow: 0 0 40px rgba(255, 255, 0, 0.5) !important;
+}
+
+.high-contrast #overlay h1 {
+  color: #ffff00 !important;
+}
+
+.high-contrast #overlay h2 {
+  color: #00ffff !important;
+}
+
+.high-contrast #overlay table {
+  border-bottom: 1px solid #ffffff !important;
+}
+
+.high-contrast #overlay td {
+  border-bottom: 1px solid #888888 !important;
+  color: #ffffff !important;
+}
+
+.high-contrast #overlay .note {
+  color: #00ffff !important;
+}
+
+.high-contrast #start {
+  color: #000 !important;
+  background: #ffff00 !important;
+}
+
+.high-contrast #start:hover {
+  background: #ffff88 !important;
+}
+
+.high-contrast #quit {
+  color: #ffff00 !important;
+  border-color: #ffff00 !important;
+}
+
+.high-contrast #quit:hover {
+  color: #ffffff !important;
+  border-color: #ffff00 !important;
+}
+
+/* ============================================
+   Accessibility: Subtitles
+   ============================================ */
+#subtitles {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80%;
+  max-width: 600px;
+  pointer-events: none;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.subtitle {
+  font: var(--subtitle-font-size) var(--font-main);
+  line-height: var(--subtitle-line-height);
+  color: #ffffff;
+  text-shadow: 0 0 4px #000, 0 0 8px #000;
+  padding: 6px 12px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, var(--subtitle-background-opacity));
+  max-width: 100%;
+  text-align: center;
+}
+
+.subtitle-speaker {
+  color: #ffd23a;
+  font-weight: 700;
+}
