@@ -12,13 +12,14 @@ import { Hud } from './view/hud.js';
 import { Audio } from './view/audio.js';
 import { Post } from './view/post.js';
 import { Juice } from './view/juice.js';
-import { Controls } from './controls.js';
+import { Controls, initBindings } from './controls.js';
 import { settings, bindSettingsUI } from './settings.js';
 import { applyQuality } from './view/quality.js';
 import { SCENES, resolveScene } from './scenes.js';
 import { TOOLS } from './gym/tools.js';
 import { KeyHints } from './view/keyhints.js';
 import { disposeTree } from '../engine/dispose.js';
+import { initAccessibility, applyColorBlindPalette, applyHighContrast, reapplyAccessibility } from './accessibility.js';
 
 // Composition root: builds every game system on top of the engine, wires events and declares the
 // frame order. This is the only file that knows about all systems; they only know their direct
@@ -40,6 +41,12 @@ export class Game {
     const engine = (this.engine = new Engine({ canvas, fov: 70 }));
     const { scene, camera, events, renderer, input } = engine;
     this.debug = debug;
+
+    // Initialize accessibility settings and bindings BEFORE creating systems
+    initAccessibility();
+    initBindings();
+    applyColorBlindPalette();
+    applyHighContrast();
 
     // ---- level + piece registry: every system builds its part of the level from data ----
     const registry = new Registry().register('world', WORLD_PIECES).register('enemies', ENEMY_PIECES).register('pickups', PICKUP_PIECES);
@@ -84,7 +91,6 @@ export class Game {
     this.skeletons = false;
     this.playerHelper = this.#helper(player.rigModel);
     this.helpers = [];
-    this.keyHints = new KeyHints();
     this.loadScene(first);
 
     // ---- frame order ----
@@ -308,23 +314,12 @@ export class Game {
     const { engine, controls, audio } = this;
     const input = engine.input;
     if (engine.paused) {
-      const status = input.pad.connected ? `Controller: ${input.pad.id.replace(/\s*\(.*$/, '').slice(0, 40)} ✓` : 'Controller: press any button to connect.';
+      const status = input.pad.connected ? `Controller: ${input.pad.id.replace(/\s*\(.*$/, '').slice(0, 40)} \u2713` : 'Controller: press any button to connect.';
       if (this.padStatus !== status) document.getElementById('pad-status').textContent = this.padStatus = status;
-      if (controls.pressed('pause') || (input.device === 'pad' && input.wasPressed('Pad0'))) {
-        audio.init();
-        this.padPlay = true;
-        this.setRunning(true);
-      }
-    } else if (controls.pressed('pause')) {
-      this.padPlay = false;
-      if (input.locked) document.exitPointerLock();
-      input.free = false;
-      this.setRunning(false);
     }
-  }
-
-  start() {
-    this.engine.start();
-    return this;
+    if (input.pad.connected) {
+      this.padPlay = true;
+      input.device = 'pad';
+    }
   }
 }
