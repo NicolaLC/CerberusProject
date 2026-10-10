@@ -20,6 +20,7 @@ const TUNING = {
   sight: 36, // wakes at this range with line of sight
   burst: { aim: 0.45, shots: 2, gap: 0.16, cooldown: [1.6, 2.8], spread: 0.03, damage: 6 },
   radius: 0.6,
+  floorMin: 2, // m: boxes narrower than this (walls, parapets) don't lift the flight height, wide ones (platforms) do
   bounds: { minX: -48, maxX: 48, minZ: -60, maxZ: 48 },
 };
 
@@ -268,7 +269,7 @@ export class Drone {
     this.pos.x = THREE.MathUtils.clamp(this.pos.x, b.minX, b.maxX);
     this.pos.z = THREE.MathUtils.clamp(this.pos.z, b.minZ, b.maxZ);
     const world = this.sys.world;
-    const ground = world.groundAt(this.pos.x, this.pos.z, this.pos.y + this.alt);
+    const ground = world.groundAt(this.pos.x, this.pos.z, this.pos.y + this.alt, 0, TUNING.floorMin);
     _b.set(this.pos.x, ground + this.alt - 0.3, this.pos.z);
     if (world.isInterior(_b)) {
       this.pos.x = prevX;
@@ -281,7 +282,7 @@ export class Drone {
       this.pos.x = _b.x;
       this.pos.z = _b.z;
     }
-    this.pos.y += (world.groundAt(this.pos.x, this.pos.z, this.pos.y + this.alt) - this.pos.y) * damp(3, dt);
+    this.pos.y += (world.groundAt(this.pos.x, this.pos.z, this.pos.y + this.alt, 0, TUNING.floorMin) - this.pos.y) * damp(3, dt);
     // banking into the movement
     const lx = this.vel.x * Math.cos(this.yaw) - this.vel.z * Math.sin(this.yaw);
     const lz = this.vel.x * Math.sin(this.yaw) + this.vel.z * Math.cos(this.yaw);

@@ -38,6 +38,9 @@ const _col = new THREE.Color();
 const _white = new THREE.Color(1, 1, 1);
 
 export class AiTool {
+  // shown in the key bar (view/keyhints.js) whatever the panel's state
+  static KEYS = [['J', 'respawn enemies'], ['K', 'freeze AI'], ['L', 'player hidden'], ['O', 'overlays (?debug)']];
+
   constructor(game, level) {
     this.game = game;
     this.level = level;

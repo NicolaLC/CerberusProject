@@ -42,6 +42,8 @@ const TUNING = {
   spreadPerMeter: 0.012,
 };
 
+// s without getting 5 cm closer to the move goal before a trooper gives up on it (squadmate or corner in the way)
+const STALL_TIME = 1.0;
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _d = new THREE.Vector3();
@@ -177,6 +179,7 @@ export class Trooper extends EnemyBody {
         const left = _d.length();
         if (left < 0.5 && this.path.length) {
           this.path.shift(); // waypoint reached: on to the spot
+          this.closest = Infinity;
           break;
         }
         if (left < 0.15) {
@@ -185,6 +188,15 @@ export class Trooper extends EnemyBody {
           this.vel.set(0, 0, 0);
           this.#enterCover(this.flanking ? 0.2 : rand([0.4, 0.8])); // a flanker opens fire right away
           this.flanking = false;
+          break;
+        }
+        // no progress toward the goal for STALL_TIME (blocked by a squadmate or a corner): pick something else now
+        // instead of standing there until the move timer runs out
+        if (left < this.closest - 0.05) {
+          this.closest = left;
+          this.stalled = 0;
+        } else if ((this.stalled += dt) > STALL_TIME) {
+          this.#relocate();
           break;
         }
         _d.divideScalar(left).multiplyScalar(Math.min(this.speed, left * 4));
@@ -366,6 +378,8 @@ export class Trooper extends EnemyBody {
       cover.claim(next, this);
       this.state = 'move';
       this.timer = (this.path.length ? 1.4 : 1) * (next.pos.distanceTo(this.pos) / this.speed) + 2.5; // give up if it takes much longer
+      this.closest = Infinity; // progress watch (move state)
+      this.stalled = 0;
     } else {
       this.state = 'peek'; // in the open: shoot, then look again
       this.timer = 0.3;

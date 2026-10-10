@@ -98,6 +98,7 @@ Payload objects marked * are reused: copy what you keep.
 | `player:coverSlam` / `player:land` | – / 'vault' \| 'jet' | juice, audio (land) |
 | `player:jet` | *{ point, dir } (nozzle, exhaust direction) | fx, audio, juice |
 | `player:vault` | 'hop' \| 'slide' | – |
+| `player:vaultRefused` | *{ collider, blocker } (landing spot blocked; a jet burst fires instead) | Gym traversal tool |
 | `player:step` | *{ run, raised } (each heel strike; not in the air) | audio |
 | `enemy:step` | position (trooper / moving puppet heel strike) | audio (fades out by 28 m from the camera) |
 | `puppet:down` | puppet | pickups (drop), audio |

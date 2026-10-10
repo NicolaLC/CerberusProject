@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { mergeGroup } from '../../engine/batch.js';
+import { bakeGroup, makeLodMaterial } from '../../engine/batch.js';
 
 // Building blocks for the procedural models (player soldier, enemies): rounded boxes, cylinders, capsules,
 // each placed and rotated in its bone's space. Geometry is cached by size, so many rigs share it.
@@ -44,8 +44,11 @@ export const look = (...children) => {
 };
 
 // Debris chunk for a baked piece: the RigidSkin proxies under `obj` (its look; invisible hitboxes are left out),
-// merged to one mesh per material and placed where `obj` is in the world. null if nothing under it is drawn.
-// The merged geometry is the chunk's own: free it with disposeDebris.
+// baked to one mesh with vertex colors, no shadow: one draw per chunk whatever the materials (a destroyed trooper
+// was ~119 draws with one shadow-casting mesh per material) and placed where `obj` is in the world. null if nothing under
+// it is drawn. The geometry is the chunk's own: free it with disposeDebris; the material is shared by all debris.
+const DEBRIS_MAT = makeLodMaterial();
+DEBRIS_MAT.userData.shared = true;
 const _inv = new THREE.Matrix4();
 export function debrisCopy(obj) {
   const out = new THREE.Group();
@@ -53,12 +56,13 @@ export function debrisCopy(obj) {
   obj.traverse((o) => {
     if (!o.isMesh || !o.userData.proxy) return;
     const m = new THREE.Mesh(o.geometry, o.material);
-    m.castShadow = true;
+    m.castShadow = false; // small, fast and gone in seconds: not worth a shadow draw per chunk
     m.applyMatrix4(new THREE.Matrix4().multiplyMatrices(_inv, o.matrixWorld));
     out.add(m);
   });
   if (!out.children.length) return null;
-  mergeGroup(out);
+  bakeGroup(out, DEBRIS_MAT);
+  if (!out.children.length) return null; // only transparent parts
   obj.matrixWorld.decompose(out.position, out.quaternion, out.scale);
   return out;
 }
