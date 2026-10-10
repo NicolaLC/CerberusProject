@@ -481,9 +481,13 @@ export class Player {
     for (const col of this.world.colliders) {
       const bb = col.box;
       if (bb.max.y <= this.pos.y + this.t.stepHeight || bb.min.y > this.pos.y + 1.8) continue;
-      if (to.x > bb.min.x - r && to.x < bb.max.x + r && to.z > bb.min.z - r && to.z < bb.max.z + r) return false;
+      if (to.x > bb.min.x - r && to.x < bb.max.x + r && to.z > bb.min.z - r && to.z < bb.max.z + r) {
+        this.events.emit('player:vaultRefused', { collider, blocker: col });
+        return false;
+      }
     }
-    const slide = depth > VAULT.hopDepth;
+    // tolerance: box extents carry float error (a 1.2 deep block can read 1.2000000000000028) and must still hop
+    const slide = depth > VAULT.hopDepth + 1e-3;
     to.y = this.world.groundAt(to.x, to.z, this.pos.y + this.t.stepHeight);
     this.cover = null;
     this.crouched = false; // leaving low cover: the crouch would sink the hips into the block on top of the vault pose

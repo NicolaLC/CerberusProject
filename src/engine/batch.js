@@ -220,6 +220,27 @@ export function mergeGroup(group) {
   return group;
 }
 
+// Like mergeGroup, but into ONE mesh with per-vertex colors and glow (the far-LOD bake) drawn with `material`
+// (a makeLodMaterial()). One draw (plus one shadow draw) whatever the materials; transparent parts are dropped.
+export function bakeGroup(group, material) {
+  group.updateWorldMatrix(true, true);
+  _inv.copy(group.matrixWorld).invert();
+  const buckets = new Map();
+  const sources = [];
+  group.traverse((o) => {
+    if (o.isMesh && o.visible) sources.push(o);
+  });
+  for (const m of sources) collect(buckets, m, _m.multiplyMatrices(_inv, m.matrixWorld));
+  for (const m of sources) m.removeFromParent();
+  const b = lodBucket(buckets, material);
+  if (b) {
+    const mesh = new THREE.Mesh(toGeometry(b), material);
+    mesh.castShadow = sources.some((m) => m.castShadow);
+    group.add(mesh);
+  }
+  return group;
+}
+
 // Bakes the visible parts on a skeleton into SkinnedMeshes (one per material), parented to `root`.
 // exclude(object) -> true skips that object and its subtree (e.g. swappable guns).
 // rebuild() re-bakes after parts were added or removed (e.g. new weak spots on respawn).

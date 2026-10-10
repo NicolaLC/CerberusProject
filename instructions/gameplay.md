@@ -61,7 +61,8 @@
 - Vault (`VAULT` in player.js): a block up to 1.2 m deep (its short side) is jumped (tucked hop, 0.5 s); a deeper
   one (its long side) is slid across on the hip (0.3 s + depth / 5.5 m/s, linear, keeps momentum). Running
   (> 3.5 m/s) straight at low cover within 2.2 m and pressing `Space` vaults without stopping. Heights come
-  from the take-off and landing floors (the floor under the arc is the block's top). Event `player:vault`.
+  from the take-off and landing floors (the floor under the arc is the block's top). Event `player:vault`; a vault refused because the landing
+  spot is blocked emits `player:vaultRefused` (the press then jets).
   During the slide only (`player.isSliding()`, not the hop or the cover-entry snap) aiming and shooting work as usual
   (spread, recoil, probe, crosshair; reload and weapon switch too) and firing never ends the slide. The hips keep the
   slide yaw, the chest twists toward the camera yaw (clamped ±1.2 rad, `VAULT.twist`). `player.sliding` (0..1, eased

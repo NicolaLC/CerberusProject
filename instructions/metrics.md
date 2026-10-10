@@ -29,10 +29,10 @@ code, **derived** = computed from code numbers (formula given), **proposed** = r
 | FOV | normal 70, aim 50, sprint 78, slide +8, scope 24, railgun 42 | `camera.js:TUNING.fov` |
 | Pitch limits | -1.25 (look down) .. +1.1 rad | `camera.js:look` |
 | Camera collision | ray pivot -> camera against all level boxes, pulled in to hit - 0.25 (min 0.2 from the pivot) | `camera.js:update` |
-| Jetpack burst | thrust 0.22 s to 5.5 m/s, then gravity 17.6; peak 1.46 above take-off; airtime 0.94 s; cooldown 0.9 s | `player.js:JET`, `TUNING.gravity` |
+| Jetpack burst | thrust 0.22 s to 5.5 m/s, then gravity 17.6; peak 1.54 above take-off (Gym, 1/60 s step); airtime 0.94 s; cooldown 0.9 s | `player.js:JET`, `TUNING.gravity` |
 | Jet horizontal distance | stand-still ~3.6, walking ~4.7, from a sprint ~5.4 (momentum eases to walk speed at 4/s) | derived (simulation of `JET.boost/airAccel`) |
-| Jet landing height | on a box with top <= apex + step, theory ~1.9; **intended reach 1.6** (owner decision: low cover 1.1 and the 1.6 platform) | derived, **gym** |
-| Ceiling during jet | rising head stops under any box; needs 1.8 + 1.46 = 3.3 free for a full burst | `player.js:#ceiling` |
+| Jet landing height | lands on tops up to **1.9** (Gym: standing start <= 1.8 m away, any walking start); 2.0 never. The 1.6 platform is reliably jettable (owner decision: intended) | Gym #64 |
+| Ceiling during jet | rising head stops under any box; needs 1.8 + 1.54 = 3.34 free for a full burst (a 3.2 ceiling cuts the peak to 1.4) | `player.js:#ceiling` |
 
 Camera clearances (derived from the table above):
 - Camera height above feet = eye + 0.15 + dist x sin(-pitch). Default pitch -0.08: ~1.9 stand. Looking straight down (-1.25): ~5.0 normal, ~5.5 sprint.
@@ -65,7 +65,7 @@ Cover for AI needs the same floor level only (no stairs): a cover box on a platf
 ## 4. Vault
 | Item | Value | Source |
 |---|---|---|
-| Hop vs slide | block depth (short side along the vault) <= 1.2 hop (0.5 s), > 1.2 slide (0.3 s + depth / 5.5 m/s) | `player.js:VAULT.hopDepth`, `#tryVault` |
+| Hop vs slide | block depth (short side along the vault) <= 1.2 hop (compared with a 1 mm tolerance: box extents carry float error) (0.5 s), > 1.2 slide (0.3 s + depth / 5.5 m/s) | `player.js:VAULT.hopDepth`, `#tryVault` |
 | Max vaultable height | only "low" (< 1.7 above feet) is checked in code; tested and authored: 1.1 | `#castCover`, `#tryVault`, **gym** |
 | Hop arc | top + 0.3; slide: top + 0.08 | `#tryVault` |
 | Run-up speed | > 3.5 m/s (walk 4.6 already qualifies), within 2.2 of the face, heading within ~45 deg of the normal (`-wish.n > 0.7`) | `VAULT.runIn`, `runInReach`, `update` |
@@ -79,15 +79,15 @@ Legend: *hard min* = engine or camera breaks below it; *rec* = the standard to b
 arena's scale is the standard** — rec values are the arena's own sizes.
 | Item | Hard min | Rec | Why / source |
 |---|---|---|---|
-| Corridor width | 1.6 | **4.0** (same as the arena doorways) | 2 bodies x 0.8; camera side 1.1 per side; derived. No corridor exists yet |
+| Corridor width | 2.0 (walk; 2.4 if aiming happens there) | **4.0** (same as the arena doorways) | below it the camera is pulled in by the walls (Gym #64: 1.8 pulls at walk, 2.0 when aiming, 1.6 always) |
 | Door width | 1.2 | **4.0** (arena doors at x -12, 16) | player 0.8 + peek lean; wall ends beside doors act as high-cover edges (peek) so keep the wall >= 0.9 wide there |
-| Door / lintel height | 1.8 (head box; `collideCircle` ignores boxes whose bottom >= feet + 1.8) | **4.0** (arena doors) | `world.js:collideCircle`; jet needs 3.3 |
+| Door / lintel height | 1.8 (head box; `collideCircle` ignores boxes whose bottom >= feet + 1.8) | **4.0** (arena doors) | `world.js:collideCircle`; a full jet needs 3.4 |
 | Ceiling (rooms) | 2.5 (camera pulls to the head) | **7.0** (arena building walls) | camera height ~3.4 at pitch -0.5 and 3.4 normal; derived |
-| Ceiling for jet | 3.3 | 7.0 | 1.8 + 1.46 (`JET`) |
+| Ceiling for jet | 3.4 | 7.0 | 1.8 + 1.54 (`JET`, Gym) |
 | Stairs | rise <= 0.45 | **rise 0.4, run 1.0, 4 wide** (arena stairs, 3 steps) | `player.js:TUNING.stepHeight`; `world.js:#buildLevel` stairs; AI uses the same 0.45 |
 | Ramps | -- | none: `groundAt` uses box tops, a ramp must be a stair of 0.4 m boxes | `world.js:groundAt` |
 | Raised floors | -- | 1.6 platform: stairs; parapets on it are LOW 1.1 x 0.6 thick; AI cover only works on the same level | `world.js` platform |
-| Tallest jumpable | -- | boxes up to **1.6** are jet-reachable **by design** (owner decision: the 1.6 platform may be jetted onto); > 1.9 not jettable | derived, **gym** (confirm 1.6 is reliable) |
+| Tallest jumpable | -- | boxes up to **1.9** are jet-reachable (1.6 platform by design); >= 2.0 is not. Anything that must not be climbed is >= 2.0 (high cover 2.8, walls) | Gym #64 |
 | Room width / depth | 4 x 4 | 8 x 8+ for a fight (cover spots need >= 6 m to the player) | `cover.js:minRange`; derived |
 | Open sky for drones | -- | flight band 3.5-5 + 0.6 radius: no roof below ~5.6 above a drone area; drones never enter `interiorZones` | `drone.js:TUNING`, `update` bounds |
 | Arena size | -- | see 7 | -- |
@@ -152,12 +152,12 @@ Each item: value, how the Gym measures it.
 
 ## 8b. Gym results (measured 2026-10-10, Gym rooms #64-#67)
 Measured by the Gym suites (`tests/gym-*.browser.mjs`) with the engine stepped at 1/60 s. Room layouts and tools are in
-`instructions/gym.md`. Values that **differ from the tables above** are marked ⚠ and need an owner decision before freezing.
+`instructions/gym.md`. The corrections have been applied to the tables above (#75).
 | # | Item | Measured |
 |---|---|---|
 | 1 | Max vaultable height | every low block 1.0-1.6 hops (walk and sprint); 1.7 (high) never vaults, a jet fires |
-| 2 | Jet landing reach | ⚠ **1.9** lands (standing start <= 1.8 m away, any walking start); 2.0 never. The "intended 1.6" is not enforced by code |
-| - | Jet peak | ⚠ **1.54** above take-off (doc said 1.46); a full burst needs ~3.34 free; a 3.2 ceiling cuts it to 1.4 |
+| 2 | Jet landing reach | **1.9** lands (standing start <= 1.8 m away, any walking start); 2.0 never. The "intended 1.6" is not enforced by code |
+| - | Jet peak | **1.54** above take-off (the draft said 1.46, now corrected above); a full burst needs ~3.34 free; a 3.2 ceiling cuts it to 1.4 |
 | 3 | Jet gap (reliable / reach) | stand 3.5 / 3.8, walk 4.5 / 4.96, sprint 5.0 / 5.51 → gaps <= 3.5 for everyone, 4.5 needs a run, > 5.0 never |
 | 4 | Corridor width, no camera pull-in | walk 2.0, aim 2.4, sprint 1.8; 1.6 pulls in every mode (both shoulders same). Rec 4.0 is well clear |
 | 5 | Ceilings | default pitch: no pull at any height 2.4-5.0; looking straight down pulls the camera even at 5.0 (3.4 of 3.64). Jet: 0.6 under 2.4, 1.0 under 2.8, 1.4 under 3.2, full from 3.4 |
@@ -166,7 +166,7 @@ Measured by the Gym suites (`tests/gym-*.browser.mjs`) with the engine stepped a
 | 8 | Cover class | flips exactly at 1.7; snap stops 0.45 from the face. Aim probe / bolts over 1.2-1.6 not measured |
 | 9 | Run-up | vault fires from every lane 0.5-3.0 (0.5 = vault from cover, auto cover grabs first; run-in at 3.7 m/s from 1.0) |
 | 10 | Landing space | refused at 0.6 / 0.9 behind the far face, vaults at 1.2 / 1.4 (threshold 1.05) → keep >= 1.1 clear holds |
-| 11 | Hop vs slide | ⚠ <= 1.1 hop, >= 1.3 slide; **1.2 slides** on blocks whose float depth reads 1.2000000000000028 (`#tryVault` compares without tolerance) |
+| 11 | Hop vs slide | <= 1.2 hop, >= 1.3 slide (1.2 used to slide on float error; fixed with a tolerance, #75) |
 | 12 | Stairs | rise 0.30 / 0.40 / 0.45 climb (walk, sprint), 0.50 stuck; run 0.6 and 1.2 fine; camera pivot step 54-113 mm/frame |
 | 13 | Trooper gaps | straight crossing needs > 0.7 (0.75 passes); bodies walk every gap >= 0.75; routes to spots behind a row only through gaps >= 1.2 (one corner waypoint, no pathfinding); no stalls at gaps |
 | 14 | Cover spots | 3 m low box ≈ 6.8 spots, 2.4 m high box 4; a 3-row trooper room gives 16-35 viable spots per player position in 4-11 bearings; picks 17-26 m (7-19 between rows), always within 6-28 |
@@ -181,8 +181,8 @@ Performance (stress room, worst case: near LOD, in view, shadow pass included): 
 drone 4 / 9.2k; beyond 32 m each enemy is 1 draw. A destroyed puppet / trooper costs +75 / +119 draws for 5 s (debris).
 Per-tier encounter caps: `instructions/engine.md`, Per-encounter budget.
 
-Decisions needed before freezing: jet reach (accept 1.9 or tune the jet to 1.6), jet peak / headroom (3.4 ceilings), the
-1.2 hop edge (tolerance fix), and the minimum corridor (2.0 walk, 2.4 aim, against the 4.0 standard).
+Applied to the tables above (#75): jet peak 1.54 / headroom 3.4, jet reach 1.9, corridor hard minimum 2.0 (2.4 where aiming),
+hop up to 1.2 inclusive. Open before freezing: confirm the 1.9 jet reach is acceptable (else `JET` is retuned and the Gym re-measured).
 
 ## 9. Change rule
 Once frozen, a metric changes only through an issue that lists: (a) the old and new value with the source symbol, (b) every kit

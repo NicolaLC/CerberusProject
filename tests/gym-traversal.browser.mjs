@@ -23,7 +23,7 @@ const r = await p.evaluate(() => {
   const keys = engine.input.keys;
   const step = (n = 1) => { for (let i = 0; i < n; i++) engine.step(1 / 60); };
   const events = [];
-  for (const n of ['player:vault', 'player:jet', 'player:land']) engine.events.on(n, (d) => events.push(n === 'player:vault' ? `vault:${d}` : n === 'player:jet' ? 'jet' : 'land'));
+  for (const n of ['player:vault', 'player:jet', 'player:land', 'player:vaultRefused']) engine.events.on(n, (d) => events.push(n === 'player:vault' ? `vault:${d}` : n === 'player:jet' ? 'jet' : n === 'player:land' ? 'land' : 'refused'));
   const DIR = { N: 0, E: -Math.PI / 2, W: Math.PI / 2, S: Math.PI }; // camera yaw: the way W moves
   const put = (x, y, z, dir = 'N') => {
     keys.clear();
@@ -67,7 +67,7 @@ const r = await p.evaluate(() => {
     keys.clear();
     step(40);
     const vault = events.find((e) => e.startsWith('vault:')) ?? null;
-    return { result: vault ?? (events.includes('jet') ? 'jet' : 'none'), how, fired, y: f(player.pos.y), z: f(player.pos.z), past: player.pos.z < blk.zN };
+    return { result: vault ?? (events.includes('jet') ? 'jet' : 'none'), refused: events.includes('refused'), how, fired, y: f(player.pos.y), z: f(player.pos.z), past: player.pos.z < blk.zN };
   };
 
   // ---------- item 1 + cover classes (item 8): the cover height row ----------
@@ -455,9 +455,9 @@ const v11 = r.vaultHeight.find((v) => v.h === 1.1);
 expect('the 1.1 low cover vaults at walk and at sprint (a hop over the 1 m block)', v11.walk.result === 'vault:hop' && v11.walk.past && v11.walk.y === 0 && v11.sprint.result === 'vault:hop' && v11.sprint.past);
 expect('every low block 1.0 .. 1.6 vaults at walk', r.vaultHeight.filter((v) => v.h < 1.7).every((v) => v.walk.result === 'vault:hop' && v.walk.past), JSON.stringify(r.vaultHeight.map((v) => v.walk.result)));
 expect('a 1.7 block (high cover) is not vaulted', r.vaultHeight.find((v) => v.h === 1.7).walk.result === 'jet');
-// 1.2 itself is not asserted: Box3 depth of a 1.2 block at z -24.6 is 1.2000000000000028 > VAULT.hopDepth, so it slides (reported)
-expect('vault depth: hop up to 1.1, slide from 1.3 (1.2 is the edge, see the printed row)', r.vaultDepth.every((v) => (v.d === 1.2 ? v.past : v.result === (v.d < 1.2 ? 'vault:hop' : 'vault:slide') && v.past)), JSON.stringify(r.vaultDepth.map((v) => v.result)));
-expect('landing space: an obstacle closer than ~1.1 m behind the far face refuses the vault', r.landing.filter((v) => v.gap < 1.05).every((v) => v.result === 'jet') && r.landing.filter((v) => v.gap >= 1.1).every((v) => v.result === 'vault:hop'), JSON.stringify(r.landing.map((v) => v.result)));
+// 1.2 hops although its Box3 depth reads 1.2000000000000028 (#tryVault compares with a tolerance)
+expect('vault depth: hop up to 1.2, slide from 1.3', r.vaultDepth.every((v) => v.result === (v.d <= 1.2 ? 'vault:hop' : 'vault:slide') && v.past), JSON.stringify(r.vaultDepth.map((v) => v.result)));
+expect('landing space: an obstacle closer than ~1.1 m behind the far face refuses the vault (player:vaultRefused, then a jet)', r.landing.filter((v) => v.gap < 1.05).every((v) => v.result === 'jet' && v.refused) && r.landing.filter((v) => v.gap >= 1.1).every((v) => v.result === 'vault:hop'), JSON.stringify(r.landing.map((v) => v.result)));
 expect('the run-in vault works from every lane length 0.5 .. 3.0 m', r.runUp.every((v) => v.result === 'vault:hop'), JSON.stringify(r.runUp.map((v) => v.result)));
 const lands = (row, mode) => row[mode].includes('1');
 expect('a jet from standing lands on blocks up to 1.4 (low cover 1.1 included)', r.jetHeight.filter((v) => v.h <= 1.4).every((v) => lands(v, 'stand')), JSON.stringify(r.jetHeight.map((v) => v.stand)));
