@@ -4,7 +4,7 @@
 Plain JSON (an editor can write it), imported by `scenes.js`, validated by `Registry.check`. Layout, enemies and
 pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 ```
-{ name, title, demo?, spawn: { pos, yaw }, interiorZones: [{ min, max }],
+{ name, title, tool?, demo?, spawn: { pos, yaw }, interiorZones: [{ min, max }],
   pieces: [ { id, pos: [x, y, z], yaw?, params?, name? }, ... ] }
 ```
 - `pieces` is one ordered list; each system builds the ones it owns, in file order. Order matters: boxes are merged
@@ -12,6 +12,8 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 - `title`: shown in the HUD zone label (outdoors; indoors it reads INTERIOR) and in the panel's scene picker.
 - `demo: true` (Library): enemies are exhibits: they idle and take hits but never wake, aim, fire or flank
   (`Enemies` hands them a view of the player that reads `dead`).
+- `tool`: a Gym room helper from `src/game/gym/tools.js` (`traversal` / `range` / `ai` / `stress`): readouts, overlays, keys.
+  Created after the level loads, disposed before it unloads, `update(dt)` each unpaused frame (system `gymTool`).
 - `spawn.yaw` is the player's initial facing (3.14159 = north, -Z). The boss arena bounds are data of `boss.spider`.
 - Add a piece: append `{ "id": ..., "pos": [...], "params": {...} }`. Add a new kind: put a builder in the owning
   module's table (`WORLD_PIECES` / `ENEMY_PIECES` / `PICKUP_PIECES`) and document the id here. Never rename an id.
