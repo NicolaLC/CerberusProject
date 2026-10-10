@@ -56,6 +56,25 @@ Every entry has both (enemies, pickups, `kit.*`, `env.*`, `light.point`, `prop.g
 
 Interior zones (camera exposure) are `interiorZones` boxes, not pieces. Dropped clips are runtime, not data.
 
+## Save and load (`src/game/workshop/io.js`, #72)
+The editor (#70) calls four functions plus `levelNames()`; the level is the plain object of the format above.
+- `serializeLevel(level)` -> text. Top-level keys one per line in this order: `name`, `title`, `tool`, `demo`, `spawn`,
+  `interiorZones`, any other keys (as given), then `pieces`. Each piece is one line of compact JSON (no spaces) with keys
+  `id`, `name`, `pos`, `yaw`, `params` (unknown keys after). Numbers are rounded to 4 decimals (no float noise, `-0` -> `0`),
+  NaN / Infinity throw. Ends with a newline. Same level in, same bytes out (idempotent), so a git diff shows only real edits.
+  Nested values (`spawn`, `rooms`, `params`) stay compact on their line, as in the `gym-*` files. Existing level files are
+  not rewritten: they re-serialize to this shape the first time the editor saves them.
+- `parseLevel(text, registry)`: `JSON.parse` + `registry.check`. Errors name the problem: `level file is not valid JSON (line N)`,
+  `piece #i has unknown id "x"`, `needs pos`, `"pieces" must be an array`.
+- `saveLevel(level)` -> `{ where: 'repo' | 'dialog' | 'download', path? }`. `level.name` must match `[a-z0-9-]+` (it is the file name).
+  Desktop: writes `src/levels/<name>.json` (`repo`); a packaged app has no repo folder and shows a save dialog (`dialog`).
+  Web: downloads `<name>.json` (`download`). Cancelling a dialog rejects with an `AbortError`.
+- `openLevel(registry)`: file picker (web) or open dialog (desktop) -> parsed, checked level; rejects with a readable error
+  (`AbortError` on cancel).
+- `levelNames()`: names of the bundled scenes (`scenes.js`), arena included. To edit one, take `SCENES[name]` (deep-copy it first).
+- Saving to `src/levels` does not list the level: a new scene still needs its import in `scenes.js` (Scenes, below).
+- Test: `tests/levelio.test.mjs` (`npm test`) round-trips every `src/levels/*.json` with the real `Registry` and piece tables.
+
 ## Scenes (`src/game/scenes.js`)
 | name | file | content |
 |---|---|---|
