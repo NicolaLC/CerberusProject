@@ -200,3 +200,37 @@ Measures what content costs, so encounters can be budgeted (numbers: `engine.md`
   leave no leak. `SHOT=/path.png` saves a screenshot with a crowd; `ONLY=fx` runs the cost table of one kind.
 - Gotchas: adding / removing point lights recompiles shaders (a hitch, not a leak; the sweep's `settle` skips it). The fx pools
   create hidden meshes on demand, so the scene object count grows up to the most particles ever alive at once, then stays.
+
+---
+
+## Library (`?scene=library`, #68)
+
+The showroom: a walkable bare-grid floor (x -40..40, z 60..-100) with labelled aisles. Spawn (0, 0, 34) facing north; aisles run
+west-east, one per row, signs (yellow) at the west end. Level `library.json` (`demo: true`, `tool: "library"`), tool `gym/library.js`,
+suite `tests/library.browser.mjs`.
+
+| Aisle | z | Content |
+| --- | --- | --- |
+| 1 Enemies | 26 | static, mover (rail 4 m), shooter (behind a low block), trooper, drone; `boss.spider` on its own pen (x 28, arena 19..37 / 10..34) |
+| 2 Guns | 10 | one `prop.gun` per gun on a low stand (0.8 m), caption: name, damage, mag, falloff |
+| 3 Cover and environment | -6 | `env.box` low / high / wall / platform / faces, `env.strip`, `env.label` |
+| 4 Pickups | -20 | `pickup.light`, `pickup.heavy` |
+| 5 Light presets | -30 | four `light.point` over pedestals: cyan, warm white, red, flicker (with its strip) |
+| 6 Kit aisle | -46 | empty in the file on purpose; the tool fills it |
+
+- **Exhibit** = a level piece named `ex:<id>`. Each has a flat floor caption (readable walking north): its id and the entry's `label`
+  meta (guns: name, damage, mag, falloff). Enemy and pickup captions in the file must equal their meta (the suite checks it); the
+  env / light ones are hand-written. Edit `library.json` by hand; keep that rule.
+- **Auto aisle**: at load the tool spawns every registered id that the file does not show, from `meta.example`, on the grid
+  `level.kitAisle` ({ x, z, dx, cols, dz }), each with a caption (id + wrapped label). So new pieces (the `kit.*` ids) appear
+  without touching the file. World pieces go through `world.spawn(piece)` (returns a handle; `world.despawn(handle)` frees boxes,
+  labels, lights, props and colliders), enemies through `enemies.spawn`, pickups through `registry.build` / `pickups.despawn`.
+  `tool.spawned` counts what it added per owner (`scenes.browser.mjs` adds it to the file's piece counts); `tool.failed` lists ids
+  whose spawn threw (also a console error). `dispose()` frees all of it.
+- **Wake one**: key **V** (`KEYS`) makes the nearest enemy exhibit `hostile`: `Enemies.update` hands it the real player instead
+  of the demo stand-in, so it fights; the rest stay harmless. V next to it again replaces it with a fresh, calm copy.
+- **Panel** (top-left): id, owner and label of the exhibit within 14 m, awake / idle, exhibit counts.
+- Keys in use elsewhere (do not reuse): controls W A S D E F R Q H 1-6, Gym tools T G B N M J K L O P [ ].
+- `prop.gun` frees its merged geometry in `World.unload()` (own list `world.props`); its materials are permanent.
+- Gotchas fixed on the way: a `mover` with speed 0 or no `to` went NaN (division by a zero rail length); `boss.spider` without an
+  `arena` now gets a 20 m box around its position.
