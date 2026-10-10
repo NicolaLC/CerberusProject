@@ -201,10 +201,13 @@ for (const name of SCENES) {
     engine.headless = true;
     const step = (n) => { for (let i = 0; i < n; i++) engine.step(1 / 60); };
     const out = { zones: {} };
+    out.hints = {};
     for (const n of names) {
       g.loadScene(n);
       step(2);
       out.zones[n] = [document.getElementById('zone').textContent, g.level.title];
+      const bar = document.getElementById('keyhints');
+      out.hints[n] = { shown: !bar.hidden, keys: [...bar.querySelectorAll('b')].map((x) => x.textContent), tool: g.tool?.constructor.KEYS.map(([k]) => k) ?? [] };
     }
     // Library: stand in front of the exhibit row (every enemy in range and in sight) for 10 s
     g.loadScene('library');
@@ -239,6 +242,23 @@ for (const name of SCENES) {
   for (const n of SCENES) {
     const [shown, title] = r.zones[n];
     expect(`HUD zone label in "${n}" is its title "${title}"`, !!title && shown === title, shown);
+  }
+  // key bar: with ?debug the global debug keys, plus every key of the scene's Gym tool
+  for (const n of SCENES) {
+    const h = r.hints[n];
+    expect(`key bar in "${n}" shows H, F3 and the room's keys (${h.tool.join(' ') || 'none'})`, h.shown && ['H', 'F3 / `', ...h.tool].every((k) => h.keys.includes(k)), JSON.stringify(h));
+  }
+  // and every key a Gym tool listens to is in its KEYS list (static check of the tool sources)
+  {
+    const { readFileSync, readdirSync } = await import('node:fs');
+    const label = (code) => (code.startsWith('Key') ? code.slice(3) : code.startsWith('Bracket') ? '[ ]' : code);
+    const missing = [];
+    for (const f of readdirSync(new URL('../src/game/gym/', import.meta.url)).filter((x) => x.endsWith('.js') && x !== 'tools.js')) {
+      const src = readFileSync(new URL(`../src/game/gym/${f}`, import.meta.url), 'utf8');
+      const listed = [...src.matchAll(/static KEYS = \[(.*)\];/g)].flatMap((m) => [...m[1].matchAll(/\['([^']+)'/g)].map((x) => x[1]));
+      for (const [, code] of src.matchAll(/e\.code === '(\w+)'/g)) if (!listed.includes(label(code))) missing.push(`${f}: ${code}`);
+    }
+    expect('every key a Gym tool handles is listed in its KEYS (and so in the key bar)', missing.length === 0, missing.join(', '));
   }
   expect('library is a demo level: 10 s in front of every enemy, no bolts, no damage', r.demo && r.maxBolts === 0 && r.unhurt, JSON.stringify(r));
   expect('  no exhibit woke up (drones, boss)', r.awake.length === 0, JSON.stringify(r.awake));

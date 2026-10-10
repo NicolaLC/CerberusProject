@@ -41,6 +41,9 @@ const _to = new THREE.Vector3();
 const fix = (n, p = 2) => n.toFixed(p);
 
 export class TraversalTool {
+  // shown in the key bar (view/keyhints.js) whatever the panel's state
+  static KEYS = [['T', 'readout panel'], ['G', 'next station']];
+
   constructor(game, level) {
     this.game = game;
     this.level = level;

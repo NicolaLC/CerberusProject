@@ -25,6 +25,9 @@ const _c = new THREE.Color();
 const coneCm = (rad, dist = 10) => 2 * dist * Math.tan(rad) * 100;
 
 export class RangeTool {
+  // shown in the key bar (view/keyhints.js) whatever the panel's state
+  static KEYS = [['B', 'clear recoil dots'], ['N', 'panel and labels'], ['M', 'reset dummy readouts']];
+
   constructor(game, level) {
     this.game = game;
     this.level = level;
