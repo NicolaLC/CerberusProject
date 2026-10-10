@@ -71,6 +71,7 @@ export class Enemies {
       { reset: (b) => (b.obj.visible = false) },
     ).warm(16);
     this.standCount = 0;
+    this.freeStands = []; // stand slots of despawned puppets, reused by spawn()
     // pneumatic stands (puppets only): one instanced draw for all bases, one for all posts
     this.standMat = new THREE.MeshStandardMaterial({ color: 0x55585e, metalness: 0.7, roughness: 0.35 });
     this.standGeo = {
@@ -116,12 +117,66 @@ export class Enemies {
     this.bases = this.posts = null;
     this.cover = null;
     this.standCount = 0;
+    this.freeStands.length = 0;
     this.kills = 0;
     this.time = 0;
     this.flankCooldown = FLANK.firstAfter;
     this._engaged.length = 0;
     this.targets.length = 0;
     this.dirty = true;
+  }
+
+  // Runtime spawn (tools, tests): builds one piece after load, same registry builders as the level file.
+  // Puppets get a stand slot; the instance buffers grow when full (load sizes them for the level's own puppets).
+  spawn(data) {
+    const stand = this.registry.meta(data.id).stand;
+    const used = this.standCount;
+    let slot = 0;
+    if (stand) {
+      slot = this.freeStands.pop() ?? used;
+      if (slot >= this.bases.instanceMatrix.count) this.#growStands(Math.max(16, slot * 2));
+      this.standCount = slot; // the Puppet constructor takes standCount++ as its slot
+    }
+    const actor = this.registry.build('enemies', this, data);
+    if (stand) {
+      this.standCount = Math.max(used, slot + 1);
+      this.bases.count = this.posts.count = this.standCount;
+    }
+    this.puppets.push(actor);
+    this.dirty = true;
+    return actor;
+  }
+
+  // Removes and frees one enemy built by spawn() (or by load).
+  despawn(actor) {
+    const i = this.puppets.indexOf(actor);
+    if (i < 0) return;
+    this.puppets.splice(i, 1);
+    if (this.bases && actor.index !== undefined) {
+      _m.makeScale(0, 0, 0);
+      this.bases.setMatrixAt(actor.index, _m);
+      this.posts.setMatrixAt(actor.index, _m);
+      this.bases.instanceMatrix.needsUpdate = this.posts.instanceMatrix.needsUpdate = true;
+      this.freeStands.push(actor.index);
+    }
+    if (!actor.alive && actor.kind !== 'boss') this.kills = Math.max(0, this.kills - 1);
+    actor.dispose();
+    this.dirty = true;
+  }
+
+  #growStands(capacity) {
+    for (const key of ['bases', 'posts']) {
+      const old = this[key];
+      const m = new THREE.InstancedMesh(old.geometry, this.standMat, capacity);
+      m.instanceMatrix.array.set(old.instanceMatrix.array);
+      m.count = old.count;
+      m.castShadow = m.receiveShadow = true;
+      m.frustumCulled = false;
+      this.scene.add(m);
+      old.removeFromParent();
+      old.dispose();
+      this[key] = m;
+    }
   }
 
   setStand(i, pos, postH) {
