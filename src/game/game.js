@@ -118,16 +118,18 @@ export class Game {
         if (controls.pressed('stats')) engine.stats.visible = !engine.stats.visible;
       },
     });
+    // The Workshop editor (tool.editing) owns input and the camera: the player, weapon, pickups and camera rig stand still.
     engine.add({
       name: 'player',
       update: (dt) => {
+        if (this.editing) return;
         player.update(dt, controls, camRig, weapon);
         if (player.dead && player.deadTime > RESPAWN_AFTER) player.respawn();
       },
     });
-    engine.add({ name: 'weapon', update: (dt) => weapon.update(dt, controls) });
+    engine.add({ name: 'weapon', update: (dt) => !this.editing && weapon.update(dt, controls) });
     engine.add({ name: 'enemies', update: (dt) => enemies.update(dt, player) });
-    engine.add({ name: 'pickups', update: (dt) => pickups.update(dt, player, weapon) });
+    engine.add({ name: 'pickups', update: (dt) => !this.editing && pickups.update(dt, player, weapon) });
     // boss lock-on: an engaged boss within range stays framed (CameraRig.focus)
     const bossFocus = new THREE.Vector3();
     engine.add({
@@ -135,6 +137,7 @@ export class Game {
       phase: 'late',
       whilePaused: true,
       update: (dt) => {
+        if (this.editing) return;
         const b = enemies.boss;
         const engaged = b && b.alive && b.awake && !player.dead && b.pos.distanceTo(player.pos) < BOSS_FOCUS_RANGE;
         camRig.focus = engaged ? b.focusPoint(bossFocus) : null;
@@ -150,9 +153,9 @@ export class Game {
       phase: 'present',
       update: () => {
         world.update(engine.time);
-        world.updateSun(player.pos);
+        world.updateSun(this.editing ? camera.position : player.pos); // the editor's shadow window follows its camera
         // hide the player model when the camera is pushed into it
-        player.root.visible = camera.position.distanceTo(camRig.pivot) > 0.45;
+        player.root.visible = !this.editing && camera.position.distanceTo(camRig.pivot) > 0.45;
       },
     });
     engine.add({
@@ -225,7 +228,13 @@ export class Game {
     return this;
   }
 
+  // True while the Workshop editor runs (gym/tools.js `workshop`): see the systems below.
+  get editing() {
+    return this.tool?.editing === true;
+  }
+
   #unloadLevel() {
+    if (this.editing) this.padPlay = false; // it ran without pointer lock (start button)
     this.tool?.dispose();
     this.tool = null;
     for (const h of this.helpers) disposeTree(h);
@@ -263,7 +272,10 @@ export class Game {
     setRunning(this.debug);
     document.getElementById('start').addEventListener('click', () => {
       audio.init();
-      input.lock();
+      if (this.editing) {
+        this.padPlay = true; // the editor needs the cursor: run without pointer lock
+        setRunning(true);
+      } else input.lock();
     });
     // scene picker (start / pause panel): switches at once and keeps ?scene= in the URL so a reload stays there
     const picker = (this.picker = document.getElementById('scene'));

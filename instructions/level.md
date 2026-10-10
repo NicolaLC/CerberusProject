@@ -12,7 +12,7 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 - `title`: shown in the HUD zone label (outdoors; indoors it reads INTERIOR) and in the panel's scene picker.
 - `demo: true` (Library): enemies are exhibits: they idle and take hits but never wake, aim, fire or flank
   (`Enemies` hands them a view of the player that reads `dead`).
-- `tool`: a Gym room helper from `src/game/gym/tools.js` (`traversal` / `range` / `ai` / `stress` / `library`): readouts, overlays, keys.
+- `tool`: a Gym room helper from `src/game/gym/tools.js` (`traversal` / `range` / `ai` / `stress` / `library` / `workshop`): readouts, overlays, keys.
   Created after the level loads, disposed before it unloads, `update(dt)` each unpaused frame (system `gymTool`).
 - `spawn.yaw` is the player's initial facing (3.14159 = north, -Z). The boss arena bounds are data of `boss.spider`.
 - Add a piece: append `{ "id": ..., "pos": [...], "params": {...} }`. Add a new kind: put a builder in the owning
@@ -56,6 +56,25 @@ Every entry has both (enemies, pickups, `kit.*`, `env.*`, `light.point`, `prop.g
 
 Interior zones (camera exposure) are `interiorZones` boxes, not pieces. Dropped clips are runtime, not data.
 
+## Save and load (`src/game/workshop/io.js`, #72)
+The editor (#70) calls four functions plus `levelNames()`; the level is the plain object of the format above.
+- `serializeLevel(level)` -> text. Top-level keys one per line in this order: `name`, `title`, `tool`, `demo`, `spawn`,
+  `interiorZones`, any other keys (as given), then `pieces`. Each piece is one line of compact JSON (no spaces) with keys
+  `id`, `name`, `pos`, `yaw`, `params` (unknown keys after). Numbers are rounded to 4 decimals (no float noise, `-0` -> `0`),
+  NaN / Infinity throw. Ends with a newline. Same level in, same bytes out (idempotent), so a git diff shows only real edits.
+  Nested values (`spawn`, `rooms`, `params`) stay compact on their line, as in the `gym-*` files. Existing level files are
+  not rewritten: they re-serialize to this shape the first time the editor saves them.
+- `parseLevel(text, registry)`: `JSON.parse` + `registry.check`. Errors name the problem: `level file is not valid JSON (line N)`,
+  `piece #i has unknown id "x"`, `needs pos`, `"pieces" must be an array`.
+- `saveLevel(level)` -> `{ where: 'repo' | 'dialog' | 'download', path? }`. `level.name` must match `[a-z0-9-]+` (it is the file name).
+  Desktop: writes `src/levels/<name>.json` (`repo`); a packaged app has no repo folder and shows a save dialog (`dialog`).
+  Web: downloads `<name>.json` (`download`). Cancelling a dialog rejects with an `AbortError`.
+- `openLevel(registry)`: file picker (web) or open dialog (desktop) -> parsed, checked level; rejects with a readable error
+  (`AbortError` on cancel).
+- `levelNames()`: names of the bundled scenes (`scenes.js`), arena included. To edit one, take `SCENES[name]` (deep-copy it first).
+- Saving to `src/levels` does not list the level: a new scene still needs its import in `scenes.js` (Scenes, below).
+- Test: `tests/levelio.test.mjs` (`npm test`) round-trips every `src/levels/*.json` with the real `Registry` and piece tables.
+
 ## Scenes (`src/game/scenes.js`)
 | name | file | content |
 |---|---|---|
@@ -65,7 +84,7 @@ Interior zones (camera exposure) are `interiorZones` boxes, not pieces. Dropped 
 | `gym-ai` | `gym-ai.json` | Gym: enemy behaviour rooms (#66) |
 | `gym-stress` | `gym-stress.json` | Gym: performance stress room (#67) |
 | `library` | `library.json` | the Library (#68), `demo` + `tool: library`: aisles of enemies, guns, cover / environment, pickups, light presets and the kit aisle (gym.md, Library) |
-| `workshop` | `workshop.json` | placeholder: floor and three cover boxes (Workshop epic #60) |
+| `workshop` | `workshop.json` | the level editor (`tool: workshop`, workshop.md): a small starter level, floor, three cover boxes, a static puppet and an ammo crate (Workshop epic #60) |
 
 - Players pick a scene in the start / pause panel (Scene list; it also sets `?scene=` so a reload stays there).
 - `?scene=<name>` (works with `?debug`) opens one; unknown → arena + `console.warn`. At runtime: `game.loadScene('gym')`
