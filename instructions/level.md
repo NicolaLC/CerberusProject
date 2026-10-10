@@ -9,7 +9,7 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 ```
 - `pieces` is one ordered list; each system builds the ones it owns, in file order. Order matters: boxes are merged
   per material in file order (draw calls, `render.browser.mjs`), enemies fill stands in order.
-- `title`: shown in the HUD zone label (outdoors; indoors it reads INTERIOR) and in the panel's scene picker.
+- `title`: shown in the HUD zone label (outdoors; indoors it reads INTERIOR) and in the panel's scene buttons (top of the start / pause panel).
 - `demo: true` (Library): enemies are exhibits: they idle and take hits but never wake, aim, fire or flank
   (`Enemies` hands them a view of the player that reads `dead`).
 - `tool`: a Gym room helper from `src/game/gym/tools.js` (`traversal` / `range` / `ai` / `stress` / `library` / `workshop`): readouts, overlays, keys.
