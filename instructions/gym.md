@@ -39,8 +39,7 @@ L/R, PINNED), last vault (hop / slide / refused), jet state with the last jet (p
 distance to the pivot against the distance it wants (PULLED IN when a wall or ceiling is in the way), and the low block
 ahead with its depth and whether its landing is clear. G teleports to the next station (`STATIONS` in the tool, same
 order as the rows) with a clean player and the camera behind it; `tool.goto(i)`, `tool.camPull()`, `tool.state()` are for
-tests. Only T and G are used. "Refused" is inferred (a jet burst right after a blocked low block was ahead while
-running at it or in its cover), the game raises no event for it.
+tests. Only T and G are used. "Refused" comes from the `player:vaultRefused` event.
 
 Suite `tests/gym-traversal.browser.mjs` drives the player through every station with the engine stopped (deterministic,
 no rendering) and prints the section 8 values it measures (`item ...` blocks); the asserts are the intended behaviour.
@@ -164,10 +163,11 @@ The stomp (radius 7) hit a player 4.5 m away behind a 3.2 m wall. Cover only hel
 Not measured: drone shots against cover as bolts (spread, hit points); the spider's mortar against moving players beyond one back-and-forth pattern; fog
 and LOD readability (item 16, not this room); leg clipping against the arena perimeter walls beyond the lane tests.
 
-### Surprises found (not fixed, gameplay code)
-- Troopers' routes ignore squadmates: a trooper walking along the back of a cover row stops 0.9 m behind a squadmate standing in the same lane (`separate`) until its
-  move timer runs out (0-3 stalls per 125 s of fighting).
-- The drone's altitude target follows the highest box top under it, so over a wall it rises to wall + alt (up to 10 m) after crossing; not measured, read from `drone.js`.
+### Surprises found
+- Fixed (#75): troopers stalled 0.9 m behind a squadmate in the same lane (`separate`) until the move timer ran out (0-3 per 125 s);
+  they now step round it sideways and give up on a goal after 1 s without progress (`STALL_TIME`): 0 stalls since.
+- Fixed (#75): the drone's flight height followed wall tops (up to wall + alt after crossing); boxes narrower than 2 m
+  (`TUNING.floorMin`) no longer lift it, platforms still do.
 - `Enemies.demo` (L) does not recall bolts or bursts already started.
 
 ---

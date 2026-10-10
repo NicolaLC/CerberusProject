@@ -60,6 +60,7 @@ export class TraversalTool {
     const events = game.engine.events;
     this.off = [
       events.on('player:vault', (kind) => (this.vault = { kind, age: 0 })),
+      events.on('player:vaultRefused', () => (this.vault = { kind: 'refused', age: 0 })),
       events.on('player:jet', () => this.#onJet()),
     ];
     this.onKey = (e) => {
@@ -134,9 +135,6 @@ export class TraversalTool {
 
   #onJet() {
     const { player } = this.game;
-    // a jet burst right after the probe saw a low block with a blocked landing, with the player running at it or
-    // already in its cover, is the vault being refused (Player.update falls back to the burst)
-    if (this.ahead?.blocked && this.ahead.intent) this.vault = { kind: 'refused', age: 0 };
     this.jet.active = true;
     this.jet.from.copy(player.pos);
     this.jet.peak = 0;
