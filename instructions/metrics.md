@@ -150,8 +150,42 @@ Each item: value, how the Gym measures it.
 19. **Camera against low cover when crouched**: camera height 1.23 over 1.1 cover, ray from pivot; check pop through cover on the shoulder swap.
 20. **Platform jet-ons** (decided: intended): confirm a jet reliably lands on the 1.6 platform from stand and walk.
 
+## 8b. Gym results (measured 2026-10-10, Gym rooms #64-#67)
+Measured by the Gym suites (`tests/gym-*.browser.mjs`) with the engine stepped at 1/60 s. Room layouts and tools are in
+`instructions/gym.md`. Values that **differ from the tables above** are marked ⚠ and need an owner decision before freezing.
+| # | Item | Measured |
+|---|---|---|
+| 1 | Max vaultable height | every low block 1.0-1.6 hops (walk and sprint); 1.7 (high) never vaults, a jet fires |
+| 2 | Jet landing reach | ⚠ **1.9** lands (standing start <= 1.8 m away, any walking start); 2.0 never. The "intended 1.6" is not enforced by code |
+| - | Jet peak | ⚠ **1.54** above take-off (doc said 1.46); a full burst needs ~3.34 free; a 3.2 ceiling cuts it to 1.4 |
+| 3 | Jet gap (reliable / reach) | stand 3.5 / 3.8, walk 4.5 / 4.96, sprint 5.0 / 5.51 → gaps <= 3.5 for everyone, 4.5 needs a run, > 5.0 never |
+| 4 | Corridor width, no camera pull-in | walk 2.0, aim 2.4, sprint 1.8; 1.6 pulls in every mode (both shoulders same). Rec 4.0 is well clear |
+| 5 | Ceilings | default pitch: no pull at any height 2.4-5.0; looking straight down pulls the camera even at 5.0 (3.4 of 3.64). Jet: 0.6 under 2.4, 1.0 under 2.8, 1.4 under 3.2, full from 3.4 |
+| 6 | Lintels | 1.7 blocks, >= 1.8 passes; jet in the doorway full from 3.4 |
+| 7 | Cover length | slide range = L - 0.44 (low 0.8 → 0.32 … 3.0 → 2.56); both ends peekable on all; high pins at the centre from 1.2, not at 0.9; low never pins → proposed minimums (low 1.6, high 1.2) hold |
+| 8 | Cover class | flips exactly at 1.7; snap stops 0.45 from the face. Aim probe / bolts over 1.2-1.6 not measured |
+| 9 | Run-up | vault fires from every lane 0.5-3.0 (0.5 = vault from cover, auto cover grabs first; run-in at 3.7 m/s from 1.0) |
+| 10 | Landing space | refused at 0.6 / 0.9 behind the far face, vaults at 1.2 / 1.4 (threshold 1.05) → keep >= 1.1 clear holds |
+| 11 | Hop vs slide | ⚠ <= 1.1 hop, >= 1.3 slide; **1.2 slides** on blocks whose float depth reads 1.2000000000000028 (`#tryVault` compares without tolerance) |
+| 12 | Stairs | rise 0.30 / 0.40 / 0.45 climb (walk, sprint), 0.50 stuck; run 0.6 and 1.2 fine; camera pivot step 54-113 mm/frame |
+| 13 | Trooper gaps | straight crossing needs > 0.7 (0.75 passes); bodies walk every gap >= 0.75; routes to spots behind a row only through gaps >= 1.2 (one corner waypoint, no pathfinding); no stalls at gaps |
+| 14 | Cover spots | 3 m low box ≈ 6.8 spots, 2.4 m high box 4; a 3-row trooper room gives 16-35 viable spots per player position in 4-11 bearings; picks 17-26 m (7-19 between rows), always within 6-28 |
+| 15 | Drones vs walls / cover | a wall stops a drone when top > alt - 0.3: 3.2 never blocks, >= 4.7 always, between depends on the altitude roll. Standing chest is never hidden by low cover; crouched it is hidden 0.6-2.4 m behind the far face (D 6-15 m); high cover hides 4.3-24+ m |
+| 16 | Long sight lines | troopers notice < 32, fire < 30 (first bolt seen at 28.7); 30-34 m is safe from troopers |
+| 17 | Spider lanes / blasts | lanes 5-7 m refused (stalls at the mouth), 7.2 / 8 / 9 walked through; leg-wall overlap 0.16 in the 9 m lane only; mortar and stomp ignore cover (6/6 hits behind a 3.2 wall); a moving player dodges the mortar |
+| 18 | Grid readability | not measured (needs a person looking) |
+| 19 | Camera over low cover, crouched | no pull-in, no ray through the 1.1 block (16 samples) |
+| 20 | Platform jet-on | 1.6 platform: standing from <= 1.8 m away, walk / sprint from any start → reliable |
+
+Performance (stress room, worst case: near LOD, in view, shadow pass included): puppet 7 draws / 15.3k tris, trooper 9 / 47.4k,
+drone 4 / 9.2k; beyond 32 m each enemy is 1 draw. A destroyed puppet / trooper costs +75 / +119 draws for 5 s (debris).
+Per-tier encounter caps: `instructions/engine.md`, Per-encounter budget.
+
+Decisions needed before freezing: jet reach (accept 1.9 or tune the jet to 1.6), jet peak / headroom (3.4 ceilings), the
+1.2 hop edge (tolerance fix), and the minimum corridor (2.0 walk, 2.4 aim, against the 4.0 standard).
+
 ## 9. Change rule
 Once frozen, a metric changes only through an issue that lists: (a) the old and new value with the source symbol, (b) every kit
 piece and level that uses it (search by the named height or size), (c) the code constants to edit. Kit pieces and levels are
 updated or re-verified in the Gym in the same change. Gameplay code changes to `TUNING`, `VAULT`, `JET`, `PEEK`, cover.js,
-guns.js falloff or the enemy tunings count as metric changes. See `instructions/production.md` (not in this tree at the time of writing).
+guns.js falloff or the enemy tunings count as metric changes. See `instructions/production.md`.
