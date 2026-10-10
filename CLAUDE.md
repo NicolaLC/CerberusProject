@@ -17,5 +17,6 @@
 - `instructions/level.md` — arena layout, lighting, grid textures
 - `instructions/desktop.md` — Electron desktop app: shell, packaging, why not Tauri
 - `instructions/feel.md` — camera juice, hitstop, post-processing
+- `instructions/gym.md` — the four Gym rooms: layout, tools, keys, which tests use them
 - `instructions/metrics.md` — level metrics: player, cover, vault, spaces, ranges (DRAFT until approved)
 - `instructions/sfx-prompts.md` — ElevenLabs prompts for the sounds still synthesized or missing

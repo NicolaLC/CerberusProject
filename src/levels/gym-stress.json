@@ -1,0 +1,30 @@
+{
+  "name": "gym-stress",
+  "title": "GYM · STRESS",
+  "tool": "stress",
+  "spawn": {"pos":[0,0,36],"yaw":3.141592653589793},
+  "interiorZones": [],
+  "pieces": [
+    {"id":"env.box","pos":[0,-1,0],"params":{"size":[80,1,80],"mat":"floor","shadow":false}},
+    {"id":"env.box","pos":[0,0,26],"params":{"size":[3.5,1.1,1],"mat":"low","cover":"low"}},
+    {"id":"env.box","pos":[10,0,24],"params":{"size":[4.5,2.8,0.6],"mat":"high","cover":"high"}},
+    {"id":"env.box","pos":[18.5,0,18.5],"params":{"size":[3.5,1.1,1],"mat":"low","cover":"low"}},
+    {"id":"env.box","pos":[24,0,10],"params":{"size":[0.6,2.8,4.5],"mat":"high","cover":"high"}},
+    {"id":"env.box","pos":[26,0,0],"params":{"size":[1,1.1,3.5],"mat":"low","cover":"low"}},
+    {"id":"env.box","pos":[24,0,-10],"params":{"size":[0.6,2.8,4.5],"mat":"high","cover":"high"}},
+    {"id":"env.box","pos":[18.5,0,-18.5],"params":{"size":[1,1.1,3.5],"mat":"low","cover":"low"}},
+    {"id":"env.box","pos":[10,0,-24],"params":{"size":[4.5,2.8,0.6],"mat":"high","cover":"high"}},
+    {"id":"env.box","pos":[0,0,-26],"params":{"size":[3.5,1.1,1],"mat":"low","cover":"low"}},
+    {"id":"env.box","pos":[-10,0,-24],"params":{"size":[4.5,2.8,0.6],"mat":"high","cover":"high"}},
+    {"id":"env.box","pos":[-18.5,0,-18.5],"params":{"size":[3.5,1.1,1],"mat":"low","cover":"low"}},
+    {"id":"env.box","pos":[-24,0,-10],"params":{"size":[0.6,2.8,4.5],"mat":"high","cover":"high"}},
+    {"id":"env.box","pos":[-26,0,0],"params":{"size":[1,1.1,3.5],"mat":"low","cover":"low"}},
+    {"id":"env.box","pos":[-24,0,10],"params":{"size":[0.6,2.8,4.5],"mat":"high","cover":"high"}},
+    {"id":"env.box","pos":[-18.5,0,18.5],"params":{"size":[1,1.1,3.5],"mat":"low","cover":"low"}},
+    {"id":"env.box","pos":[-10,0,24],"params":{"size":[4.5,2.8,0.6],"mat":"high","cover":"high"}},
+    {"id":"env.label","pos":[0,0,31],"params":{"text":"[ ] step count   P sweep","size":0.5,"flat":true}},
+    {"id":"env.label","pos":[0,0,-34],"params":{"text":"STRESS ROOM  80 x 80 m","size":1.2}},
+    {"id":"env.label","pos":[-34,0,0],"params":{"text":"WEST","size":0.8,"yaw":1.5707963267948966}},
+    {"id":"env.label","pos":[34,0,0],"params":{"text":"EAST","size":0.8,"yaw":-1.5707963267948966}}
+  ]
+}
