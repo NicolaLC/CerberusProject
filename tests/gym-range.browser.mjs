@@ -81,7 +81,8 @@ const result = await p.evaluate(async () => {
     keys.add('Mouse0'); engine.input.pressed.add('Mouse0'); // held, with the press edge semi-auto guns need
     for (let i = 0; i < 120 && !hits.length; i++) { track(chestOf(dummy)); step(); }
     keys.delete('Mouse0');
-    for (let i = 0; i < 10; i++) { track(chestOf(dummy)); step(); }
+    // let every round of a burst land before comparing with the panel (a late third round would update the panel only)
+    for (let i = 0; i < 45; i++) { track(chestOf(dummy)); step(); }
     off();
     keys.delete('Mouse2');
     step(60);
@@ -208,7 +209,7 @@ const result = await p.evaluate(async () => {
 
 console.log(JSON.stringify(result, null, 1));
 const fail = [];
-const expect = (name, ok) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`); if (!ok) fail.push(name); };
+const expect = (name, ok, extra = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok || !extra ? '' : ` ${extra}`}`); if (!ok) fail.push(name); };
 const guns = Object.entries(result.guns);
 
 expect('room: tool is the range tool with its panel', result.tool === 'RangeTool' && result.panelInDom);
@@ -221,7 +222,7 @@ for (const [id, r] of guns) {
   expect(`${id}: markers follow the gun (${r.markers.start}/${r.markers.end})`, r.markers.gun === id && (r.falloff ? r.markers.start === r.falloff.start && r.markers.end === r.falloff.end : r.markers.start === null && r.markers.end === null));
   expect(`${id}: spread hip / aim match guns.js (${r.hip.toFixed(4)} / ${r.aim.toFixed(4)})`, Math.abs(r.hip - r.hipFormula) < 1e-4 && Math.abs(r.aim - r.aimFormula) < 1e-4 && r.aimBlend > 0.98 && r.aim <= r.hip);
   for (const s of r.shots) {
-    expect(`${id}: ${s.D} m shot hit ${s.dummy} m dummy, dealt ${s.amount} = ${s.expected} (x${s.mult} ${s.zone})`, !s.missed && s.onTarget && s.ok && s.allOk && s.panel && Math.abs(s.panel.amount - s.last.amount) < 1e-3 && Math.abs(s.panel.expected - s.last.expected) < 1e-3);
+    expect(`${id}: ${s.D} m shot hit ${s.dummy} m dummy, dealt ${s.amount} = ${s.expected} (x${s.mult} ${s.zone})`, !s.missed && s.onTarget && s.ok && s.allOk && s.panel && Math.abs(s.panel.amount - s.last.amount) < 1e-3 && Math.abs(s.panel.expected - s.last.expected) < 1e-3, JSON.stringify(s));
   }
   // falloff is monotone: never more damage farther out (same zone)
   const same = r.shots.filter((s) => !s.missed && s.zone === r.shots[0].zone);
