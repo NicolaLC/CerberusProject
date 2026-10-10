@@ -12,7 +12,7 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 - `title`: shown in the HUD zone label (outdoors; indoors it reads INTERIOR) and in the panel's scene picker.
 - `demo: true` (Library): enemies are exhibits: they idle and take hits but never wake, aim, fire or flank
   (`Enemies` hands them a view of the player that reads `dead`).
-- `tool`: a Gym room helper from `src/game/gym/tools.js` (`traversal` / `range` / `ai` / `stress` / `library`): readouts, overlays, keys.
+- `tool`: a Gym room helper from `src/game/gym/tools.js` (`traversal` / `range` / `ai` / `stress` / `library` / `workshop`): readouts, overlays, keys.
   Created after the level loads, disposed before it unloads, `update(dt)` each unpaused frame (system `gymTool`).
 - `spawn.yaw` is the player's initial facing (3.14159 = north, -Z). The boss arena bounds are data of `boss.spider`.
 - Add a piece: append `{ "id": ..., "pos": [...], "params": {...} }`. Add a new kind: put a builder in the owning
@@ -65,7 +65,7 @@ Interior zones (camera exposure) are `interiorZones` boxes, not pieces. Dropped 
 | `gym-ai` | `gym-ai.json` | Gym: enemy behaviour rooms (#66) |
 | `gym-stress` | `gym-stress.json` | Gym: performance stress room (#67) |
 | `library` | `library.json` | the Library (#68), `demo` + `tool: library`: aisles of enemies, guns, cover / environment, pickups, light presets and the kit aisle (gym.md, Library) |
-| `workshop` | `workshop.json` | placeholder: floor and three cover boxes (Workshop epic #60) |
+| `workshop` | `workshop.json` | the level editor (`tool: workshop`, workshop.md): a small starter level, floor, three cover boxes, a static puppet and an ammo crate (Workshop epic #60) |
 
 - Players pick a scene in the start / pause panel (Scene list; it also sets `?scene=` so a reload stays there).
 - `?scene=<name>` (works with `?debug`) opens one; unknown → arena + `console.warn`. At runtime: `game.loadScene('gym')`
