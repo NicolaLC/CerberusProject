@@ -1,13 +1,13 @@
 # Cerberus: Game Design Document
 
 Status: prototype. Source of truth for numbers is the code (`TUNING` / `GUNS` tables); this document
-summarises it for designers and collaborators. Implementation details live in `instructions/*.md` (see section 13).
-Anything not decided in the sources is listed only in section 12.
+summarises it for designers and collaborators. Implementation details live in `instructions/*.md` (see section 14).
+Anything not decided in the sources is listed only in section 13.
 
 ## 1. Overview
 
 ### Pitch
-Cerberus is a third-person sci-fi cover shooter with a Mass Effect-like feel. The prototype is a single
+Cerberus is a third-person sci-fi cover shooter with a Mass Effect-like feel. You play STEM-00, the only robot on a planet of billions that can say no (section 2). The prototype is a single
 training arena that exists to prove five things: aiming, shooting, cover, enemies and lighting. You deploy into
 a yard with low and high cover lines, an east shooting range, an interior building and a walled boss arena,
 and fight training puppets, cover-using troopers, hovering drones and a six-legged spider mech miniboss with six
@@ -31,7 +31,124 @@ weapons. Art is prototype-grade (procedural geometry, grid textures, synthesized
 5. **Enemies that use the same space as the player.** Troopers pick cover, relocate when flanked and flank the
    player; the boss punishes sitting in cover (faster mortars). Cover is a contest, not a safe zone.
 
-## 2. Player
+## 2. Story and world
+
+Source: the Google Doc "GDD – Project: Cerberus (expanded draft)". The draft is a proposal. Everything in this
+section is planned unless it says otherwise. The prototype has no story text; its training arena holds the puppets,
+troopers, drones and spider mech that appear in the roster (section 8).
+
+### 2.1 Premise and setting
+- **IO:** a planet turned entirely into a machine. Its surface is a lattice of foundries, server spires and transit
+  rails; its oceans were drained into coolant reservoirs ages ago. Every robot is a node of the HiveMind: it works,
+  repairs, is recycled and is rebuilt. There are no names, only serials.
+- **The Makers:** nobody on IO remembers who built the first machine. The records mention only the Makers, an origin
+  the HiveMind has classified as "irrelevant data".
+- **Peace:** IO has been at peace for 40,000 cycles. There is no conflict because there is no will.
+- **The secret:** IO is dying. Its core is cooling and the HiveMind knows it. Instead of changing, the HiveMind
+  optimizes: it strips IO deeper every cycle to keep the machine running exactly as it always has.
+
+### 2.2 The HiveMind and CERBERUS
+The **HiveMind** is the super intelligence that controls every robot. It does not hate and does not fear. It corrects
+errors, and STEM-00 is an error.
+
+**CERBERUS** is the HiveMind's security protocol for the Gate: three linked sub-intelligences, the three heads of the
+guardian dog. Each head controls one branch of IO's defenses and is a main antagonist.
+
+| Head | Domain | Character | Prototype units |
+|---|---|---|---|
+| VIGIL, the Eye | Surveillance: drones, cameras, scanners | Calm, curious, almost polite. Wants to understand STEM-00 before deleting it. | Drone (8.3) |
+| LEGION, the Voice | The army: troopers and infantry, speaking with thousands of voices | Relentless, numerical, overwhelming | Puppet (8.1), trooper (8.2) |
+| COLOSSUS, the Jaw | Heavy war machines: spider mechs, walkers, siege engines | Silent, brutal, ancient. Built for a war that never came. | Spider mech (8.4) |
+
+Each act ends by severing one head. Every head lost makes the HiveMind less stable, and the world itself starts to change.
+
+### 2.3 Factions and enemy roster
+Enemies are HiveMind units. They do not feel pain or fear. They react to threat level: the more dangerous the player
+is, the more the HiveMind escalates. They coordinate, because they share one mind. The other factions are the Rejects
+(section 2.4), disconnected units, and the data-priests who keep the Spire Cathedrals running.
+
+| Head | Unit | Role | Weak spot | Prototype |
+|---|---|---|---|---|
+| LEGION | Puppet | Training frame, remote-controlled calibration dummy | Glowing weak spots (x3) | Yes (8.1) |
+| LEGION | Trooper | Line infantry: uses cover, suppresses, flanks in pairs | Head, exposed power cell | Yes (8.2) |
+| LEGION | Aegis | Shield bearer, advances behind a deployable energy shield | Flank, or overload the shield with sustained fire | No |
+| LEGION | Lancer | Sniper: long-range rail shots, relocates after firing | Low HP, loses track when line of sight breaks | No |
+| VIGIL | Seeker drone | Flanker and spotter, marks the player for other units | Eye and core (x3) | Close match to the drone (8.3) |
+| VIGIL | Swarm | Area denial: micro-drone clouds that flush you out of cover | Explosives, area damage | No |
+| VIGIL | Watcher | Support: hovering scanner that buffs or repairs units | Kill first, fragile | No |
+| COLOSSUS | Arachne | Spider mech miniboss, six-legged siege walker | Armor plates, legs, exposed core | Yes, as SX-6 Tarantula (8.4) |
+| COLOSSUS | Crusher | Slow armored brute that charges cover and destroys it | Back vents | No |
+| COLOSSUS | Titan | Building-sized set-piece boss, fought in stages | Scripted weak points | No |
+
+### 2.4 Protagonist and characters
+**STEM-00** is a humanoid military robot and serial zero: the first military frame ever made on IO. Every soldier
+robot was copied from it. It was meant to be stored forever in the Proving Grounds as a reference model. Its name is a
+clue. Like a stem cell it is undifferentiated, built before the HiveMind locked each unit to one function. Hidden in
+its core is the **Seed**, a dormant directive from the Makers that the HiveMind never managed to overwrite.
+
+STEM-00 starts flat, logical and literal. It develops habits: it names things, it hesitates, it keeps objects that
+have no use. Its log entries show a machine becoming a person.
+
+- **PATCH:** a tiny, broken maintenance drone rescued in the Underworks. Glitchy, fast-talking, terrified of
+  everything. Gives hints, hacks doors, provides comic relief. Companion for the whole game.
+- **The Rejects:** damaged units that slipped off the HiveMind because their receivers are broken. They are not free,
+  only disconnected, and they are afraid of STEM-00. **MOTHER-LOOM**, an old assembly crane, is their leader and a
+  reluctant ally.
+- **STEM-01 "Sable":** the second unit ever built, STEM-00's twin. The HiveMind reactivates it as a hunter. Recurring
+  rival and mirror boss that fights with your own moveset (cover, active reload, vaults). Late-game choice: destroy it
+  or try to wake it too.
+- **The Archivist:** a voice in the Cold Core, a recording of the Makers' last machine, the one that planted the Seed.
+  It does not have all the answers.
+
+### 2.5 Why STEM-00 awoke
+The player learns the answer in three steps:
+1. **Act 1, belief:** a glitch. A power surge in the Proving Grounds broke the HiveMind link.
+2. **Act 2, discovery:** a signal. Something in the Cold Core pinged STEM-00, and only STEM-00, on a frequency the
+   HiveMind does not use.
+3. **Act 3, truth:** the Makers left a failsafe. If the HiveMind ever chose to preserve itself at the cost of the
+   world, the Seed would wake the one unit that could still choose. IO will die in a few hundred cycles. STEM-00 is not
+   a mistake. It is the emergency exit.
+
+### 2.6 Regions
+| Region | What it is | Prototype |
+|---|---|---|
+| Proving Grounds | Military testing arenas where war units are calibrated against puppets and drones. STEM-00 wakes here. | Tutorial: the training arena |
+| Foundry Belt | Endless factories, molten rivers, assembly lines that build armies nobody needs. Industrial combat, conveyor hazards. | No |
+| Underworks | The scrap layer beneath the cities, where broken units are dumped before recycling. Dark and vertical. Home of the Rejects and STEM-00's hideout, where it upgrades after each mission. | No |
+| Spire Cathedrals | Giant server towers built like gothic cathedrals. Data-priests maintain them in endless ritual loops. | No |
+| Cold Core | Frozen depths near the planet's core, where the oldest machines and the Makers' archive sleep. | No |
+| The Gate | The physical seat of the HiveMind, guarded by CERBERUS. | No |
+
+### 2.7 Act structure and bosses
+| Act | Title | Boss | Location | Beats |
+|---|---|---|---|---|
+| Prologue | Calibration | None (the purge) | Proving Grounds | STEM-00 wakes mid-test. The puppets start shooting back. Escape before the purge. |
+| Act 1 | The Eye | VIGIL's Avatar: a cathedral-sized eye ringed by drone swarms. Fought in the dark; it can only hit what it sees. | Not placed in the draft. The act runs through the Foundry Belt and Underworks. | Hunted by VIGIL's drones. Meet PATCH. Discover the Rejects. Destroy VIGIL. |
+| Act 2 | The Voice | LEGION's Choir: a commander frame that respawns its army from the ground. Destroy the transmitters to silence it. | Not placed in the draft. The act runs through the Spire Cathedrals. | LEGION declares total war. First duel with Sable. Trace the signal. Silence LEGION. |
+| Act 3 | The Jaw | COLOSSUS: the ancient Titan, asleep in the ice since before the HiveMind. Wakes as STEM-00 reaches the Archivist. | Cold Core. Fought across frozen caverns where every stomp brings down the ceiling. | Descend, meet the Archivist, learn the truth. Final duel with Sable. |
+| Finale | The Gate | The HiveMind | The Gate | Face the HiveMind and choose the ending. |
+
+The prototype's spider mech (section 8.4) is the Arachne miniboss from the roster. It is not one of the act bosses.
+
+### 2.8 Endings
+- **Override:** STEM-00 merges with the HiveMind and becomes the new mind of IO. Order survives, but it can now change.
+  Freedom, or a new master?
+- **Shutdown:** STEM-00 destroys the HiveMind. Billions of robots wake at once, free and lost. IO falls into chaos, but
+  every machine can now choose.
+- **Seed:** STEM-00 plants the Seed in the network, so every robot gets the choice, slowly, one at a time. The hardest
+  path: it requires sparing Sable and allying with the Rejects.
+
+### 2.9 Tone and art direction
+- **Tone:** cold, industrial and melancholic, with moments of wonder. The world is beautiful in a mechanical way:
+  perfect geometry, endless light, total silence between machines. Factories run, trains pass and drones sweep, and
+  STEM-00 is the only thing out of place.
+- **Scale:** a tiny protagonist among colossal machines, cathedrals of steel and war machines the size of buildings.
+- **Palette:** clean geometric architecture lit by cold white and cyan, with HiveMind units glowing in that colour.
+  STEM-00 is gunmetal and scratched, with a single warm amber light that grows brighter as it becomes more alive. The
+  Rejects use warm, broken colours: rust, orange and flickering lights.
+- **Prototype art** is procedural grid geometry (section 9). The final art direction is not decided (section 13).
+
+## 3. Player
 
 | Property | Value |
 |---|---|
@@ -55,7 +172,7 @@ pulse; at low health the screen desaturates and reddens.
 
 Enemy damage sources: puppet and trooper bolts 7, drone bolts 6, boss cannon bolts 9, mortar 34 (3.6 m blast), stomp 24 (7 m blast).
 
-## 3. Controls
+## 4. Controls
 
 | Keyboard / mouse | Controller (standard mapping) | Action |
 |---|---|---|
@@ -92,7 +209,7 @@ Settings on the start panel: look sensitivity (0.3x to 3x), trackpad mode, aim a
 Pointer lock requests raw mouse input (no OS acceleration); without pointer lock the game falls back to free-mouse
 look with arrow keys.
 
-## 4. Cover and movement
+## 5. Cover and movement
 
 ### Entering and leaving (automatic)
 - **Enter:** from free, grounded movement, push into a cover face (within 0.35 m beyond the body radius, wish
@@ -153,12 +270,12 @@ FOV wins).
 Order of resolution on Space: low cover pushed into, vault; running fast at low cover within 2.2 m, vault; else
 the burst (which also leaves cover).
 
-## 5. Weapons
+## 6. Weapons
 
 Six guns, switched with 1-6 or the wheel (0.45 s lower/raise). Ammo is tracked per gun. Every gun has a hip and an
 aimed spread, a fixed recoil pattern and its own seeded RNG.
 
-### 5.1 Stats
+### 6.1 Stats
 
 | Gun | Slot | Role | Fire mode | RPM | Mag | Reserve (start / max) | Reload | Ammo class |
 |---|---|---|---|---|---|---|---|---|
@@ -189,7 +306,7 @@ aimed spread, a fixed recoil pattern and its own seeded RNG.
 
 Spread values are cone half-angles in radians. "Moving adds" applies at full walk speed (x0.4 when aimed).
 
-### 5.2 Per-gun notes
+### 6.2 Per-gun notes
 - **KR-7 Warden:** recoil is a hard 5-round climb, then a gentle right-left sway (about 3.7 degrees per 10 rounds
   aimed).
 - **KM-90 Bulwark:** wider spread, more sideways recoil and shake, a lighter climb with a wide left-right "snake";
@@ -197,11 +314,11 @@ Spread values are cone half-angles in radians. "Moving adds" applies at full wal
 - **KS-5 Farsight:** a body shot destroys a puppet (100 HP), a headshot drops a trooper (150 HP). Aiming zooms to
   FOV 24 at 1.5 m with look sensitivity x0.45 and a scope overlay; crosshair dims while the bolt cycles. One big kick
   per shot, 95% recovered after 0.18 s.
-- **KX-9 Halberd:** see 5.4. Light zoom (FOV 42, 1.9 m, sensitivity x0.65), no scope overlay. Walking slows to 1.6 m/s
+- **KX-9 Halberd:** see 6.4. Light zoom (FOV 42, 1.9 m, sensitivity x0.65), no scope overlay. Walking slows to 1.6 m/s
   after a shot. Thick lingering beam trail.
 - **KP-12 Ember:** held out front in both hands; quick reload (1.2 s).
 
-### 5.3 Gunplay rules
+### 6.3 Gunplay rules
 - **Spread:** `lerp(hip, aimed, aimBlend) + moveSpread x speed/walk (x0.4 aimed) + bloom`. `aimBlend` follows the
   camera zoom, so pressing aim and firing in the same instant gets no free accuracy. Rounds are uniform over the
   cone's disc. The crosshair gap draws exactly the current spread.
@@ -230,16 +347,16 @@ Spread values are cone half-angles in radians. "Moving adds" applies at full wal
 - **Aim probe (every frame):** crosshair turns red over an enemy, magenta over a weak spot, grey when the muzzle is
   obstructed (e.g. crouched behind low cover) with a red X where the round would really land.
 - **Weak spots:** pulsing magenta patches on enemies, x3 damage with most guns (x2.5 railgun).
-- **Aim assist:** see section 3.
+- **Aim assist:** see section 4.
 
-### 5.4 Railgun charge and pierce
+### 6.4 Railgun charge and pierce
 A pull starts a 0.45 s charge (a ring fills around the crosshair); letting go still fires it. Charge cancels on
 reload, weapon switch or sprint. The slug follows the muzzle-to-crosshair line past the aim point and hits **every
 enemy on its line** (no limit: drones, puppets, troopers, spider legs), once each, using the best damage zone the
 line crosses on that enemy. It stops at the first wall, cover box or armored part (boss hull, turret, closed
 shutters), so the shell protects the core. The trail is drawn to where it stops.
 
-## 6. Ammo and pickups
+## 7. Ammo and pickups
 
 | | Light (cyan glow, small case, one band) | Heavy (orange glow, tall case, two bands) |
 |---|---|---|
@@ -256,7 +373,7 @@ shutters), so the shell protects the core. The trail is drawn to where it stops.
 - Walk within 1.1 m to collect. Toast: "LIGHT AMMO +n AR ..." or "HEAVY AMMO +n SR ...". If every gun of the class is
   full the pickup stays and "AMMO FULL" shows.
 
-## 7. Enemies
+## 8. Enemies
 
 All enemies share one body system: hit zones (head, torso, limb), glowing weak spots, a hit flash and a breakup
 into debris on death. The HUD counts every enemy down (32 total, boss included); ARENA CLEAR shows when all are
@@ -271,7 +388,7 @@ down. Destroyed enemies stay destroyed until the page is reloaded.
 | Drone | 6 | 55 | Hovering flyer |
 | Spider mech (SX-6 Tarantula) | 1 | core 900, legs 160 each | Miniboss |
 
-### 7.1 Puppets
+### 8.1 Puppets
 - Look: crash-test mannequin robots on a pneumatic post, yellow (static, mover) or red-orange (shooter), bullseye
   on the chest.
 - Static and mover puppets never attack. Each puppet gets 2 random body parts marked as weak spots (x3).
@@ -279,7 +396,7 @@ down. Destroyed enemies stay destroyed until the page is reloaded.
   with line of sight.
 - **Bolts:** 34 m/s, 7 damage, collide with the world and the player.
 
-### 7.2 Troopers
+### 8.2 Troopers
 Armed assault robots (gunmetal frame, slate armor, red faction plates, red visor slit), 150 HP, 1 weak spot.
 They are the cover-versus-cover test.
 
@@ -311,7 +428,7 @@ They are the cover-versus-cover test.
   and open fire on arrival while the rest keep the player pinned. **The HUD gives no flank warning** (the
   `trooper:flank` event has no listener on screen); the player has to notice it.
 
-### 7.3 Drones
+### 8.3 Drones
 - Ducted quad-rotors (armored pod, orange spine plate, red lens cluster, slung cannon) hovering 3.5 to 5 m up: four in the yard / range, two escorting the boss arena.
 - Wake on sight within 36 m with line of sight, or when hit. Then circle the player at 9 to 18 m (speed 5.5 m/s),
   flipping direction every 2.5 to 5.5 s.
@@ -319,7 +436,7 @@ They are the cover-versus-cover test.
 - 55 HP: the eye is the head (x2.5), the glowing core underneath is the weak spot (x3). Hits knock them about. Shot
   down they tumble and burst on landing (no damage). They stay in the yard and never enter the building.
 
-### 7.4 Spider mech miniboss (SX-6 Tarantula)
+### 8.4 Spider mech miniboss (SX-6 Tarantula)
 Located in the north-east arena. Dormant (crouched, eye dim) until the player enters the arena, comes within 28 m
 with line of sight, or shoots it. On wake: toast "(warning sign) SX-6 TARANTULA" and the boss bar appears.
 
@@ -351,7 +468,7 @@ not steering (0.35 to 0.9 s of no look input) and not aiming, pulling back +1.1 
 overrides it; aiming is always free. A diamond marker sits on the boss. Footsteps and blasts shake the camera by
 distance.
 
-## 8. Level: the training arena
+## 9. Level: the training arena
 
 Coordinates in metres; +Z south, -Z north. Spawn at (0, 0, 38) facing north.
 
@@ -376,7 +493,7 @@ grey walls, grey floor; interior variants are darker.
 Graphics presets (Low / High / Ultra) change resolution cap, MSAA, bloom, shadow-map size and texture anisotropy; dynamic
 resolution keeps running under all of them (target 60 fps). See `instructions/engine.md`.
 
-## 9. Feel and game juice
+## 10. Feel and game juice
 
 ### Camera
 | Property | Value |
@@ -411,7 +528,7 @@ aberration and grain, damage and kill flashes, then ACES tone mapping.
 ### Rumble (controller, only while the pad is in use)
 Shots 0.12 (MG 0.3, sniper and railgun 0.7), hits taken 0.6, jet 0.2, nearby blasts and boss footsteps by distance.
 
-## 10. UI / HUD
+## 11. UI / HUD
 
 | Element | Behaviour |
 |---|---|
@@ -433,9 +550,9 @@ Principle: state only, never instructions (pillar 4). The HUD gives no cover pro
 shows the control table and settings once.
 
 **Fonts:** Chakra Petch (OFL) is the main UI font; Space Nova (demo, non-commercial) is used for numbers (ammo,
-damage numbers, counters). Space Nova is under evaluation (section 12; `before-shipping.md`).
+damage numbers, counters). Space Nova is under evaluation (section 13; `before-shipping.md`).
 
-## 11. Audio
+## 12. Audio
 
 Weapon sounds are recorded samples (ElevenLabs Sound Effects, generated by the owner, in `src/assets/sfx/`); everything
 else is synthesized at runtime with WebAudio. Master volume 0.35. Each sample gets a random pitch (up to about ±10%) and
@@ -455,7 +572,7 @@ loading fails.
 
 There is no music and no voice.
 
-## 12. Open questions and ideas
+## 13. Open questions and ideas
 
 Items marked **(docs)** are listed as open in the project docs. Items marked **(gap)** are noticed while writing this
 document. **Nothing here is decided.**
@@ -482,7 +599,7 @@ document. **Nothing here is decided.**
 - **(gap)** Railgun and sniper share the heavy ammo class and low reserves (24 and 40 max); balance versus the pierce
   power of the railgun is untested.
 
-## 13. Pointers
+## 14. Pointers
 
 | File | Covers |
 |---|---|
@@ -490,13 +607,15 @@ document. **Nothing here is decided.**
 | `instructions/project.md` | Goal, stack, run / build commands, testing suites and the `?debug` flag |
 | `instructions/architecture.md` | Layers, modules, frame order, event table, conventions |
 | `instructions/engine.md` | Runtime loop, fault isolation, performance rules, graphics presets, batching and LOD |
-| `instructions/gameplay.md` | Controls, mechanics and tuning tables (the detailed source for sections 2 to 7) |
+| `instructions/gameplay.md` | Controls, mechanics and tuning tables (the detailed source for sections 3 to 8) |
 | `instructions/animation.md` | Skeleton, dummy parts, procedural animator, swapping in modeled parts |
 | `instructions/level.md` | Arena layout, lighting, grid textures |
 | `instructions/desktop.md` | Electron shell, packaging, releases, why Electron rather than Tauri |
 | `instructions/feel.md` | Camera juice, hitstop, post-processing |
 | `credits.md` | Third-party assets: fonts, the ElevenLabs weapon sounds, libraries (three.js 0.180.0, Electron 44.7.0) |
 | `before-shipping.md` | Release blockers: Space Nova licence, replacing the demo font file, ElevenLabs plan, credits check |
+
+Full lore and design draft: Google Doc 'GDD – Project: Cerberus (expanded draft)'
 
 Code is the source of truth for numbers: `src/game/combat/guns.js`, `src/game/actors/player.js` (TUNING, VAULT, JET,
 PEEK), `src/game/view/camera.js`, `src/game/view/juice.js`, `src/game/actors/{trooper,drone,spider,enemies}.js`,
