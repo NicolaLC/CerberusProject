@@ -1,12 +1,15 @@
 {
   "name": "workshop",
   "title": "WORKSHOP",
+  "tool": "workshop",
   "spawn": { "pos": [0, 0, 12], "yaw": 3.141592653589793 },
   "interiorZones": [],
   "pieces": [
     { "id": "env.box", "pos": [0, -1, 0], "params": { "size": [40, 1, 40], "mat": "floor", "shadow": false } },
     { "id": "env.box", "pos": [-6, 0, -4], "params": { "size": [3, 1.1, 1], "mat": "low", "cover": "low" } },
     { "id": "env.box", "pos": [6, 0, -4], "params": { "size": [3, 2.8, 1], "mat": "high", "cover": "high" } },
-    { "id": "env.box", "pos": [0, 0, -12], "params": { "size": [10, 3.2, 1], "mat": "wall", "cover": "wall" } }
+    { "id": "env.box", "pos": [0, 0, -12], "params": { "size": [10, 3.2, 1], "mat": "wall", "cover": "wall" } },
+    { "id": "enemy.static", "pos": [-10, 0, 4] },
+    { "id": "pickup.light", "pos": [10, 0, 4] }
   ]
 }
