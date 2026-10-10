@@ -15,8 +15,8 @@ const TUNING = {
 // Pickup pieces (registry ids, a public contract: instructions/level.md). Data: { id, pos } for a respawning crate
 // of that ammo class. Spots live in the level file (7 light, 3 heavy in the arena).
 export const PICKUP_PIECES = {
-  'pickup.light': (pickups, d) => pickups.addCrate(d.pos, 'light'),
-  'pickup.heavy': (pickups, d) => pickups.addCrate(d.pos, 'heavy'),
+  'pickup.light': { example: { params: {} }, label: `light ammo (AR MG BR PS) | respawns in ${TUNING.respawn} s`, build: (pickups, d) => pickups.addCrate(d.pos, 'light') },
+  'pickup.heavy': { example: { params: {} }, label: `heavy ammo (SR RG) | respawns in ${TUNING.respawn} s`, build: (pickups, d) => pickups.addCrate(d.pos, 'heavy') },
 };
 
 export class Pickups {
@@ -142,6 +142,12 @@ export class Pickups {
         this.#remove(i);
       }
     }
+  }
+
+  // Removes one item built by addCrate() (tools); dropped clips use #remove.
+  despawn(item) {
+    const i = this.items.indexOf(item);
+    if (i >= 0) this.#remove(i);
   }
 
   #remove(i) {

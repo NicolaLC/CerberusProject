@@ -7,6 +7,7 @@ import { damp, wrapAngle } from '../../engine/math.js';
 // kinds: 'static' (takes hits), 'mover' (slides on a rail), 'shooter' (pops up from fixed cover and fires).
 
 const HIDE = -0.95; // rig lift when retracted behind low cover
+export const HEALTH = { default: 100, shooter: 120 }; // hit points by kind
 export const ENGAGE_RANGE = 30; // m: shooters only pop up and fire at a player this close (with line of sight)
 
 const _v = new THREE.Vector3();
@@ -21,7 +22,7 @@ export class Puppet extends EnemyBody {
       kind: def.kind,
       pos: def.pos,
       yaw: def.yaw ?? 0,
-      health: def.kind === 'shooter' ? 120 : 100,
+      health: def.kind === 'shooter' ? HEALTH.shooter : HEALTH.default,
       mats: puppetMaterials(def.kind === 'shooter' ? 0xd04a2a : 0xe8c23a),
     });
     buildPuppet(this.rig, this.mats, this.visor);
@@ -49,7 +50,8 @@ export class Puppet extends EnemyBody {
 
   think(dt, player) {
     let speed = 0;
-    if (this.kind === 'mover') {
+    // a mover without a rail (or with speed 0) stands still: dividing by a zero length would put it at NaN
+    if (this.kind === 'mover' && this.to && this.speed > 0 && this.home.distanceTo(this.to) > 0) {
       this.moveT += (dt * this.speed) / this.home.distanceTo(this.to);
       const s = 0.5 - 0.5 * Math.cos(this.moveT * Math.PI);
       const prev = _u.copy(this.pos);
