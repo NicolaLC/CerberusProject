@@ -17,7 +17,7 @@ import { damp, lerpAngle } from '../../engine/math.js';
 // periodically sends one trooper (flank()) to cover on the player's side or rear while the rest keep
 // the player pinned.
 
-const TUNING = {
+export const TUNING = {
   health: 150,
   radius: 0.4,
   height: 1.8,
