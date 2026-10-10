@@ -22,6 +22,7 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 |---|---|---|
 | `env.box` | world | `size [w,h,d]`, `mat` (key of `World.mats`), `faces?` `{px,nx,py,ny,pz,nz: mat}`, `cover?` `'low'\|'high'\|'wall'`, `collide?` `shadow?` (default true). `pos` = center x, bottom y, center z. Axis-aligned: no rotation |
 | `env.strip` | world | `size`, `mat`, `ownMaterial?` (clone the material; needed to flicker one strip alone). Emissive, no collision, no shadow |
+| `env.label` | world | `text` (`\n` for lines), `size?` letter height (0.6), `yaw?` (0 = readable from +Z), `flat?` (on the floor), `color?`, `bg?`. Unlit sign, no collision; own canvas texture, freed on unload |
 | `light.point` | world | `color '#rrggbb'`, `intensity`, `distance`, `flicker?: { strip: name }` (flickers the light, and the named earlier strip) |
 | `enemy.static` / `enemy.mover` / `enemy.shooter` | enemies | puppets on a stand. `yaw?`; mover: `to [x,y,z]`, `speed` |
 | `enemy.trooper` | enemies | cover-using soldier. `yaw?` |
@@ -35,7 +36,10 @@ Interior zones (camera exposure) are `interiorZones` boxes, not pieces. Dropped 
 | name | file | content |
 |---|---|---|
 | `arena` | `arena.json` | the training arena, default; no `?scene` = this |
-| `gym` | `gym.json` | placeholder: floor, low / high / wall cover, two ammo crates (real content: Gym epic #58) |
+| `gym` | `gym.json` | Gym: traversal and cover room (#64) |
+| `gym-range` | `gym-range.json` | Gym: weapon range room (#65) |
+| `gym-ai` | `gym-ai.json` | Gym: enemy behaviour rooms (#66) |
+| `gym-stress` | `gym-stress.json` | Gym: performance stress room (#67) |
 | `library` | `library.json` | placeholder, `demo`: one of each enemy kind in a row as harmless exhibits (Library epic #59) |
 | `workshop` | `workshop.json` | placeholder: floor and three cover boxes (Workshop epic #60) |
 

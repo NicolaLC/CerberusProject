@@ -1,0 +1,10 @@
+{
+  "name": "gym-ai",
+  "title": "GYM · ENEMIES",
+  "spawn": {"pos": [0, 0, 14], "yaw": 3.141592653589793},
+  "interiorZones": [],
+  "pieces": [
+    {"id": "env.box", "pos": [0, -1, 0], "params": {"size": [40, 1, 40], "mat": "floor", "shadow": false}},
+    {"id": "env.label", "pos": [0, 0, 8], "params": {"text": "ENEMY ROOMS (placeholder)", "size": 0.8}}
+  ]
+}
