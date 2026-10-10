@@ -3,6 +3,7 @@ import { gridTexture, applyWorldUVs } from './textures.js';
 import { mergeStatic, mergeGroup } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
 import { GUNS } from '../combat/guns.js';
+import { KIT_PIECES } from './kit.js';
 
 // Static level: axis-aligned boxes only (collision, cover and shadows depend on that).
 // Coordinates: x = east, z = south, y = up. Floor is y = 0.
@@ -18,36 +19,54 @@ function faces(def, { px, nx, py, ny, pz, nz } = {}) {
 }
 
 // Environment pieces (registry ids, a public contract: instructions/level.md). Builders run against the World.
-// data: { id, pos, name?, params }. `pos` is the box center x/z and its bottom y.
+// data: { id, pos, name?, params }. `pos` is the box center x/z and its bottom y. An entry is a builder or
+// { build, example: { params, yaw? }, label } (what the Library spawns and its one-line stats); the kit.* pieces live in kit.js.
 export const WORLD_PIECES = {
+  ...KIT_PIECES,
   // params: size [w, h, d], mat (key of World.mats), faces? { px|nx|py|ny|pz|nz: mat key } (overrides one side),
   // cover? 'low' | 'high' | 'wall', collide? (default true), shadow? (default true)
-  'env.box': (world, d) => {
-    const { size, cover, collide, shadow } = d.params;
-    const opts = { cover: cover ?? null, collide: collide ?? true, shadow: shadow ?? true };
-    return world.box(d.pos[0], d.pos[1], d.pos[2], ...size, world.material(d.params), opts);
+  'env.box': {
+    example: { params: { size: [3, 1.1, 1], mat: 'low', cover: 'low' } },
+    label: 'BOX any size, axis-aligned',
+    build: (world, d) => {
+      const { size, cover, collide, shadow } = d.params;
+      const opts = { cover: cover ?? null, collide: collide ?? true, shadow: shadow ?? true };
+      return world.box(d.pos[0], d.pos[1], d.pos[2], ...size, world.material(d.params), opts);
+    },
   },
   // emissive, non-colliding, non-shadowing box. params: size, mat, ownMaterial? (clone the material, e.g. to flicker alone)
-  'env.strip': (world, d) => {
-    const m = world.strip(d.pos[0], d.pos[1], d.pos[2], ...d.params.size, world.material(d.params, d.params.ownMaterial));
-    if (d.name) world.named.set(d.name, m);
-    return m;
+  'env.strip': {
+    example: { params: { size: [4, 0.2, 0.2], mat: 'stripCyan' } },
+    label: 'STRIP emissive, no collision',
+    build: (world, d) => {
+      const m = world.strip(d.pos[0], d.pos[1], d.pos[2], ...d.params.size, world.material(d.params, d.params.ownMaterial));
+      if (d.name) world.named.set(d.name, m);
+      return m;
+    },
   },
   // params: color '#rrggbb', intensity, distance, flicker? { strip: name of an earlier env.strip }
-  'light.point': (world, d) => {
-    const { color, intensity, distance, flicker } = d.params;
-    let f = null;
-    if (flicker) {
-      const strip = flicker.strip == null ? undefined : world.named.get(flicker.strip);
-      if (flicker.strip != null && !strip) throw new Error(`light.point: flicker strip "${flicker.strip}" must be defined before the light`);
-      f = { strip };
-    }
-    return world.pointLight(d.pos[0], d.pos[1], d.pos[2], color, intensity, distance, f);
+  'light.point': {
+    example: { params: { color: '#38d8ff', intensity: 40, distance: 14 } },
+    label: 'POINT LIGHT colour, intensity, distance',
+    build: (world, d) => {
+      const { color, intensity, distance, flicker } = d.params;
+      let f = null;
+      if (flicker) {
+        const strip = flicker.strip == null ? undefined : world.named.get(flicker.strip);
+        if (flicker.strip != null && !strip) throw new Error(`light.point: flicker strip "${flicker.strip}" must be defined before the light`);
+        f = { strip };
+      }
+      return world.pointLight(d.pos[0], d.pos[1], d.pos[2], color, intensity, distance, f);
+    },
   },
   // Unlit text sign (Gym / Library markers), no collision, no shadow. pos = bottom center of the text.
   // params: text, size? (letter height in m, default 0.6), yaw? (rad, default 0 = readable from +Z),
   // flat? (lie on the floor, readable walking toward -Z, rotated by yaw), color? '#rrggbb', bg? css color
-  'env.label': (world, d) => world.label(d.pos, d.params),
+  'env.label': {
+    example: { params: { text: 'LABEL', size: 0.6 } },
+    label: 'LABEL text sign, no collision',
+    build: (world, d) => world.label(d.pos, d.params),
+  },
   // Display model of one gun (Library). params: gun (key of GUNS). The model sits at pos with its stock at the origin,
   // barrel along +Z turned by yaw. No collision; freed on unload.
   'prop.gun': { example: { params: { gun: 'rifle' } }, label: 'display model of one gun', build: (world, d) => world.gunProp(d) },

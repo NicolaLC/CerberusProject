@@ -290,6 +290,26 @@
     {"id": "env.label", "pos": [22,0,-302.5], "params": {"text": "wall end", "size": 0.55, "flat": true, "color": "#9cc4ff"}},
     {"id": "env.box", "name": "pillar", "pos": [34,0,-304.6], "params": {"size": [1.2,2.8,1.2], "mat": "high", "cover": "high"}},
     {"id": "env.label", "pos": [34,0,-302.5], "params": {"text": "pillar 1.2", "size": 0.55, "flat": true, "color": "#9cc4ff"}},
-    {"id": "env.label", "pos": [2,7.8,-312], "params": {"text": "PEEK TESTS (cover corners, wall ends, doorway)\naim at an edge to peek · 4 x 4 m door in a 7 m wall", "size": 0.5, "color": "#ffe27a", "bg": "rgba(0,0,0,0.7)"}}
+    {"id": "env.label", "pos": [2,7.8,-312], "params": {"text": "PEEK TESTS (cover corners, wall ends, doorway)\naim at an edge to peek · 4 x 4 m door in a 7 m wall", "size": 0.5, "color": "#ffe27a", "bg": "rgba(0,0,0,0.7)"}},
+    {"id":"env.box","name":"kit-floor-ext","pos":[0,-1,62.5],"params":{"size":[150,1,55],"mat":"floor","shadow":false}},
+    {"id":"env.label","pos":[0,8.6,38],"params":{"text":"KIT · modular pieces (#69)\none of each kit.* id, example params · metrics.md sizes\nwalk south from the spawn, approach each from the south","size":0.5,"yaw":3.141592653589793,"color":"#ffe27a","bg":"rgba(0,0,0,0.55)"}},
+    {"id":"kit.floor","name":"kit:floor","pos":[-30,0,48],"params":{"size":[4,4]}},
+    {"id":"env.label","pos":[-30,0,50.5],"params":{"text":"FLOOR TILE\n4.0 x 4.0 x 0.2","size":0.45,"flat":true,"color":"#9fe8ff"}},
+    {"id":"kit.wall","name":"kit:wall","pos":[-22,0,48],"params":{"length":4,"height":7}},
+    {"id":"env.label","pos":[-22,0,50.5],"params":{"text":"WALL\n4.0 x 7.0 x 0.5","size":0.45,"flat":true,"color":"#9fe8ff"}},
+    {"id":"kit.doorway","name":"kit:doorway","pos":[-8,0,48],"params":{"width":4,"height":4}},
+    {"id":"env.label","pos":[-8,0,50.5],"params":{"text":"DOORWAY\n4.0 x 4.0 in 7.0 wall","size":0.45,"flat":true,"color":"#9fe8ff"}},
+    {"id":"kit.cover.low","name":"kit:cover.low","pos":[2,0,48],"params":{"length":3}},
+    {"id":"env.label","pos":[2,0,50.5],"params":{"text":"LOW COVER\n1.1 x 3.0","size":0.45,"flat":true,"color":"#9fe8ff"}},
+    {"id":"kit.cover.high","name":"kit:cover.high","pos":[8,0,48],"params":{"length":2.4}},
+    {"id":"env.label","pos":[8,0,50.5],"params":{"text":"HIGH COVER\n2.8 x 2.4","size":0.45,"flat":true,"color":"#9fe8ff"}},
+    {"id":"kit.pillar","name":"kit:pillar","pos":[14,0,48],"params":{}},
+    {"id":"env.label","pos":[14,0,50.5],"params":{"text":"PILLAR\n1.2 x 1.2","size":0.45,"flat":true,"color":"#9fe8ff"}},
+    {"id":"kit.stairs","name":"kit:stairs","pos":[-28,0,70],"params":{"width":4,"height":1.6}},
+    {"id":"env.label","pos":[-28,0,73.5],"params":{"text":"STAIRS\nrise 0.4 run 1.0 to 1.6","size":0.45,"flat":true,"color":"#9fe8ff"}},
+    {"id":"kit.ramp","name":"kit:ramp","pos":[-16,0,70],"params":{"width":4,"height":1.6,"length":8}},
+    {"id":"env.label","pos":[-16,0,75.5],"params":{"text":"RAMP\n0.1 steps, 8.0 long to 1.6","size":0.45,"flat":true,"color":"#9fe8ff"}},
+    {"id":"kit.platform","name":"kit:platform","pos":[4,0,70],"params":{"size":[8,8],"height":1.6,"stairs":"s","parapets":true}},
+    {"id":"env.label","pos":[4,0,79.5],"params":{"text":"PLATFORM\n8.0 x 8.0 x 1.6 + stairs","size":0.45,"flat":true,"color":"#9fe8ff"}}
   ]
 }
