@@ -12,7 +12,7 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 - `title`: shown in the HUD zone label (outdoors; indoors it reads INTERIOR) and in the panel's scene picker.
 - `demo: true` (Library): enemies are exhibits: they idle and take hits but never wake, aim, fire or flank
   (`Enemies` hands them a view of the player that reads `dead`).
-- `tool`: a Gym room helper from `src/game/gym/tools.js` (`traversal` / `range` / `ai` / `stress`): readouts, overlays, keys.
+- `tool`: a Gym room helper from `src/game/gym/tools.js` (`traversal` / `range` / `ai` / `stress` / `library`): readouts, overlays, keys.
   Created after the level loads, disposed before it unloads, `update(dt)` each unpaused frame (system `gymTool`).
 - `spawn.yaw` is the player's initial facing (3.14159 = north, -Z). The boss arena bounds are data of `boss.spider`.
 - Add a piece: append `{ "id": ..., "pos": [...], "params": {...} }`. Add a new kind: put a builder in the owning
@@ -25,12 +25,20 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `env.box` | world | `size [w,h,d]`, `mat` (key of `World.mats`), `faces?` `{px,nx,py,ny,pz,nz: mat}`, `cover?` `'low'\|'high'\|'wall'`, `collide?` `shadow?` (default true). `pos` = center x, bottom y, center z. Axis-aligned: no rotation |
 | `env.strip` | world | `size`, `mat`, `ownMaterial?` (clone the material; needed to flicker one strip alone). Emissive, no collision, no shadow |
 | `env.label` | world | `text` (`\n` for lines), `size?` letter height (0.6), `yaw?` (0 = readable from +Z), `flat?` (on the floor), `color?`, `bg?`. Unlit sign, no collision; own canvas texture, freed on unload |
+| `prop.gun` | world | `gun` (key of `GUNS`). The gun's own display model (its `build`, merged to one mesh per material), stock at `pos`, barrel along +Z turned by `yaw`. No collision; freed on unload |
 | `light.point` | world | `color '#rrggbb'`, `intensity`, `distance`, `flicker?: { strip: name }` (flickers the light, and the named earlier strip) |
 | `enemy.static` / `enemy.mover` / `enemy.shooter` | enemies | puppets on a stand. `yaw?`; mover: `to [x,y,z]`, `speed` |
 | `enemy.trooper` | enemies | cover-using soldier. `yaw?` |
 | `enemy.drone` | enemies | `pos` = the ground under it |
 | `boss.spider` | enemies | `yaw?`, `arena: { minX, maxX, minZ, maxZ }` (the boss stays inside; wakes when the player enters) |
 | `pickup.light` / `pickup.heavy` | pickups | respawning ammo crate of that class |
+
+### Piece meta (Library convention)
+A registry table entry may be `{ build, ...meta }` (read with `registry.meta(id)`). Two metas feed the Library:
+- `example: { params, yaw? }`: what the Library spawns for the id (it must build with just these and `pos`).
+- `label`: one short line of key stats (HP, ranges, respawn...), read from the owner's `TUNING` where there is one.
+Enemy and pickup entries have both. A new id with an `example` shows up in the Library's kit aisle by itself
+(`tool: library`, gym.md); `tests/library.browser.mjs` spawns every id from its example.
 
 Interior zones (camera exposure) are `interiorZones` boxes, not pieces. Dropped clips are runtime, not data.
 
@@ -42,7 +50,7 @@ Interior zones (camera exposure) are `interiorZones` boxes, not pieces. Dropped 
 | `gym-range` | `gym-range.json` | Gym: weapon range room (#65) |
 | `gym-ai` | `gym-ai.json` | Gym: enemy behaviour rooms (#66) |
 | `gym-stress` | `gym-stress.json` | Gym: performance stress room (#67) |
-| `library` | `library.json` | placeholder, `demo`: one of each enemy kind in a row as harmless exhibits (Library epic #59) |
+| `library` | `library.json` | the Library (#68), `demo` + `tool: library`: aisles of enemies, guns, cover / environment, pickups, light presets and the kit aisle (gym.md, Library) |
 | `workshop` | `workshop.json` | placeholder: floor and three cover boxes (Workshop epic #60) |
 
 - Players pick a scene in the start / pause panel (Scene list; it also sets `?scene=` so a reload stays there).
