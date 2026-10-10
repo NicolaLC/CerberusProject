@@ -51,7 +51,7 @@ Keys (the key bar shows them; `static KEYS` is the source and the suite checks i
 | Del / Backspace | delete |
 | Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z | undo, redo |
 | Ctrl+S / Ctrl+O | `saveLevel(doc)` / `openLevel(registry)` from io.js; a failure ("not implemented" until #72) is a toast |
-| Esc | disarm, then deselect, then pause (the start panel has the scene picker) |
+| Esc | disarm, then deselect, then pause (the start panel has the scene buttons) |
 
 ## Panels and helpers
 - **Palette** (left, `#workshop-palette`): every `registry.ids()` entry as a `button[data-id]`, grouped by owner and prefix

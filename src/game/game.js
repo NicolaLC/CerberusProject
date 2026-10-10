@@ -200,6 +200,11 @@ export class Game {
 
   // ---- scenes: one level at a time; every per-level system loads from and unloads to its level file ----
 
+  // highlights the current scene's button in the panel
+  #markScene() {
+    for (const b of this.sceneButtons?.children ?? []) b.classList.toggle('on', b.dataset.scene === this.sceneName);
+  }
+
   // Switches to another scene (a key of scenes.js; unknown names warn and open the default). Call it between
   // frames (a test, the console, a menu), never from inside a system update. The old level is freed completely
   // (instructions/architecture.md: every per-level system must be disposable), the player is put at the new spawn
@@ -211,7 +216,7 @@ export class Game {
     if (this.sceneName) this.#unloadLevel();
     this.sceneName = key;
     this.level = level;
-    if (this.picker) this.picker.value = key;
+    this.#markScene();
     world.load(level, this.registry);
     enemies.load(level);
     pickups.load(level);
@@ -277,17 +282,23 @@ export class Game {
         setRunning(true);
       } else input.lock();
     });
-    // scene picker (start / pause panel): switches at once and keeps ?scene= in the URL so a reload stays there
-    const picker = (this.picker = document.getElementById('scene'));
-    for (const [key, level] of Object.entries(SCENES)) picker.add(new Option(level.title ?? key, key));
-    picker.value = this.sceneName;
-    picker.addEventListener('change', () => {
-      this.loadScene(picker.value);
-      const url = new URL(location.href);
-      url.searchParams.set('scene', this.sceneName);
-      history.replaceState(null, '', url);
-      picker.blur(); // keys go back to the game
-    });
+    // scene buttons (top of the start / pause panel): switch at once and keep ?scene= in the URL so a reload stays there
+    this.sceneButtons = document.getElementById('scenes');
+    for (const [key, level] of Object.entries(SCENES)) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.scene = key;
+      b.textContent = level.title ?? key;
+      b.addEventListener('click', () => {
+        this.loadScene(key);
+        const url = new URL(location.href);
+        url.searchParams.set('scene', this.sceneName);
+        history.replaceState(null, '', url);
+        b.blur(); // keys go back to the game
+      });
+      this.sceneButtons.append(b);
+    }
+    this.#markScene();
     // desktop build (desktop/preload.cjs): quit button in the panel
     const desktop = window.cerberusDesktop;
     const quit = document.getElementById('quit');

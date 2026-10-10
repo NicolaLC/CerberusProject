@@ -51,6 +51,9 @@
       <div class="panel">
         <h1>CERBERUS</h1>
         <h2>combat training arena · prototype</h2>
+        <div id="scenes" class="scenes" role="group" aria-label="Scene"></div>
+        <button id="start">CLICK TO DEPLOY · A / MENU ON A CONTROLLER</button>
+        <button id="quit" hidden>QUIT TO DESKTOP</button>
         <table>
           <tr class="head"><td>keys</td><td>pad</td><td></td></tr>
           <tr><td>WASD</td><td>L stick</td><td>move</td></tr>
@@ -68,7 +71,6 @@
         </table>
         <p class="note">Ammo: walk over the glowing cases: cyan = light ammo (AR, MG, BR, pistol), orange = heavy ammo (sniper, railgun). Broken puppets sometimes drop clips. Shoot the pulsing magenta weak spots for triple damage.</p>
         <div class="settings">
-          <label class="row" for="scene"><span>Scene</span><select id="scene"></select></label>
           <label class="row" for="sens"><span>Look sensitivity</span><input id="sens" type="range" min="0.3" max="3" step="0.1" /><output id="sens-out">1.0×</output></label>
           <label class="row" for="trackpad"><input id="trackpad" type="checkbox" /><span>Trackpad mode: two-finger swipe to look, E toggles aim</span></label>
           <label class="row" for="assist"><input id="assist" type="checkbox" /><span>Aim assist</span></label>
@@ -76,8 +78,6 @@
           <label class="row" for="invert"><input id="invert" type="checkbox" /><span>Invert look Y (controller)</span></label>
         </div>
         <p class="note">Keyboard plus mouse or trackpad, or a controller. <span id="pad-status">Controller: press any button to connect.</span></p>
-        <button id="start">CLICK TO DEPLOY · A / MENU ON A CONTROLLER</button>
-        <button id="quit" hidden>QUIT TO DESKTOP</button>
       </div>
     </div>
 
