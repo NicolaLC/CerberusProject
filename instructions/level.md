@@ -12,7 +12,7 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 - `title`: shown in the HUD zone label (outdoors; indoors it reads INTERIOR) and in the panel's scene picker.
 - `demo: true` (Library): enemies are exhibits: they idle and take hits but never wake, aim, fire or flank
   (`Enemies` hands them a view of the player that reads `dead`).
-- `tool`: a Gym room helper from `src/game/gym/tools.js` (`traversal` / `range` / `ai` / `stress`): readouts, overlays, keys.
+- `tool`: a Gym room helper from `src/game/gym/tools.js` (`traversal` / `range` / `ai` / `stress` / `library`): readouts, overlays, keys.
   Created after the level loads, disposed before it unloads, `update(dt)` each unpaused frame (system `gymTool`).
 - `spawn.yaw` is the player's initial facing (3.14159 = north, -Z). The boss arena bounds are data of `boss.spider`.
 - Add a piece: append `{ "id": ..., "pos": [...], "params": {...} }`. Add a new kind: put a builder in the owning
@@ -25,12 +25,34 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `env.box` | world | `size [w,h,d]`, `mat` (key of `World.mats`), `faces?` `{px,nx,py,ny,pz,nz: mat}`, `cover?` `'low'\|'high'\|'wall'`, `collide?` `shadow?` (default true). `pos` = center x, bottom y, center z. Axis-aligned: no rotation |
 | `env.strip` | world | `size`, `mat`, `ownMaterial?` (clone the material; needed to flicker one strip alone). Emissive, no collision, no shadow |
 | `env.label` | world | `text` (`\n` for lines), `size?` letter height (0.6), `yaw?` (0 = readable from +Z), `flat?` (on the floor), `color?`, `bg?`. Unlit sign, no collision; own canvas texture, freed on unload |
+| `prop.gun` | world | `gun` (key of `GUNS`). The gun's own display model (its `build`, merged to one mesh per material), stock at `pos`, barrel along +Z turned by `yaw`. No collision; freed on unload |
 | `light.point` | world | `color '#rrggbb'`, `intensity`, `distance`, `flicker?: { strip: name }` (flickers the light, and the named earlier strip) |
+| `kit.floor` | world | `size [w,d]` (4 x 4), `thickness` (0.2), `flush?` (top at `pos.y`, hangs below), `mat` |
+| `kit.wall` | world | `length` (4), `height` (7, min 2.0), `thickness` (0.5), `mat`. Cover `wall` |
+| `kit.doorway` | world | wall segment with a lintel: opening `width` (4, clamped up to 2.0) and `height` (4, clamped up to 1.8), `length` (width + 6; each wall end >= 0.9), `wallHeight` (7), `thickness`, `mat`. Opening centered on `pos` |
+| `kit.stairs` | world | `width` (4), `height` (target top, 1.6), `rise` (0.4; above 0.45 throws), `run` (1.0, min 0.6), `mat`. Climbs toward -Z at yaw 0; `pos` = footprint center. Real rise = height / ceil(height / rise) |
+| `kit.ramp` | world | stairs with a fine rise (the code has no slopes: `groundAt` reads box tops): `width`, `height` (1.6), `length` (8, horizontal), `rise` (0.1, max 0.25), `mat` |
+| `kit.cover.low` | world | 1.1 high, 1.0 thick; `length` (3, min 1.6, below throws), `mat` (`low`) |
+| `kit.cover.high` | world | 2.8 high, 0.6 thick; `length` (2.4, min 1.2, below throws), `mat` (`high`) |
+| `kit.pillar` | world | 1.2 x 1.2 x 2.8 high cover; `mat` (`high`) |
+| `kit.platform` | world | solid deck, `size [w,d]` (8 x 8), `height` (1.6), `stairs?` `'n'\|'s'\|'e'\|'w'` (attached outside that side, `stairsWidth` 4), `parapets?` `true` or a list of sides (low 1.1 x 0.6, open at the stairs), `mat`, `coverMat` (parapets) |
 | `enemy.static` / `enemy.mover` / `enemy.shooter` | enemies | puppets on a stand. `yaw?`; mover: `to [x,y,z]`, `speed` |
 | `enemy.trooper` | enemies | cover-using soldier. `yaw?` |
 | `enemy.drone` | enemies | `pos` = the ground under it |
 | `boss.spider` | enemies | `yaw?`, `arena: { minX, maxX, minZ, maxZ }` (the boss stays inside; wakes when the player enters) |
 | `pickup.light` / `pickup.heavy` | pickups | respawning ammo crate of that class |
+
+**Kit rules** (`world/kit.js`, sizes from `metrics.md`, frozen): boxes only, built through `world.box`. `yaw` must be a
+multiple of 90 degrees (else a clear error), so every piece stays axis-aligned. Bad params throw `kit.x: ...`. One material
+key per role (floor / wall / low / high / platform), overridable per piece with `params.mat` (a key of `World.mats`):
+the hook for region skins.
+
+### Piece meta (Library convention)
+A registry table entry may be `{ build, ...meta }` (read with `registry.meta(id)`). Two metas feed the Library:
+- `example: { params, yaw? }`: what the Library spawns for the id (it must build with just these and `pos`).
+- `label`: one short line of key stats (HP, ranges, respawn...), read from the owner's `TUNING` where there is one.
+Every entry has both (enemies, pickups, `kit.*`, `env.*`, `light.point`, `prop.gun`); new entries must too. A new id with an `example` shows up in the Library's kit aisle by itself
+(`tool: library`, gym.md); `tests/library.browser.mjs` spawns every id from its example.
 
 Interior zones (camera exposure) are `interiorZones` boxes, not pieces. Dropped clips are runtime, not data.
 
@@ -42,7 +64,7 @@ Interior zones (camera exposure) are `interiorZones` boxes, not pieces. Dropped 
 | `gym-range` | `gym-range.json` | Gym: weapon range room (#65) |
 | `gym-ai` | `gym-ai.json` | Gym: enemy behaviour rooms (#66) |
 | `gym-stress` | `gym-stress.json` | Gym: performance stress room (#67) |
-| `library` | `library.json` | placeholder, `demo`: one of each enemy kind in a row as harmless exhibits (Library epic #59) |
+| `library` | `library.json` | the Library (#68), `demo` + `tool: library`: aisles of enemies, guns, cover / environment, pickups, light presets and the kit aisle (gym.md, Library) |
 | `workshop` | `workshop.json` | placeholder: floor and three cover boxes (Workshop epic #60) |
 
 - Players pick a scene in the start / pause panel (Scene list; it also sets `?scene=` so a reload stays there).

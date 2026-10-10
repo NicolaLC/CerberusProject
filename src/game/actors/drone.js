@@ -11,7 +11,7 @@ import { rb, cyl, ring, look, debrisCopy, disposeDebris } from './parts.js';
 // Same interface as the other enemies (see enemy.js) plus aimPoints(out, n). `pos` is on the ground under it
 // (pickups drop there); the body flies at pos.y + alt.
 
-const TUNING = {
+export const TUNING = {
   health: 55,
   hover: [3.5, 5], // m above the ground
   range: [9, 18], // keeps this distance to the player

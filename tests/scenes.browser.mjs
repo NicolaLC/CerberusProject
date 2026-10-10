@@ -39,7 +39,8 @@ const probe = (frames) => {
   for (const o of culled) o.frustumCulled = true;
   let objects = 0;
   engine.scene.traverse(() => objects++);
-  const pieces = (owner) => g.registry.piecesOf(g.level, owner).length;
+  // plus what the Library tool spawned in its kit aisle (registered ids the level file does not show)
+  const pieces = (owner) => g.registry.piecesOf(g.level, owner).length + (g.tool?.spawned?.[owner] ?? 0);
   return {
     scene: g.sceneName,
     levelName: g.level.name,

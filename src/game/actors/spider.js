@@ -13,7 +13,7 @@ import { rbox, rb, cyl, look, debrisCopy, disposeDebris } from './parts.js';
 // Same interface as the other enemies (see enemy.js) plus armor(zone, object) and aimPoints(out, n).
 // Built from bones like the humanoids: one RigidSkin draw per material, the part meshes stay as hitboxes.
 
-const TUNING = {
+export const TUNING = {
   name: 'SX-6 TARANTULA',
   core: 900, // health of the core (the boss dies with it)
   legHealth: 160,
@@ -54,7 +54,7 @@ export class SpiderMech {
     this.name = TUNING.name;
     this.pos = new THREE.Vector3(...def.pos);
     this.yaw = def.yaw ?? 0;
-    this.arena = def.arena; // { minX, maxX, minZ, maxZ } from the level file: the boss stays inside, and wakes when the player walks in
+    this.arena = def.arena ?? { minX: def.pos[0] - 10, maxX: def.pos[0] + 10, minZ: def.pos[2] - 10, maxZ: def.pos[2] + 10 }; // { minX, maxX, minZ, maxZ } from the level file: the boss stays inside, and wakes when the player walks in
     this.maxHealth = this.health = TUNING.core;
     this.alive = true;
     this.lift = 0;
