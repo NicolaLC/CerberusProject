@@ -201,12 +201,14 @@ export class World {
     return this.interiorZones.some((z) => z.containsPoint(p));
   }
 
-  // Highest walkable top under (x,z) that is at or below maxY.
-  groundAt(x, z, maxY, radius = 0) {
+  // Highest walkable top under (x,z) that is at or below maxY. minSize: ignore boxes narrower than that on either
+  // horizontal axis (walls, parapets, posts), for fliers that should keep their height over them.
+  groundAt(x, z, maxY, radius = 0, minSize = 0) {
     let g = 0;
     for (const c of this.colliders) {
       const b = c.box;
       if (b.max.y > maxY) continue;
+      if (minSize > 0 && (b.max.x - b.min.x < minSize || b.max.z - b.min.z < minSize)) continue;
       if (x < b.min.x - radius || x > b.max.x + radius || z < b.min.z - radius || z > b.max.z + radius) continue;
       if (b.max.y > g) g = b.max.y;
     }

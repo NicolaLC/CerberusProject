@@ -253,8 +253,19 @@ export class Enemies {
       const d2 = dx * dx + dz * dz;
       if (d2 >= minDist * minDist || d2 < 1e-6) continue;
       const d = Math.sqrt(d2);
-      self.pos.x += (dx / d) * (minDist - d) * 0.5;
-      self.pos.z += (dz / d) * (minDist - d) * 0.5;
+      const push = (minDist - d) * 0.5;
+      self.pos.x += (dx / d) * push;
+      self.pos.z += (dz / d) * push;
+      // a squadmate standing in the way (ahead of our velocity): a straight push only holds us behind it until the
+      // move timer runs out, so also step sideways round it, on the side we are already offset to
+      const vx = self.vel?.x ?? 0;
+      const vz = self.vel?.z ?? 0;
+      const v = Math.hypot(vx, vz);
+      if (v > 0.5 && -(dx * vx + dz * vz) / (d * v) > 0.5) {
+        const side = dx * vz - dz * vx >= 0 ? 1 : -1;
+        self.pos.x += (vz / v) * side * push * 2;
+        self.pos.z += (-vx / v) * side * push * 2;
+      }
     }
   }
 

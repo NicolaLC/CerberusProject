@@ -75,15 +75,16 @@ Costs are WORST CASE per unit: in view, near LOD, sun shadow pass included (draw
 
 | unit | draws (near) | tris (near) | geometries | draws / tris far (> 32 m) | when destroyed |
 |---|---|---|---|---|---|
-| puppet (`enemy.static`) | 7 | 15.3k | 8 | 1 / 7.5k | + 75 draws for 5 s (debris), then the stand sinks |
-| trooper (`enemy.trooper`) | 9 | 47.4k | 10 | 1 / 23.7k | + 119 draws for 5 s |
+| puppet (`enemy.static`) | 7 | 15.3k | 8 | 1 / 7.5k | + 22 draws for 5 s (debris, was 75 before #75), then the stand sinks |
+| trooper (`enemy.trooper`) | 9 | 47.4k | 10 | 1 / 23.7k | + 23 draws for 5 s (was 119) |
 | drone (`enemy.drone`) | 4 | 9.2k | 5 | 1 / 9.2k (shadow stays) | + 2 (falls in one piece) |
 | point light (`light.point`) | 0 | 0 | 0 | | cost is per lit fragment, not per draw; adding / removing one recompiles shaders |
 | effect burst (`blast`: sparks, smoke, ring) | 3 | 0.4k | 0 | | sparks capped at 256 (16 bursts); lives 0.3-0.6 s |
 
 Triangles are doubled by the shadow pass (a trooper is ~23.7k triangles drawn twice). The empty room (floor, 16 cover boxes, the
-player, post) is 45 draws / 66k tris. Debris is the surprise: every chunk is its own mesh and it casts shadows, so a destroyed puppet
-or trooper costs 10-15 times what it did alive until it expires. A mission that kills many at once spikes the draw count.
+player, post) is 45 draws / 66k tris. Debris was the surprise (#75): every chunk was one shadow-casting mesh per material, so a destroyed trooper cost
+119 draws. Chunks are now baked to one vertex-coloured mesh each and cast no shadow: ~22 draws per destroyed body for 5 s,
+still 2-3 times a live one, so mass kills cost something but no longer spike.
 
 **Current budget.** `tests/render.browser.mjs`: <= 140 draws at the arena spawn view (128 today), <= 25 in the shadow pass (14 today).
 Quality tiers (`quality.js`) do not change geometry draws, only pixels: low 84 draws, high and ultra 97 at the same view (bloom adds ~13
@@ -101,13 +102,14 @@ Assumptions, stated plainly:
 
 | tier | troopers | puppets | drones | point lights (level + dynamic) | effect bursts alive | destroyed puppets / troopers with live debris |
 |---|---|---|---|---|---|---|
-| low | 5 | 3 | 7 | 4 | 6 | 1 |
-| high | 8 | 5 | 11 | 8 | 9 | 2 |
-| ultra | 10 | 6 | 15 | 12 | 12 | 3 |
+| low | 5 | 3 | 7 | 4 | 6 | 5 |
+| high | 8 | 5 | 11 | 8 | 9 | 10 |
+| ultra | 10 | 6 | 15 | 12 | 12 | 15 |
 
-Debris is the first thing to fix if kills must be dense: merge a body's chunks into one mesh per material (one draw, like `mergeGroup`),
-stop them casting, or shorten `DEBRIS_LIFE`; the caps above assume today's behaviour. Never add or remove lights during play
-(shader recompiles); the light cap counts the level's lights.
+If kills must get denser still: merge a whole body's chunks into one moving batch, or shorten `DEBRIS_LIFE`.
+**Rule: never add or remove lights during play.** three.js recompiles every lit material when the light count changes (a
+hitch). Lights belong to the level (built on load); a dynamic light stays in the scene and is switched with its intensity,
+like the muzzle flash light in `fx.js`. The light cap counts the level's lights.
 
 **Frame-time budgets must be confirmed by running `?scene=gym-stress` on the target hardware** (press P: the sweep prints avg / p95 ms,
 draws and triangles for 0-64 of each kind); the caps above are draw and triangle derived, not GPU measured.

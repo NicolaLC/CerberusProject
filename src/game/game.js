@@ -17,6 +17,7 @@ import { settings, bindSettingsUI } from './settings.js';
 import { applyQuality } from './view/quality.js';
 import { SCENES, resolveScene } from './scenes.js';
 import { TOOLS } from './gym/tools.js';
+import { KeyHints } from './view/keyhints.js';
 import { disposeTree } from '../engine/dispose.js';
 
 // Composition root: builds every game system on top of the engine, wires events and declares the
@@ -83,6 +84,7 @@ export class Game {
     this.skeletons = false;
     this.playerHelper = this.#helper(player.rigModel);
     this.helpers = [];
+    this.keyHints = new KeyHints();
     this.loadScene(first);
 
     // ---- frame order ----
@@ -218,6 +220,7 @@ export class Game {
     juice.reset();
     if (level.tool && !TOOLS[level.tool]) throw new Error(`level "${key}": unknown tool "${level.tool}"`);
     this.tool = level.tool ? new TOOLS[level.tool](this, level) : null;
+    this.keyHints.set({ debug: this.debug, tool: this.tool });
     this.helpers = enemies.puppets.filter((p) => p.rig).map((p) => this.#helper(p.rig));
     return this;
   }
