@@ -35,6 +35,7 @@ boxes (metrics.md); cover flags follow the class (`low` under 1.7, `high` from).
 | 11 stairs, zf -238 / -258 | rise 0.30 0.40 0.45 0.50 (run 1.0); run 0.6 and 1.2 (rise 0.4); 4 steps, 4 wide | 12 |
 | 12 standard stair, zf -278 | 0.4 / 1.0 / 4 wide up to an 8 x 8 platform at 1.6, low parapets on three sides, west edge open for jet-ons | 20 |
 | 13 peek tests, zf -304 | 4 x 4 door in a 7 m wall, high and low L corners, wall end, 1.2 pillar | peek |
+| 14 KIT, z 48 / 70 (south of the spawn) | one of each `kit.*` piece with its example params, a floor extension (z 35..90), `env.label` under each (#69); the suite `tests/kit.browser.mjs` also spawns every id with edge params, climbs the stairs, ramp and platform stairs and walks the doorway | kit |
 
 The labels are the main draw-call cost (one each, 109 in this room); the boxes merge per material.
 
