@@ -49,6 +49,9 @@ export function ringSlot(i, r0) {
 }
 
 export class StressTool {
+  // shown in the key bar (view/keyhints.js) whatever the panel's state
+  static KEYS = [['[ ]', 'step the selected row (Shift ×4, click a row to select)'], ['P', 'sweep']];
+
   constructor(game, level) {
     this.game = game;
     this.level = level;

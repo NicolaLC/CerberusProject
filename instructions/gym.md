@@ -4,6 +4,10 @@ Four scenes, one per room (Gym epic #58). Each room is a level file plus a tool 
 field `tool`) for its readouts, overlays and keys, and a browser suite that uses the room as its fixture.
 Measured values go into `instructions/metrics.md` (section 8); this file says what each room contains and how to use it.
 
+**Key bar** (`view/keyhints.js`, top centre): every shortcut that works right now: the global debug keys (H skeletons, F3 / `
+stats) with `?debug`, plus the room's keys in any scene with a tool, whether its panel is open or hidden. The list comes from
+each tool's `static KEYS`; `scenes.browser.mjs` fails if a tool handles a key (`e.code === ...`) that its KEYS doesn't list.
+
 ## Traversal and cover (`?scene=gym`, #64)
 
 One long bare-grid course (floor x -75..75, z 35..-335, no enemies). Spawn (0, 0, 18) facing north; the rows run north

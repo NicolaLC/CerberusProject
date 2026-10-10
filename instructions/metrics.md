@@ -1,7 +1,7 @@
 # Level metrics
 
-**Status: DRAFT (not frozen).** Awaiting owner approval; do not build kit pieces or levels on it yet. Once approved, change
-this line to `FROZEN <date>` and apply section 9. Code wins over docs on every number; this file only collects them.
+**Status: FROZEN 2026-10-10** (owner approved, incl. the 1.9 jet reach). Kit pieces and levels are built on these numbers;
+a change follows section 9. Code wins over docs on every number; this file only collects them.
 All units metres, +Y up, floor y = 0. Source column: `file:SYMBOL` (paths under `src/game/`). Tags: **code** = read from
 code, **derived** = computed from code numbers (formula given), **proposed** = recommendation for the owner to approve,
 **gym** = open, listed in section 8.
@@ -182,7 +182,7 @@ drone 4 / 9.2k; beyond 32 m each enemy is 1 draw. A destroyed puppet / trooper c
 Per-tier encounter caps: `instructions/engine.md`, Per-encounter budget.
 
 Applied to the tables above (#75): jet peak 1.54 / headroom 3.4, jet reach 1.9, corridor hard minimum 2.0 (2.4 where aiming),
-hop up to 1.2 inclusive. Open before freezing: confirm the 1.9 jet reach is acceptable (else `JET` is retuned and the Gym re-measured).
+hop up to 1.2 inclusive. The owner accepted the 1.9 jet reach: anything players must not climb is >= 2.0.
 
 ## 9. Change rule
 Once frozen, a metric changes only through an issue that lists: (a) the old and new value with the source symbol, (b) every kit
