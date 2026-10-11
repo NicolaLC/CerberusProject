@@ -67,7 +67,9 @@ const r = await p.evaluate(() => {
   keys.add('KeyS'); keys.add('KeyD'); step(20); keys.delete('KeyS'); keys.delete('KeyD');
   out.c2 = { inC2, exited: !player.cover, z: +player.pos.z.toFixed(2) };
 
-  // (c3) sliding past the end of the cover walks on free (not while aiming), no snap back
+  // (c3) sliding past the end of a wall (1 deep) wraps round its end, still in cover (a face under 0.9 m walks on, see c5)
+  let c3corners = 0;
+  engine.events.on('player:coverCorner', () => c3corners++);
   reset(hx, hi.box.max.z + 4);
   hold('KeyW', 60);
   const x0 = player.pos.x;
@@ -76,7 +78,7 @@ const r = await p.evaluate(() => {
   for (let i = 0; i < 240 && exitX === null; i++) { step(); if (!player.cover) exitX = player.pos.x; }
   step(30); // keeps pushing: walks on past the end (the next wall is 8 m away)
   keys.delete('KeyD');
-  out.c3 = { x0, exitX, endX: +player.pos.x.toFixed(2), boxMaxX: hi.box.max.x, cover: !!player.cover, snap: !!player.snap };
+  out.c3 = { c3corners, x0, exitX, endX: +player.pos.x.toFixed(2), boxMaxX: hi.box.max.x, cover: !!player.cover, snap: !!player.snap };
   // aiming at the end keeps the cover (peek)
   reset(hx, hi.box.max.z + 4);
   hold('KeyW', 60);
@@ -96,12 +98,12 @@ const r = await p.evaluate(() => {
     const runEvents = [];
     engine.events.on('player:coverRun', (d) => runEvents.push(d.type));
     const mk = (x0, x1, z, d, h, cover = 'low') => world.box((x0 + x1) / 2, 0, z, x1 - x0, h, d, world.mats[cover === 'high' ? 'high' : 'low'], { cover: cover === 'none' ? null : cover });
-    const chain = (boxes, { aim = false, frames = 200 } = {}) => {
+    const chain = (boxes, { aim = false, frames = 200, north = false } = {}) => {
       const made = boxes.map((b) => mk(...b));
       const A = made[0].userData.collider;
-      reset(free.x + 1, free.z + 4);
+      reset(free.x + 1, free.z + (north ? -4 : 4));
       runEvents.length = 0;
-      hold('KeyW', 60);
+      hold(north ? 'KeyS' : 'KeyW', 60);
       const entered = player.cover?.collider === A;
       let maxSpeed = 0;
       let crouchMin = 1;
@@ -124,6 +126,85 @@ const r = await p.evaluate(() => {
     out.c4.blocked = chain([[x, x + 3, z, 1, 1.1], [x + 5, x + 8, z, 1, 1.1], [x + 3.7, x + 4.8, z + 0.7, 1.6, 1.5, 'none']]); // a crate in the gap
     out.c4.aim = chain([[x, x + 3, z, 1, 1.1], [x + 5, x + 8, z, 1, 1.1]], { aim: true });
     out.c4.perp = chain([[x, x + 3, z, 1, 1.1], [x + 5.5, x + 6.1, z, 6, 2.8, 'high']]); // a wall across the line, facing back
+    out.c4.negative = chain([[x, x + 3, z, 1, 1.1], [x + 5, x + 8, z, 1, 1.1]], { north: true }); // approached from the -z side (cover normal -z)
+
+    // jump mid-run cancels it: burst, no cover, no slam
+    {
+      const made = [mk(x, x + 3, z, 1, 1.1), mk(x + 5, x + 8, z, 1, 1.1)];
+      reset(x + 1, z + 4);
+      hold('KeyW', 60);
+      const slams = [];
+      const jets = [];
+      const o1 = engine.events.on('player:coverSlam', () => slams.push(1));
+      const o2 = engine.events.on('player:jet', () => jets.push(1));
+      keys.add('KeyD');
+      for (let i = 0; i < 200 && !player.snap?.run; i++) step();
+      const inRun = !!player.snap?.run;
+      step(4);
+      slams.length = 0;
+      press('Space');
+      const vx1 = +player.vel.x.toFixed(1);
+      keys.delete('KeyD');
+      step(30);
+      out.c4.jumpCancel = { inRun, cover: !!player.cover, snap: !!player.snap, jets: jets.length, slams: slams.length, airborneOrJet: player.airborne || player.jetting > 0 || player.pos.y > 0.05, vx: vx1 };
+      step(120);
+      out.c4.jumpCancel.landed = !player.airborne && !player.cover;
+      if (typeof o1 === 'function') o1();
+      if (typeof o2 === 'function') o2();
+      for (const m of made) world.despawn({ objects: [m] });
+    }
+
+    // (c5) corners: at the end of a box, pushing along carries around it (outside) or into the wall that meets it (inside),
+    // staying in cover; the stick held the same way keeps sliding along the new face
+    const cornerKinds = [];
+    engine.events.on('player:coverCorner', (d) => cornerKinds.push(d.kind));
+    const corner = (boxes, { north = false, aim = false, frames = 200, key = 'KeyD', stopAfterKinds = 0, extra = 0 } = {}) => {
+      const made = boxes.map((b) => mk(...b));
+      const A = made[0].userData.collider;
+      reset(free.x + 1, free.z + (north ? -4 : 4));
+      hold(north ? 'KeyS' : 'KeyW', 60);
+      cornerKinds.length = 0;
+      const entered = player.cover?.collider === A;
+      const seq = [];
+      const ids = [];
+      let lost = 0;
+      let minZ = player.pos.z;
+      let z0 = player.pos.z;
+      let landed = 0;
+      if (aim) keys.add('Mouse2');
+      keys.add(key);
+      for (let i = 0; i < frames; i++) {
+        step();
+        if (!player.cover && !player.snap) lost++;
+        if (player.cover) {
+          const k = `${Math.round(player.cover.normal.x)},${Math.round(player.cover.normal.z)}`;
+          if (seq[seq.length - 1] !== k) { seq.push(k); ids.push(made.findIndex((m) => m.userData.collider === player.cover.collider)); }
+        }
+        if (stopAfterKinds && cornerKinds.length >= stopAfterKinds && !player.snap && player.cover) { if (!landed) { landed = i; z0 = player.pos.z; } if (i - landed >= extra) break; }
+        if (lost > 20) break;
+      }
+      keys.delete(key);
+      keys.delete('Mouse2');
+      const res = { entered, seq, ids, lost, kinds: cornerKinds.slice(), cover: !!player.cover, snap: !!player.snap, type: player.cover?.type ?? null, id: made.findIndex((m) => m.userData.collider === player.cover?.collider), dz: +(player.pos.z - z0).toFixed(2), x: +player.pos.x.toFixed(2) };
+      for (const m of made) world.despawn({ objects: [m] });
+      return res;
+    };
+    // free-standing high box 3 x 2: hold D all the way round (4 outside corners)
+    out.c5 = { loop: corner([[x, x + 3, z, 2, 2.8, 'high']], { frames: 420 }) };
+    out.c5.lowBox = corner([[x, x + 3, z, 1, 1.1]], { frames: 200, stopAfterKinds: 1, extra: 6 });
+    // crate on the spot around the corner: exits as before
+    out.c5.blocked = corner([[x, x + 3, z, 2, 2.8, 'high'], [x + 3.2, x + 4.2, z + 0.4, 0.8, 1.5, 'none']], { frames: 120 });
+    // a face under 0.9 m (a 0.5 kit wall end, a door jamb) is no cover to wrap onto: pushing past the end walks on, as before
+    out.c5.thin = corner([[x, x + 3, z, 0.5, 2.8, 'high']], { frames: 200 });
+    out.c5.thin.endX = out.c5.thin.x - x;
+    // aiming at the end peeks
+    out.c5.aim = corner([[x, x + 3, z, 2, 2.8, 'high']], { aim: true, frames: 120 });
+    // inside corner: wall A (x..x+8) meets wall B (x+8..x+8.6, running toward the player)
+    out.c5.inside = corner([[x, x + 8, z, 0.6, 2.8, 'high'], [x + 8, x + 8.6, z + 6.15, 12, 2.8, 'high']], { frames: 300, stopAfterKinds: 1, extra: 60 });
+    // outside corner of an L of two walls: A (x..x+6) ends flush with the face of B (running away from the player)
+    out.c5.ell = corner([[x, x + 6, z, 0.6, 2.8, 'high'], [x + 5.4, x + 6, z - 5.7, 12, 2.8, 'high']], { frames: 300, stopAfterKinds: 1, extra: 60 });
+    // from the -z side too (normal -z), and a held back-stick afterwards leaves cover (the grace is short)
+    out.c5.north = corner([[x, x + 3, z, 2, 2.8, 'high']], { north: true, frames: 200, stopAfterKinds: 1, extra: 20 });
   }
 
   // (d) Space on open ground: a burst, then back down
@@ -284,13 +365,13 @@ const r = await p.evaluate(() => {
 });
 console.log(JSON.stringify(r, null, 1));
 const fail = [];
-const expect = (name, ok) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`); if (!ok) fail.push(name); };
+const expect = (name, ok, extra = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${name}${ok ? "" : " " + extra}`); if (!ok) fail.push(name); };
 expect('(a) walking into a wall enters high cover with no key', r.a.cover === 'high' && r.a.dist < 0.6);
 expect('(b) walking along the wall close to its face never snaps', !r.b.snapped && r.b.x > 3);
 expect('(c) moving away exits cover', r.c.wasIn && r.c.exited);
 expect('(c) no instant re-entry, but it grabs again after the cooldown', !r.c.instant && r.c.later);
 expect('(c2) a diagonal backward push exits cover', r.c2.inC2 && r.c2.exited);
-expect('(c3) pushing along the cover past its end exits and walks on', r.c3.exitX !== null && !r.c3.cover && !r.c3.snap && r.c3.endX > r.c3.boxMaxX + 0.5);
+expect('(c3) pushing along the cover past its end of a 1 m deep wall wraps round it: still in cover, one outside corner', r.c3.cover && !r.c3.snap && r.c3.c3corners === 1 && r.c3.endX > r.c3.boxMaxX);
 expect('(c3) aiming at the end keeps the cover (peek)', r.c3.aimStays);
 if (r.c4.free) {
   const c4 = r.c4;
@@ -302,6 +383,18 @@ if (r.c4.free) {
   expect('(c4) a crate in the gap blocks the path: exits as before', c4.blocked.entered && !c4.blocked.cover && c4.blocked.runs === 0);
   expect('(c4) aiming at the end peeks: stays in cover, no run', c4.aim.cover && c4.aim.onB === 0 && c4.aim.runs === 0);
   expect('(c4) a wall across the line (perpendicular): runs up to it, cover normal faces back along the push', c4.perp.runs === 1 && c4.perp.onB === 1 && c4.perp.type === 'high' && c4.perp.nx === -1);
+  expect('(c4) the same run from the -z side (cover normal -z)', c4.negative.onB === 1 && c4.negative.runs === 1 && c4.negative.nz === -1);
+  const jc = c4.jumpCancel;
+  expect('(c4) jump mid-run cancels it: jetpack burst, not in cover, no cover slam', jc.inRun && !jc.cover && !jc.snap && jc.jets === 1 && jc.slams === 0 && jc.airborneOrJet && jc.vx > 4 && jc.landed, JSON.stringify(jc));
+  const c5 = r.c5;
+  expect('(c5) hold D round a free-standing high box: 4 outside corners, normals turn 90 deg each time, never leaves cover', c5.loop.entered && c5.loop.kinds.length >= 4 && c5.loop.kinds.every((k) => k === 'outside') && c5.loop.seq.slice(0, 5).join('|') === '0,1|1,0|0,-1|-1,0|0,1' && c5.loop.lost === 0 && c5.loop.ids.every((i) => i === 0), JSON.stringify(c5.loop));
+  expect('(c5) low box: wraps (crouch-run) onto the adjacent face and keeps sliding along it', c5.lowBox.kinds[0] === 'outside' && c5.lowBox.seq.join('|') === '0,1|1,0' && c5.lowBox.type === 'low' && c5.lowBox.lost === 0 && c5.lowBox.dz < -0.05, JSON.stringify(c5.lowBox));
+  expect('(c5) a crate on the spot around the corner: exits as before, no wrap', c5.blocked.entered && c5.blocked.kinds.length === 0 && !c5.blocked.cover, JSON.stringify(c5.blocked));
+  expect('(c5) a 0.3 m thin wall has no face to wrap onto: exits and walks on past the end', c5.thin.entered && !c5.thin.cover && c5.thin.kinds.length === 0 && c5.thin.endX > 3.5, JSON.stringify(c5.thin));
+  expect('(c5) aiming at the end peeks: stays on the face, no wrap', c5.aim.cover && c5.aim.kinds.length === 0 && c5.aim.seq.join('|') === '0,1', JSON.stringify(c5.aim));
+  expect('(c5) inside corner: turns into wall B (normal -x), keeps sliding away from the corner, no exit or bounce', c5.inside.kinds[0] === 'inside' && c5.inside.seq.join('|') === '0,1|-1,0' && c5.inside.ids[1] === 1 && c5.inside.lost === 0 && c5.inside.cover && c5.inside.dz > 0.8, JSON.stringify(c5.inside));
+  expect('(c5) outside corner of an L of two walls: ends on wall B (normal +x), sliding on along it', c5.ell.kinds[0] === 'outside' && c5.ell.seq.join('|') === '0,1|1,0' && c5.ell.ids[1] === 1 && c5.ell.lost === 0 && c5.ell.dz < -0.8, JSON.stringify(c5.ell));
+  expect('(c5) the corner works from the -z side (normal -z -> +x... turns the other way)', c5.north.kinds[0] === 'outside' && c5.north.seq[0] === '0,-1' && c5.north.seq[1] === '1,0' && c5.north.lost === 0, JSON.stringify(c5.north));
 } else expect('(c4) found a free area for the cover-run cases', false);
 expect('(d) Space on open ground: burst peaks 1.2-1.8 m and lands back', r.d.peak > 1.2 && r.d.peak < 1.8 && r.d.y === 0 && !r.d.airborne && r.d.jetting > 0.15);
 expect('(d) player:jet (nozzle ~1.2 m up, exhaust down) then player:land', r.d.events.length === 2 && /^player:jet@1\.2\d?\/-1$/.test(r.d.events[0]) && r.d.events[1] === 'player:land');
