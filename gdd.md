@@ -541,8 +541,9 @@ Shots 0.12 (MG 0.3, sniper and railgun 0.7), hits taken 0.6, jet 0.2, nearby bla
 | Ammo counter | Turns red at 25% of the magazine or less, at least the last round: AR 8, MG 22, BR 6, SR 1, RG 1, PS 3. Glows after a perfect reload |
 | Active reload bar | Good and perfect zones with a sweeping cursor and an "R" label; disappears on a jam; shows PERFECT / GOOD |
 | Top bar | Zone name (TRAINING YARD / INTERIOR), "TARGETS DOWN n / 32" |
+| Objective | State line under the top bar (hidden without objectives): current objective text, `n / N` kills or time left, MISSION COMPLETE / MISSION FAILED. Never says what to do |
 | Boss bar | Name, core health fill, six leg pips (grey out when destroyed), state text "CORE EXPOSED" / "DESTROYED"; shown only while the boss is awake |
-| Toasts | ammo pickups, AMMO FULL, ARENA CLEAR (6 s), boss name on wake, CORE EXPOSED, MECH DESTROYED, SYSTEM FAULT (engine fault isolation) |
+| Toasts | ammo pickups, AMMO FULL, ARENA CLEAR (6 s), boss name on wake, CORE EXPOSED, MECH DESTROYED, OBJECTIVE COMPLETE, MISSION COMPLETE / FAILED (4 s), SYSTEM FAULT (engine fault isolation) |
 | Death | "SHIELDS DOWN, RESPAWNING" |
 | Lock-on | Diamond marker on the awake boss |
 

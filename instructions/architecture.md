@@ -24,7 +24,7 @@ src/
     registry.js           piece registry: stable string id -> how a piece is built from data (ids: level.md)
     controls.js           BINDINGS table + intents (move, look, aiming, running, firing, slots...)
     settings.js           player settings + start-panel bindings
-    world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), textures.js, pickups.js (pickup.* pieces), encounter.js (marker.* / trigger.* pieces: spawn, checkpoints, trigger volumes, reinforcements; workshop.md)
+    world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), textures.js, pickups.js (pickup.* pieces), encounter.js (marker.* / trigger.* / objective.* pieces: spawn, checkpoints, trigger volumes, reinforcements; workshop.md), mission.js (objective sequencing, `game.mission`; ticks inside encounter)
     actors/ rig.js (skeleton, animator, IK), parts.js (model building blocks, debris), soldier.js (player model),
             looks.js (trooper / puppet models), player.js,
             enemy.js (shared enemy body: hit zones, weak spots, flash, debris death),
@@ -72,7 +72,7 @@ the only thing three.js recompiles shaders for, so they come from a fixed pool o
 | phase | systems | dt |
 |---|---|---|
 | pre | controls (+ hitstop time scale, aim assist, look, shoulder, debug keys), stats toggle | real |
-| simulate (substeps ≤ 20 ms) | player → weapon → enemies → encounter → pickups | scaled |
+| simulate (substeps ≤ 20 ms) | player → weapon → enemies → encounter (+ mission) → pickups | scaled |
 | late | camera → aimProbe (what the crosshair is on) | scaled (shake uses real) |
 | present | fx → world (lights, sun, player visibility) → hud → audio (MG spin) | scaled |
 | render | post (exposure, grade, bloom) | real |
@@ -101,11 +101,13 @@ Payload objects marked * are reused: copy what you keep.
 | `player:vaultRefused` | *{ collider, blocker } (landing spot blocked; a jet burst fires instead) | Gym traversal tool |
 | `player:step` | *{ run, raised } (each heel strike; not in the air) | audio |
 | `enemy:step` | position (trooper / moving puppet heel strike) | audio (fades out by 28 m from the camera) |
-| `puppet:down` | puppet | pickups (drop), audio |
-| `trigger:fired` | { id, event } (a `trigger.volume` was entered) | – (objectives, #12, later) |
-| `checkpoint:reached` | { id, pos, yaw } | hud toast |
-| `group:wake` / `group:spawn` | { group } / { group, count } | – |
-| `encounter:wake` / `encounter:spawn` | group name (requests, listened by `Encounter`) | emitted by nobody yet (objectives) |
+| `puppet:down` | puppet | pickups (drop), audio, mission (destroy) |
+| `trigger:fired` | { id, event } (a `trigger.volume` was entered) | mission (reach with `trigger`) |
+| `checkpoint:reached` | { id, pos, yaw } | hud toast, mission (reach with `trigger`) |
+| `group:wake` / `group:spawn` | { group } / { group, count } | – / mission (destroy without `count`) |
+| `encounter:wake` / `encounter:spawn` | group name (requests, listened by `Encounter`) | emitted by the mission (objective `wakeGroup` / `spawnGroup`) |
+| `mission:objective` / `mission:objective:done` | { index, total, id, kind, text } (fresh object) | hud toast (done) |
+| `mission:complete` / `mission:failed` | { total } / { index, id, reason } | hud toast |
 | `bolt:fired` / `bolt:impact` | position / *{ point, normal } | audio / fx |
 | `pickup:collected` / `pickup:full` | label ('LIGHT AMMO +n AR ...') / – (all guns of the class full) | hud toast, audio |
 | `weapon:charge` | true (railgun charge started) / false (cancelled) | audio (the HUD ring reads `weapon.charging`) |
