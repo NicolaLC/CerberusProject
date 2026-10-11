@@ -100,6 +100,7 @@ Keys (the key bar shows them; `static KEYS` is the source and the suite checks i
 - All helpers, panels, listeners, the HUD state and every piece handle are freed in `dispose()`.
 
 ## Test hooks (`game.tool`)
+The suite refuses `requestPointerLock` (init script, game falls back to free-mouse mode): headless Chromium can end up swallowing every real mouse event after interleaved lock requests, which made the real-DOM inspector sections flaky. Real mouse/keyboard sections need that.
 `place(id, pos, params?, yaw?)` (returns the index; snaps x / z and yaw), `select(i)`, `move(i, pos)`, `rotate(i, steps = 1)`,
 `remove(i)`, `duplicate(i)` (returns the copy's index), `setParams(i, patch)` (null value removes the key), `setName(i, name)`, `undo()`, `redo()`, `load(level)`, `arm(id | null)`,
 `play()`, `edit()`, `togglePlay()`, `restart()`, `spawnAt()`, `playing`, `doc`, `items`, `sel`, `armed`, `grid`, `count`, `ghostPos`, `toastText`, `coverOf(i)`, `surface()`, `pick()` (cursor ray),
