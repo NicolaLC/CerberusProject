@@ -14,18 +14,20 @@ import { CoverMap } from '../ai/cover.js';
 // The spawn list lives in the level file; builders run against this system and return the actor.
 // params (all enemies): group (spawn group name, see wakeGroup); mover { to: [x, y, z], speed }, drone: pos = the ground under it, boss.spider { arena: { minX, maxX, minZ, maxZ } }.
 // `stand`: puppets on a pneumatic stand (one instanced base + post each).
+// Inspector fields (level.md, piece meta): every enemy takes a spawn group.
+const GROUP = { key: 'group', type: 'text', optional: true };
 const def = (kind, d) => ({ kind, pos: d.pos, yaw: d.yaw, ...d.params });
 // `example` ({ params, yaw? }) is what the Library spawns; `label` is its one-line stat sheet (level.md, meta convention).
 export const ENEMY_PIECES = {
-  'enemy.static': { stand: true, example: { params: {} }, label: `HP ${HEALTH.default} | stands, takes hits`, build: (sys, d) => new Puppet(sys, def('static', d)) },
-  'enemy.mover': { stand: true, example: { params: { speed: 0 } }, label: `HP ${HEALTH.default} | slides on a rail`, build: (sys, d) => new Puppet(sys, def('mover', d)) },
-  'enemy.shooter': { stand: true, example: { params: {} }, label: `HP ${HEALTH.shooter} | pops up and fires within ${ENGAGE_RANGE} m`, build: (sys, d) => new Puppet(sys, def('shooter', d)) },
+  'enemy.static': { stand: true, example: { params: {} }, label: `HP ${HEALTH.default} | stands, takes hits`, fields: [GROUP], build: (sys, d) => new Puppet(sys, def('static', d)) },
+  'enemy.mover': { stand: true, example: { params: { speed: 0 } }, label: `HP ${HEALTH.default} | slides on a rail`, fields: [GROUP, { key: 'to', type: 'vec3', optional: true }, { key: 'speed', type: 'number', min: 0 }], build: (sys, d) => new Puppet(sys, def('mover', d)) },
+  'enemy.shooter': { stand: true, example: { params: {} }, label: `HP ${HEALTH.shooter} | pops up and fires within ${ENGAGE_RANGE} m`, fields: [GROUP], build: (sys, d) => new Puppet(sys, def('shooter', d)) },
   // moves between cover and shoots back
-  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m`, build: (sys, d) => new Trooper(sys, def('trooper', d)) },
+  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m`, fields: [GROUP], build: (sys, d) => new Trooper(sys, def('trooper', d)) },
   // hovers and strafes, short bursts
-  'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m`, build: (sys, d) => new Drone(sys, def('drone', d)) },
+  'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m`, fields: [GROUP], build: (sys, d) => new Drone(sys, def('drone', d)) },
   // miniboss
-  'boss.spider': { example: { params: {} }, label: `HP ${SPIDER.core} core | wakes at ${SPIDER.wakeRange} m or in its arena`, build: (sys, d) => new SpiderMech(sys, def('boss', d)) },
+  'boss.spider': { example: { params: {} }, label: `HP ${SPIDER.core} core | wakes at ${SPIDER.wakeRange} m or in its arena`, fields: [GROUP], build: (sys, d) => new SpiderMech(sys, def('boss', d)) },
 };
 
 // Flank director: with 2+ troopers engaged, every FLANK_EVERY s one of them is sent around the player.

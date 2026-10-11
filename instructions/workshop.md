@@ -56,7 +56,7 @@ Keys (the key bar shows them; `static KEYS` is the source and the suite checks i
 | Ctrl+S / Ctrl+O | `saveLevel(doc)` / `openLevel(registry)` from io.js; a failure ("not implemented" until #72) is a toast |
 | P | play in place / back to edit (see below) |
 | T | while playing: restart the encounter |
-| Esc | disarm, then deselect, then pause (the start panel has the scene buttons) |
+| Esc | in an inspector field: revert + blur; otherwise disarm, then deselect, then pause (the start panel has the scene buttons) |
 
 ## Play in place (#71)
 `P` toggles edit and play (`play()`, `edit()`, `togglePlay()`, `restart()`, `playing`); `editing` is false while playing, so
@@ -81,17 +81,31 @@ Keys (the key bar shows them; `static KEYS` is the source and the suite checks i
   `example` params; picking it again, or Esc, disarms. A new registry id shows up by itself.
 - **Ghost**: a translucent green box (the measured bounds of the armed piece, turned by its yaw) under the cursor, on the
   floor or on top of the box under it. While dragging, it shows where the piece will land.
+- **Inspector** (right, `#workshop-inspector`, below the status panel): shown while one piece is selected in edit mode. One control per
+  entry of the piece's registry meta `fields` (level.md, Piece meta) plus a `name` text field for every piece: text input (number, vec,
+  list, text), checkbox (bool), select (enum; `options: 'mats'` = keys of `World.mats`). Built from data, so a new `fields` entry shows up by itself;
+  rebuilt only when the selected id changes, otherwise values are refreshed in place after every command / undo / redo.
+  - **Commit** on Enter or `change` (blur, select, checkbox), never per keystroke, through `setParams(i, { key: value })` (or `setName`):
+    one undoable command each, validated by the builder first. A bad value (`parseField` error, or the builder throws) is a toast and the field shows the doc value again.
+    An optional field left empty removes its key (`setParams` patch value `null` = delete key; no params left = no `params`); `setName('')` removes `name`.
+  - **Focus rules**: the field's own `keydown` / `keyup` stop propagation, so no editor shortcut, engine input or game debug key (H, F3, `) sees typing;
+    the editor's `#active` also ignores events whose target is an input / select. Esc in a field reverts its text and blurs it (selection kept);
+    a click on the canvas blurs it. Entering play blurs it and hides the whole right column.
+  - Fields by piece: `env.box` size, mat, cover, collide, shadow; `env.strip` size, mat; `env.label` text, size, flat; `light.point` color, intensity, distance;
+    `prop.gun` gun; every `kit.*` its size params + mat (`kit.platform`: size, height, stairs, parapets, mat, coverMat); enemies `group` (`enemy.mover` also `to`, `speed`);
+    `marker.entry` group, enemies (comma list); `trigger.volume` size, event, once, wakeGroup, spawnGroup. Markers (`marker.spawn`, `marker.checkpoint`), pickups and `boss.spider`'s arena have only `name` / `group`.
+  - Not in the UI: `faces`, `ownMaterial`, `flicker`, `env.label` colors, `boss.spider` arena, `kit.*` `yaw` (use R).
 - **Selection**: a `Box3Helper` tinted by cover class (wall white, high blue, low orange, none yellow) and the status
   panel (right): count, snap, undo / redo depth, the piece's id, pos, yaw, size and cover flags.
 - All helpers, panels, listeners, the HUD state and every piece handle are freed in `dispose()`.
 
 ## Test hooks (`game.tool`)
 `place(id, pos, params?, yaw?)` (returns the index; snaps x / z and yaw), `select(i)`, `move(i, pos)`, `rotate(i, steps = 1)`,
-`remove(i)`, `duplicate(i)` (returns the copy's index), `setParams(i, patch)`, `undo()`, `redo()`, `load(level)`, `arm(id | null)`,
+`remove(i)`, `duplicate(i)` (returns the copy's index), `setParams(i, patch)` (null value removes the key), `setName(i, name)`, `undo()`, `redo()`, `load(level)`, `arm(id | null)`,
 `play()`, `edit()`, `togglePlay()`, `restart()`, `spawnAt()`, `playing`, `doc`, `items`, `sel`, `armed`, `grid`, `count`, `ghostPos`, `toastText`, `coverOf(i)`, `surface()`, `pick()` (cursor ray),
 and `verify()`: `{ ok, problems }` checks one handle per piece, enemy and pickup counts, and that every world collider
 belongs to a handle. `suite tests/workshop.browser.mjs` covers: one of each owner, all ids, scene = doc, snapping,
-rotation rules, encounter tools (section 12), undo / redo JSON identity, delete frees (colliders, scene objects), no leak over place / delete cycles and
+rotation rules, encounter tools (section 12), inspector (section 13: fields per piece, type + Enter edits, undo identity, invalid values, focus / shortcuts, play, leaks), undo / redo JSON identity, delete frees (colliders, scene objects), no leak over place / delete cycles and
 over leaving the scene (measured in a quiet scene: the arena's own gameplay makes geometry counts vary), palette, key
 bar, real mouse placing / selecting / dragging, cover tint, `load`, play in place (spawn, awake enemies, kill, restart, edit
 returns the identical doc and history, no leak over play / edit cycles).
@@ -99,7 +113,7 @@ returns the identical doc and history, no leak over play / edit cycles).
 ## Encounters (#73)
 Code: `src/game/world/encounter.js` (`Encounter` system, `ENCOUNTER_PIECES`, `levelSpawn`). Registry owner `encounter`, so the four pieces show up
 in the palette (`encounter marker.*`, `encounter trigger.*`) and follow the doc / command / undo rules like any piece. Params are edited
-with `setParams` (hook) only; UI editing is still open.
+in the inspector (see Panels and helpers) or with `setParams`.
 | id | params | gizmo (edit mode only) |
 |---|---|---|
 | `marker.spawn` | – (`yaw` = facing) | green box + arrow. **The player start**: `levelSpawn(level)` = first `marker.spawn` piece, else `level.spawn` (stays required in the file) |
@@ -129,5 +143,5 @@ with `setParams` (hook) only; UI editing is still open.
   `marker.spawn` (camera spawn kept, restart, normal load), checkpoint respawn, no leaks over play / edit cycles.
 
 ## Not yet
-Editing params in the UI (size, material, cover, groups, events), interior zones editing, light-placement
+Interior zones editing, faces / flicker / label colours / boss arena in the inspector, light-placement
 hitch (adding a point light recompiles shaders once).

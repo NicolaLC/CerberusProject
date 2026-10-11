@@ -1024,6 +1024,134 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   expect('4 play / edit cycles with every encounter piece (reinforcements, wakes, checkpoint) leak nothing; doc unchanged', same2 && leak.same && leak.ok, JSON.stringify(leak));
 }
 
+// ---- 13. inspector: the selected piece's params as fields (registry meta `fields`), edited through the real DOM ----
+{
+  const INS = '#workshop-inspector';
+  const field = (key) => `${INS} [data-key="${key}"]`;
+  const typeIn = async (key, text) => { await p.click(field(key), { clickCount: 3 }); await (text === '' ? p.keyboard.press('Backspace') : p.keyboard.type(text)); await p.keyboard.press('Enter'); };
+  // earlier sections leave pointer lock on (play): the real mouse needs the cursor
+  await ev(() => { const t = T.tool(); if (t.playing) t.edit(); document.exitPointerLock(); window.game.engine.input.free = false; t.load(window.game.level); t.arm(null); });
+  await p.waitForFunction(() => !document.pointerLockElement);
+  const box = await ev(() => { const t = T.tool(); const i = t.place('env.box', [-20, 0, 40], { size: [3, 1.1, 1], mat: 'low', cover: 'low' }); t.select(i); return i; });
+  const shown = await ev(() => ({
+    vis: document.querySelector('#workshop-inspector').style.display !== 'none',
+    keys: [...document.querySelectorAll('#workshop-inspector [data-key]')].map((e) => e.dataset.key),
+    size: document.querySelector('#workshop-inspector [data-key="size"]').value,
+    mat: document.querySelector('#workshop-inspector [data-key="mat"]').value,
+    cover: document.querySelector('#workshop-inspector [data-key="cover"]').value,
+    shadow: document.querySelector('#workshop-inspector [data-key="shadow"]').checked,
+  }));
+  expect('selecting a piece shows one field per `fields` entry (and its name)', shown.vis && JSON.stringify(shown.keys) === JSON.stringify(['name', 'size', 'mat', 'cover', 'collide', 'shadow']) && shown.size === '3, 1.1, 1' && shown.mat === 'low' && shown.cover === 'low' && shown.shadow === true, JSON.stringify(shown));
+  // every field of every piece id comes from the registry: ids without fields show only the name
+  const meta = await ev(() => { const g = window.game; return g.registry.ids().map((id) => [id, (g.registry.meta(id).fields ?? []).map((f) => f.key)]); });
+  expect('  every registry id has well-formed fields (or none)', await ev(() => window.game.registry.ids().every((id) => (window.game.registry.meta(id).fields ?? []).every((f) => f.key && ['number', 'vec2', 'vec3', 'text', 'bool', 'enum', 'list'].includes(f.type) && (f.type !== 'enum' || f.options)))), JSON.stringify(meta));
+  const mid = await ev(() => { const t = T.tool(); const g = window.game; const out = {}; for (const id of ['marker.spawn', 'marker.entry', 'trigger.volume', 'enemy.mover', 'kit.platform', 'pickup.light']) { const i = t.place(id, [-20, 0, 44]); t.select(i); out[id] = [...document.querySelectorAll('#workshop-inspector [data-key]')].map((e) => e.dataset.key).join(','); } for (let k = 0; k < 6; k++) t.undo(); t.select(-1); return out; });
+  expect('  encounter, enemy, kit and pickup pieces show their own fields', mid['trigger.volume'] === 'name,size,event,once,wakeGroup,spawnGroup' && mid['marker.entry'] === 'name,group,enemies' && mid['enemy.mover'] === 'name,group,to,speed' && mid['marker.spawn'] === 'name' && mid['pickup.light'] === 'name' && mid['kit.platform'].startsWith('name,size,height,stairs,parapets,mat'), JSON.stringify(mid));
+  expect('  nothing selected: inspector hidden', await ev(() => document.querySelector('#workshop-inspector').style.display === 'none'));
+
+  // type + Enter: doc and scene change, one undo step
+  await ev((i) => T.tool().select(i), box);
+  const before = await ev(() => ({ doc: T.doc(), undo: T.tool().undoStack.length, h: T.tool().items.length }));
+  await typeIn('size', '6, 2, 1.5');
+  const a = await ev((i) => { const t = T.tool(); return { p: t.doc.pieces[i], undo: t.undoStack.length, ok: t.verify().ok, size: t.items[i].thing.objects[0].geometry.parameters, val: document.querySelector('#workshop-inspector [data-key="size"]').value }; }, box);
+  expect('editing size (type + Enter) changes the doc and rebuilds the scene piece, as one command', JSON.stringify(a.p.params.size) === '[6,2,1.5]' && a.undo === before.undo + 1 && a.ok && a.size.width === 6 && a.size.height === 2 && a.size.depth === 1.5, JSON.stringify(a));
+  expect('  the field shows the stored value', a.val === '6, 2, 1.5');
+  await p.selectOption(field('mat'), 'high');
+  await p.selectOption(field('cover'), '');
+  await p.uncheck(field('shadow'));
+  await typeIn('name', 'crate1');
+  const b = await ev((i) => { const t = T.tool(); return { p: t.doc.pieces[i], cover: t.coverOf(i), ok: t.verify().ok }; }, box);
+  expect('  mat (select), cover cleared (key removed), shadow (checkbox), name', b.p.params.mat === 'high' && !('cover' in b.p.params) && b.p.params.shadow === false && b.p.name === 'crate1' && b.cover.length === 0 && b.ok, JSON.stringify(b));
+  // undo / redo restore the exact JSON
+  const afterDoc = await ev(() => T.doc());
+  const u = await ev(() => { const t = T.tool(); for (let k = 0; k < 5; k++) t.undo(); const d0 = T.doc(); for (let k = 0; k < 5; k++) t.redo(); return { d0, d1: T.doc(), ok: t.verify().ok, sel: t.sel }; });
+  expect('  undo x5 returns the identical doc from before, redo x5 the edited one', u.d0 === before.doc && u.d1 === afterDoc && u.ok, JSON.stringify({ ok: u.ok, same0: u.d0 === before.doc, same1: u.d1 === afterDoc }));
+  await ev((i) => T.tool().select(i), box);
+  expect('  the inspector follows undo (field shows the doc)', await p.inputValue(field('size')) === '6, 2, 1.5');
+
+  // invalid values: toast, doc untouched, field back to the doc value
+  const docOk = await ev(() => T.doc());
+  const undoN = await ev(() => T.tool().undoStack.length);
+  const bad = {};
+  for (const [key, text] of [['size', '1, 2'], ['size', 'a, b, c'], ['size', '0, 1, 1']]) {
+    await typeIn(key, text);
+    bad[`${key}=${text}`] = await ev(() => ({ toast: T.tool().toastText, doc: T.doc(), val: document.querySelector('#workshop-inspector [data-key="size"]').value }));
+  }
+  expect('invalid values (wrong count, not numbers, below min) toast and leave the doc and history alone; the field is reverted', Object.values(bad).every((r) => r.toast && r.doc === docOk && r.val === '6, 2, 1.5') && await ev(() => T.tool().undoStack.length) === undoN, JSON.stringify(bad));
+  await p.selectOption(field('mat'), 'high');
+  await ev(() => { const t = T.tool(); t.toastText = ''; });
+  const trig = await ev(() => { const t = T.tool(); const i = t.place('trigger.volume', [-20, 0, 50]); t.select(i); return i; });
+  await typeIn('size', '1, 1');
+  expect('  a builder error (trigger size with 2 numbers) is a toast too, nothing changed', await ev((i) => T.tool().toastText !== '' && JSON.stringify(T.tool().doc.pieces[i].params.size) === '[4,3,4]', trig));
+
+  // encounter params
+  await typeIn('size', '8, 3, 6');
+  await typeIn('event', 'door-open');
+  await p.uncheck(field('once'));
+  await typeIn('wakeGroup', 'alpha');
+  await typeIn('spawnGroup', 'reinforce');
+  await typeIn('name', 'gate');
+  const tg = await ev((i) => { const t = T.tool(); return { p: t.doc.pieces[i], ok: t.verify().ok, rec: t.items[i].thing.data ?? null }; }, trig);
+  expect('trigger.volume: size, event, once, wakeGroup, spawnGroup and name edit in the UI', JSON.stringify(tg.p.params) === JSON.stringify({ size: [8, 3, 6], event: 'door-open', once: false, wakeGroup: 'alpha', spawnGroup: 'reinforce' }) && tg.p.name === 'gate' && tg.ok, JSON.stringify(tg));
+  await typeIn('wakeGroup', '');
+  expect('  emptying an optional field removes the key', await ev((i) => !('wakeGroup' in T.tool().doc.pieces[i].params), trig));
+  const ent = await ev(() => { const t = T.tool(); const i = t.place('marker.entry', [-20, 0, 56]); t.select(i); return i; });
+  await typeIn('group', 'wave2');
+  await typeIn('enemies', 'enemy.drone, enemy.trooper , enemy.trooper');
+  expect('marker.entry: group and enemies (comma list)', await ev((i) => JSON.stringify(T.tool().doc.pieces[i].params) === JSON.stringify({ group: 'wave2', enemies: ['enemy.drone', 'enemy.trooper', 'enemy.trooper'] }) && T.tool().verify().ok, ent));
+  await typeIn('enemies', 'kit.wall');
+  expect('  a non-enemy id in the list is a toast, doc unchanged', await ev((i) => T.tool().doc.pieces[i].params.enemies.length === 3, ent));
+  const en = await ev(() => { const t = T.tool(); const i = t.place('enemy.trooper', [-20, 0, 62]); t.select(i); return i; });
+  await typeIn('group', 'alpha');
+  expect('enemy group (trooper)', await ev((i) => T.tool().doc.pieces[i].params.group === 'alpha' && T.tool().items[i].thing.squad === 'alpha' && T.tool().verify().ok, en));
+  const kt = await ev(() => { const t = T.tool(); const i = t.place('kit.platform', [-20, 0, 70]); t.select(i); return i; });
+  await typeIn('size', '10, 6');
+  await p.selectOption(field('stairs'), 'e');
+  await typeIn('height', '2.4');
+  expect('kit.platform: size (2 numbers), stairs (enum), height', await ev((i) => { const q = T.tool().doc.pieces[i].params; return JSON.stringify(q.size) === '[10,6]' && q.stairs === 'e' && q.height === 2.4 && T.tool().verify().ok; }, kt));
+
+  // keyboard focus: typing in a field is the field's, never the editor's
+  await ev((i) => { const t = T.tool(); t.select(i); T.step(0.1); window.__cam = t.game.engine.camera.position.toArray(); window.__n = t.count; window.__g = t.grid; window.__d = T.doc(); }, box);
+  await p.click(field('name'), { clickCount: 3 });
+  for (const k of ['d', 'w', 'r', 'g', 'h']) await p.keyboard.press(k);
+  await p.keyboard.down('d'); await ev(() => T.step(0.5)); await p.keyboard.up('d');
+  await p.keyboard.press('Delete'); await p.keyboard.press('Backspace'); await p.keyboard.press('Control+z'); await p.keyboard.press('PageUp'); await p.keyboard.press('ArrowRight'); await p.keyboard.press('p');
+  const typed = await ev(() => { const t = T.tool(); const el = document.querySelector('#workshop-inspector [data-key="name"]'); return { cam: t.game.engine.camera.position.toArray(), n: t.count, grid: t.grid, same: T.doc() === window.__d, playing: t.playing, keys: [...t.keys], focus: document.activeElement === el, val: el.value, camSame: JSON.stringify(t.game.engine.camera.position.toArray()) === JSON.stringify(window.__cam), skel: window.game.debug }; });
+  expect('typing in a field (d w r g h, held D, Delete, Backspace, Ctrl+Z, PageUp, arrows, p) fires no editor shortcut: no fly, no delete/undo/nudge/play', typed.camSame && typed.n === (await ev(() => window.__n)) && typed.grid === (await ev(() => window.__g)) && !typed.playing && typed.keys.length === 0 && typed.focus, JSON.stringify(typed));
+  expect('  the keys landed in the field', typed.val !== 'crate1' && /d/.test(typed.val), typed.val);
+  await p.keyboard.press('Escape');
+  const esc = await ev((i) => { const t = T.tool(); return { blurred: document.activeElement === document.body, sel: t.sel, val: document.querySelector('#workshop-inspector [data-key="name"]').value, doc: T.doc() === window.__d }; }, box);
+  expect('Esc in a field blurs it, reverts the text, keeps the selection and the doc', esc.blurred && esc.sel === box && esc.val === 'crate1' && esc.doc, JSON.stringify(esc));
+  // control: with the field blurred the same keys do act
+  await p.keyboard.press('Delete');
+  expect('  control: Delete after the field is blurred deletes the selection', await ev((n) => T.tool().count === n - 1, await ev(() => window.__n)));
+  await ev(() => T.tool().undo());
+
+  // play hides the panel and frees focus; edit brings it back
+  await ev((i) => T.tool().select(i), box);
+  await p.click(field('name'));
+  await ev(() => T.tap('KeyP'));
+  const pl = await ev(() => { const t = T.tool(); const playing = t.playing; return { playing, hidden: getComputedStyle(document.querySelector('#workshop-inspector')).display === 'none' || document.querySelector('#workshop-inspector').offsetParent === null, focus: document.activeElement.tagName }; });
+  await ev(() => T.tap('KeyP'));
+  const back = await ev(() => ({ playing: T.tool().playing, vis: document.querySelector('#workshop-inspector').offsetParent !== null, n: document.querySelectorAll('#workshop-inspector [data-key]').length }));
+  expect('play hides the inspector and drops field focus; back to edit shows it again with the selection', pl.playing && pl.hidden && pl.focus === 'BODY' && !back.playing && back.vis && back.n === 6, JSON.stringify({ pl, back }));
+
+  // leaks: select / deselect / play cycles, then leaving the scene
+  const lk = await ev((i) => {
+    const t = T.tool();
+    const cycle = () => { for (const k of [i, i + 1, 0, -1, i]) { t.select(k); } T.tap('KeyP'); T.step(0.5); T.tap('KeyP'); T.step(0.2); };
+    cycle();
+    const a = { dom: document.body.querySelectorAll('*').length, mem: T.mem(), insp: document.querySelectorAll('#workshop-inspector').length };
+    for (let n = 0; n < 4; n++) cycle();
+    const c = { dom: document.body.querySelectorAll('*').length, mem: T.mem(), insp: document.querySelectorAll('#workshop-inspector').length };
+    window.game.loadScene('arena'); T.step(2);
+    const gone = { insp: document.querySelectorAll('#workshop-inspector').length, side: document.querySelectorAll('#workshop-palette').length };
+    window.game.loadScene('workshop'); T.step(2);
+    return { a, c, gone, back: document.querySelectorAll('#workshop-inspector').length };
+  }, box);
+  expect('select / deselect / play cycles leave no DOM nodes, geometry or textures behind; one inspector, none after leaving the scene', lk.a.dom === lk.c.dom && lk.a.mem.geometries === lk.c.mem.geometries && lk.a.mem.textures === lk.c.mem.textures && lk.a.insp === 1 && lk.c.insp === 1 && lk.gone.insp === 0 && lk.back === 1, JSON.stringify(lk));
+}
+
 expect('no page or console errors', errors.length === 0, errors.join(' | '));
 await b.close();
 process.exit(fail.length ? 1 : 0);

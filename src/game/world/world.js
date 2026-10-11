@@ -3,7 +3,7 @@ import { gridTexture, applyWorldUVs } from './textures.js';
 import { mergeStatic, mergeGroup } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
 import { GUNS } from '../combat/guns.js';
-import { KIT_PIECES } from './kit.js';
+import { KIT_PIECES, MAT } from './kit.js';
 
 // Static level: axis-aligned boxes only (collision, cover and shadows depend on that).
 // Coordinates: x = east, z = south, y = up. Floor is y = 0.
@@ -28,6 +28,7 @@ export const WORLD_PIECES = {
   'env.box': {
     example: { params: { size: [3, 1.1, 1], mat: 'low', cover: 'low' } },
     label: 'BOX any size, axis-aligned',
+    fields: [{ key: 'size', type: 'vec3', min: 0.1 }, { ...MAT, optional: false }, { key: 'cover', type: 'enum', options: ['low', 'high', 'wall'], optional: true }, { key: 'collide', type: 'bool', def: true }, { key: 'shadow', type: 'bool', def: true }],
     build: (world, d) => {
       const { size, cover, collide, shadow } = d.params;
       const opts = { cover: cover ?? null, collide: collide ?? true, shadow: shadow ?? true };
@@ -38,6 +39,7 @@ export const WORLD_PIECES = {
   'env.strip': {
     example: { params: { size: [4, 0.2, 0.2], mat: 'stripCyan' } },
     label: 'STRIP emissive, no collision',
+    fields: [{ key: 'size', type: 'vec3', min: 0.01 }, { ...MAT, optional: false }],
     build: (world, d) => {
       const m = world.strip(d.pos[0], d.pos[1], d.pos[2], ...d.params.size, world.material(d.params, d.params.ownMaterial));
       if (d.name) world.named.set(d.name, m);
@@ -48,6 +50,7 @@ export const WORLD_PIECES = {
   'light.point': {
     example: { params: { color: '#38d8ff', intensity: 40, distance: 14 } },
     label: 'POINT LIGHT colour, intensity, distance',
+    fields: [{ key: 'color', type: 'text' }, { key: 'intensity', type: 'number', min: 0 }, { key: 'distance', type: 'number', min: 0 }],
     build: (world, d) => {
       const { color, intensity, distance, flicker } = d.params;
       let f = null;
@@ -65,11 +68,12 @@ export const WORLD_PIECES = {
   'env.label': {
     example: { params: { text: 'LABEL', size: 0.6 } },
     label: 'LABEL text sign, no collision',
+    fields: [{ key: 'text', type: 'text' }, { key: 'size', type: 'number', min: 0.1 }, { key: 'flat', type: 'bool', def: false }],
     build: (world, d) => world.label(d.pos, d.params),
   },
   // Display model of one gun (Library). params: gun (key of GUNS). The model sits at pos with its stock at the origin,
   // barrel along +Z turned by yaw. No collision; freed on unload.
-  'prop.gun': { example: { params: { gun: 'rifle' } }, label: 'display model of one gun', build: (world, d) => world.gunProp(d) },
+  'prop.gun': { example: { params: { gun: 'rifle' } }, label: 'display model of one gun', fields: [{ key: 'gun', type: 'enum', options: Object.keys(GUNS) }], build: (world, d) => world.gunProp(d) },
 };
 
 export class World {
