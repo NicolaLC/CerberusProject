@@ -89,12 +89,17 @@ export function turned(piece, steps) {
 
 export class WorkshopEditor {
   // shown in the key bar (view/keyhints.js); tests/workshop.browser.mjs checks that every key handled below is listed
-  static KEYS = [['W A S D', 'fly'], ['Q / E', 'down / up'], ['Shift', 'fast'], ['RMB', 'look (hold)'], ['LMB', 'place / select / drag'], ['R', 'rotate (Shift: back)'], ['G', 'snap 0.5 / 0.25 / 1 / off'], ['Arrows', 'nudge'], ['PgUp / PgDn', 'raise / lower'], ['Ctrl+D', 'duplicate'], ['Del / Backspace', 'delete'], ['Ctrl+Z / Y', 'undo / redo'], ['Ctrl+S / O', 'save / open'], ['Esc', 'cancel / pause']];
+  static KEYS = [['W A S D', 'fly'], ['Q / E', 'down / up'], ['Shift', 'fast'], ['RMB', 'look (hold)'], ['LMB', 'place / select / drag'], ['R', 'rotate (Shift: back)'], ['G', 'snap 0.5 / 0.25 / 1 / off'], ['Arrows', 'nudge'], ['PgUp / PgDn', 'raise / lower'], ['Ctrl+D', 'duplicate'], ['Del / Backspace', 'delete'], ['Ctrl+Z / Y', 'undo / redo'], ['Ctrl+S / O', 'save / open'], ['P', 'play here / back to edit'], ['T', 'restart (playing)'], ['Esc', 'cancel / pause']];
 
   constructor(game, level) {
     this.game = game;
-    // Edit mode only runs in the workshop scene; in any other level this tool does nothing.
-    this.editing = game.sceneName === 'workshop';
+    // The tool only runs in the workshop scene; in any other level it does nothing. `editing` is the edit half of it
+    // (false while playing in place), which is what game.js checks.
+    this.active = game.sceneName === 'workshop';
+    this.playing = false;
+    this.snapshot = null; // the doc as it was when play started (deep copy)
+    this.playLevel = null; // what play loaded: the snapshot with the spawn moved to the camera
+    this.edit3d = null; // camera state kept while playing
     this.disposed = false;
     this.doc = clone(level);
     this.items = []; // live handle of doc.pieces[i]: { owner, thing }
@@ -110,9 +115,9 @@ export class WorkshopEditor {
     this.mouse = { x: 0, y: 0, over: false, looking: false };
     this.drag = null; // { i, px, grab, from, active, target }
     this.ghostPos = null; // where the armed piece would land
-    if (!this.editing) return;
+    if (!this.active) return;
 
-    const { engine, world, enemies, pickups, registry, player } = game;
+    const { engine, enemies, player } = game;
     this.ray = new THREE.Raycaster();
     this.hit = new THREE.Vector3();
     this.canvas = engine.canvas;
@@ -120,24 +125,7 @@ export class WorkshopEditor {
     this.wasFrozen = enemies.frozen;
     enemies.frozen = true;
 
-    // The level file's world pieces were merged into batches (no handles): rebuild them one by one so each doc piece
-    // owns its objects. Enemies and pickups were built in file order already: adopt them.
-    const actors = enemies.puppets.slice();
-    const crates = pickups.items.slice();
-    world.load({ ...level, pieces: level.pieces.filter((p) => registry.owner(p.id) !== 'world') }, registry);
-    let ne = 0;
-    let np = 0;
-    this.items = this.doc.pieces.map((p) => {
-      const owner = registry.owner(p.id);
-      if (owner === 'enemies') {
-        const a = actors[ne++];
-        this.#pose(a);
-        if (a.kind === 'boss') enemies.boss = a;
-        return { owner, thing: a };
-      }
-      if (owner === 'pickups') return { owner, thing: crates[np++] };
-      return this.#build(p);
-    });
+    this.#populate(false);
 
     // camera: above and behind the spawn, looking north
     const s = level.spawn.pos;
@@ -164,6 +152,39 @@ export class WorkshopEditor {
     addEventListener('mouseup', this.onMouseUp);
     this.canvas.addEventListener('mousedown', this.onMouseDown);
     this.#refresh();
+  }
+
+  get editing() {
+    return this.active && !this.playing;
+  }
+
+  // Builds the scene from this.doc for editing: the world pieces one by one (each doc piece owns its objects), the
+  // enemies frozen and posed, the pickups. `reload` false = enemies and pickups are already loaded from the doc
+  // (the scene just opened): adopt them in file order. Anything else (back from play) loads them first.
+  #populate(reload) {
+    const { world, enemies, pickups, registry } = this.game;
+    const level = this.doc;
+    world.load({ ...level, pieces: level.pieces.filter((p) => registry.owner(p.id) !== 'world') }, registry);
+    if (reload) {
+      enemies.load(level);
+      pickups.load(level);
+    }
+    enemies.frozen = true;
+    const actors = enemies.puppets.slice();
+    const crates = pickups.items.slice();
+    let ne = 0;
+    let np = 0;
+    this.items = this.doc.pieces.map((p) => {
+      const owner = registry.owner(p.id);
+      if (owner === 'enemies') {
+        const a = actors[ne++];
+        this.#pose(a);
+        if (a.kind === 'boss') enemies.boss = a;
+        return { owner, thing: a };
+      }
+      if (owner === 'pickups') return { owner, thing: crates[np++] };
+      return this.#build(p);
+    });
   }
 
   // ---- document ----
@@ -293,6 +314,106 @@ export class WorkshopEditor {
     }
     if (colliders !== world.colliders.length) problems.push(`colliders ${world.colliders.length} != ${colliders} owned`);
     return { ok: problems.length === 0, problems, colliders, pieces: this.count };
+  }
+
+  // ---- play in place (#71) ----
+  // P plays the doc: a copy of it is loaded as a normal level (world batches, cover map for the enemies, awake enemies,
+  // pickups), the player stands where the camera is. P again drops that level and rebuilds the editor from the snapshot,
+  // so the doc is exactly what it was. The undo / redo history is kept (its commands act on the doc, which is unchanged).
+
+  // Where the player starts: on the ground under the camera, or the doc's spawn when there is no ground there (or the
+  // spot is inside a wall). Returns { pos, yaw } of a level spawn.
+  spawnAt() {
+    const cam = this.game.engine.camera.position;
+    const spawn = this.doc.spawn;
+    const r = 0.4; // player radius (metrics.md 1: 0.35), with a margin
+    let ground = -Infinity;
+    const cover = (c, lo, hi) => {
+      const b = c.box;
+      return b.max.y > lo && b.min.y < hi && cam.x > b.min.x - r && cam.x < b.max.x + r && cam.z > b.min.z - r && cam.z < b.max.z + r;
+    };
+    const colliders = this.game.world.colliders;
+    for (const c of colliders) {
+      if (c.box.max.y <= cam.y && c.box.max.y > ground && cover(c, -Infinity, Infinity)) ground = c.box.max.y;
+    }
+    // walkable: ground found, and nothing solid where the body would stand (a wall box around the camera's x / z)
+    const blocked = ground === -Infinity || colliders.some((c) => c.box.max.y > ground + 0.5 && cover(c, ground + 0.5, ground + 1.7));
+    if (blocked) return { pos: spawn.pos.slice(), yaw: spawn.yaw ?? Math.PI };
+    return { pos: [round(cam.x), round(ground), round(cam.z)], yaw: this.cam.yaw + Math.PI };
+  }
+
+  // Edit -> play. Returns false when already playing.
+  play() {
+    if (!this.active || this.playing) return false;
+    const { game } = this;
+    const { engine } = game;
+    this.snapshot = clone(this.doc);
+    this.playLevel = { ...clone(this.doc), spawn: this.spawnAt() };
+    this.edit3d = { pos: engine.camera.position.clone(), fov: engine.camera.fov };
+    // forget the gestures of edit mode
+    this.drag = null;
+    this.keys.clear();
+    this.mouse.looking = false;
+    this.ghost.visible = this.helper.visible = false;
+    for (const el of [this.palette, this.status, this.toastEl]) el.style.display = 'none';
+    // the editor's objects are freed by the level reload below (world.load / enemies.load / pickups.load unload first)
+    this.items = [];
+    this.playing = true;
+    game.padPlay = false; // like the game: losing pointer lock pauses
+    if (this.hud) this.hud.style.display = this.hudDisplay;
+    this.#loadPlay();
+    game.engine.input.lock();
+    return true;
+  }
+
+  // Loads the play level (also the restart): a fresh copy of the snapshot, enemies awake, player at the spawn.
+  #loadPlay() {
+    const { game } = this;
+    const level = game.registry.check(clone({ ...this.snapshot, spawn: this.playLevel.spawn }));
+    game.dropHelpers();
+    game.world.load(level, game.registry);
+    game.enemies.load(level);
+    game.pickups.load(level);
+    game.enemies.frozen = false;
+    game.resetRun(level);
+    game.rebuildHelpers();
+  }
+
+  // Back to the editor: the doc is replaced by the snapshot, the scene rebuilt from it, the camera as it was.
+  edit() {
+    if (!this.active || !this.playing) return false;
+    const { game } = this;
+    const { engine } = game;
+    game.dropHelpers();
+    this.playing = false;
+    this.doc = clone(this.snapshot);
+    this.#populate(true);
+    game.resetRun(this.doc);
+    engine.camera.position.copy(this.edit3d.pos);
+    engine.camera.fov = this.edit3d.fov;
+    engine.camera.updateProjectionMatrix();
+    this.#aim();
+    this.snapshot = this.playLevel = this.edit3d = null;
+    if (this.hud) this.hud.style.display = 'none';
+    for (const el of [this.palette, this.status, this.toastEl]) el.style.display = '';
+    if (engine.input.locked) document.exitPointerLock();
+    engine.input.free = false;
+    game.padPlay = true; // the editor runs without pointer lock
+    game.setRunning?.(true);
+    this.sel = this.sel < this.count ? this.sel : -1;
+    this.#refreshSel();
+    return true;
+  }
+
+  togglePlay() {
+    return this.playing ? this.edit() : this.play();
+  }
+
+  // Plays the encounter again from the snapshot (player back at the spawn, every enemy and pickup new).
+  restart() {
+    if (!this.playing) return false;
+    this.#loadPlay();
+    return true;
   }
 
   // ---- commands ----
@@ -557,6 +678,12 @@ export class WorkshopEditor {
     if (!this.#active(e)) return;
     const c = e.code;
     const mod = e.ctrlKey || e.metaKey;
+    if (!mod && !e.repeat && (c === 'KeyP' || (c === 'KeyT' && this.playing))) {
+      this.#guard(() => (c === 'KeyP' ? this.togglePlay() : this.restart()));
+      e.preventDefault();
+      return;
+    }
+    if (this.playing) return; // the game owns every other key
     if (!mod) this.keys.add(c); // held keys fly the camera; a Ctrl chord (Ctrl+D...) must not
     if (mod) {
       let done = true;
@@ -626,7 +753,7 @@ export class WorkshopEditor {
   }
 
   #mouseDown(e) {
-    if (this.game.engine.paused) return;
+    if (this.game.engine.paused || this.playing) return;
     this.#ndc(e);
     if (e.button === 2) {
       this.mouse.looking = true;
@@ -781,7 +908,7 @@ export class WorkshopEditor {
 
   dispose() {
     this.disposed = true;
-    if (!this.editing) return;
+    if (!this.active) return;
     removeEventListener('keydown', this.onKeyDown);
     removeEventListener('keyup', this.onKeyUp);
     removeEventListener('blur', this.onBlur);

@@ -510,6 +510,171 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   expect('  a piece that cannot be built (bad params, unknown id, bad level) throws and leaves doc, scene and history untouched', /kit\.cover\.low/.test(r.msg ?? '') && /unknown/.test(r.msg2 ?? '') && r.msg3 && r.same && r.ok.ok && r.hist === 0, JSON.stringify(r));
 }
 
+// ---- 11. play in place (#71): P plays the doc, P again restores it exactly, T restarts, nothing leaks ----
+{
+  const setup = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load({ name: 'x', spawn: { pos: [0, 0, 20], yaw: 3.14159 }, interiorZones: [], pieces: [
+      { id: 'env.box', pos: [0, -1, 0], params: { size: [60, 1, 60], mat: 'floor' } },
+      { id: 'env.box', pos: [8, 0, 0], params: { size: [2, 3, 2], mat: 'wall', cover: 'wall' } },
+      { id: 'enemy.trooper', pos: [0, 0, -8] },
+      { id: 'enemy.static', pos: [-6, 0, -4] },
+      { id: 'pickup.heavy', pos: [-4, 0, 6] },
+    ] });
+    t.place('kit.cover.low', [3, 0, 3]); // history to keep
+    t.select(1);
+    T.step(1);
+    t.keys.clear();
+    g.engine.camera.position.set(0, 6, 4);
+    t.cam.yaw = 0.5; t.cam.pitch = -0.4;
+    T.step(1);
+    return { hist: [t.undoStack.length, t.redoStack.length], counts: { colliders: g.world.colliders.length, puppets: g.enemies.puppets.length, pickups: g.pickups.items.length } };
+  });
+  const before = await ev(() => ({ doc: T.doc(), cam: window.game.engine.camera.position.toArray(), fov: window.game.engine.camera.fov }));
+
+  // keys: P enters play
+  const inPlay = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    g.engine.input.keys.clear(); // keys stuck from the earlier key tests
+    g.engine.input.pressed.clear();
+    T.tap('KeyP');
+    T.step(1);
+    const tr = g.enemies.puppets.find((e) => e.kind === 'trooper');
+    const out = {
+      playing: t.playing, toolEditing: t.editing, gameEditing: g.editing, frozen: g.enemies.frozen,
+      hud: document.getElementById('hud').style.display, palette: document.getElementById('workshop-palette').style.display,
+      player: g.player.pos.toArray().map((v) => Math.round(v * 100) / 100), spawnYaw: t.playLevel.spawn.yaw, visible: g.player.root.visible,
+      puppets: g.enemies.puppets.length, pickups: g.pickups.items.length, cover: !!g.enemies.cover, batches: g.world.batches.length,
+      statics: g.world.staticMeshes.length, trooperState: tr.state,
+    };
+    return out;
+  });
+  expect('P: playing, editor inert (tool.editing / game.editing false), enemies unfrozen, HUD back, palette hidden', inPlay.playing && !inPlay.toolEditing && !inPlay.gameEditing && !inPlay.frozen && inPlay.hud === '' && inPlay.palette === 'none', JSON.stringify(inPlay));
+  expect('  player stands on the ground under the camera, facing where it looked', Math.abs(inPlay.player[0]) < 0.01 && Math.abs(inPlay.player[1]) < 0.01 && Math.abs(inPlay.player[2] - 4) < 0.01 && Math.abs(inPlay.spawnYaw - (0.5 + Math.PI)) < 1e-6, JSON.stringify(inPlay.player));
+  expect('  the doc is played as a real level: merged batches, a cover map, enemies and pickups built from it', inPlay.batches > 0 && inPlay.cover && inPlay.puppets === 2 && inPlay.pickups === 1, JSON.stringify(inPlay));
+  const woke = await ev(() => {
+    const g = window.game;
+    T.step(4);
+    const tr = g.enemies.puppets.find((e) => e.kind === 'trooper');
+    return { state: tr.state, time: g.enemies.time };
+  });
+  expect('  enemies are awake: the trooper reacts to the player', woke.state !== 'idle', JSON.stringify(woke));
+
+  // hurt the game: kill an enemy, take the pickup, move a lot
+  const hurt = await ev(() => {
+    const g = window.game;
+    const st = g.enemies.puppets.find((e) => e.kind !== 'trooper');
+    for (let i = 0; i < 40 && st.alive; i++) st.damage(50, st.pos.clone().setY(1), new st.pos.constructor(0, 0, -1), 'body');
+    g.player.pos.set(-4, 0, 6);
+    T.step(1);
+    g.player.pos.set(1, 0, 4);
+    g.player.damage(30);
+    T.step(1);
+    return { dead: !st.alive, kills: g.enemies.kills, crate: g.pickups.items.some((i) => !i.active) };
+  });
+  expect('  destroying an enemy and taking a crate works', hurt.dead && hurt.kills >= 1, JSON.stringify(hurt));
+
+  // restart (T): everything new, player back at the spawn
+  const rs = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    T.tap('KeyT');
+    T.step(1);
+    return { playing: t.playing, kills: g.enemies.kills, alive: g.enemies.puppets.every((e) => e.alive), n: g.enemies.puppets.length, pickups: g.pickups.items.every((i) => i.active), player: g.player.pos.toArray().map((v) => Math.round(v * 100) / 100), health: g.player.health, shields: g.player.shields };
+  });
+  expect('T restarts the encounter: enemies alive again, pickups back, player at the spawn with full health', rs.playing && rs.kills === 0 && rs.alive && rs.n === 2 && rs.pickups && Math.abs(rs.player[2] - 4) < 0.01 && rs.health >= 100, JSON.stringify(rs));
+
+  // back to edit
+  const back = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    const st = g.enemies.puppets.find((e) => e.kind !== 'trooper');
+    for (let i = 0; i < 40 && st.alive; i++) st.damage(50, st.pos.clone().setY(1), new st.pos.constructor(0, 0, -1), 'body');
+    T.step(1);
+    T.tap('KeyT', { ctrlKey: true }); // not a restart key chord: nothing happens
+    T.tap('KeyP');
+    T.step(2);
+    return {
+      playing: t.playing, editing: t.editing, gameEditing: g.editing, doc: T.doc(), verify: t.verify(), frozen: g.enemies.frozen,
+      hud: document.getElementById('hud').style.display, palette: document.getElementById('workshop-palette').style.display,
+      cam: g.engine.camera.position.toArray(), fov: g.engine.camera.fov, hist: [t.undoStack.length, t.redoStack.length], sel: t.sel,
+      counts: { colliders: g.world.colliders.length, puppets: g.enemies.puppets.length, pickups: g.pickups.items.length, alive: g.enemies.puppets.every((e) => e.alive), kills: g.enemies.kills },
+      batches: g.world.batches.length, playerVisible: g.player.root.visible,
+    };
+  });
+  expect('P again: back in edit mode, HUD hidden, palette back, enemies frozen, player hidden', back.editing && back.gameEditing && !back.playing && back.frozen && back.hud === 'none' && back.palette === '' && !back.playerVisible, JSON.stringify(back));
+  expect('  doc JSON identical to before play, scene = doc (verify ok), destroyed enemy restored', back.doc === before.doc && back.verify.ok && back.counts.alive && back.counts.kills === 0 && back.counts.puppets === setup.counts.puppets && back.counts.pickups === setup.counts.pickups && back.batches === 0, JSON.stringify({ verify: back.verify, counts: back.counts, batches: back.batches }));
+  expect('  collider count as before; camera position and fov restored; selection and undo / redo history kept', back.counts.colliders === setup.counts.colliders && JSON.stringify(back.cam) === JSON.stringify(before.cam) && back.fov === before.fov && JSON.stringify(back.hist) === JSON.stringify(setup.hist) && back.sel === 1, JSON.stringify({ back: back.cam, before: before.cam, hist: back.hist, sel: back.sel }));
+  const edit = await ev(() => {
+    const t = T.tool();
+    t.undo();
+    T.step(1);
+    const a = t.verify().ok;
+    t.redo();
+    T.step(1);
+    const i = t.place('env.box', [20, 0, 20]);
+    return { a, b: t.verify().ok, i, restartOutside: t.restart() };
+  });
+  expect('  editing carries on: undo / redo work on the restored scene, restart outside play does nothing', edit.a && edit.b && edit.restartOutside === false, JSON.stringify(edit));
+
+  // no ground under the camera -> the level's spawn
+  const off = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    g.engine.camera.position.set(200, 6, 200);
+    const s = t.spawnAt();
+    g.engine.camera.position.set(8, 1.5, 0); // inside the wall box
+    const w = t.spawnAt();
+    return { s, w, doc: t.doc.spawn };
+  });
+  expect('play spawn: no ground (or inside a wall) under the camera = the level spawn', JSON.stringify(off.s.pos) === JSON.stringify(off.doc.pos) && JSON.stringify(off.w.pos) === JSON.stringify(off.doc.pos), JSON.stringify(off));
+
+  // leaving the scene while playing frees everything
+  const leave = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    g.engine.camera.position.set(0, 6, 4);
+    T.tap('KeyP');
+    T.step(1);
+    g.loadScene('workshop');
+    T.step(2);
+    return { playing: T.tool().playing, ok: T.ok().ok, hud: document.getElementById('hud').style.display, palettes: document.querySelectorAll('#workshop-palette').length };
+  });
+  expect('loading a scene while playing: a fresh editor, one palette, scene = doc', !leave.playing && leave.ok && leave.hud === 'none' && leave.palettes === 1, JSON.stringify(leave));
+
+  // toggle cycles do not leak: geometries, textures and scene objects after N cycles equal those after the first
+  const leak = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load({ name: 'x', spawn: { pos: [0, 0, 20], yaw: 3.14159 }, interiorZones: [], pieces: [
+      { id: 'env.box', pos: [0, -1, 0], params: { size: [60, 1, 60], mat: 'floor' } },
+      { id: 'enemy.trooper', pos: [0, 0, -8] }, { id: 'enemy.static', pos: [-6, 0, -4] }, { id: 'enemy.drone', pos: [5, 3, -6] }, { id: 'pickup.heavy', pos: [-4, 0, 6] },
+      { id: 'light.point', pos: [0, 3, 0], params: { color: 0xffffff, intensity: 1, distance: 10 } },
+    ] });
+    const doc0 = T.doc();
+    g.engine.camera.position.set(0, 6, 4);
+    const cycle = (kill) => {
+      T.tap('KeyP');
+      T.step(1);
+      if (kill) for (const e of g.enemies.puppets) for (let i = 0; i < 80 && e.alive; i++) e.damage(100, e.pos.clone().setY(1), new e.pos.constructor(0, 0, -1), 'body');
+      T.step(1);
+      T.tap('KeyT');
+      T.step(1);
+      T.tap('KeyP');
+      T.step(1);
+    };
+    cycle(true); // warms the lazily built pools (debris, fx)
+    const first = T.mem();
+    const readings = [];
+    for (let i = 0; i < 4; i++) { cycle(i % 2 === 0); readings.push(T.mem()); }
+    return { first, readings, same: T.doc() === doc0, ok: T.ok().ok, colliders: g.world.colliders.length };
+  });
+  const same = leak.readings.every((r) => r.geometries === leak.first.geometries && r.textures === leak.first.textures && r.objects === leak.first.objects);
+  expect('4 play / edit cycles (with kills and restarts) leak nothing: geometries, textures and scene objects identical, doc unchanged', same && leak.same && leak.ok, JSON.stringify(leak));
+}
+
 expect('no page or console errors', errors.length === 0, errors.join(' | '));
 await b.close();
 process.exit(fail.length ? 1 : 0);

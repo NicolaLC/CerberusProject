@@ -212,7 +212,7 @@ export class Game {
   loadScene(name) {
     const key = resolveScene(name);
     const level = this.registry.check(SCENES[key]);
-    const { world, enemies, pickups, player, camRig, weapon, fx, hud, juice } = this;
+    const { world, enemies, pickups } = this;
     if (this.sceneName) this.#unloadLevel();
     this.sceneName = key;
     this.level = level;
@@ -220,17 +220,35 @@ export class Game {
     world.load(level, this.registry);
     enemies.load(level);
     pickups.load(level);
+    this.resetRun(level);
+    if (level.tool && !TOOLS[level.tool]) throw new Error(`level "${key}": unknown tool "${level.tool}"`);
+    this.tool = level.tool ? new TOOLS[level.tool](this, level) : null;
+    this.keyHints.set({ debug: this.debug, tool: this.tool });
+    this.rebuildHelpers();
+    return this;
+  }
+
+  // Player at the level's spawn with full health, camera / weapon / fx / hud / juice reset: the start of a run on
+  // the level the systems were just loaded with (loadScene, and the Workshop's play in place).
+  resetRun(level) {
+    const { player, camRig, weapon, fx, hud, juice } = this;
     player.place(level.spawn);
     camRig.reset(player.facing);
     weapon.reset();
     fx.reset();
     hud.reset(level);
     juice.reset();
-    if (level.tool && !TOOLS[level.tool]) throw new Error(`level "${key}": unknown tool "${level.tool}"`);
-    this.tool = level.tool ? new TOOLS[level.tool](this, level) : null;
-    this.keyHints.set({ debug: this.debug, tool: this.tool });
-    this.helpers = enemies.puppets.filter((p) => p.rig).map((p) => this.#helper(p.rig));
-    return this;
+  }
+
+  // Skeleton debug helpers of the enemies that exist now (H shows them); dropHelpers frees them (before the enemies go).
+  rebuildHelpers() {
+    this.dropHelpers();
+    this.helpers = this.enemies.puppets.filter((p) => p.rig).map((p) => this.#helper(p.rig));
+  }
+
+  dropHelpers() {
+    for (const h of this.helpers) disposeTree(h);
+    this.helpers.length = 0;
   }
 
   // True while the Workshop editor runs (gym/tools.js `workshop`): see the systems below.
@@ -242,8 +260,7 @@ export class Game {
     if (this.editing) this.padPlay = false; // it ran without pointer lock (start button)
     this.tool?.dispose();
     this.tool = null;
-    for (const h of this.helpers) disposeTree(h);
-    this.helpers.length = 0;
+    this.dropHelpers();
     this.enemies.unload();
     this.pickups.unload();
     this.world.unload();
