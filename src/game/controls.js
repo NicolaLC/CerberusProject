@@ -24,6 +24,7 @@ export const BINDINGS = {
   slot4: ['Digit4'],
   slot5: ['Digit5'],
   slot6: ['Digit6', 'Pad13'], // d-pad down: sidearm
+  interact: ['KeyG', 'Pad1'], // objective terminals
   pause: ['Pad9'],
   lookLeft: ['ArrowLeft'],
   lookRight: ['ArrowRight'],

@@ -29,7 +29,7 @@ const QUARTER = Math.PI / 2;
 const STEP = Math.PI / 12; // 15 degrees
 const TINT = { wall: 0xe8f0ff, high: 0x3aa0ff, low: 0xff9a3a, none: 0xffe14a }; // box helper by cover class
 const font = '11px/1.45 monospace';
-const VOLUME = new Set(['trigger.volume', 'zone.interior']);
+const VOLUME = new Set(['trigger.volume', 'zone.interior', 'objective.reach']);
 const FIELD = /^(INPUT|SELECT|TEXTAREA)$/;
 const FALLBACK = new THREE.Box3(new THREE.Vector3(-0.45, 0, -0.45), new THREE.Vector3(0.45, 1.9, 0.45)); // enemy / pickup stand-in
 const POINT = new THREE.Box3(new THREE.Vector3(-0.25, -0.25, -0.25), new THREE.Vector3(0.25, 0.25, 0.25)); // lights
@@ -41,11 +41,11 @@ const deg = (rad) => Math.round((rad * 180) / Math.PI);
 const css = (el, style) => Object.assign(el.style, style);
 
 // How a piece turns: 'quarter' kit.* (axis-aligned, yaw in 90 degree steps: kit.js throws otherwise), 'box' env.box /
-// env.strip / trigger.volume / zone.interior (builders ignore yaw: a quarter turn swaps width and depth), 'label' (yaw is a param), 'none' (lights),
+// env.strip / trigger.volume / zone.interior / objective.reach (builders ignore yaw: a quarter turn swaps width and depth), 'label' (yaw is a param), 'none' (lights),
 // 'free' everything else (enemies, pickups, props: 15 degree steps).
 export function rotationKind(id) {
   if (id.startsWith('kit.')) return 'quarter';
-  if (id === 'env.box' || id === 'env.strip' || id === 'trigger.volume' || id === 'zone.interior') return 'box';
+  if (id === 'env.box' || id === 'env.strip' || id === 'trigger.volume' || id === 'zone.interior' || id === 'objective.reach') return 'box';
   if (id === 'env.label') return 'label';
   if (id === 'light.point') return 'none';
   return 'free';

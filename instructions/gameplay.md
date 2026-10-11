@@ -6,13 +6,13 @@
 - Shields 100 (regen 45/s after 3.5s), health 100 (regen 12/s after 6s). Death → respawn at spawn after 3s.
 
 ## Input (bindings: `BINDINGS` in `game/controls.js`)
-- Aim (zoom): hold RMB. Sprint: Shift. Jump / vault: Space. Fire: LMB or F. Arrow keys look. F3: performance stats.
+- Aim (zoom): hold RMB. Sprint: Shift. Jump / vault: Space. Fire: LMB or F. Interact (objective terminals): G / B. Arrow keys look. F3: performance stats.
 - Trackpad mode: two-finger swipe (wheel events) looks; E toggles aim (right click and LT always aim only while held); aim assist
   stronger (1.6 vs 0.8). E does nothing outside trackpad mode.
 - Aim assist (`camRig.assist`): within ~4-8° of a visible puppet's chest the look slows (friction) and eases toward it.
 - Look sensitivity multiplier lives in settings.
 - Controller (standard mapping, Xbox names): L stick move (analog: partial tilt walks slower), R stick look,
-  LT aim, RT fire, X reload, A jump / vault, LB swap shoulder, Y or RB next gun, d-pad ← ↑ → ↓ = AR / MG / SR / pistol,
+  LT aim, RT fire, X reload, A jump / vault, B interact, LB swap shoulder, Y or RB next gun, d-pad ← ↑ → ↓ = AR / MG / SR / pistol,
   L3 click sprints until the stick is released or pulled back, View = stats, Menu = pause (A or Menu deploys from
   the start panel, no pointer lock needed). Look: 15% radial dead zone, response curve ^2.2, ×1.7 turn boost after
   0.25 s at the rim (`PAD_LOOK`), optional invert Y. Aim assist uses the stronger trackpad profile (friction + pull).
