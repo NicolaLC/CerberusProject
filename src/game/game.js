@@ -15,7 +15,7 @@ import { Post } from './view/post.js';
 import { Juice } from './view/juice.js';
 import { Controls } from './controls.js';
 import { settings, bindSettingsUI } from './settings.js';
-import { applyQuality } from './view/quality.js';
+import { applyQuality, QUALITY } from './view/quality.js';
 import { SCENES, resolveScene } from './scenes.js';
 import { TOOLS } from './gym/tools.js';
 import { KeyHints } from './view/keyhints.js';
@@ -48,7 +48,7 @@ export class Game {
     const first = resolveScene(sceneName);
 
     // ---- systems ----
-    const world = new World(scene);
+    const world = new World(scene, { lights: QUALITY[settings.quality]?.lights });
     const controls = new Controls(input);
     const camRig = new CameraRig(camera, world);
     const player = new Player({ scene, world, events, spawn: levelSpawn(registry.check(SCENES[first])) });

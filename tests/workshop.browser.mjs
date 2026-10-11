@@ -1370,7 +1370,10 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
     T.tap('KeyP'); T.frames(4); T.tap('KeyP'); T.frames(4); // play once: its materials (merged batches, LOD, shadow) are compiled too
     return { programs: T.programs(), lights: T.sceneLights(), pool: g.world.pool.length, inUse: g.world.lights.length };
   }, FLOORP);
-  expect('the world owns a fixed pool of 12 point lights, all parked at intensity 0 in a level without lights', lv.pool === 12 && lv.inUse === 0 && lv.lights === 13, JSON.stringify(lv)); // 12 + the muzzle light
+  const TIER = await ev(async () => { const { QUALITY } = await import('/src/game/view/quality.js'); return { name: window.game.settings?.quality ?? 'high', caps: Object.fromEntries(Object.entries(QUALITY).map(([k, v]) => [k, v.lights])) }; });
+  const POOL = TIER.caps[TIER.name];
+  expect('the point-light pool size per tier is 4 / 8 / 12 (the caps in instructions/engine.md)', TIER.caps.low === 4 && TIER.caps.high === 8 && TIER.caps.ultra === 12, JSON.stringify(TIER));
+  expect(`the world owns a fixed pool of ${POOL} point lights (tier ${TIER.name}), all parked at intensity 0 in a level without lights`, lv.pool === POOL && lv.inUse === 0 && lv.lights === POOL + 1, JSON.stringify(lv)); // pool + the muzzle light
   const r = await ev(() => {
     const g = window.game;
     const t = T.tool();
@@ -1415,7 +1418,7 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   expect('  deleting every light parks the pool again (intensity 0, none in use)', r.cleared.inUse === 0 && r.cleared.lit === 0 && r.cleared.programs === r.P0 && r.cleared.lights === r.L0, JSON.stringify(r.cleared));
 
   // past the pool: extra lights are temporary (the count changes, with a warning) and leave nothing behind
-  const over = await ev(() => {
+  const over = await ev((POOL) => {
     const g = window.game;
     const t = T.tool();
     const warns = [];
@@ -1423,13 +1426,59 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
     console.warn = (...a) => warns.push(a.join(' '));
     const L0 = T.sceneLights();
     const n0 = t.count;
-    for (let k = 0; k < 14; k++) t.place('light.point', [k - 7, 3, -8], { color: '#ffffff', intensity: 5, distance: 6 });
+    const N = POOL + 2;
+    for (let k = 0; k < N; k++) t.place('light.point', [k - 7, 3, -8], { color: '#ffffff', intensity: 5, distance: 6 });
     const mid = { lights: T.sceneLights(), inUse: g.world.lights.length, pool: g.world.pool.length, ok: t.verify().ok };
-    for (let k = 0; k < 14; k++) t.remove(t.count - 1);
+    for (let k = 0; k < N; k++) t.remove(t.count - 1);
     console.warn = w0;
-    return { warned: warns.length, mid, end: { lights: T.sceneLights(), inUse: g.world.lights.length, n: t.count - n0, pool: g.world.pool.length, parked: g.world.pool.every((l) => l.intensity === 0) }, L0 };
+    return { warned: warns.length, mid, end: { lights: T.sceneLights(), inUse: g.world.lights.length, n: t.count - n0, pool: g.world.pool.length, parked: g.world.pool.every((l) => l.intensity === 0) }, L0, N };
+  }, POOL);
+  expect('more lights than the tier pool: the extras are temporary scene lights (warned), all gone again after deleting them; the pool is untouched', over.warned >= 1 && over.mid.lights === over.L0 + 2 && over.mid.inUse === POOL + 2 && over.mid.pool === POOL && over.mid.ok && over.end.lights === over.L0 && over.end.inUse === 0 && over.end.n === 0 && over.end.pool === POOL && over.end.parked, JSON.stringify(over));
+
+  // switching quality resizes the pool (a settings action, one recompile); at every tier place / play / restart keep the programs constant
+  const tiers = await ev(async () => {
+    const g = window.game;
+    const t = T.tool();
+    const { applyQuality, QUALITY } = await import('/src/game/view/quality.js');
+    const out = { tiers: {}, resize: null };
+    const base = g.settings?.quality ?? 'high';
+    for (const name of ['low', 'ultra', 'high']) {
+      applyQuality(name, g);
+      T.frames(4);
+      T.tap('KeyP'); T.frames(4); T.tap('KeyP'); T.frames(4); // the new tier's programs (play's materials too) are compiled before the baseline
+      const want = QUALITY[name].lights;
+      const P0 = T.programs();
+      const r = { pool: g.world.pool.length, want, lights: T.sceneLights(), P0, steps: [] };
+      const mark = (n) => { T.frames(3); r.steps.push([n, T.programs(), T.sceneLights()]); };
+      const a = t.place('light.point', [0, 3, 3], { color: '#ff5030', intensity: 40, distance: 14 });
+      mark('placed');
+      t.setParams(a, { intensity: 20 }); mark('edited');
+      T.tap('KeyP'); mark('play');
+      T.tap('KeyT'); mark('restart');
+      T.tap('KeyP'); mark('edit'); // play, restart, back to edit
+      t.remove(a); mark('removed');
+      out.tiers[name] = r;
+    }
+    // lights in use survive a resize: shrinking keeps lit lights as temporary ones, growing adopts them again
+    const warn = console.warn; console.warn = () => {};
+    for (let k = 0; k < 6; k++) t.place('light.point', [k, 3, -8], { color: '#ffffff', intensity: 5, distance: 6 });
+    console.warn = warn;
+    applyQuality('low', g); T.frames(3);
+    const low = { pool: g.world.pool.length, inUse: g.world.lights.length, lit: g.world.lights.filter((l) => l.intensity > 0).length, lights: T.sceneLights() };
+    applyQuality('ultra', g); T.frames(3);
+    const up = { pool: g.world.pool.length, inUse: g.world.lights.length, lit: g.world.lights.filter((l) => l.intensity > 0).length, lights: T.sceneLights(), pooled: g.world.lights.every((l) => l.userData.pooled) };
+    for (let k = 0; k < 6; k++) t.remove(t.count - 1);
+    applyQuality(base, g); T.frames(3);
+    out.resize = { low, up, end: { pool: g.world.pool.length, inUse: g.world.lights.length, lights: T.sceneLights(), parked: g.world.pool.every((l) => l.intensity === 0), ok: t.verify().ok } };
+    return out;
   });
-  expect('more than 12 lights: the extras are temporary scene lights (warned), all gone again after deleting them; the pool is untouched', over.warned >= 1 && over.mid.lights === over.L0 + 2 && over.mid.inUse === 14 && over.mid.pool === 12 && over.mid.ok && over.end.lights === over.L0 && over.end.inUse === 0 && over.end.n === 0 && over.end.pool === 12 && over.end.parked, JSON.stringify(over));
+  for (const [name, r] of Object.entries(tiers.tiers)) {
+    expect(`quality ${name}: the pool has ${r.want} lights (scene ${r.want + 1} with the muzzle light); place / edit / play / restart / delete keep programs and light count`, r.pool === r.want && r.lights === r.want + 1 && r.steps.every(([, pr, n]) => pr === r.P0 && n === r.lights), JSON.stringify(r));
+  }
+  expect('  a tier switch with 6 lights in use: low keeps them (4 pooled + 2 temporary, scene 6 + muzzle), ultra adopts them (pool 12, none temporary), back to the start tier everything is parked',
+    tiers.resize.low.pool === 4 && tiers.resize.low.inUse === 6 && tiers.resize.low.lit === 6 && tiers.resize.low.lights === 7
+    && tiers.resize.up.pool === 12 && tiers.resize.up.inUse === 6 && tiers.resize.up.lit === 6 && tiers.resize.up.lights === 13 && tiers.resize.up.pooled
+    && tiers.resize.end.pool === POOL && tiers.resize.end.inUse === 0 && tiers.resize.end.lights === POOL + 1 && tiers.resize.end.parked && tiers.resize.end.ok, JSON.stringify(tiers.resize));
 }
 
 expect('no page or console errors', errors.length === 0, errors.join(' | '));

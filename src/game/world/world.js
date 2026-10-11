@@ -4,6 +4,7 @@ import { mergeStatic, mergeGroup } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
 import { GUNS } from '../combat/guns.js';
 import { KIT_PIECES, MAT } from './kit.js';
+import { QUALITY } from '../view/quality.js';
 
 // Static level: axis-aligned boxes only (collision, cover and shadows depend on that).
 // Coordinates: x = east, z = south, y = up. Floor is y = 0.
@@ -12,10 +13,10 @@ import { KIT_PIECES, MAT } from './kit.js';
 // materials stay in code and outlive every level.
 
 // Point lights are a fixed pool: three.js compiles every lit material's program for the number of lights in the scene, so
-// the count must never change after start-up (a hitch per light placed, per scene switch). The pool is built with the World;
-// an unused light has intensity 0 (three skips its shading) and waits far below the floor. The size is the ultra tier cap
-// (instructions/engine.md); asking for more makes extra lights that are removed again (a recompile each way, over budget).
-export const LIGHT_POOL = 12;
+// the count must never change while a level is loaded or edited (a hitch per light placed, per scene switch). The pool is
+// built with the World and sized by the quality tier (QUALITY[tier].lights = the point-light cap in instructions/engine.md);
+// only a quality change resizes it (setLightPool, one recompile, a settings action). An unused light has intensity 0 and waits far
+// below the floor (three still loops it in the shader). Asking for more than the pool makes extra lights that are removed again.
 const PARKED = new THREE.Vector3(0, -1000, 0);
 
 export const SUN_DIR = new THREE.Vector3(0.45, 0.78, 0.43).normalize();
@@ -87,7 +88,7 @@ export class World {
   // Two lifetimes. Permanent (built once): materials + grid textures, sky, fog, hemisphere and sun. Per level
   // (load / unload, mirrored step by step): zones, boxes and strips (+ merged batches), point lights, colliders.
   // The arrays are cleared in place, other systems hold them by reference.
-  constructor(scene) {
+  constructor(scene, { lights = QUALITY.high.lights } = {}) {
     this.scene = scene;
     this.named = new Map(); // piece name -> mesh (for references between pieces, e.g. a light flickering a strip)
     this.colliders = []; // { box: Box3, mesh, cover: 'low' | 'high' | null }
@@ -97,7 +98,7 @@ export class World {
     this.flickerLights = [];
     this.staticMeshes = []; // every level box; merged per material for rendering, kept as raycast proxies
     this.lights = []; // the level's point lights in use (pool lights, plus any beyond the pool)
-    this.pool = []; // LIGHT_POOL permanent point lights; those not in `lights` are parked at intensity 0
+    this.pool = []; // permanent point lights (QUALITY lights); those not in `lights` are parked at intensity 0
     this.labels = []; // env.label meshes: own geometry, material and canvas texture each
     this.props = []; // prop.gun display models: own merged geometry, shared materials
     this.registry = null; // of the loaded level, for spawn()
@@ -114,12 +115,30 @@ export class World {
     this.keep = new Set([...Object.values(this.mats), ...Object.values(this.propMats)]); // shared across levels: never disposed with a level
     this.#buildSky();
     this.#buildLights();
-    for (let i = 0; i < LIGHT_POOL; i++) {
-      const l = new THREE.PointLight(0xffffff, 0, 1, 2);
-      l.position.copy(PARKED);
-      l.userData.pooled = true;
-      this.scene.add(l);
+    this.setLightPool(lights);
+  }
+
+  // Resizes the pool (quality change only: the light count changes, so shaders recompile once). Growing adopts temporary extra
+  // lights first; shrinking drops parked lights first, and a lit light that no longer fits becomes a temporary one.
+  setLightPool(n) {
+    if (n === this.pool.length) return;
+    while (this.pool.length < n) {
+      let l = this.lights.find((x) => !x.userData.pooled);
+      if (l) l.userData.pooled = true;
+      else {
+        l = new THREE.PointLight(0xffffff, 0, 1, 2);
+        l.position.copy(PARKED);
+        l.userData.pooled = true;
+        this.scene.add(l);
+      }
       this.pool.push(l);
+    }
+    while (this.pool.length > n) {
+      let i = this.pool.findLastIndex((x) => !x.userData.used);
+      if (i < 0) i = this.pool.length - 1;
+      const [l] = this.pool.splice(i, 1);
+      if (l.userData.used) l.userData.pooled = false; // stays in the scene as a temporary light until released
+      else disposeTree(l);
     }
   }
 
@@ -411,7 +430,7 @@ export class World {
       l.distance = distance;
       l.userData.used = true;
     } else {
-      console.warn(`world: more than ${LIGHT_POOL} point lights: the extra light changes the light count (shaders recompile)`);
+      console.warn(`world: more than ${this.pool.length} point lights: the extra light changes the light count (shaders recompile)`);
       l = new THREE.PointLight(color, intensity, distance, 2);
       this.scene.add(l);
     }
