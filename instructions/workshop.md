@@ -15,7 +15,7 @@ other level is inert (`tool.editing === false`).
   `world.spawn` each) because the loaded boxes are merged into batches and have no handle. Enemies and pickups are
   adopted in file order. Consequences: in the editor boxes are individual meshes (more draw calls than the played level),
   and the enemies' `CoverMap` still describes the level as loaded (they are frozen, so nothing reads it). Anything that
-  plays the doc (play in place) must reload the scene from it instead of reusing these objects.
+  plays the doc (play in place) reloads the scene from it instead of reusing these objects (see Play in place).
 - **Commands**: every edit is `{ index, before, after }` (piece snapshots; before null = insert, after null = delete,
   both = rebuild in place) on `undoStack` / `redoStack`. Undo / redo restore the exact piece JSON at the exact index, so
   docs compare equal as JSON. A drag is one command (committed on release). Opening a file (`load`) forgets the history.
@@ -51,7 +51,26 @@ Keys (the key bar shows them; `static KEYS` is the source and the suite checks i
 | Del / Backspace | delete |
 | Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z | undo, redo |
 | Ctrl+S / Ctrl+O | `saveLevel(doc)` / `openLevel(registry)` from io.js; a failure ("not implemented" until #72) is a toast |
+| P | play in place / back to edit (see below) |
+| T | while playing: restart the encounter |
 | Esc | disarm, then deselect, then pause (the start panel has the scene buttons) |
+
+## Play in place (#71)
+`P` toggles edit and play (`play()`, `edit()`, `togglePlay()`, `restart()`, `playing`); `editing` is false while playing, so
+`game.editing` is false and the player, weapon, pickups and camera systems run as in the normal game.
+- **Play**: the doc is deep-copied to `snapshot`; a copy of it is loaded as a normal level (`world.load` with every piece so boxes are
+  merged, `enemies.load` with a real `CoverMap`, `pickups.load`), enemies unfrozen, HUD back, palette / status panel hidden,
+  pointer lock requested (`input.lock()`; Esc then pauses like the game, the start button resumes). The editor's own piece handles are
+  dropped without despawning (the level load frees them).
+- **Spawn** (`spawnAt()`): the ground under the camera (highest collider top at or below the camera, and nothing solid at body height
+  there), facing the way the camera looks; otherwise `doc.spawn`. The doc itself is never changed by playing.
+- **Restart** (`T`, only while playing): reloads the play level from the snapshot (all enemies and pickups new, player at the spawn
+  with full health). `Game.resetRun(level)` is the shared "start a run" (player, camera rig, weapon, fx, hud, juice).
+- **Back to edit**: `doc = clone(snapshot)`, the editor scene is rebuilt from it (`#populate`: same path as opening the scene), the
+  camera position / fov come back, the player is parked at the spawn, panels return. Destroyed enemies and pieces are restored because
+  the whole scene is rebuilt. The doc is JSON-identical to before play; **undo / redo history and the selection are kept** (commands
+  act on piece snapshots at indices, and the doc is unchanged).
+- Loading another scene while playing disposes the tool normally (nothing of the editor is left in the scene).
 
 ## Panels and helpers
 - **Palette** (left, `#workshop-palette`): every `registry.ids()` entry as a `button[data-id]`, grouped by owner and prefix
@@ -66,13 +85,14 @@ Keys (the key bar shows them; `static KEYS` is the source and the suite checks i
 ## Test hooks (`game.tool`)
 `place(id, pos, params?, yaw?)` (returns the index; snaps x / z and yaw), `select(i)`, `move(i, pos)`, `rotate(i, steps = 1)`,
 `remove(i)`, `duplicate(i)` (returns the copy's index), `setParams(i, patch)`, `undo()`, `redo()`, `load(level)`, `arm(id | null)`,
-`doc`, `items`, `sel`, `armed`, `grid`, `count`, `ghostPos`, `toastText`, `coverOf(i)`, `surface()`, `pick()` (cursor ray),
+`play()`, `edit()`, `togglePlay()`, `restart()`, `spawnAt()`, `playing`, `doc`, `items`, `sel`, `armed`, `grid`, `count`, `ghostPos`, `toastText`, `coverOf(i)`, `surface()`, `pick()` (cursor ray),
 and `verify()`: `{ ok, problems }` checks one handle per piece, enemy and pickup counts, and that every world collider
 belongs to a handle. `suite tests/workshop.browser.mjs` covers: one of each owner, all ids, scene = doc, snapping,
 rotation rules, undo / redo JSON identity, delete frees (colliders, scene objects), no leak over place / delete cycles and
 over leaving the scene (measured in a quiet scene: the arena's own gameplay makes geometry counts vary), palette, key
-bar, real mouse placing / selecting / dragging, cover tint, `load`.
+bar, real mouse placing / selecting / dragging, cover tint, `load`, play in place (spawn, awake enemies, kill, restart, edit
+returns the identical doc and history, no leak over play / edit cycles).
 
 ## Not yet
-Editing params in the UI (size, material, cover), play in place, spawn point and interior zones editing, light-placement
+Editing params in the UI (size, material, cover), spawn point and interior zones editing, light-placement
 hitch (adding a point light recompiles shaders once).
