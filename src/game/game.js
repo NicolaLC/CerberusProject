@@ -3,6 +3,7 @@ import { Engine } from '../engine/engine.js';
 import { Registry } from './registry.js';
 import { World, WORLD_PIECES } from './world/world.js';
 import { Pickups, PICKUP_PIECES } from './world/pickups.js';
+import { Encounter, ENCOUNTER_PIECES, levelSpawn } from './world/encounter.js';
 import { Player } from './actors/player.js';
 import { Enemies, ENEMY_PIECES } from './actors/enemies.js';
 import { Weapon } from './combat/weapon.js';
@@ -42,7 +43,7 @@ export class Game {
     this.debug = debug;
 
     // ---- level + piece registry: every system builds its part of the level from data ----
-    const registry = new Registry().register('world', WORLD_PIECES).register('enemies', ENEMY_PIECES).register('pickups', PICKUP_PIECES);
+    const registry = new Registry().register('world', WORLD_PIECES).register('enemies', ENEMY_PIECES).register('pickups', PICKUP_PIECES).register('encounter', ENCOUNTER_PIECES);
     this.registry = registry;
     const first = resolveScene(sceneName);
 
@@ -50,9 +51,10 @@ export class Game {
     const world = new World(scene);
     const controls = new Controls(input);
     const camRig = new CameraRig(camera, world);
-    const player = new Player({ scene, world, events, spawn: registry.check(SCENES[first]).spawn });
+    const player = new Player({ scene, world, events, spawn: levelSpawn(registry.check(SCENES[first])) });
     const enemies = new Enemies({ scene, world, events, registry });
     const pickups = new Pickups({ scene, events, registry });
+    const encounter = new Encounter({ scene, events, registry, enemies });
     const weapon = new Weapon({ camera, rig: camRig, player, world, enemies, events });
     const fx = new FX(scene, camera, world).listen(events);
     const hud = new Hud().listen(events, camRig);
@@ -61,6 +63,7 @@ export class Game {
     applyQuality(settings.quality, { engine, post, world });
     const juice = new Juice({ camRig, post, fx }).listen(events);
     events.on('puppet:down', (p) => pickups.drop(p.pos));
+    events.on('checkpoint:reached', () => hud.toast('CHECKPOINT'));
     // controller rumble (only while the pad is the device in use)
     events.on('weapon:shot', (s) => {
       const big = s.gun === 'sniper' || s.beam;
@@ -78,7 +81,7 @@ export class Game {
       if (near > 0) input.rumble(near * 0.35, 0, 70);
     });
     addEventListener('pointerdown', () => audio.init()); // resumes audio started from a controller
-    Object.assign(this, { world, controls, camRig, player, enemies, pickups, weapon, fx, hud, audio, post, juice, settings });
+    Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, weapon, fx, hud, audio, post, juice, settings });
 
     // skeleton debug overlay (H): the player's helper is permanent, the enemies' come and go with the level
     this.skeletons = false;
@@ -124,11 +127,12 @@ export class Game {
       update: (dt) => {
         if (this.editing) return;
         player.update(dt, controls, camRig, weapon);
-        if (player.dead && player.deadTime > RESPAWN_AFTER) player.respawn();
+        if (player.dead && player.deadTime > RESPAWN_AFTER) player.respawn(encounter.checkpoint); // the last checkpoint reached, else the spawn
       },
     });
     engine.add({ name: 'weapon', update: (dt) => !this.editing && weapon.update(dt, controls) });
     engine.add({ name: 'enemies', update: (dt) => enemies.update(dt, player) });
+    engine.add({ name: 'encounter', update: (dt) => !this.editing && encounter.update(dt, player) });
     engine.add({ name: 'pickups', update: (dt) => !this.editing && pickups.update(dt, player, weapon) });
     // boss lock-on: an engaged boss within range stays framed (CameraRig.focus)
     const bossFocus = new THREE.Vector3();
@@ -212,7 +216,7 @@ export class Game {
   loadScene(name) {
     const key = resolveScene(name);
     const level = this.registry.check(SCENES[key]);
-    const { world, enemies, pickups } = this;
+    const { world, enemies, pickups, encounter } = this;
     if (this.sceneName) this.#unloadLevel();
     this.sceneName = key;
     this.level = level;
@@ -220,6 +224,7 @@ export class Game {
     world.load(level, this.registry);
     enemies.load(level);
     pickups.load(level);
+    encounter.load(level);
     this.resetRun(level);
     if (level.tool && !TOOLS[level.tool]) throw new Error(`level "${key}": unknown tool "${level.tool}"`);
     this.tool = level.tool ? new TOOLS[level.tool](this, level) : null;
@@ -230,9 +235,10 @@ export class Game {
 
   // Player at the level's spawn with full health, camera / weapon / fx / hud / juice reset: the start of a run on
   // the level the systems were just loaded with (loadScene, and the Workshop's play in place).
-  resetRun(level) {
+  // `spawn` defaults to the level's own (levelSpawn: a `marker.spawn` piece, else `level.spawn`).
+  resetRun(level, spawn = levelSpawn(level)) {
     const { player, camRig, weapon, fx, hud, juice } = this;
-    player.place(level.spawn);
+    player.place(spawn);
     camRig.reset(player.facing);
     weapon.reset();
     fx.reset();
@@ -261,6 +267,7 @@ export class Game {
     this.tool?.dispose();
     this.tool = null;
     this.dropHelpers();
+    this.encounter.unload();
     this.enemies.unload();
     this.pickups.unload();
     this.world.unload();

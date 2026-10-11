@@ -336,6 +336,11 @@ export class SpiderMech {
     return n;
   }
 
+  // Spawn groups (enemies.js wakeGroup).
+  wake() {
+    if (this.alive) this.#wake();
+  }
+
   #wake() {
     if (this.awake) return;
     this.awake = true;

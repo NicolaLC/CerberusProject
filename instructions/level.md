@@ -14,9 +14,9 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
   (`Enemies` hands them a view of the player that reads `dead`).
 - `tool`: a Gym room helper from `src/game/gym/tools.js` (`traversal` / `range` / `ai` / `stress` / `library` / `workshop`): readouts, overlays, keys.
   Created after the level loads, disposed before it unloads, `update(dt)` each unpaused frame (system `gymTool`).
-- `spawn.yaw` is the player's initial facing (3.14159 = north, -Z). The boss arena bounds are data of `boss.spider`.
+- `spawn.yaw` is the player's initial facing (3.14159 = north, -Z). A `marker.spawn` piece replaces `spawn` as the start (`levelSpawn(level)` in `world/encounter.js`). The boss arena bounds are data of `boss.spider`.
 - Add a piece: append `{ "id": ..., "pos": [...], "params": {...} }`. Add a new kind: put a builder in the owning
-  module's table (`WORLD_PIECES` / `ENEMY_PIECES` / `PICKUP_PIECES`) and document the id here. Never rename an id.
+  module's table (`WORLD_PIECES` / `ENEMY_PIECES` / `PICKUP_PIECES` / `ENCOUNTER_PIECES`) and document the id here. Never rename an id.
 - `name` lets a later piece refer to an earlier one (`light.point` `flicker.strip`).
 
 ### Piece ids (public contract)
@@ -41,6 +41,13 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `enemy.drone` | enemies | `pos` = the ground under it |
 | `boss.spider` | enemies | `yaw?`, `arena: { minX, maxX, minZ, maxZ }` (the boss stays inside; wakes when the player enters) |
 | `pickup.light` / `pickup.heavy` | pickups | respawning ammo crate of that class |
+| `marker.spawn` | encounter | the player start (`yaw` = facing). Overrides `level.spawn` (first one in the file wins; `spawn` stays required) |
+| `marker.checkpoint` | encounter | respawn point after a death once the player has been within 2 m; `name` shows up in `checkpoint:reached` |
+| `marker.entry` | encounter | reinforcement entry: `group` (string), `enemies` (list of `enemy.*` / `boss.*` ids) built here when `group` is spawned |
+| `trigger.volume` | encounter | `size [w,h,d]` (4,3,4), `event` ('trigger'), `once` (true), `wakeGroup?`, `spawnGroup?`. `pos` = centre x / bottom y / centre z. Fires `trigger:fired { id, event }` when the player enters (`id` = `name`, else `trigger<n>`) |
+
+Encounter pieces are logic only in a played level (no geometry, no collision); the Workshop draws gizmos for them (workshop.md, Encounters).
+Every enemy piece also takes `params.group` (string): enemies of one group wake together.
 
 **Kit rules** (`world/kit.js`, sizes from `metrics.md`, frozen): boxes only, built through `world.box`. `yaw` must be a
 multiple of 90 degrees (else a clear error), so every piece stays axis-aligned. Bad params throw `kit.x: ...`. One material

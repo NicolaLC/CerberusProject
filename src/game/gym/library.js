@@ -47,7 +47,7 @@ export class LibraryTool {
     this.exhibits = []; // { id, owner, data, pos: [x, y, z], label, actor?, awake?, auto }
     this.auto = []; // the auto aisle's exhibits (subset of exhibits)
     this.handles = []; // what the tool spawned, to free: { owner, thing }
-    this.spawned = { world: 0, enemies: 0, pickups: 0 };
+    this.spawned = { world: 0, enemies: 0, pickups: 0, encounter: 0 };
     this.failed = [];
     this.panelT = 0;
 
@@ -110,7 +110,12 @@ export class LibraryTool {
 
   // Builds one piece in its owning system and remembers how to free it.
   #spawn(owner, data) {
-    const { world, enemies, pickups, registry } = this.game;
+    const { world, enemies, pickups, encounter, registry } = this.game;
+    if (owner === 'encounter') {
+      const r = encounter.spawn(data, { gizmo: true }); // gizmo only: nothing fires in the showroom
+      this.handles.push({ owner, thing: r });
+      return r;
+    }
     if (owner === 'world') {
       const h = world.spawn(data);
       this.handles.push({ owner, thing: h });
@@ -196,9 +201,10 @@ export class LibraryTool {
   dispose() {
     removeEventListener('keydown', this.onKey);
     this.panel.remove();
-    const { world, enemies, pickups } = this.game;
+    const { world, enemies, pickups, encounter } = this.game;
     for (const { owner, thing } of this.handles.reverse()) {
-      if (owner === 'world') world.despawn(thing);
+      if (owner === 'encounter') encounter.despawn(thing);
+      else if (owner === 'world') world.despawn(thing);
       else if (owner === 'enemies') enemies.despawn(thing);
       else pickups.despawn(thing);
     }
