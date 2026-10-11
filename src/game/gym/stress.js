@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { disposeTree } from '../../engine/dispose.js';
 
 // Gym tool: Performance stress room (#67, instructions/gym.md). A panel spawns N of each kind through the
 // registry builders (the same ids as level files) and reports what they cost: frame time, draw calls, triangles,
@@ -111,9 +110,7 @@ export class StressTool {
   #free(kind, unit) {
     const { world, enemies } = this.game;
     if (kind.key === 'lights') {
-      const i = world.lights.indexOf(unit);
-      if (i >= 0) world.lights.splice(i, 1);
-      disposeTree(unit);
+      world.releaseLight(unit);
     } else enemies.despawn(unit);
   }
 

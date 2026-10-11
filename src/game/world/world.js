@@ -11,6 +11,13 @@ import { KIT_PIECES, MAT } from './kit.js';
 // environment pieces (env.*, light.*) through the piece registry and frees them again (unload). Sky, sun, fog and
 // materials stay in code and outlive every level.
 
+// Point lights are a fixed pool: three.js compiles every lit material's program for the number of lights in the scene, so
+// the count must never change after start-up (a hitch per light placed, per scene switch). The pool is built with the World;
+// an unused light has intensity 0 (three skips its shading) and waits far below the floor. The size is the ultra tier cap
+// (instructions/engine.md); asking for more makes extra lights that are removed again (a recompile each way, over budget).
+export const LIGHT_POOL = 12;
+const PARKED = new THREE.Vector3(0, -1000, 0);
+
 export const SUN_DIR = new THREE.Vector3(0.45, 0.78, 0.43).normalize();
 
 // Per-face material array for BoxGeometry (order: +x, -x, +y, -y, +z, -z).
@@ -89,7 +96,8 @@ export class World {
     this.interiorZones = [];
     this.flickerLights = [];
     this.staticMeshes = []; // every level box; merged per material for rendering, kept as raycast proxies
-    this.lights = []; // the level's point lights
+    this.lights = []; // the level's point lights in use (pool lights, plus any beyond the pool)
+    this.pool = []; // LIGHT_POOL permanent point lights; those not in `lights` are parked at intensity 0
     this.labels = []; // env.label meshes: own geometry, material and canvas texture each
     this.props = []; // prop.gun display models: own merged geometry, shared materials
     this.registry = null; // of the loaded level, for spawn()
@@ -106,6 +114,13 @@ export class World {
     this.keep = new Set([...Object.values(this.mats), ...Object.values(this.propMats)]); // shared across levels: never disposed with a level
     this.#buildSky();
     this.#buildLights();
+    for (let i = 0; i < LIGHT_POOL; i++) {
+      const l = new THREE.PointLight(0xffffff, 0, 1, 2);
+      l.position.copy(PARKED);
+      l.userData.pooled = true;
+      this.scene.add(l);
+      this.pool.push(l);
+    }
   }
 
   // level: parsed level file; registry: Registry holding WORLD_PIECES.
@@ -122,7 +137,7 @@ export class World {
   unload() {
     for (const m of this.staticMeshes) disposeTree(m, { keep: this.keep });
     for (const m of [...this.batches, this.batches.shadow]) if (m) disposeTree(m, { keep: this.keep });
-    for (const l of this.lights) disposeTree(l);
+    for (const l of this.lights.slice()) this.releaseLight(l);
     // disposeTree leaves textures alone (shared caches); a label's canvas texture is its own
     for (const m of this.labels) {
       m.material.map.dispose();
@@ -144,8 +159,10 @@ export class World {
 
   // Removes and frees what spawn() built (boxes, labels, lights, props, and their collision).
   despawn(handle) {
+    if (handle.piece?.isPointLight) this.releaseLight(handle.piece); // pool lights are not scene additions: no object in the handle
     const gone = new Set(handle.objects);
     for (const o of handle.objects) {
+      if (o.isPointLight) continue; // an over-pool light, already freed by releaseLight
       if (this.labels.includes(o)) o.material.map.dispose();
       disposeTree(o, { keep: this.keep });
     }
@@ -385,13 +402,37 @@ export class World {
     return this.box(cx, y, cz, w, h, d, mat, { collide: false, shadow: false });
   }
 
+  // Takes a light from the pool (or, past the pool, a temporary one) and sets it up.
   pointLight(x, y, z, color, intensity, distance, flicker = null) {
-    const l = new THREE.PointLight(color, intensity, distance, 2);
+    let l = this.pool.find((p) => !p.userData.used);
+    if (l) {
+      l.color.set(color);
+      l.intensity = intensity;
+      l.distance = distance;
+      l.userData.used = true;
+    } else {
+      console.warn(`world: more than ${LIGHT_POOL} point lights: the extra light changes the light count (shaders recompile)`);
+      l = new THREE.PointLight(color, intensity, distance, 2);
+      this.scene.add(l);
+    }
     l.position.set(x, y, z);
-    this.scene.add(l);
     this.lights.push(l);
     if (flicker) this.flickerLights.push({ light: l, base: intensity, seed: Math.random() * 100, strip: flicker.strip });
     return l;
+  }
+
+  // Gives a light back: a pool light is parked at intensity 0, a temporary one is removed from the scene.
+  releaseLight(l) {
+    let i = this.lights.indexOf(l);
+    if (i >= 0) this.lights.splice(i, 1);
+    i = this.flickerLights.findIndex((f) => f.light === l);
+    if (i >= 0) this.flickerLights.splice(i, 1);
+    if (l.userData.pooled) {
+      l.intensity = 0;
+      l.distance = 1;
+      l.position.copy(PARKED);
+      l.userData.used = false;
+    } else disposeTree(l);
   }
 
   // Text sign, see env.label. Not merged into the static batches (one texture per sign).

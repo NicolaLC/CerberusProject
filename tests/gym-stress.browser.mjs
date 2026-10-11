@@ -69,7 +69,7 @@ await p.evaluate(() => {
     for (const o of culled) o.frustumCulled = true;
     const r = e.renderer.info.render;
     let pointLights = 0;
-    e.scene.traverse((o) => o.isPointLight && o.visible && pointLights++);
+    e.scene.traverse((o) => o.isPointLight && o.visible && o.intensity > 0 && pointLights++); // pool lights not in use sit at intensity 0
     return { calls: r.calls, tris: r.triangles, pointLights };
   };
   // simulate without drawing (SwiftShader draws 100 units slowly); particles, pools and debris still run
@@ -154,7 +154,7 @@ expect('puppets cost draw calls and triangles', per.puppets.draws > 0 && per.pup
 expect('troopers cost draw calls and triangles', per.troopers.draws > 0 && per.troopers.tris > 0);
 expect('drones cost draw calls and triangles', per.drones.draws > 0 && per.drones.tris > 0);
 expect('a point light costs no draw call and no triangle', Math.abs(per.lights.draws) < 0.1 && Math.abs(per.lights.tris) < 1);
-expect('the renderer sees every spawned point light', table.lights.every((r) => r.pointLights === r.n + 1), JSON.stringify(table.lights.map((r) => r.pointLights))); // +1: the permanent muzzle light
+expect('the renderer sees every spawned point light', table.lights.every((r) => r.pointLights === r.n), JSON.stringify(table.lights.map((r) => r.pointLights)));
 expect('effect bursts are draw calls (rings, smoke), no new geometry', per.fx.draws > 0 && Math.abs(per.fx.geos) < 0.1);
 
 // far LOD: the same units seen from beyond the switch distance (32 m): one draw per rig, no shadow casting

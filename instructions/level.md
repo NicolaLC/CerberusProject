@@ -26,7 +26,7 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `env.strip` | world | `size`, `mat`, `ownMaterial?` (clone the material; needed to flicker one strip alone). Emissive, no collision, no shadow |
 | `env.label` | world | `text` (`\n` for lines), `size?` letter height (0.6), `yaw?` (0 = readable from +Z), `flat?` (on the floor), `color?`, `bg?`. Unlit sign, no collision; own canvas texture, freed on unload |
 | `prop.gun` | world | `gun` (key of `GUNS`). The gun's own display model (its `build`, merged to one mesh per material), stock at `pos`, barrel along +Z turned by `yaw`. No collision; freed on unload |
-| `light.point` | world | `color '#rrggbb'`, `intensity`, `distance`, `flicker?: { strip: name }` (flickers the light, and the named earlier strip) |
+| `light.point` | world | `color '#rrggbb'`, `intensity`, `distance`, `flicker?: { strip: name }` (flickers the light, and the named earlier strip). Uses one of the World's 12 pool lights (engine.md) |
 | `kit.floor` | world | `size [w,d]` (4 x 4), `thickness` (0.2), `flush?` (top at `pos.y`, hangs below), `mat` |
 | `kit.wall` | world | `length` (4), `height` (7, min 2.0), `thickness` (0.5), `mat`. Cover `wall` |
 | `kit.doorway` | world | wall segment with a lintel: opening `width` (4, clamped up to 2.0) and `height` (4, clamped up to 1.8), `length` (width + 6; each wall end >= 0.9), `wallHeight` (7), `thickness`, `mat`. Opening centered on `pos` |
@@ -124,5 +124,6 @@ The editor (#70) calls four functions plus `levelNames()`; the level is the plai
 ## Lighting
 - Sun: directional, shadow map 4096 over ±48m, follows the player (snapped to 2m). Direction `SUN_DIR`.
 - Hemisphere fill, gradient sky dome shader, light fog. ACES tone mapping.
+- Point lights: a fixed pool of 12 in `World` (`LIGHT_POOL`), switched by intensity, so the light count never changes (engine.md).
 - Interior: darker albedo than outside (but readable), 8 point lights incl. fills; cyan/white/red, emissive strips, flicker via `pointLight(..., { strip })`.
 - Exposure adaptation in `game/view/post.js`: 1.0 outside, 1.9 when the camera is inside an `interiorZones` box.

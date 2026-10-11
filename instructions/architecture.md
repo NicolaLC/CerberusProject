@@ -66,8 +66,7 @@ src/
 old level (enemies → pickups → world), loads the new one (world → enemies → pickups), puts the player at `level.spawn`
 with full health, resets camera / weapon / fx / hud / juice. `?scene=<name>` picks the first scene (unknown → arena + console warning);
 `window.game.loadScene` is there with `?debug`. A malformed file throws before anything is unloaded. Point lights are
-the only thing three.js recompiles shaders for: switching scenes hitches once (the "never add lights at runtime"
-rule is about gameplay frames).
+the only thing three.js recompiles shaders for, so they come from a fixed pool owned by `World` (engine.md, Per-encounter budget): scene switches and the editor do not recompile.
 
 ## Frame order (declared in `game.js`)
 | phase | systems | dt |
@@ -122,6 +121,6 @@ Payload objects marked * are reused: copy what you keep.
 ## Rules
 - World geometry is axis-aligned boxes only (`world.box`). Collision, cover normals and ground checks rely on it.
 - Colors > 1.0 on emissive/basic materials are intentional: they feed bloom (threshold 0.92).
-- Never add/remove lights during play (shader recompiles). Toggle intensity instead (see muzzle flash). Only a scene load adds/removes a level's point lights.
+- Never add/remove lights from the scene (shader recompiles). Level point lights are a fixed pool in `World` (`LIGHT_POOL`); toggle intensity instead (see muzzle flash).
 - Tuning constants live in a `TUNING` object at the top of each module.
 - Units: meters, seconds, radians. +Z south, -Z north (building), +Y up. Characters face +Z in local space.

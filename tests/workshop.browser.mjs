@@ -1351,6 +1351,87 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   expect('place / delete / undo and play / edit / restart cycles leak nothing (geometries, textures, objects, gizmo count); no world zones in edit; leaving the scene frees the gizmo resources', same && lk.a.gz === lk.c.gz && lk.a.n === lk.c.n && lk.c.zones === 0 && lk.left.gz === 0 && !lk.left.res && lk.left.zones === 1, JSON.stringify(lk));
 }
 
+// ---- 15. lights: a fixed pool, so placing / removing a point light never recompiles shaders (three.js programs depend on the light count) ----
+{
+  await ev(() => { const t = T.tool(); if (t.playing) t.edit(); document.exitPointerLock(); window.game.engine.input.free = false; window.game.engine.input.keys.clear(); });
+  const FLOORP = { id: 'env.box', pos: [0, -1, 0], params: { size: [300, 1, 300], mat: 'floor' } };
+  const lv = await ev((FLOORP) => {
+    const g = window.game;
+    const t = T.tool();
+    t.load({ name: 'lights', title: 'LIGHTS', spawn: { pos: [0, 0, 20], yaw: 3.14159 }, interiorZones: [], pieces: [FLOORP,
+      { id: 'kit.wall', pos: [0, 0, -4], params: { length: 8, height: 3, mat: 'wall' } }, { id: 'enemy.static', pos: [3, 0, 0] }, { id: 'enemy.trooper', pos: [-3, 0, 0] }, { id: 'pickup.light', pos: [0, 0, 2] }] });
+    g.engine.camera.position.set(0, 4, 8); t.cam.yaw = 0; t.cam.pitch = -0.35;
+    // real frames (post stack, shadows, LOD) so every program the scene needs is compiled
+    T.frames = (n) => { g.engine.headless = false; for (let i = 0; i < n; i++) g.engine.step(1 / 60); g.engine.headless = true; };
+    T.programs = () => g.engine.renderer.info.programs.length;
+    T.sceneLights = () => { let n = 0; g.engine.scene.traverse((o) => o.isPointLight && n++); return n; };
+    t.select(1); T.frames(3); t.select(-1); // the selection helper's line material is compiled too
+    T.frames(4);
+    T.tap('KeyP'); T.frames(4); T.tap('KeyP'); T.frames(4); // play once: its materials (merged batches, LOD, shadow) are compiled too
+    return { programs: T.programs(), lights: T.sceneLights(), pool: g.world.pool.length, inUse: g.world.lights.length };
+  }, FLOORP);
+  expect('the world owns a fixed pool of 12 point lights, all parked at intensity 0 in a level without lights', lv.pool === 12 && lv.inUse === 0 && lv.lights === 13, JSON.stringify(lv)); // 12 + the muzzle light
+  const r = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    const P0 = T.programs();
+    const L0 = T.sceneLights();
+    const out = { P0, L0, steps: [] };
+    const mark = (name) => { T.frames(3); out.steps.push([name, T.programs(), T.sceneLights()]); };
+    const a = t.place('light.point', [0, 3, 3], { color: '#ff5030', intensity: 40, distance: 14 });
+    mark('placed');
+    const pl = g.world.lights[0];
+    out.lit = { n: g.world.lights.length, intensity: pl.intensity, distance: pl.distance, color: pl.color.getHexString(), pos: pl.position.toArray() };
+    for (let k = 0; k < 4; k++) t.place('light.point', [k * 2 - 3, 3, 1], { color: '#38d8ff', intensity: 20 + k, distance: 10 });
+    mark('five');
+    t.setParams(a, { intensity: 55, color: '#00ff00' });
+    const green = g.world.lights.filter((l) => l.color.getHexString() === '00ff00');
+    out.edited = { n: green.length, intensity: green[0]?.intensity, inUse: g.world.lights.length };
+    mark('edited');
+    t.remove(a); t.remove(t.count - 1);
+    mark('removed');
+    t.undo(); t.undo(); t.redo(); t.undo();
+    mark('undo');
+    out.afterUndo = g.world.lights.length;
+    // duplicate + move
+    const d = t.duplicate(t.count - 1); t.move(d, [5, 3, 5]);
+    mark('dup');
+    T.tap('KeyP'); T.frames(4);
+    out.play = { programs: T.programs(), lights: T.sceneLights(), inUse: g.world.lights.length, lit: g.world.lights.filter((l) => l.intensity > 0).length };
+    T.tap('KeyT'); T.frames(3);
+    out.restart = { programs: T.programs(), inUse: g.world.lights.length };
+    T.tap('KeyP'); T.frames(4);
+    out.back = { programs: T.programs(), lights: T.sceneLights(), inUse: g.world.lights.length, lit: g.world.lights.filter((l) => l.intensity > 0).length, ok: t.verify().ok };
+    // a scene without lights frees them all again
+    for (let k = t.count - 1; k >= 0; k--) if (t.doc.pieces[k].id === 'light.point') t.remove(k);
+    T.frames(2);
+    out.cleared = { inUse: g.world.lights.length, lit: g.world.pool.filter((l) => l.intensity > 0).length, programs: T.programs(), lights: T.sceneLights() };
+    return out;
+  });
+  const same = r.steps.every(([, pr, n]) => pr === r.P0 && n === r.L0);
+  expect('placing, editing, removing, undoing, duplicating point lights in edit mode: renderer.info.programs and the scene light count never change', same, JSON.stringify(r.steps) + ` P0=${r.P0} L0=${r.L0}`);
+  expect('  the placed light is a pool light set up from its piece (colour, intensity, distance, position); editing it rebuilds one light in the pool', r.lit.n === 1 && r.lit.intensity === 40 && r.lit.distance === 14 && r.lit.color === 'ff5030' && JSON.stringify(r.lit.pos) === '[0,3,3]' && r.edited.n === 1 && r.edited.intensity === 55 && r.edited.inUse === 5, JSON.stringify({ lit: r.lit, edited: r.edited }));
+  expect('  play (and restart, and back to edit) with lights: same programs, same light count, the doc\'s lights lit', r.play.programs === r.P0 && r.restart.programs === r.P0 && r.back.programs === r.P0 && r.play.lights === r.L0 && r.back.lights === r.L0 && r.play.inUse === r.afterUndo + 1 && r.play.lit === r.play.inUse && r.back.inUse === r.play.inUse && r.back.ok, JSON.stringify({ play: r.play, restart: r.restart, back: r.back, afterUndo: r.afterUndo }));
+  expect('  deleting every light parks the pool again (intensity 0, none in use)', r.cleared.inUse === 0 && r.cleared.lit === 0 && r.cleared.programs === r.P0 && r.cleared.lights === r.L0, JSON.stringify(r.cleared));
+
+  // past the pool: extra lights are temporary (the count changes, with a warning) and leave nothing behind
+  const over = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    const warns = [];
+    const w0 = console.warn;
+    console.warn = (...a) => warns.push(a.join(' '));
+    const L0 = T.sceneLights();
+    const n0 = t.count;
+    for (let k = 0; k < 14; k++) t.place('light.point', [k - 7, 3, -8], { color: '#ffffff', intensity: 5, distance: 6 });
+    const mid = { lights: T.sceneLights(), inUse: g.world.lights.length, pool: g.world.pool.length, ok: t.verify().ok };
+    for (let k = 0; k < 14; k++) t.remove(t.count - 1);
+    console.warn = w0;
+    return { warned: warns.length, mid, end: { lights: T.sceneLights(), inUse: g.world.lights.length, n: t.count - n0, pool: g.world.pool.length, parked: g.world.pool.every((l) => l.intensity === 0) }, L0 };
+  });
+  expect('more than 12 lights: the extras are temporary scene lights (warned), all gone again after deleting them; the pool is untouched', over.warned >= 1 && over.mid.lights === over.L0 + 2 && over.mid.inUse === 14 && over.mid.pool === 12 && over.mid.ok && over.end.lights === over.L0 && over.end.inUse === 0 && over.end.n === 0 && over.end.pool === 12 && over.end.parked, JSON.stringify(over));
+}
+
 expect('no page or console errors', errors.length === 0, errors.join(' | '));
 await b.close();
 process.exit(fail.length ? 1 : 0);
