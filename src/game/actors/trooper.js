@@ -104,6 +104,15 @@ export class Trooper extends EnemyBody {
     return this.state !== 'idle';
   }
 
+  // Spawn groups (enemies.js wakeGroup): awake = alerted.
+  get awake() {
+    return this.alerted;
+  }
+
+  wake() {
+    this.alert();
+  }
+
   // ---------------- perception ----------------
 
   #eye(out) {

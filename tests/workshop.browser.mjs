@@ -675,6 +675,355 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   expect('4 play / edit cycles (with kills and restarts) leak nothing: geometries, textures and scene objects identical, doc unchanged', same && leak.same && leak.ok, JSON.stringify(leak));
 }
 
+// ---- 12. encounter tools (#73): spawn groups, triggers, reinforcement entries, player spawn, checkpoints, gizmos ----
+{
+  // shared helpers in the page
+  await ev(() => {
+    const g = window.game;
+    const FLOOR = { id: 'env.box', pos: [0, -1, 0], params: { size: [300, 1, 300], mat: 'floor' } };
+    T.level = (pieces, spawn = { pos: [0, 0, 20], yaw: 3.14159 }) => ({ name: 'x', spawn, interiorZones: [], pieces: [FLOOR, ...pieces] });
+    // plays `level` from the camera at (0, 6, 4) (the player stands at 0, 0, 4)
+    T.play = (level) => {
+      const t = T.tool();
+      if (t.playing) t.edit();
+      t.load(level);
+      T.step(0.2);
+      g.engine.camera.position.set(0, 6, 4);
+      t.cam.yaw = 0; t.cam.pitch = -0.4;
+      g.engine.input.keys.clear(); g.engine.input.pressed.clear();
+      T.tap('KeyP');
+      T.step(0.2);
+      return t.playing;
+    };
+    T.log = [];
+    g.engine.events.on('trigger:fired', (e) => T.log.push(['trigger', e.id, e.event]));
+    g.engine.events.on('group:wake', (e) => T.log.push(['wake', e.group]));
+    g.engine.events.on('group:spawn', (e) => T.log.push(['spawn', e.group, e.count]));
+    g.engine.events.on('checkpoint:reached', (e) => T.log.push(['checkpoint', e.id]));
+    T.logOf = (k) => T.log.filter((x) => x[0] === k);
+    // gizmo geometry in the scene
+    T.gizmoMeshes = () => {
+      let n = 0;
+      g.engine.scene.traverse((o) => o.userData.gizmo && n++);
+      return n;
+    };
+    const t = T.tool();
+    if (t.playing) t.edit();
+  });
+
+  // -- pieces: place, gizmo in edit mode, no collision, undo / redo identity --
+  const pieces = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load(T.level([]));
+    T.step(0.5);
+    const start = T.doc();
+    const col0 = g.world.colliders.length;
+    const ids = ['marker.spawn', 'marker.checkpoint', 'marker.entry', 'trigger.volume'];
+    const out = {};
+    ids.forEach((id, k) => {
+      const i = t.place(id, [k * 6 - 9, 0, -4]);
+      T.step(0.1);
+      const r = t.items[i].thing;
+      out[id] = { i, owner: g.registry.owner(id), gizmo: !!r.gizmo && r.gizmo.parent === g.engine.scene && r.gizmo.visible, ok: T.ok().ok, box: t.status ? t.pick !== undefined : false };
+    });
+    const placed = T.doc();
+    // gizmos are selectable boxes
+    t.select(ids.length); // floor is #0, so this is the 4th placed piece
+    const sel = { vis: t.helper.visible, size: t.helper.box.getSize(new g.camRig.pivot.constructor()).toArray() };
+    t.select(-1);
+    const colliders = g.world.colliders.length - col0 - 0; // the floor was already counted by load
+    let undone = 0;
+    while (t.undoStack.length) { t.undo(); undone++; }
+    const back = T.doc();
+    const gone = T.gizmoMeshes();
+    let redone = 0;
+    while (t.redoStack.length) { t.redo(); redone++; }
+    return { out, start, placed, back, again: T.doc(), undone, redone, colliders, sel, gone, shown: T.gizmoMeshes(), ok: T.ok(), n: g.encounter.items.length };
+  });
+  expect('encounter pieces place (marker.spawn / checkpoint / entry, trigger.volume): owner "encounter", a visible gizmo in the scene, scene = doc', Object.values(pieces.out).every((x) => x.owner === 'encounter' && x.gizmo && x.ok), JSON.stringify(pieces.out));
+  expect('  gizmos add no colliders; a gizmo is selectable (selection box around it)', pieces.colliders === 0 && pieces.sel.vis && pieces.sel.size[0] > 0, JSON.stringify({ c: pieces.colliders, sel: pieces.sel }));
+  expect('  undo x all returns the identical doc and frees every gizmo; redo x all brings them back', pieces.back === pieces.start && pieces.gone === 0 && pieces.again === pieces.placed && pieces.redone === pieces.undone && pieces.shown > 0 && pieces.ok.ok && pieces.n === 4, JSON.stringify({ gone: pieces.gone, shown: pieces.shown, n: pieces.n }));
+
+  // -- params: setParams (undoable), bad params throw and leave the doc alone, rotate a trigger swaps w / d --
+  const params = await ev(() => {
+    const t = T.tool();
+    const g = window.game;
+    t.load(T.level([]));
+    const e = t.place('marker.entry', [0, 0, 0]);
+    const v = t.place('trigger.volume', [10, 0, 0], { size: [6, 3, 2], event: 'a', once: true });
+    const before = T.doc();
+    t.setParams(e, { group: 'z', enemies: ['enemy.drone'] });
+    const set = JSON.stringify(t.doc.pieces[e].params);
+    let m1 = null; try { t.setParams(e, { enemies: ['kit.wall'] }); } catch (err) { m1 = err.message; }
+    let m2 = null; try { t.setParams(v, { size: [1, 0, 1] }); } catch (err) { m2 = err.message; }
+    const same = JSON.stringify(t.doc.pieces[e].params) === set;
+    t.rotate(v, 1);
+    const size = t.doc.pieces[v].params.size;
+    t.undo(); t.undo();
+    return { set, m1, m2, same, size, undoOk: T.doc() === before, ok: T.ok().ok };
+  });
+  expect('setParams: entry list and group are kept; a non-enemy id or a bad size throws and changes nothing', /drone/.test(params.set) && /enemy/.test(params.m1 ?? '') && /size/.test(params.m2 ?? '') && params.same && params.undoOk && params.ok, JSON.stringify(params));
+  expect('  rotating a trigger volume turns it a quarter (width and depth swap)', JSON.stringify(params.size) === JSON.stringify([2, 3, 6]), JSON.stringify(params.size));
+
+  // -- save -> load roundtrip keeps them --
+  const rt = await ev(async () => {
+    const t = T.tool();
+    const g = window.game;
+    const { serializeLevel, parseLevel } = await import('/src/game/workshop/io.js');
+    t.load(T.level([]));
+    t.place('marker.spawn', [3, 0, -3], undefined, Math.PI / 2);
+    t.place('marker.checkpoint', [-3, 0, -3]);
+    const e = t.place('marker.entry', [0, 0, -12], { group: 'r', enemies: ['enemy.trooper', 'enemy.drone'] });
+    t.place('enemy.trooper', [0, 0, -20], { group: 'a' });
+    t.place('trigger.volume', [0, 0, 0], { size: [4, 3, 4], event: 'go', once: false, wakeGroup: 'a', spawnGroup: 'r' });
+    const canon = (o) => JSON.stringify(o, (_, v) => (typeof v === 'number' ? Math.round(v * 1e4) / 1e4 : v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort()) : v)); // io.js rounds to 4 decimals
+    const text = serializeLevel(t.doc);
+    const parsed = parseLevel(text, g.registry);
+    const before = canon(t.doc);
+    t.load(parsed);
+    T.step(0.5);
+    return { same: canon(t.doc) === before, again: serializeLevel(t.doc) === text, ok: T.ok(), items: g.encounter.items.length, e: t.doc.pieces[e + 1].params, lines: text.split('\n').filter((l) => /marker\.|trigger\./.test(l)).length };
+  });
+  expect('save -> load roundtrip keeps the encounter pieces and their params (serialize is idempotent), scene = doc', rt.same && rt.again && rt.ok.ok && rt.items === 4 && rt.lines === 4, JSON.stringify(rt));
+
+  // -- gizmos: edit mode only --
+  const giz = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load(T.level([{ id: 'marker.spawn', pos: [4, 0, 4] }, { id: 'marker.checkpoint', pos: [8, 0, 4] }, { id: 'marker.entry', pos: [12, 0, 4], params: { group: 'r', enemies: ['enemy.static'] } }, { id: 'trigger.volume', pos: [0, 0, -30], params: { size: [4, 3, 4] } }]));
+    T.step(0.3);
+    const col = g.world.colliders.length;
+    const edit = { gizmos: g.encounter.items.filter((r) => r.gizmo && r.gizmo.visible && r.gizmo.parent).length, meshes: T.gizmoMeshes(), colliders: col };
+    T.play(T.tool().doc);
+    const play = { playing: t.playing, gizmos: g.encounter.items.filter((r) => r.gizmo).length, meshes: T.gizmoMeshes(), items: g.encounter.items.length, colliders: g.world.colliders.length };
+    t.edit();
+    T.step(0.3);
+    const back = { gizmos: g.encounter.items.filter((r) => r.gizmo && r.gizmo.visible).length, meshes: T.gizmoMeshes(), colliders: g.world.colliders.length, verify: t.verify().ok };
+    return { edit, play, back };
+  });
+  expect('gizmos: 4 visible in edit mode; none in play (no objects built, logic only, no colliders added); back again after edit', giz.edit.gizmos === 4 && giz.edit.meshes > 0 && giz.play.playing && giz.play.gizmos === 0 && giz.play.meshes === 0 && giz.play.items === 4 && giz.back.gizmos === 4 && giz.back.meshes === giz.edit.meshes && giz.back.verify, JSON.stringify(giz));
+
+  // -- a trigger volume around a piece does not steal clicks; it is picked when nothing else is under the cursor --
+  const pick = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load(T.level([{ id: 'env.box', pos: [0, 0, 0], params: { size: [2, 2, 2], mat: 'low' } }, { id: 'trigger.volume', pos: [0, 0, 0], params: { size: [10, 4, 10] } }]));
+    T.step(0.3);
+    t.mouse.x = 0; t.mouse.y = 0;
+    g.engine.camera.position.set(0, 4, 8);
+    t.cam.yaw = 0;
+    t.cam.pitch = -0.4; T.step(0.1); t.surface(); const onBox = t.pick();
+    t.cam.pitch = -0.8; T.step(0.1); t.surface(); const inVol = t.pick();
+    return { onBox, inVol, box: t.doc.pieces.findIndex((p) => p.params?.mat === 'low'), vol: t.doc.pieces.findIndex((p) => p.id === 'trigger.volume') };
+  });
+  expect('picking: the box inside a trigger volume is picked first; an empty spot inside the volume picks the volume', pick.onBox === pick.box && pick.inVol === pick.vol, JSON.stringify(pick));
+
+  // -- spawn groups: when one member wakes, the rest wake; an ungrouped enemy does not --
+  const grp = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    const lvl = (groupB) => T.level([
+      { id: 'enemy.trooper', pos: [0, 0, -10], params: { group: 'a' } }, // sees the player
+      { id: 'enemy.trooper', pos: [60, 0, -40], params: groupB }, // far away (sight 32, squad alert 22)
+      { id: 'enemy.trooper', pos: [-60, 0, -40] }, // no group
+      { id: 'enemy.drone', pos: [0, 0, -50], params: { group: 'a' } },
+    ]);
+    T.log.length = 0;
+    T.play(lvl({ group: 'a' }));
+    T.step(4);
+    const ts = g.enemies.puppets.filter((e) => e.kind === 'trooper');
+    const dr = g.enemies.puppets.find((e) => e.kind === 'drone');
+    const withGroup = { a: ts[0].alerted, b: ts[1].alerted, free: ts[2].alerted, drone: dr.awake, wakes: T.logOf('wake').length };
+    T.play(lvl({}));
+    T.step(4);
+    const ts2 = g.enemies.puppets.filter((e) => e.kind === 'trooper');
+    const without = { a: ts2[0].alerted, b: ts2[1].alerted };
+    t.edit();
+    return { withGroup, without };
+  });
+  expect('spawn group: one trooper sees the player, the whole group wakes (troopers and a drone), once; an ungrouped one stays idle', grp.withGroup.a && grp.withGroup.b && grp.withGroup.drone && !grp.withGroup.free && grp.withGroup.wakes === 1, JSON.stringify(grp.withGroup));
+  expect('  control: the same far trooper without a group stays idle', grp.without.a && !grp.without.b, JSON.stringify(grp.without));
+
+  // -- trigger volume: fires its event once; wakes a group --
+  const trg = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    const lvl = (once) => T.level([
+      { id: 'enemy.trooper', pos: [80, 0, -80], params: { group: 'g' } },
+      { id: 'trigger.volume', pos: [0, 0, 4], name: 'door', params: { size: [4, 3, 4], event: 'door.open', once, wakeGroup: 'g' } },
+      { id: 'trigger.volume', pos: [0, 0, -60], params: { size: [4, 3, 4], event: 'far' } },
+    ]);
+    T.log.length = 0;
+    T.play(lvl(true));
+    // the camera spawn is inside the volume: it fires on the first frame
+    T.step(1);
+    const first = T.logOf('trigger').map((x) => x.slice(1).join(':'));
+    const woke = g.enemies.puppets[0].alerted;
+    // leave and enter again: once = no second event
+    g.player.pos.set(0, 0, 30); T.step(0.3);
+    g.player.pos.set(0, 0, 4); T.step(0.3);
+    const afterOnce = T.logOf('trigger').length;
+    // the second volume has no name: trigger1
+    g.player.pos.set(0, 0, -60); T.step(0.3);
+    const second = T.logOf('trigger').map((x) => x.slice(1).join(':'));
+    // once: false fires on every entry
+    T.log.length = 0;
+    T.play(lvl(false));
+    T.step(0.5);
+    g.player.pos.set(0, 0, 30); T.step(0.3);
+    g.player.pos.set(0, 0, 4); T.step(0.3);
+    g.player.pos.set(0, 0, 30); T.step(0.3);
+    g.player.pos.set(0, 0, 4); T.step(0.3);
+    const repeat = T.logOf('trigger').filter((x) => x[1] === 'door').length;
+    // a trigger in edit mode never fires
+    t.edit();
+    T.log.length = 0;
+    g.player.pos.set(0, 0, 4); T.step(1);
+    return { first, woke, afterOnce, second, repeat, editFired: T.logOf('trigger').length };
+  });
+  expect('trigger volume: enters -> `trigger:fired` { id: name, event } once, and wakes its group', JSON.stringify(trg.first) === JSON.stringify(['door:door.open']) && trg.woke && trg.afterOnce === 1, JSON.stringify(trg));
+  expect('  an unnamed trigger is "trigger<n>" in file order; once: false fires on every entry; nothing fires in edit mode', JSON.stringify(trg.second[1]) === JSON.stringify('trigger1:far') && trg.repeat === 3 && trg.editFired === 0, JSON.stringify(trg));
+
+  // -- reinforcements: a trigger (or the event) builds the group's listed enemies at the entry marker --
+  const rf = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    const n0 = (() => {
+      T.log.length = 0;
+      T.play(T.level([
+        { id: 'enemy.static', pos: [-6, 0, -4] },
+        { id: 'marker.entry', pos: [0, 0, -30], yaw: 0, params: { group: 'r', enemies: ['enemy.trooper', 'enemy.trooper'] } },
+        { id: 'marker.entry', pos: [20, 0, -30], params: { group: 'other', enemies: ['enemy.static'] } },
+        { id: 'trigger.volume', pos: [0, 0, 4], params: { size: [4, 3, 4], event: 'ambush', spawnGroup: 'r' } },
+      ]));
+      return 1;
+    })();
+    T.step(1);
+    const made = g.enemies.puppets.filter((e) => e.squad === 'r');
+    const first = {
+      total: g.enemies.puppets.length, made: made.length, awake: made.every((e) => e.alerted),
+      near: made.every((e) => Math.hypot(e.pos.x - 0, e.pos.z + 30) < 2), apart: made.length === 2 && Math.abs(made[0].pos.x - made[1].pos.x) > 1,
+      log: T.logOf('spawn'), other: g.enemies.puppets.some((e) => e.squad === 'other'),
+    };
+    // by event
+    g.engine.events.emit('encounter:spawn', 'r');
+    T.step(0.2);
+    const byEvent = g.enemies.puppets.filter((e) => e.squad === 'r').length;
+    // restart: back to the initial enemies
+    T.tap('KeyT');
+    T.step(0.5);
+    const afterRestart = g.enemies.puppets.filter((e) => e.squad === 'r').length;
+    t.edit();
+    // in edit mode the entry is inert
+    const inert = g.encounter.spawnGroup('r');
+    return { first, byEvent, afterRestart, inert, editTotal: g.enemies.puppets.length };
+  });
+  expect('reinforcements: the trigger builds the entry marker\'s listed enemies there, awake, in its group; other groups stay out', rf.first.total === 3 && rf.first.made === 2 && rf.first.awake && rf.first.near && rf.first.apart && !rf.first.other && JSON.stringify(rf.first.log) === JSON.stringify([['spawn', 'r', 2]]), JSON.stringify(rf.first));
+  expect('  `encounter:spawn` does the same; restart reloads the level (the trigger fires again: 2, not 4); nothing spawns in edit mode', rf.byEvent === 4 && rf.afterRestart === 2 && rf.inert === 0 && rf.editTotal === 1, JSON.stringify(rf));
+
+  // -- player spawn: marker.spawn --
+  const sp = await ev(async () => {
+    const g = window.game;
+    const t = T.tool();
+    const { levelSpawn } = await import('/src/game/world/encounter.js');
+    const { SCENES } = await import('/src/game/scenes.js');
+    const lvl = T.level([{ id: 'marker.spawn', pos: [5, 0, -10], yaw: Math.PI / 2 }, { id: 'marker.spawn', pos: [9, 0, -10] }]);
+    const ls = levelSpawn(lvl);
+    T.play(lvl);
+    const camSpawn = g.player.pos.toArray();
+    T.tap('KeyT');
+    T.step(0.3);
+    const restart = g.player.pos.toArray();
+    const rYaw = g.player.facing;
+    t.edit();
+    T.step(0.3);
+    const parked = g.player.pos.toArray();
+    // a normal level load (no tool): the marker is the spawn, gizmos are not built
+    SCENES.testenc = { ...lvl, name: 'testenc' };
+    g.loadScene('testenc');
+    T.step(0.3);
+    const normal = { pos: g.player.pos.toArray(), tool: g.tool, gizmos: g.encounter.items.filter((r) => r.gizmo).length, items: g.encounter.items.length, meshes: T.gizmoMeshes() };
+    g.loadScene('workshop');
+    delete SCENES.testenc;
+    T.step(0.3);
+    // without a marker, level.spawn is used
+    const plain = levelSpawn(T.level([]));
+    return { ls, camSpawn, restart, rYaw, parked, normal, plain };
+  });
+  const near = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]) < 0.05;
+  expect('marker.spawn: levelSpawn picks the first marker (else level.spawn); play in place still starts under the camera', sp.ls.pos[0] === 5 && Math.abs(sp.ls.yaw - Math.PI / 2) < 1e-9 && near(sp.camSpawn, [0, 0, 4]) && sp.plain.pos[2] === 20, JSON.stringify(sp));
+  expect('  restart (T) and a normal level load put the player on the marker; back in edit parks the player there; no gizmos in a normal level', near(sp.restart, [5, 0, -10]) && Math.abs(sp.rYaw - Math.PI / 2) < 1e-6 && near(sp.parked, [5, 0, -10]) && near(sp.normal.pos, [5, 0, -10]) && sp.normal.tool === null && sp.normal.items === 2 && sp.normal.gizmos === 0 && sp.normal.meshes === 0, JSON.stringify(sp));
+
+  // -- checkpoints: the last one reached is where the player respawns --
+  const cp = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    T.log.length = 0;
+    T.play(T.level([
+      { id: 'marker.checkpoint', pos: [0, 0, -10], yaw: 1.5, name: 'cp1' },
+      { id: 'marker.checkpoint', pos: [20, 0, -10], name: 'cp2' },
+    ]));
+    const die = () => { g.player.damage(1000); T.step(0.1); const dead = g.player.dead; T.step(3.6); return { dead, alive: !g.player.dead, health: g.player.health }; };
+    T.step(0.3);
+    const start = g.player.pos.toArray();
+    const none = g.encounter.checkpoint;
+    const d0 = die();
+    const at0 = g.player.pos.toArray(); // no checkpoint yet: back where the run started
+    g.player.pos.set(0.5, 0, -10); T.step(0.3);
+    const c1 = g.encounter.checkpoint?.id;
+    g.player.pos.set(20, 0, -10); T.step(0.3);
+    const c2 = g.encounter.checkpoint?.id;
+    g.player.pos.set(0, 0, -10); T.step(0.3); // back to cp1: the last one reached wins
+    const c1b = g.encounter.checkpoint?.id;
+    g.player.pos.set(30, 0, 30); T.step(0.3);
+    const d1 = die();
+    const at1 = g.player.pos.toArray();
+    const yaw = g.player.facing;
+    const events = T.logOf('checkpoint').map((x) => x[1]);
+    T.tap('KeyT');
+    T.step(0.3);
+    const afterRestart = g.encounter.checkpoint;
+    t.edit();
+    return { start, none, d0, at0, c1, c2, c1b, d1, at1, yaw, events, afterRestart, editCp: g.encounter.checkpoint };
+  });
+  expect('checkpoint: none before one is reached; dying then respawns at the spawn; entering one records it (last reached wins), `checkpoint:reached` per change', cp.none === null && cp.d0.dead && cp.d0.alive && near(cp.at0, cp.start) && cp.c1 === 'cp1' && cp.c2 === 'cp2' && cp.c1b === 'cp1' && JSON.stringify(cp.events) === JSON.stringify(['cp1', 'cp2', 'cp1']), JSON.stringify(cp));
+  expect('  after death the player respawns at the last checkpoint, facing its yaw, full health; restart forgets checkpoints', cp.d1.dead && cp.d1.alive && near(cp.at1, [0, 0, -10]) && Math.abs(cp.yaw - 1.5) < 1e-6 && cp.d1.health >= 100 && cp.afterRestart === null && cp.editCp === null, JSON.stringify(cp));
+
+  // -- leaks: play / edit cycles with every encounter piece (reinforcements, wakes, checkpoints) --
+  const leak = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    if (t.playing) t.edit();
+    t.load(T.level([
+      { id: 'marker.spawn', pos: [2, 0, 10] }, { id: 'marker.checkpoint', pos: [0, 0, 4] },
+      { id: 'marker.entry', pos: [0, 0, -20], params: { group: 'r', enemies: ['enemy.trooper', 'enemy.drone'] } },
+      { id: 'enemy.trooper', pos: [0, 0, -10], params: { group: 'a' } },
+      { id: 'trigger.volume', pos: [0, 0, 4], params: { size: [4, 3, 4], event: 'x', wakeGroup: 'a', spawnGroup: 'r' } },
+      { id: 'pickup.heavy', pos: [-4, 0, 6] },
+    ]));
+    const doc0 = T.doc();
+    g.engine.camera.position.set(0, 6, 4);
+    const cycle = () => {
+      T.tap('KeyP');
+      T.step(1);
+      T.tap('KeyT');
+      T.step(1);
+      T.tap('KeyP');
+      T.step(1);
+    };
+    cycle(); // warms the lazily built pools
+    const first = T.mem();
+    const readings = [];
+    for (let i = 0; i < 4; i++) { cycle(); readings.push(T.mem()); }
+    const out = { first, readings, same: T.doc() === doc0, ok: T.ok().ok, items: g.encounter.items.length };
+    g.loadScene('workshop'); T.step(1);
+    return out;
+  });
+  const same2 = leak.readings.every((r) => r.geometries === leak.first.geometries && r.textures === leak.first.textures && r.objects === leak.first.objects);
+  expect('4 play / edit cycles with every encounter piece (reinforcements, wakes, checkpoint) leak nothing; doc unchanged', same2 && leak.same && leak.ok, JSON.stringify(leak));
+}
+
 expect('no page or console errors', errors.length === 0, errors.join(' | '));
 await b.close();
 process.exit(fail.length ? 1 : 0);

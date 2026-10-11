@@ -140,6 +140,10 @@
   is reloaded; the HUD counts `down / total` and shows ARENA CLEAR when all are down. Spawn list: `SPAWNS`.
 - Shooters only engage a player within `ENGAGE_RANGE` (30 m) with line of sight.
 
+## Spawn groups (#73)
+Enemies with the same `params.group` wake together: when any troopers / drone / boss member is awake the rest wake too (once). Triggers and reinforcements: workshop.md, Encounters.
+On death the player respawns after 3 s at the last checkpoint reached, else at the spawn.
+
 ## Drones (`game/actors/drone.js` TUNING)
 - Quad-rotor drones hovering 3.5-5 m up (six: around the yard, the range, two escorting the boss arena).
   Wake on sight within 36 m (or when hit); then circle the player at 9-18 m, flipping direction every 2.5-5.5 s.

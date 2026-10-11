@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { disposeTree } from '../../engine/dispose.js';
 import { saveLevel, openLevel } from './io.js';
+import { levelSpawn } from '../world/encounter.js';
 
 // Workshop editor (#70, instructions/workshop.md): `?scene=workshop` turns into a level editor (level field
 // `"tool": "workshop"`, a Gym-style tool: new Tool(game, level), update(dt), dispose()).
@@ -38,11 +39,11 @@ const deg = (rad) => Math.round((rad * 180) / Math.PI);
 const css = (el, style) => Object.assign(el.style, style);
 
 // How a piece turns: 'quarter' kit.* (axis-aligned, yaw in 90 degree steps: kit.js throws otherwise), 'box' env.box /
-// env.strip (builders ignore yaw: a quarter turn swaps width and depth), 'label' (yaw is a param), 'none' (lights),
+// env.strip / trigger.volume (builders ignore yaw: a quarter turn swaps width and depth), 'label' (yaw is a param), 'none' (lights),
 // 'free' everything else (enemies, pickups, props: 15 degree steps).
 export function rotationKind(id) {
   if (id.startsWith('kit.')) return 'quarter';
-  if (id === 'env.box' || id === 'env.strip') return 'box';
+  if (id === 'env.box' || id === 'env.strip' || id === 'trigger.volume') return 'box';
   if (id === 'env.label') return 'label';
   if (id === 'light.point') return 'none';
   return 'free';
@@ -79,7 +80,7 @@ export function turned(piece, steps) {
     p.params = { ...p.params };
     const map = steps >= 0 ? TURN : TURN_BACK;
     for (let i = 0; i < Math.abs(steps); i++) {
-      const [w, h, d] = p.params.size;
+      const [w, h, d] = p.params.size ?? [4, 3, 4]; // trigger.volume default
       p.params.size = [d, h, w];
       if (p.params.faces) p.params.faces = Object.fromEntries(Object.entries(p.params.faces).map(([k, v]) => [map[k] ?? k, v]));
     }
@@ -162,8 +163,9 @@ export class WorkshopEditor {
   // enemies frozen and posed, the pickups. `reload` false = enemies and pickups are already loaded from the doc
   // (the scene just opened): adopt them in file order. Anything else (back from play) loads them first.
   #populate(reload) {
-    const { world, enemies, pickups, registry } = this.game;
+    const { world, enemies, pickups, encounter, registry } = this.game;
     const level = this.doc;
+    encounter.unload(); // its pieces are rebuilt below as gizmos
     world.load({ ...level, pieces: level.pieces.filter((p) => registry.owner(p.id) !== 'world') }, registry);
     if (reload) {
       enemies.load(level);
@@ -183,7 +185,7 @@ export class WorkshopEditor {
         return { owner, thing: a };
       }
       if (owner === 'pickups') return { owner, thing: crates[np++] };
-      return this.#build(p);
+      return this.#build(p); // world and encounter pieces
     });
   }
 
@@ -303,6 +305,8 @@ export class WorkshopEditor {
       if (!it || it.owner !== registry.owner(p.id)) problems.push(`#${i} ${p.id}: wrong handle`);
     });
     if (enemies.puppets.length !== n('enemies')) problems.push(`enemies ${enemies.puppets.length} != ${n('enemies')}`);
+    if (this.game.encounter.items.length !== n('encounter')) problems.push(`encounter ${this.game.encounter.items.length} != ${n('encounter')}`);
+    for (const it of this.items) if (it.owner === 'encounter' && !it.thing.gizmo?.parent) problems.push('an encounter gizmo is detached');
     if (pickups.items.length !== n('pickups')) problems.push(`pickups ${pickups.items.length} != ${n('pickups')}`);
     let colliders = 0;
     for (const it of this.items) {
@@ -325,7 +329,7 @@ export class WorkshopEditor {
   // spot is inside a wall). Returns { pos, yaw } of a level spawn.
   spawnAt() {
     const cam = this.game.engine.camera.position;
-    const spawn = this.doc.spawn;
+    const spawn = levelSpawn(this.doc); // a marker.spawn piece, else doc.spawn
     const r = 0.4; // player radius (metrics.md 1: 0.35), with a margin
     let ground = -Infinity;
     const cover = (c, lo, hi) => {
@@ -348,7 +352,7 @@ export class WorkshopEditor {
     const { game } = this;
     const { engine } = game;
     this.snapshot = clone(this.doc);
-    this.playLevel = { ...clone(this.doc), spawn: this.spawnAt() };
+    this.playLevel = { ...clone(this.doc), spawn: this.spawnAt() }; // first play: where the camera is
     this.edit3d = { pos: engine.camera.position.clone(), fov: engine.camera.fov };
     // forget the gestures of edit mode
     this.drag = null;
@@ -361,21 +365,23 @@ export class WorkshopEditor {
     this.playing = true;
     game.padPlay = false; // like the game: losing pointer lock pauses
     if (this.hud) this.hud.style.display = this.hudDisplay;
-    this.#loadPlay();
+    this.#loadPlay(this.playLevel.spawn);
     game.engine.input.lock();
     return true;
   }
 
-  // Loads the play level (also the restart): a fresh copy of the snapshot, enemies awake, player at the spawn.
-  #loadPlay() {
+  // Loads the play level (also the restart): a fresh copy of the snapshot, enemies awake, player at `spawn`; the
+  // encounter pieces load as logic only (no gizmos, checkpoint forgotten).
+  #loadPlay(spawn) {
     const { game } = this;
-    const level = game.registry.check(clone({ ...this.snapshot, spawn: this.playLevel.spawn }));
+    const level = game.registry.check(clone({ ...this.snapshot, spawn }));
     game.dropHelpers();
     game.world.load(level, game.registry);
     game.enemies.load(level);
     game.pickups.load(level);
+    game.encounter.load(level);
     game.enemies.frozen = false;
-    game.resetRun(level);
+    game.resetRun(level, spawn);
     game.rebuildHelpers();
   }
 
@@ -409,10 +415,12 @@ export class WorkshopEditor {
     return this.playing ? this.edit() : this.play();
   }
 
-  // Plays the encounter again from the snapshot (player back at the spawn, every enemy and pickup new).
+  // Plays the encounter again from the snapshot (every enemy and pickup new, checkpoint forgotten). The player goes to
+  // the level's `marker.spawn` when the doc has one, else to where this play started.
   restart() {
     if (!this.playing) return false;
-    this.#loadPlay();
+    const marked = this.snapshot.pieces.some((p) => p.id === 'marker.spawn');
+    this.#loadPlay(marked ? levelSpawn(this.snapshot) : this.playLevel.spawn);
     return true;
   }
 
@@ -456,7 +464,7 @@ export class WorkshopEditor {
   // ---- scene: the owner's runtime spawn path ----
 
   #build(piece) {
-    const { registry, world, enemies, pickups } = this.game;
+    const { registry, world, enemies, pickups, encounter } = this.game;
     const data = clone(piece); // builders may keep what they are given
     const owner = registry.owner(data.id);
     if (owner === 'world') return { owner, thing: world.spawn(data) };
@@ -467,12 +475,14 @@ export class WorkshopEditor {
       return { owner, thing: a };
     }
     if (owner === 'pickups') return { owner, thing: registry.build('pickups', pickups, data) };
+    if (owner === 'encounter') return { owner, thing: encounter.spawn(data, { gizmo: true }) };
     throw new Error(`workshop: no owner for "${data.id}"`);
   }
 
   #unbuild({ owner, thing }) {
-    const { world, enemies, pickups } = this.game;
+    const { world, enemies, pickups, encounter } = this.game;
     if (owner === 'world') world.despawn(thing);
+    else if (owner === 'encounter') encounter.despawn(thing);
     else if (owner === 'enemies') {
       if (enemies.boss === thing) enemies.boss = null;
       enemies.despawn(thing);
@@ -489,12 +499,12 @@ export class WorkshopEditor {
 
   // World box of live item (union of its objects); a stand-in where the owner has no geometry (lights).
   #boxOf(item, at) {
-    const objs = item.owner === 'world' ? item.thing.objects : item.owner === 'enemies' ? [item.thing.group ?? item.thing.root] : [item.thing.model, item.thing.ring];
+    const objs = item.owner === 'world' ? item.thing.objects : item.owner === 'encounter' ? [item.thing.gizmo] : item.owner === 'enemies' ? [item.thing.group ?? item.thing.root] : [item.thing.model, item.thing.ring];
     const box = new THREE.Box3();
     for (const o of objs) box.expandByObject(o);
     const size = box.getSize(new THREE.Vector3());
     if (box.isEmpty() || Math.max(size.x, size.y, size.z) > TUNING.maxBox || !Number.isFinite(size.x + size.y + size.z)) {
-      const fb = item.owner === 'world' ? POINT : FALLBACK;
+      const fb = item.owner === 'world' || item.owner === 'encounter' ? POINT : FALLBACK;
       return fb.clone().translate(new THREE.Vector3(...at));
     }
     return box;
@@ -821,7 +831,8 @@ export class WorkshopEditor {
     for (let i = 0; i < this.count; i++) {
       const b = this.#bounds(i);
       if (!this.ray.ray.intersectBox(b, at)) continue;
-      const d = at.distanceTo(this.ray.ray.origin);
+      // a trigger volume often surrounds other pieces: it is picked only when nothing else is under the cursor
+      const d = at.distanceTo(this.ray.ray.origin) + (this.doc.pieces[i].id === 'trigger.volume' ? 1000 : 0);
       const s = b.getSize(new THREE.Vector3());
       const v = s.x * s.y * s.z;
       if (d < bd - 1e-4 || (Math.abs(d - bd) <= 1e-4 && v < bv)) [best, bd, bv] = [i, d, v];

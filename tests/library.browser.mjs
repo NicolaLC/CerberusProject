@@ -51,7 +51,7 @@ await p.evaluate(() => {
 // ---- 1. every id spawns from its example, and with no params ----
 const spawn = await p.evaluate((NEEDS_PARAMS) => {
   const g = window.game;
-  const { registry, world, enemies, pickups } = g;
+  const { registry, world, enemies, pickups, encounter } = g;
   const out = [];
   for (const id of registry.ids()) {
     const m = registry.meta(id);
@@ -68,10 +68,12 @@ const spawn = await p.evaluate((NEEDS_PARAMS) => {
         let thing;
         if (owner === 'world') thing = world.spawn(data);
         else if (owner === 'enemies') thing = enemies.spawn(data);
+        else if (owner === 'encounter') thing = encounter.spawn(data, { gizmo: true });
         else thing = registry.build('pickups', pickups, data);
         window.T.step(0.2);
         if (owner === 'world') world.despawn(thing);
         else if (owner === 'enemies') enemies.despawn(thing);
+        else if (owner === 'encounter') encounter.despawn(thing);
         else pickups.despawn(thing);
         out.push({ id, mode, ok: true });
       } catch (e) {
