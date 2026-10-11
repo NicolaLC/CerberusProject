@@ -29,6 +29,7 @@ const QUARTER = Math.PI / 2;
 const STEP = Math.PI / 12; // 15 degrees
 const TINT = { wall: 0xe8f0ff, high: 0x3aa0ff, low: 0xff9a3a, none: 0xffe14a }; // box helper by cover class
 const font = '11px/1.45 monospace';
+const VOLUME = new Set(['trigger.volume', 'zone.interior']);
 const FIELD = /^(INPUT|SELECT|TEXTAREA)$/;
 const FALLBACK = new THREE.Box3(new THREE.Vector3(-0.45, 0, -0.45), new THREE.Vector3(0.45, 1.9, 0.45)); // enemy / pickup stand-in
 const POINT = new THREE.Box3(new THREE.Vector3(-0.25, -0.25, -0.25), new THREE.Vector3(0.25, 0.25, 0.25)); // lights
@@ -40,11 +41,11 @@ const deg = (rad) => Math.round((rad * 180) / Math.PI);
 const css = (el, style) => Object.assign(el.style, style);
 
 // How a piece turns: 'quarter' kit.* (axis-aligned, yaw in 90 degree steps: kit.js throws otherwise), 'box' env.box /
-// env.strip / trigger.volume (builders ignore yaw: a quarter turn swaps width and depth), 'label' (yaw is a param), 'none' (lights),
+// env.strip / trigger.volume / zone.interior (builders ignore yaw: a quarter turn swaps width and depth), 'label' (yaw is a param), 'none' (lights),
 // 'free' everything else (enemies, pickups, props: 15 degree steps).
 export function rotationKind(id) {
   if (id.startsWith('kit.')) return 'quarter';
-  if (id === 'env.box' || id === 'env.strip' || id === 'trigger.volume') return 'box';
+  if (id === 'env.box' || id === 'env.strip' || id === 'trigger.volume' || id === 'zone.interior') return 'box';
   if (id === 'env.label') return 'label';
   if (id === 'light.point') return 'none';
   return 'free';
@@ -81,12 +82,23 @@ export function turned(piece, steps) {
     p.params = { ...p.params };
     const map = steps >= 0 ? TURN : TURN_BACK;
     for (let i = 0; i < Math.abs(steps); i++) {
-      const [w, h, d] = p.params.size ?? [4, 3, 4]; // trigger.volume default
+      const [w, h, d] = p.params.size ?? (p.id === 'zone.interior' ? [8, 4, 8] : [4, 3, 4]); // trigger.volume / zone.interior default
       p.params.size = [d, h, w];
       if (p.params.faces) p.params.faces = Object.fromEntries(Object.entries(p.params.faces).map(([k, v]) => [map[k] ?? k, v]));
     }
   }
   return p;
+}
+
+// A copy of `level` whose top-level `interiorZones` ({ min, max } boxes, the file's older form) are `zone.interior` pieces
+// (appended in order) so the editor can select, move and resize them; `interiorZones` becomes []. Pure.
+export function zonesToPieces(level) {
+  const out = clone(level);
+  const zones = out.interiorZones ?? [];
+  if (!zones.length) return out;
+  for (const { min, max } of zones) out.pieces.push({ id: 'zone.interior', pos: [round((min[0] + max[0]) / 2), round(min[1]), round((min[2] + max[2]) / 2)], params: { size: [round(max[0] - min[0]), round(max[1] - min[1]), round(max[2] - min[2])] } });
+  out.interiorZones = [];
+  return out;
 }
 
 // ---- inspector fields (registry meta `fields`, level.md) ----
@@ -138,7 +150,7 @@ export class WorkshopEditor {
     this.playLevel = null; // what play loaded: the snapshot with the spawn moved to the camera
     this.edit3d = null; // camera state kept while playing
     this.disposed = false;
-    this.doc = clone(level);
+    this.doc = zonesToPieces(level);
     this.items = []; // live handle of doc.pieces[i]: { owner, thing }
     this.undoStack = [];
     this.redoStack = [];
@@ -337,7 +349,7 @@ export class WorkshopEditor {
     this.game.registry.check(level);
     for (let i = this.items.length - 1; i >= 0; i--) this.#unbuild(this.items[i]);
     this.items = [];
-    this.doc = clone(level);
+    this.doc = zonesToPieces(level);
     this.items = this.doc.pieces.map((p) => this.#build(p));
     this.undoStack.length = this.redoStack.length = 0;
     this.sel = -1;
@@ -994,8 +1006,8 @@ export class WorkshopEditor {
     for (let i = 0; i < this.count; i++) {
       const b = this.#bounds(i);
       if (!this.ray.ray.intersectBox(b, at)) continue;
-      // a trigger volume often surrounds other pieces: it is picked only when nothing else is under the cursor
-      const d = at.distanceTo(this.ray.ray.origin) + (this.doc.pieces[i].id === 'trigger.volume' ? 1000 : 0);
+      // a trigger volume or interior zone often surrounds other pieces: picked only when nothing else is under the cursor
+      const d = at.distanceTo(this.ray.ray.origin) + (VOLUME.has(this.doc.pieces[i].id) ? 1000 : 0);
       const s = b.getSize(new THREE.Vector3());
       const v = s.x * s.y * s.z;
       if (d < bd - 1e-4 || (Math.abs(d - bd) <= 1e-4 && v < bv)) [best, bd, bv] = [i, d, v];
