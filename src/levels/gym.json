@@ -321,6 +321,17 @@
     {"id":"env.label","pos":[-11.8,0,-321.5],"params":{"text":"high 2.4\ngap 1.5","size":0.55,"flat":true,"color":"#9cc4ff"}},
     {"id":"env.label","pos":[-7.6,0,-321.5],"params":{"text":"low 3\ngap 2.5","size":0.55,"flat":true,"color":"#ffb070"}},
     {"id":"env.label","pos":[-3.3,0,-320.5],"params":{"text":"wall across","size":0.55,"flat":true,"color":"#9cc4ff"}},
+    {"id":"env.box","name":"corner-a:high","pos":[10,0,-324],"params":{"size":[3,2.8,2],"mat":"high","cover":"high"}},
+    {"id":"env.box","name":"corner-b:low","pos":[20,0,-324],"params":{"size":[3,1.1,1],"mat":"low","cover":"low"}},
+    {"id":"env.box","name":"corner-c1:wall","pos":[31,0,-324],"params":{"size":[6,2.8,0.6],"mat":"high","cover":"wall"}},
+    {"id":"env.box","name":"corner-c2:wall","pos":[33.7,0,-329.2],"params":{"size":[0.6,2.8,11],"mat":"high","cover":"wall"}},
+    {"id":"env.box","name":"corner-d1:wall","pos":[45,0,-324],"params":{"size":[6,2.8,0.6],"mat":"high","cover":"wall"}},
+    {"id":"env.box","name":"corner-d2:wall","pos":[48.3,0,-318.15],"params":{"size":[0.6,2.8,12],"mat":"high","cover":"wall"}},
+    {"id":"env.label","pos":[10,0,-321.5],"params":{"text":"high block 3 x 2\nhold D: round it","size":0.55,"flat":true,"color":"#9cc4ff"}},
+    {"id":"env.label","pos":[20,0,-321.5],"params":{"text":"low 3 x 1\nhold D: crouch round","size":0.55,"flat":true,"color":"#ffb070"}},
+    {"id":"env.label","pos":[31,0,-321.5],"params":{"text":"L, outside corner\nhold D: onto the long wall","size":0.55,"flat":true,"color":"#9cc4ff"}},
+    {"id":"env.label","pos":[45,0,-321.5],"params":{"text":"L, inside corner\nhold D: turn into the wall","size":0.55,"flat":true,"color":"#9cc4ff"}},
+    {"id":"env.label","pos":[29,5,-330],"params":{"text":"COVER CORNERS (round the end, into the wall)\nenter a box from the south, hold D at its end: you stay in cover","size":0.5,"color":"#ffe27a","bg":"rgba(0,0,0,0.7)"}},
     {"id":"env.label","pos":[-13,5,-330],"params":{"text":"COVER CHAIN (cover to cover run)\nenter the first box, slide east at its end: you run to the next one","size":0.5,"color":"#ffe27a","bg":"rgba(0,0,0,0.7)"}}
   ]
 }
