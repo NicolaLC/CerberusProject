@@ -36,8 +36,9 @@ boxes (metrics.md); cover flags follow the class (`low` under 1.7, `high` from).
 | 12 standard stair, zf -278 | 0.4 / 1.0 / 4 wide up to an 8 x 8 platform at 1.6, low parapets on three sides, west edge open for jet-ons | 20 |
 | 13 peek tests, zf -304 | 4 x 4 door in a 7 m wall, high and low L corners, wall end, 1.2 pillar | peek |
 | 14 KIT, z 48 / 70 (south of the spawn) | one of each `kit.*` piece with its example params, a floor extension (z 35..90), `env.label` under each (#69); the suite `tests/kit.browser.mjs` also spawns every id with edge params, climbs the stairs, ramp and platform stairs and walks the doorway | kit |
+| 15 cover chain, z -324 (sign z -330) | low 3, gap 2.0, low 3, gap 3.0, high 2.4 x 0.6, gap 1.5, low 3, gap 2.5, wall 0.6 x 6 across the line (x -24..-3); `G` stands at the south of the first box | cover-to-cover run |
 
-The labels are the main draw-call cost (one each, 109 in this room); the boxes merge per material.
+The labels are the main draw-call cost (one each, 115 in this room); the boxes merge per material.
 
 Tool (`gym/traversal.js`, `game.tool`): panel top-left (T hides it): feet y, ground under the feet, speed, cover (type, edge
 L/R, PINNED), last vault (hop / slide / refused), jet state with the last jet (peak, distance, landing y), camera
