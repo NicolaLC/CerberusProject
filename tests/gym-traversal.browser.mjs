@@ -397,6 +397,35 @@ const r = await p.evaluate(() => {
     if (typeof off === 'function') off();
   }
 
+  // ---------- cover corners: enter from the south, hold D (east) ----------
+  {
+    const kinds = [];
+    const off = engine.events.on('player:coverCorner', (d) => kinds.push(d.kind));
+    const trial = (name, frames, stopKinds = 0) => {
+      const bx = pc(name);
+      put(bx.x - bx.w / 2 + 1, 0, bx.zS + 4, 'N');
+      kinds.length = 0;
+      keys.add('KeyW');
+      for (let i = 0; i < 90 && !player.cover; i++) step();
+      keys.clear();
+      const seq = [];
+      let lost = 0;
+      keys.add('KeyD');
+      for (let i = 0; i < frames; i++) {
+        step();
+        if (player.cover) {
+          const k = `${Math.round(player.cover.normal.x)},${Math.round(player.cover.normal.z)}:${player.cover.collider.mesh.position.x.toFixed(1)}`;
+          if (seq[seq.length - 1] !== k) seq.push(k);
+        } else if (!player.snap) lost++;
+        if (stopKinds && kinds.length >= stopKinds && !player.snap) { step(40); break; }
+      }
+      keys.clear();
+      return { seq, kinds: kinds.slice(), lost, type: player.cover?.type ?? null };
+    };
+    out.corners = { high: trial('corner-a:high', 420), low: trial('corner-b:low', 200, 1), outside: trial('corner-c1:wall', 300, 1), inside: trial('corner-d1:wall', 300, 1) };
+    if (typeof off === 'function') off();
+  }
+
   // ---------- the tool itself: panel, keys, teleport, free on dispose ----------
   const panel = () => document.getElementById('gym-traversal');
   const tl = {};
@@ -470,6 +499,7 @@ for (const [m, v] of Object.entries(r.jetOn)) console.log(`  ${m} ${v}`);
 console.log('\nitem 19 camera against 1.1 cover, crouched:', JSON.stringify(r.camCover));
 console.log('\npeek tests:', JSON.stringify(r.peek));
 console.log('cover chain:', JSON.stringify(r.chain));
+console.log('cover corners:', JSON.stringify(r.corners));
 
 // ----- assertions -----
 console.log('');
@@ -507,6 +537,10 @@ expect('a wall end, a cover corner and a pillar are peekable (edge flag)', r.pee
 expect('aiming at a wall end keeps the cover and leans out (peek)', r.peek.aim.cover && r.peek.aim.aiming && r.peek.aim.shift > 0.1 && r.peek.aim.side !== 0, JSON.stringify(r.peek.aim));
 expect('the 4 x 4 door in the 7 m wall passes at walk and sprint', r.peek.door.walk.passed && r.peek.door.sprint.passed);
 expect('cover chain: sliding east at each box end runs to the next one (low, low, high, low, wall across), one run each', JSON.stringify(r.chain.seen) === '[0,1,2,3,4]' && JSON.stringify(r.chain.runs) === '["low","high","low","high"]' && r.chain.type === 'high' && r.chain.nx === -1, JSON.stringify(r.chain));
+expect('cover corners: holding D round the free-standing high block turns 4 outside corners and never leaves cover', r.corners.high.kinds.length >= 4 && r.corners.high.kinds.every((k) => k === 'outside') && r.corners.high.lost === 0 && r.corners.high.seq.slice(0, 5).map((q) => q.split(':')[0]).join('|') === '0,1|1,0|0,-1|-1,0|0,1', JSON.stringify(r.corners.high));
+expect('cover corners: the low box is rounded too (crouch run), onto its east face', r.corners.low.kinds[0] === 'outside' && r.corners.low.type === 'low' && r.corners.low.lost === 0 && r.corners.low.seq.length >= 2 && r.corners.low.seq[1].startsWith('1,0'), JSON.stringify(r.corners.low));
+expect('cover corners: the L of walls (outside) ends on the long wall facing east', r.corners.outside.kinds[0] === 'outside' && r.corners.outside.lost === 0 && r.corners.outside.seq[1] === '1,0:33.7', JSON.stringify(r.corners.outside));
+expect('cover corners: the L of walls (inside) turns into the wall facing west and stays there', r.corners.inside.kinds[0] === 'inside' && r.corners.inside.lost === 0 && r.corners.inside.seq.join(',') === '0,1:45.0,-1,0:48.3', JSON.stringify(r.corners.inside));
 expect('tool: panel on load, T hides and shows it, G teleports to the next station', r.tool.panel && r.tool.hidden && r.tool.shown && r.tool.next);
 expect('tool: the panel reads cover, vault, jet and camera', ['feet y', 'cover', 'vault', 'jet', 'camera'].every((k) => r.tool.text.includes(k)), r.tool.text);
 expect('tool: the panel is removed on a scene switch and comes back once', r.tool.removed && r.tool.back);

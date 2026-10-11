@@ -19,8 +19,20 @@ const _prev = new THREE.Vector3();
 const _n = new THREE.Vector3();
 const _hd = new THREE.Vector3(); // cover hop: push direction along the cover
 const _hop = { x: 0, z: 0, nx: 0, nz: 0, col: null }; // cover hop: entry spot, face normal, collider of the best face
+const _hc = new THREE.Vector3(); // corner move: control point / end
+const _he = new THREE.Vector3();
+const _ext = { lo: 0, hi: 0 }; // extent() result
+const _cn = { cx: 0, cz: 0, ex: 0, ez: 0, nx: 0, nz: 0, col: null }; // corner move: control point, end spot, new face normal, its collider
+const _cornerEvt = { kind: '' }; // 'player:coverCorner' payload (reused)
 const _run = { to: new THREE.Vector3(), type: '', collider: null }; // 'player:coverRun' payload (reused)
 const _ray = new THREE.Raycaster();
+// extent of a box along the unit axis (ux, uz) -> _ext.lo / _ext.hi
+function extent(b, ux, uz) {
+  const a = b.min.x * ux + b.min.z * uz;
+  const c = b.max.x * ux + b.max.z * uz;
+  _ext.lo = Math.min(a, c);
+  _ext.hi = Math.max(a, c);
+}
 const _move = { x: 0, y: 0 };
 const _jet = { point: new THREE.Vector3(), dir: new THREE.Vector3(0, -1, 0) }; // 'player:jet' payload (reused)
 
@@ -42,6 +54,10 @@ const TUNING = {
   coverEdgeExit: 0.15, // s of pushing along the cover while stopped at its end before walking on past it
   coverHopReach: 5, // m from the player to the entry spot of the next cover, along the push, for the cover-to-cover run
   coverHopStandoff: 1.5, // m the next face may sit in front of / behind the current cover line
+  coverWrapTime: 0.3, // s of the move around an outside corner (a curve through the corner point, hunched)
+  coverTurnTime: 0.2, // s of the turn into the wall at an inside corner
+  coverWrapFace: 0.9, // m: shortest face the player may wrap onto (min high cover length): door jambs (0.5 walls) walk on
+  coverCornerGrace: 0.25, // s after a corner move in which "moving away" does not leave cover
   coverRunSpeed: 6.8, // m/s of that hunched run (sprint is 7.4)
   maxShields: 100,
   maxHealth: 100,
@@ -96,6 +112,8 @@ export class Player {
     this.jetTimer = 0; // seconds until the next burst is allowed
     this.coverTimer = 0; // seconds until auto cover may grab again
     this.edgeTime = 0; // seconds pushing along cover while stopped at its end
+    this.cornerGrace = 0; // seconds left in which pushing away does not leave cover (after a corner move)
+    this.keep = { on: false, ax: 0, ay: 0, dx: 0, dz: 0, yaw: 0 }; // stick held through a corner: keeps sliding along dx, dz
     this.peek = new THREE.Vector3();
     this.shields = TUNING.maxShields;
     this.health = TUNING.maxHealth;
@@ -244,14 +262,32 @@ export class Player {
     this.sprinting = controls.running && ax.y > 0 && !this.aiming && !this.airborne && !this.cover && !this.snap && !controls.firing && this.lastShot > t.sprintCooldown;
     const combat = this.aiming || this.lastShot < 0.6;
 
+    // jump cancels a cover run / corner move (not the entry snap or a vault): drop it and its pending cover, keep the
+    // velocity; the jump below does the burst (or just free movement while the jet is on cooldown)
+    if (this.snap?.run && controls.jumpPressed) {
+      this.snap = null;
+      this.keep.on = false;
+      this.coverTimer = t.autoCoverCooldown;
+    }
+
     // ----- smooth snap (enter cover / vault) -----
     if (this.snap) {
       const s = this.snap;
       s.t = Math.min(1, s.t + dt / s.dur);
       // a slide keeps its momentum (linear); cover entry and the hop ease in and out
       const e = s.vault === 'slide' || s.run ? s.t : s.t * s.t * (3 - 2 * s.t);
-      this.pos.x = THREE.MathUtils.lerp(s.from.x, s.to.x, e);
-      this.pos.z = THREE.MathUtils.lerp(s.from.z, s.to.z, e);
+      if (s.ctrl) {
+        // corner move: quadratic curve through the control point; velocity and heading follow it
+        const w = 1 - e;
+        this.pos.x = w * w * s.from.x + 2 * w * e * s.ctrl.x + e * e * s.to.x;
+        this.pos.z = w * w * s.from.z + 2 * w * e * s.ctrl.z + e * e * s.to.z;
+        s.vx = (2 * w * (s.ctrl.x - s.from.x) + 2 * e * (s.to.x - s.ctrl.x)) / s.dur;
+        s.vz = (2 * w * (s.ctrl.z - s.from.z) + 2 * e * (s.to.z - s.ctrl.z)) / s.dur;
+        s.yaw = Math.atan2(s.vx, s.vz);
+      } else {
+        this.pos.x = THREE.MathUtils.lerp(s.from.x, s.to.x, e);
+        this.pos.z = THREE.MathUtils.lerp(s.from.z, s.to.z, e);
+      }
       const ground = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.stepHeight);
       // slide: up onto the top, across it on the hip, down the far side; hop: one arc
       const lift = s.vault === 'slide' ? (s.t < 0.2 ? Math.sin((s.t / 0.2) * Math.PI * 0.5) : s.t > 0.8 ? Math.cos(((s.t - 0.8) / 0.2) * Math.PI * 0.5) : 1) : Math.sin(Math.PI * s.t);
@@ -267,6 +303,11 @@ export class Player {
       if (s.t >= 1) {
         this.snap = null;
         if (s.run) this.cover = s.next; // settled on the new face; the cover slide eases the velocity out
+        if (s.corner) {
+          this.keep.on = true;
+          this.keep.yaw = rig.yaw;
+          this.cornerGrace = t.coverCornerGrace;
+        }
         if (s.hop) this.events.emit('player:land', 'vault');
         else this.events.emit('player:coverSlam');
         this.pos.y = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.stepHeight);
@@ -306,8 +347,11 @@ export class Player {
       this.#animate(dt, rig, 1, weapon.lowered());
       return;
     }
-    if (this.cover) this.#updateCover(dt, wish, rig);
-    else this.#updateFree(dt, wish);
+    if (this.cover) this.#updateCover(dt, wish, rig, ax);
+    else {
+      this.keep.on = false;
+      this.#updateFree(dt, wish);
+    }
 
     // facing
     let targetFacing = this.facing;
@@ -376,14 +420,24 @@ export class Player {
     }
   }
 
-  #updateCover(dt, wish, rig) {
+  #updateCover(dt, wish, rig, ax) {
     const c = this.cover;
     const t = this.t;
     // tangent oriented toward camera right
     c.tangent.set(c.normal.z, 0, -c.normal.x);
     if (c.tangent.dot(rig.right) < 0) c.tangent.negate();
 
-    if (wish.dot(c.normal) > 0.5) {
+    // after a corner move the stick (still pushed the old way) means "keep going": along the new face, until it is
+    // released or turns more than ~45 deg (or the camera swings away)
+    this.cornerGrace -= dt;
+    const kp = this.keep;
+    if (kp.on) {
+      const m = Math.hypot(ax.x, ax.y);
+      if (m < 0.3 || (ax.x * kp.ax + ax.y * kp.ay) / (m * Math.hypot(kp.ax, kp.ay)) < 0.7 || Math.abs(wrapAngle(rig.yaw - kp.yaw)) > 0.8) kp.on = false;
+      else wish.set(kp.dx, 0, kp.dz).multiplyScalar(Math.min(1, m));
+    }
+
+    if (this.cornerGrace <= 0 && wish.dot(c.normal) > 0.5) {
       this.cover = null; // moving away (also a diagonal push back) leaves cover
       return;
     }
@@ -406,7 +460,11 @@ export class Player {
     this.edgeTime = blocked && !this.aiming && Math.abs(wish.dot(c.tangent)) > 0.3 ? this.edgeTime + dt : 0;
     if (this.edgeTime >= t.coverEdgeExit) {
       this.edgeTime = 0;
-      if (this.#findCoverHop(c, _hd.copy(c.tangent).multiplyScalar(Math.sign(wish.dot(c.tangent))))) this.#startCoverRun(_hd);
+      // inside corner first (a wall right ahead), then the cover-to-cover run, then around the outside corner
+      _hd.copy(c.tangent).multiplyScalar(Math.sign(wish.dot(c.tangent)));
+      if (this.#findInsideCorner(c, _hd)) this.#startCorner('inside', ax);
+      else if (this.#findCoverHop(c, _hd)) this.#startCoverRun(_hd);
+      else if (this.#findOutsideCorner(c, _hd)) this.#startCorner('outside', ax);
       this.cover = null;
       return;
     }
@@ -449,11 +507,9 @@ export class Player {
       const lb = b.max.x * nx + b.max.z * nz;
       const llo = Math.min(la, lb);
       const lhi = Math.max(la, lb);
-      // parallel: its face looking along n is at lhi when n points up the axis, else at llo
-      const up = nx + nz > 0;
-      const face = up ? lhi : llo;
+      // parallel: its face looking along n is at lhi (the n-most extent)
       let es = lo + 0.2; // entry along the push: 0.2 inside the near end, like the slide stop
-      let el = face + (up ? off : -off);
+      let el = lhi + off;
       const par = Math.abs(el - l0) <= t.coverHopStandoff && hi - lo >= 0.4 && es > s0;
       let ok = par;
       if (!ok) {
@@ -496,6 +552,127 @@ export class Player {
     _run.type = type;
     _run.collider = _hop.col;
     this.events.emit('player:coverRun', _run);
+  }
+
+  // Inside corner at the end of cover `c`, pushing along d: a cover wall B whose face looks back at us, touching or
+  // within ~0.3 m of the end (closer than the cover run's entry offset), sticking out past our face so we can stand
+  // against it. Fills _cn: the turn is a short straight move to the spot in front of B. Axis-aligned boxes only.
+  #findInsideCorner(c, d) {
+    const t = this.t;
+    const off = t.radius + 0.05;
+    const nx = c.normal.x;
+    const nz = c.normal.z;
+    if (Math.abs(nx * nz) > 0.01 || Math.abs(d.x * d.z) > 0.01) return false;
+    const py = this.pos.y;
+    const s0 = this.pos.x * d.x + this.pos.z * d.z;
+    const l0 = this.pos.x * nx + this.pos.z * nz;
+    for (const col of this.world.colliders) {
+      if (!col.cover || col === c.collider) continue;
+      const b = col.box;
+      if (b.min.y > py + t.stepHeight || b.max.y <= py + 0.5) continue;
+      extent(b, d.x, d.z);
+      const gap = _ext.lo - s0;
+      if (gap < -0.3 || gap >= off) continue;
+      extent(b, nx, nz);
+      if (!(l0 > _ext.lo + 0.2 && l0 < _ext.hi - 0.2)) continue;
+      const es = s0 + gap - off;
+      const ex = l0 * nx + es * d.x;
+      const ez = l0 * nz + es * d.z;
+      if (Math.abs(this.world.groundAt(ex, ez, py + t.stepHeight, t.radius * 0.5) - py) > 0.1 || !this.#spotFree(ex, ez, py)) continue;
+      _cn.ex = ex;
+      _cn.ez = ez;
+      _cn.cx = (ex + this.pos.x) / 2;
+      _cn.cz = (ez + this.pos.z) / 2;
+      _cn.nx = -d.x;
+      _cn.nz = -d.z;
+      _cn.col = col;
+      return true;
+    }
+    return false;
+  }
+
+  // Outside corner at the end of cover `c`, pushing along d: the face of the same box (or of an abutting cover box
+  // flush with its end and its face) that looks along d and runs back, >= coverWrapFace long, with a free spot of the
+  // same floor in front of it. Fills _cn: control point = the corner spot, end = 0.2 inside the new face's near end.
+  // The longest candidate wins. Axis-aligned boxes only.
+  #findOutsideCorner(c, d) {
+    const t = this.t;
+    const off = t.radius + 0.05;
+    const nx = c.normal.x;
+    const nz = c.normal.z;
+    if (Math.abs(nx * nz) > 0.01 || Math.abs(d.x * d.z) > 0.01) return false;
+    const py = this.pos.y;
+    const l0 = this.pos.x * nx + this.pos.z * nz;
+    extent(c.collider.box, d.x, d.z);
+    const hiA = _ext.hi;
+    extent(c.collider.box, nx, nz);
+    const lface = _ext.hi;
+    let best = 0;
+    for (const col of this.world.colliders) {
+      if (!col.cover) continue;
+      const b = col.box;
+      if (b.min.y > py + t.stepHeight || b.max.y <= py + 0.5) continue;
+      extent(b, d.x, d.z);
+      if (Math.abs(_ext.hi - hiA) > 0.05) continue; // its face looking along d is flush with the end
+      const es = _ext.hi + off;
+      extent(b, nx, nz);
+      const len = Math.min(_ext.hi, lface + 0.05) - _ext.lo;
+      if (Math.abs(_ext.hi - lface) > 0.1 || len < t.coverWrapFace || len <= best) continue; // flush with our face, long enough
+      const el = _ext.hi - 0.2;
+      const ex = el * nx + es * d.x;
+      const ez = el * nz + es * d.z;
+      const cx = l0 * nx + es * d.x;
+      const cz = l0 * nz + es * d.z;
+      if (Math.abs(this.world.groundAt(ex, ez, py + t.stepHeight, t.radius * 0.5) - py) > 0.1 || !this.#spotFree(ex, ez, py)) continue;
+      _hc.set(cx, py, cz);
+      _he.set(ex, py, ez);
+      if (!this.#spotFree(cx, cz, py) || !this.world.segmentClear(this.pos, _hc, t.radius * 0.5) || !this.world.segmentClear(_hc, _he, t.radius * 0.5)) continue;
+      best = len;
+      _cn.cx = cx;
+      _cn.cz = cz;
+      _cn.ex = ex;
+      _cn.ez = ez;
+      _cn.nx = d.x;
+      _cn.nz = d.z;
+      _cn.col = col;
+    }
+    return best > 0;
+  }
+
+  // Nothing solid (above step height, below head height) within the body radius of (x, z).
+  #spotFree(x, z, py) {
+    const r = this.t.radius;
+    for (const col of this.world.colliders) {
+      const b = col.box;
+      if (b.max.y <= py + this.t.stepHeight || b.min.y > py + this.t.standHeight) continue;
+      if (x > b.min.x - r && x < b.max.x + r && z > b.min.z - r && z < b.max.z + r) return false;
+    }
+    return true;
+  }
+
+  // Committed corner move (a snap with `run` and a curve) to the spot found in _cn, then cover on the new face.
+  // The stick is remembered: after landing it keeps meaning "on", along the new face (outside: back into the box's
+  // depth, inside: away from the wall we left).
+  #startCorner(kind, ax) {
+    const t = this.t;
+    const c = this.cover;
+    const py = this.pos.y;
+    const to = new THREE.Vector3(_cn.ex, py, _cn.ez);
+    const ctrl = new THREE.Vector3(_cn.cx, py, _cn.cz);
+    const type = _cn.col.box.max.y - py < 1.7 ? 'low' : 'high';
+    const next = { normal: new THREE.Vector3(_cn.nx, 0, _cn.nz), tangent: new THREE.Vector3(), type, collider: _cn.col, edgeL: false, edgeR: false };
+    const dur = kind === 'outside' ? t.coverWrapTime : t.coverTurnTime;
+    this.snap = { from: this.pos.clone(), to, ctrl, t: 0, dur, hop: 0, run: true, corner: true, low: c.type === 'low', next, yaw: this.facing, vx: this.vel.x, vz: this.vel.z };
+    const k = this.keep;
+    const sgn = kind === 'outside' ? -1 : 1;
+    k.on = false; // armed on landing
+    k.ax = ax.x;
+    k.ay = ax.y;
+    k.dx = c.normal.x * sgn;
+    k.dz = c.normal.z * sgn;
+    this.edgeTime = 0;
+    _cornerEvt.kind = kind;
+    this.events.emit('player:coverCorner', _cornerEvt);
   }
 
   #coverHitAt(p, n) {
