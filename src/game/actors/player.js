@@ -184,8 +184,10 @@ export class Player {
     return amount;
   }
 
-  respawn() {
-    this.pos.copy(this.spawn);
+  // `at`: { pos, yaw } of a checkpoint (Encounter), else the level spawn.
+  respawn(at = null) {
+    if (at) this.pos.set(...at.pos);
+    else this.pos.copy(this.spawn);
     this.vel.set(0, 0, 0);
     this.vy = 0;
     this.airborne = false;
@@ -198,7 +200,7 @@ export class Player {
     this.shields = this.t.maxShields;
     this.health = this.t.maxHealth;
     this.dead = false;
-    this.facing = this.spawnYaw;
+    this.facing = at ? at.yaw : this.spawnYaw;
     this.root.rotation.set(0, this.facing, 0);
   }
 

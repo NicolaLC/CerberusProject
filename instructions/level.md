@@ -4,7 +4,7 @@
 Plain JSON (an editor can write it), imported by `scenes.js`, validated by `Registry.check`. Layout, enemies and
 pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 ```
-{ name, title, tool?, demo?, spawn: { pos, yaw }, interiorZones: [{ min, max }],
+{ name, title, tool?, demo?, spawn: { pos, yaw }, interiorZones: [{ min, max }] (older form, may be []; new levels use `zone.interior` pieces),
   pieces: [ { id, pos: [x, y, z], yaw?, params?, name? }, ... ] }
 ```
 - `pieces` is one ordered list; each system builds the ones it owns, in file order. Order matters: boxes are merged
@@ -14,9 +14,9 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
   (`Enemies` hands them a view of the player that reads `dead`).
 - `tool`: a Gym room helper from `src/game/gym/tools.js` (`traversal` / `range` / `ai` / `stress` / `library` / `workshop`): readouts, overlays, keys.
   Created after the level loads, disposed before it unloads, `update(dt)` each unpaused frame (system `gymTool`).
-- `spawn.yaw` is the player's initial facing (3.14159 = north, -Z). The boss arena bounds are data of `boss.spider`.
+- `spawn.yaw` is the player's initial facing (3.14159 = north, -Z). A `marker.spawn` piece replaces `spawn` as the start (`levelSpawn(level)` in `world/encounter.js`). The boss arena bounds are data of `boss.spider`.
 - Add a piece: append `{ "id": ..., "pos": [...], "params": {...} }`. Add a new kind: put a builder in the owning
-  module's table (`WORLD_PIECES` / `ENEMY_PIECES` / `PICKUP_PIECES`) and document the id here. Never rename an id.
+  module's table (`WORLD_PIECES` / `ENEMY_PIECES` / `PICKUP_PIECES` / `ENCOUNTER_PIECES`) and document the id here. Never rename an id.
 - `name` lets a later piece refer to an earlier one (`light.point` `flicker.strip`).
 
 ### Piece ids (public contract)
@@ -26,7 +26,7 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `env.strip` | world | `size`, `mat`, `ownMaterial?` (clone the material; needed to flicker one strip alone). Emissive, no collision, no shadow |
 | `env.label` | world | `text` (`\n` for lines), `size?` letter height (0.6), `yaw?` (0 = readable from +Z), `flat?` (on the floor), `color?`, `bg?`. Unlit sign, no collision; own canvas texture, freed on unload |
 | `prop.gun` | world | `gun` (key of `GUNS`). The gun's own display model (its `build`, merged to one mesh per material), stock at `pos`, barrel along +Z turned by `yaw`. No collision; freed on unload |
-| `light.point` | world | `color '#rrggbb'`, `intensity`, `distance`, `flicker?: { strip: name }` (flickers the light, and the named earlier strip) |
+| `light.point` | world | `color '#rrggbb'`, `intensity`, `distance`, `flicker?: { strip: name }` (flickers the light, and the named earlier strip). Uses one of the World's 12 pool lights (engine.md) |
 | `kit.floor` | world | `size [w,d]` (4 x 4), `thickness` (0.2), `flush?` (top at `pos.y`, hangs below), `mat` |
 | `kit.wall` | world | `length` (4), `height` (7, min 2.0), `thickness` (0.5), `mat`. Cover `wall` |
 | `kit.doorway` | world | wall segment with a lintel: opening `width` (4, clamped up to 2.0) and `height` (4, clamped up to 1.8), `length` (width + 6; each wall end >= 0.9), `wallHeight` (7), `thickness`, `mat`. Opening centered on `pos` |
@@ -41,6 +41,14 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `enemy.drone` | enemies | `pos` = the ground under it |
 | `boss.spider` | enemies | `yaw?`, `arena: { minX, maxX, minZ, maxZ }` (the boss stays inside; wakes when the player enters) |
 | `pickup.light` / `pickup.heavy` | pickups | respawning ammo crate of that class |
+| `marker.spawn` | encounter | the player start (`yaw` = facing). Overrides `level.spawn` (first one in the file wins; `spawn` stays required) |
+| `marker.checkpoint` | encounter | respawn point after a death once the player has been within 2 m; `name` shows up in `checkpoint:reached` |
+| `marker.entry` | encounter | reinforcement entry: `group` (string), `enemies` (list of `enemy.*` / `boss.*` ids) built here when `group` is spawned |
+| `zone.interior` | encounter | `size [w,h,d]` (8,4,8). `pos` = centre x / bottom y / centre z. An interior zone (camera exposure, HUD INTERIOR, drones); logic only in play, the Workshop draws a gizmo |
+| `trigger.volume` | encounter | `size [w,h,d]` (4,3,4), `event` ('trigger'), `once` (true), `wakeGroup?`, `spawnGroup?`. `pos` = centre x / bottom y / centre z. Fires `trigger:fired { id, event }` when the player enters (`id` = `name`, else `trigger<n>`) |
+
+Encounter pieces are logic only in a played level (no geometry, no collision); the Workshop draws gizmos for them (workshop.md, Encounters).
+Every enemy piece also takes `params.group` (string): enemies of one group wake together.
 
 **Kit rules** (`world/kit.js`, sizes from `metrics.md`, frozen): boxes only, built through `world.box`. `yaw` must be a
 multiple of 90 degrees (else a clear error), so every piece stays axis-aligned. Bad params throw `kit.x: ...`. One material
@@ -48,13 +56,17 @@ key per role (floor / wall / low / high / platform), overridable per piece with 
 the hook for region skins.
 
 ### Piece meta (Library convention)
-A registry table entry may be `{ build, ...meta }` (read with `registry.meta(id)`). Two metas feed the Library:
+A registry table entry may be `{ build, ...meta }` (read with `registry.meta(id)`). Three metas feed the Library and the Workshop:
 - `example: { params, yaw? }`: what the Library spawns for the id (it must build with just these and `pos`).
 - `label`: one short line of key stats (HP, ranges, respawn...), read from the owner's `TUNING` where there is one.
-Every entry has both (enemies, pickups, `kit.*`, `env.*`, `light.point`, `prop.gun`); new entries must too. A new id with an `example` shows up in the Library's kit aisle by itself
+- `fields` (Workshop inspector, workshop.md): the editable params, `[{ key, type, label?, options?, min?, optional?, def? }]`. `type`: `number`, `vec2` / `vec3`
+  (typed "a, b, c"), `text`, `bool` (checkbox; `def` = value when absent), `enum` (`options` list, or `'mats'` = keys of `World.mats`), `list` (comma separated strings).
+  `optional: true` = empty removes the key. `min` is a generic floor (the builder's own checks still win and surface as a toast). `key` is a top-level `params` key.
+  Shared fields live next to the owner (`MAT` in `kit.js`, `GROUP` in `enemies.js`). Pieces without `fields` (or whose params are not listed) show only `name`.
+Every entry has `example` and `label` (enemies, pickups, `kit.*`, `env.*`, `light.point`, `prop.gun`); new entries must too. A new id with an `example` shows up in the Library's kit aisle by itself
 (`tool: library`, gym.md); `tests/library.browser.mjs` spawns every id from its example.
 
-Interior zones (camera exposure) are `interiorZones` boxes, not pieces. Dropped clips are runtime, not data.
+Interior zones (camera exposure) are `zone.interior` pieces. The top-level `interiorZones: [{ min, max }]` of older files (arena) is still read by `World`; the Workshop converts it to pieces on open. Dropped clips are runtime, not data.
 
 ## Save and load (`src/game/workshop/io.js`, #72)
 The editor (#70) calls four functions plus `levelNames()`; the level is the plain object of the format above.
@@ -112,5 +124,6 @@ The editor (#70) calls four functions plus `levelNames()`; the level is the plai
 ## Lighting
 - Sun: directional, shadow map 4096 over ±48m, follows the player (snapped to 2m). Direction `SUN_DIR`.
 - Hemisphere fill, gradient sky dome shader, light fog. ACES tone mapping.
+- Point lights: a fixed pool of 12 in `World` (`LIGHT_POOL`), switched by intensity, so the light count never changes (engine.md).
 - Interior: darker albedo than outside (but readable), 8 point lights incl. fills; cyan/white/red, emissive strips, flicker via `pointLight(..., { strip })`.
 - Exposure adaptation in `game/view/post.js`: 1.0 outside, 1.9 when the camera is inside an `interiorZones` box.

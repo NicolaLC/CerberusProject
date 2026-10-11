@@ -17,6 +17,16 @@ const p = await b.newPage({ viewport: { width: 960, height: 540 } });
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 p.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+// No real pointer lock in this suite: headless Chromium answers lock requests racily, and when the answers interleave (play -> edit -> play ...,
+// a request, an error and a late grant) it can be left swallowing every real mouse event for the rest of the page (document-level
+// mousedown never fires, only keys arrive), which made the real-DOM inspector sections (13+) flaky. Refusing the lock is the path
+// the game takes in a sandboxed frame (free-mouse mode, input.js), so play still works and the mouse stays deterministic.
+await p.addInitScript(() => {
+  Element.prototype.requestPointerLock = function () {
+    setTimeout(() => document.dispatchEvent(new Event('pointerlockerror')), 0);
+    return Promise.reject(new DOMException('refused by the test', 'NotAllowedError'));
+  };
+});
 await p.goto(withScene('workshop'));
 await p.waitForFunction(() => window.game?.engine);
 
@@ -508,6 +518,977 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   });
   expect('load(level): replaces doc and scene, forgets the history', r.loaded.n === 3 && r.loaded.ok.ok && r.loaded.enemies === 1 && r.loaded.pickups === 1 && r.loaded.history === 0, JSON.stringify(r.loaded));
   expect('  a piece that cannot be built (bad params, unknown id, bad level) throws and leaves doc, scene and history untouched', /kit\.cover\.low/.test(r.msg ?? '') && /unknown/.test(r.msg2 ?? '') && r.msg3 && r.same && r.ok.ok && r.hist === 0, JSON.stringify(r));
+}
+
+// ---- 11. play in place (#71): P plays the doc, P again restores it exactly, T restarts, nothing leaks ----
+{
+  const setup = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load({ name: 'x', spawn: { pos: [0, 0, 20], yaw: 3.14159 }, interiorZones: [], pieces: [
+      { id: 'env.box', pos: [0, -1, 0], params: { size: [60, 1, 60], mat: 'floor' } },
+      { id: 'env.box', pos: [8, 0, 0], params: { size: [2, 3, 2], mat: 'wall', cover: 'wall' } },
+      { id: 'enemy.trooper', pos: [0, 0, -8] },
+      { id: 'enemy.static', pos: [-6, 0, -4] },
+      { id: 'pickup.heavy', pos: [-4, 0, 6] },
+    ] });
+    t.place('kit.cover.low', [3, 0, 3]); // history to keep
+    t.select(1);
+    T.step(1);
+    t.keys.clear();
+    g.engine.camera.position.set(0, 6, 4);
+    t.cam.yaw = 0.5; t.cam.pitch = -0.4;
+    T.step(1);
+    return { hist: [t.undoStack.length, t.redoStack.length], counts: { colliders: g.world.colliders.length, puppets: g.enemies.puppets.length, pickups: g.pickups.items.length } };
+  });
+  const before = await ev(() => ({ doc: T.doc(), cam: window.game.engine.camera.position.toArray(), fov: window.game.engine.camera.fov }));
+
+  // keys: P enters play
+  const inPlay = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    g.engine.input.keys.clear(); // keys stuck from the earlier key tests
+    g.engine.input.pressed.clear();
+    T.tap('KeyP');
+    T.step(1);
+    const tr = g.enemies.puppets.find((e) => e.kind === 'trooper');
+    const out = {
+      playing: t.playing, toolEditing: t.editing, gameEditing: g.editing, frozen: g.enemies.frozen,
+      hud: document.getElementById('hud').style.display, palette: document.getElementById('workshop-palette').style.display,
+      player: g.player.pos.toArray().map((v) => Math.round(v * 100) / 100), spawnYaw: t.playLevel.spawn.yaw, visible: g.player.root.visible,
+      puppets: g.enemies.puppets.length, pickups: g.pickups.items.length, cover: !!g.enemies.cover, batches: g.world.batches.length,
+      statics: g.world.staticMeshes.length, trooperState: tr.state,
+    };
+    return out;
+  });
+  expect('P: playing, editor inert (tool.editing / game.editing false), enemies unfrozen, HUD back, palette hidden', inPlay.playing && !inPlay.toolEditing && !inPlay.gameEditing && !inPlay.frozen && inPlay.hud === '' && inPlay.palette === 'none', JSON.stringify(inPlay));
+  expect('  player stands on the ground under the camera, facing where it looked', Math.abs(inPlay.player[0]) < 0.01 && Math.abs(inPlay.player[1]) < 0.01 && Math.abs(inPlay.player[2] - 4) < 0.01 && Math.abs(inPlay.spawnYaw - (0.5 + Math.PI)) < 1e-6, JSON.stringify(inPlay.player));
+  expect('  the doc is played as a real level: merged batches, a cover map, enemies and pickups built from it', inPlay.batches > 0 && inPlay.cover && inPlay.puppets === 2 && inPlay.pickups === 1, JSON.stringify(inPlay));
+  const woke = await ev(() => {
+    const g = window.game;
+    T.step(4);
+    const tr = g.enemies.puppets.find((e) => e.kind === 'trooper');
+    return { state: tr.state, time: g.enemies.time };
+  });
+  expect('  enemies are awake: the trooper reacts to the player', woke.state !== 'idle', JSON.stringify(woke));
+
+  // hurt the game: kill an enemy, take the pickup, move a lot
+  const hurt = await ev(() => {
+    const g = window.game;
+    const st = g.enemies.puppets.find((e) => e.kind !== 'trooper');
+    for (let i = 0; i < 40 && st.alive; i++) st.damage(50, st.pos.clone().setY(1), new st.pos.constructor(0, 0, -1), 'body');
+    g.player.pos.set(-4, 0, 6);
+    T.step(1);
+    g.player.pos.set(1, 0, 4);
+    g.player.damage(30);
+    T.step(1);
+    return { dead: !st.alive, kills: g.enemies.kills, crate: g.pickups.items.some((i) => !i.active) };
+  });
+  expect('  destroying an enemy and taking a crate works', hurt.dead && hurt.kills >= 1, JSON.stringify(hurt));
+
+  // restart (T): everything new, player back at the spawn
+  const rs = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    T.tap('KeyT');
+    T.step(1);
+    return { playing: t.playing, kills: g.enemies.kills, alive: g.enemies.puppets.every((e) => e.alive), n: g.enemies.puppets.length, pickups: g.pickups.items.every((i) => i.active), player: g.player.pos.toArray().map((v) => Math.round(v * 100) / 100), health: g.player.health, shields: g.player.shields };
+  });
+  expect('T restarts the encounter: enemies alive again, pickups back, player at the spawn with full health', rs.playing && rs.kills === 0 && rs.alive && rs.n === 2 && rs.pickups && Math.abs(rs.player[2] - 4) < 0.01 && rs.health >= 100, JSON.stringify(rs));
+
+  // back to edit
+  const back = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    const st = g.enemies.puppets.find((e) => e.kind !== 'trooper');
+    for (let i = 0; i < 40 && st.alive; i++) st.damage(50, st.pos.clone().setY(1), new st.pos.constructor(0, 0, -1), 'body');
+    T.step(1);
+    T.tap('KeyT', { ctrlKey: true }); // not a restart key chord: nothing happens
+    T.tap('KeyP');
+    T.step(2);
+    return {
+      playing: t.playing, editing: t.editing, gameEditing: g.editing, doc: T.doc(), verify: t.verify(), frozen: g.enemies.frozen,
+      hud: document.getElementById('hud').style.display, palette: document.getElementById('workshop-palette').style.display,
+      cam: g.engine.camera.position.toArray(), fov: g.engine.camera.fov, hist: [t.undoStack.length, t.redoStack.length], sel: t.sel,
+      counts: { colliders: g.world.colliders.length, puppets: g.enemies.puppets.length, pickups: g.pickups.items.length, alive: g.enemies.puppets.every((e) => e.alive), kills: g.enemies.kills },
+      batches: g.world.batches.length, playerVisible: g.player.root.visible,
+    };
+  });
+  expect('P again: back in edit mode, HUD hidden, palette back, enemies frozen, player hidden', back.editing && back.gameEditing && !back.playing && back.frozen && back.hud === 'none' && back.palette === '' && !back.playerVisible, JSON.stringify(back));
+  expect('  doc JSON identical to before play, scene = doc (verify ok), destroyed enemy restored', back.doc === before.doc && back.verify.ok && back.counts.alive && back.counts.kills === 0 && back.counts.puppets === setup.counts.puppets && back.counts.pickups === setup.counts.pickups && back.batches === 0, JSON.stringify({ verify: back.verify, counts: back.counts, batches: back.batches }));
+  expect('  collider count as before; camera position and fov restored; selection and undo / redo history kept', back.counts.colliders === setup.counts.colliders && JSON.stringify(back.cam) === JSON.stringify(before.cam) && back.fov === before.fov && JSON.stringify(back.hist) === JSON.stringify(setup.hist) && back.sel === 1, JSON.stringify({ back: back.cam, before: before.cam, hist: back.hist, sel: back.sel }));
+  const edit = await ev(() => {
+    const t = T.tool();
+    t.undo();
+    T.step(1);
+    const a = t.verify().ok;
+    t.redo();
+    T.step(1);
+    const i = t.place('env.box', [20, 0, 20]);
+    return { a, b: t.verify().ok, i, restartOutside: t.restart() };
+  });
+  expect('  editing carries on: undo / redo work on the restored scene, restart outside play does nothing', edit.a && edit.b && edit.restartOutside === false, JSON.stringify(edit));
+
+  // no ground under the camera -> the level's spawn
+  const off = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    g.engine.camera.position.set(200, 6, 200);
+    const s = t.spawnAt();
+    g.engine.camera.position.set(8, 1.5, 0); // inside the wall box
+    const w = t.spawnAt();
+    return { s, w, doc: t.doc.spawn };
+  });
+  expect('play spawn: no ground (or inside a wall) under the camera = the level spawn', JSON.stringify(off.s.pos) === JSON.stringify(off.doc.pos) && JSON.stringify(off.w.pos) === JSON.stringify(off.doc.pos), JSON.stringify(off));
+
+  // leaving the scene while playing frees everything
+  const leave = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    g.engine.camera.position.set(0, 6, 4);
+    T.tap('KeyP');
+    T.step(1);
+    g.loadScene('workshop');
+    T.step(2);
+    return { playing: T.tool().playing, ok: T.ok().ok, hud: document.getElementById('hud').style.display, palettes: document.querySelectorAll('#workshop-palette').length };
+  });
+  expect('loading a scene while playing: a fresh editor, one palette, scene = doc', !leave.playing && leave.ok && leave.hud === 'none' && leave.palettes === 1, JSON.stringify(leave));
+
+  // toggle cycles do not leak: geometries, textures and scene objects after N cycles equal those after the first
+  const leak = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load({ name: 'x', spawn: { pos: [0, 0, 20], yaw: 3.14159 }, interiorZones: [], pieces: [
+      { id: 'env.box', pos: [0, -1, 0], params: { size: [60, 1, 60], mat: 'floor' } },
+      { id: 'enemy.trooper', pos: [0, 0, -8] }, { id: 'enemy.static', pos: [-6, 0, -4] }, { id: 'enemy.drone', pos: [5, 3, -6] }, { id: 'pickup.heavy', pos: [-4, 0, 6] },
+      { id: 'light.point', pos: [0, 3, 0], params: { color: 0xffffff, intensity: 1, distance: 10 } },
+    ] });
+    const doc0 = T.doc();
+    g.engine.camera.position.set(0, 6, 4);
+    const cycle = (kill) => {
+      T.tap('KeyP');
+      T.step(1);
+      if (kill) for (const e of g.enemies.puppets) for (let i = 0; i < 80 && e.alive; i++) e.damage(100, e.pos.clone().setY(1), new e.pos.constructor(0, 0, -1), 'body');
+      T.step(1);
+      T.tap('KeyT');
+      T.step(1);
+      T.tap('KeyP');
+      T.step(1);
+    };
+    cycle(true); // warms the lazily built pools (debris, fx)
+    const first = T.mem();
+    const readings = [];
+    for (let i = 0; i < 4; i++) { cycle(i % 2 === 0); readings.push(T.mem()); }
+    return { first, readings, same: T.doc() === doc0, ok: T.ok().ok, colliders: g.world.colliders.length };
+  });
+  const same = leak.readings.every((r) => r.geometries === leak.first.geometries && r.textures === leak.first.textures && r.objects === leak.first.objects);
+  expect('4 play / edit cycles (with kills and restarts) leak nothing: geometries, textures and scene objects identical, doc unchanged', same && leak.same && leak.ok, JSON.stringify(leak));
+}
+
+// ---- 12. encounter tools (#73): spawn groups, triggers, reinforcement entries, player spawn, checkpoints, gizmos ----
+{
+  // shared helpers in the page
+  await ev(() => {
+    const g = window.game;
+    const FLOOR = { id: 'env.box', pos: [0, -1, 0], params: { size: [300, 1, 300], mat: 'floor' } };
+    T.level = (pieces, spawn = { pos: [0, 0, 20], yaw: 3.14159 }) => ({ name: 'x', spawn, interiorZones: [], pieces: [FLOOR, ...pieces] });
+    // plays `level` from the camera at (0, 6, 4) (the player stands at 0, 0, 4)
+    T.play = (level) => {
+      const t = T.tool();
+      if (t.playing) t.edit();
+      t.load(level);
+      T.step(0.2);
+      g.engine.camera.position.set(0, 6, 4);
+      t.cam.yaw = 0; t.cam.pitch = -0.4;
+      g.engine.input.keys.clear(); g.engine.input.pressed.clear();
+      T.tap('KeyP');
+      T.step(0.2);
+      return t.playing;
+    };
+    T.log = [];
+    g.engine.events.on('trigger:fired', (e) => T.log.push(['trigger', e.id, e.event]));
+    g.engine.events.on('group:wake', (e) => T.log.push(['wake', e.group]));
+    g.engine.events.on('group:spawn', (e) => T.log.push(['spawn', e.group, e.count]));
+    g.engine.events.on('checkpoint:reached', (e) => T.log.push(['checkpoint', e.id]));
+    T.logOf = (k) => T.log.filter((x) => x[0] === k);
+    // gizmo geometry in the scene
+    T.gizmoMeshes = () => {
+      let n = 0;
+      g.engine.scene.traverse((o) => o.userData.gizmo && n++);
+      return n;
+    };
+    const t = T.tool();
+    if (t.playing) t.edit();
+  });
+
+  // -- pieces: place, gizmo in edit mode, no collision, undo / redo identity --
+  const pieces = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load(T.level([]));
+    T.step(0.5);
+    const start = T.doc();
+    const col0 = g.world.colliders.length;
+    const ids = ['marker.spawn', 'marker.checkpoint', 'marker.entry', 'trigger.volume'];
+    const out = {};
+    ids.forEach((id, k) => {
+      const i = t.place(id, [k * 6 - 9, 0, -4]);
+      T.step(0.1);
+      const r = t.items[i].thing;
+      out[id] = { i, owner: g.registry.owner(id), gizmo: !!r.gizmo && r.gizmo.parent === g.engine.scene && r.gizmo.visible, ok: T.ok().ok, box: t.status ? t.pick !== undefined : false };
+    });
+    const placed = T.doc();
+    // gizmos are selectable boxes
+    t.select(ids.length); // floor is #0, so this is the 4th placed piece
+    const sel = { vis: t.helper.visible, size: t.helper.box.getSize(new g.camRig.pivot.constructor()).toArray() };
+    t.select(-1);
+    const colliders = g.world.colliders.length - col0 - 0; // the floor was already counted by load
+    let undone = 0;
+    while (t.undoStack.length) { t.undo(); undone++; }
+    const back = T.doc();
+    const gone = T.gizmoMeshes();
+    let redone = 0;
+    while (t.redoStack.length) { t.redo(); redone++; }
+    return { out, start, placed, back, again: T.doc(), undone, redone, colliders, sel, gone, shown: T.gizmoMeshes(), ok: T.ok(), n: g.encounter.items.length };
+  });
+  expect('encounter pieces place (marker.spawn / checkpoint / entry, trigger.volume): owner "encounter", a visible gizmo in the scene, scene = doc', Object.values(pieces.out).every((x) => x.owner === 'encounter' && x.gizmo && x.ok), JSON.stringify(pieces.out));
+  expect('  gizmos add no colliders; a gizmo is selectable (selection box around it)', pieces.colliders === 0 && pieces.sel.vis && pieces.sel.size[0] > 0, JSON.stringify({ c: pieces.colliders, sel: pieces.sel }));
+  expect('  undo x all returns the identical doc and frees every gizmo; redo x all brings them back', pieces.back === pieces.start && pieces.gone === 0 && pieces.again === pieces.placed && pieces.redone === pieces.undone && pieces.shown > 0 && pieces.ok.ok && pieces.n === 4, JSON.stringify({ gone: pieces.gone, shown: pieces.shown, n: pieces.n }));
+
+  // -- params: setParams (undoable), bad params throw and leave the doc alone, rotate a trigger swaps w / d --
+  const params = await ev(() => {
+    const t = T.tool();
+    const g = window.game;
+    t.load(T.level([]));
+    const e = t.place('marker.entry', [0, 0, 0]);
+    const v = t.place('trigger.volume', [10, 0, 0], { size: [6, 3, 2], event: 'a', once: true });
+    const before = T.doc();
+    t.setParams(e, { group: 'z', enemies: ['enemy.drone'] });
+    const set = JSON.stringify(t.doc.pieces[e].params);
+    let m1 = null; try { t.setParams(e, { enemies: ['kit.wall'] }); } catch (err) { m1 = err.message; }
+    let m2 = null; try { t.setParams(v, { size: [1, 0, 1] }); } catch (err) { m2 = err.message; }
+    const same = JSON.stringify(t.doc.pieces[e].params) === set;
+    t.rotate(v, 1);
+    const size = t.doc.pieces[v].params.size;
+    t.undo(); t.undo();
+    return { set, m1, m2, same, size, undoOk: T.doc() === before, ok: T.ok().ok };
+  });
+  expect('setParams: entry list and group are kept; a non-enemy id or a bad size throws and changes nothing', /drone/.test(params.set) && /enemy/.test(params.m1 ?? '') && /size/.test(params.m2 ?? '') && params.same && params.undoOk && params.ok, JSON.stringify(params));
+  expect('  rotating a trigger volume turns it a quarter (width and depth swap)', JSON.stringify(params.size) === JSON.stringify([2, 3, 6]), JSON.stringify(params.size));
+
+  // -- save -> load roundtrip keeps them --
+  const rt = await ev(async () => {
+    const t = T.tool();
+    const g = window.game;
+    const { serializeLevel, parseLevel } = await import('/src/game/workshop/io.js');
+    t.load(T.level([]));
+    t.place('marker.spawn', [3, 0, -3], undefined, Math.PI / 2);
+    t.place('marker.checkpoint', [-3, 0, -3]);
+    const e = t.place('marker.entry', [0, 0, -12], { group: 'r', enemies: ['enemy.trooper', 'enemy.drone'] });
+    t.place('enemy.trooper', [0, 0, -20], { group: 'a' });
+    t.place('trigger.volume', [0, 0, 0], { size: [4, 3, 4], event: 'go', once: false, wakeGroup: 'a', spawnGroup: 'r' });
+    const canon = (o) => JSON.stringify(o, (_, v) => (typeof v === 'number' ? Math.round(v * 1e4) / 1e4 : v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort()) : v)); // io.js rounds to 4 decimals
+    const text = serializeLevel(t.doc);
+    const parsed = parseLevel(text, g.registry);
+    const before = canon(t.doc);
+    t.load(parsed);
+    T.step(0.5);
+    return { same: canon(t.doc) === before, again: serializeLevel(t.doc) === text, ok: T.ok(), items: g.encounter.items.length, e: t.doc.pieces[e + 1].params, lines: text.split('\n').filter((l) => /marker\.|trigger\./.test(l)).length };
+  });
+  expect('save -> load roundtrip keeps the encounter pieces and their params (serialize is idempotent), scene = doc', rt.same && rt.again && rt.ok.ok && rt.items === 4 && rt.lines === 4, JSON.stringify(rt));
+
+  // -- gizmos: edit mode only --
+  const giz = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load(T.level([{ id: 'marker.spawn', pos: [4, 0, 4] }, { id: 'marker.checkpoint', pos: [8, 0, 4] }, { id: 'marker.entry', pos: [12, 0, 4], params: { group: 'r', enemies: ['enemy.static'] } }, { id: 'trigger.volume', pos: [0, 0, -30], params: { size: [4, 3, 4] } }]));
+    T.step(0.3);
+    const col = g.world.colliders.length;
+    const edit = { gizmos: g.encounter.items.filter((r) => r.gizmo && r.gizmo.visible && r.gizmo.parent).length, meshes: T.gizmoMeshes(), colliders: col };
+    T.play(T.tool().doc);
+    const play = { playing: t.playing, gizmos: g.encounter.items.filter((r) => r.gizmo).length, meshes: T.gizmoMeshes(), items: g.encounter.items.length, colliders: g.world.colliders.length };
+    t.edit();
+    T.step(0.3);
+    const back = { gizmos: g.encounter.items.filter((r) => r.gizmo && r.gizmo.visible).length, meshes: T.gizmoMeshes(), colliders: g.world.colliders.length, verify: t.verify().ok };
+    return { edit, play, back };
+  });
+  expect('gizmos: 4 visible in edit mode; none in play (no objects built, logic only, no colliders added); back again after edit', giz.edit.gizmos === 4 && giz.edit.meshes > 0 && giz.play.playing && giz.play.gizmos === 0 && giz.play.meshes === 0 && giz.play.items === 4 && giz.back.gizmos === 4 && giz.back.meshes === giz.edit.meshes && giz.back.verify, JSON.stringify(giz));
+
+  // -- a trigger volume around a piece does not steal clicks; it is picked when nothing else is under the cursor --
+  const pick = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load(T.level([{ id: 'env.box', pos: [0, 0, 0], params: { size: [2, 2, 2], mat: 'low' } }, { id: 'trigger.volume', pos: [0, 0, 0], params: { size: [10, 4, 10] } }]));
+    T.step(0.3);
+    t.mouse.x = 0; t.mouse.y = 0;
+    g.engine.camera.position.set(0, 4, 8);
+    t.cam.yaw = 0;
+    t.cam.pitch = -0.4; T.step(0.1); t.surface(); const onBox = t.pick();
+    t.cam.pitch = -0.8; T.step(0.1); t.surface(); const inVol = t.pick();
+    return { onBox, inVol, box: t.doc.pieces.findIndex((p) => p.params?.mat === 'low'), vol: t.doc.pieces.findIndex((p) => p.id === 'trigger.volume') };
+  });
+  expect('picking: the box inside a trigger volume is picked first; an empty spot inside the volume picks the volume', pick.onBox === pick.box && pick.inVol === pick.vol, JSON.stringify(pick));
+
+  // -- spawn groups: when one member wakes, the rest wake; an ungrouped enemy does not --
+  const grp = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    const lvl = (groupB) => T.level([
+      { id: 'enemy.trooper', pos: [0, 0, -10], params: { group: 'a' } }, // sees the player
+      { id: 'enemy.trooper', pos: [60, 0, -40], params: groupB }, // far away (sight 32, squad alert 22)
+      { id: 'enemy.trooper', pos: [-60, 0, -40] }, // no group
+      { id: 'enemy.drone', pos: [0, 0, -50], params: { group: 'a' } },
+    ]);
+    T.log.length = 0;
+    T.play(lvl({ group: 'a' }));
+    T.step(4);
+    const ts = g.enemies.puppets.filter((e) => e.kind === 'trooper');
+    const dr = g.enemies.puppets.find((e) => e.kind === 'drone');
+    const withGroup = { a: ts[0].alerted, b: ts[1].alerted, free: ts[2].alerted, drone: dr.awake, wakes: T.logOf('wake').length };
+    T.play(lvl({}));
+    T.step(4);
+    const ts2 = g.enemies.puppets.filter((e) => e.kind === 'trooper');
+    const without = { a: ts2[0].alerted, b: ts2[1].alerted };
+    t.edit();
+    return { withGroup, without };
+  });
+  expect('spawn group: one trooper sees the player, the whole group wakes (troopers and a drone), once; an ungrouped one stays idle', grp.withGroup.a && grp.withGroup.b && grp.withGroup.drone && !grp.withGroup.free && grp.withGroup.wakes === 1, JSON.stringify(grp.withGroup));
+  expect('  control: the same far trooper without a group stays idle', grp.without.a && !grp.without.b, JSON.stringify(grp.without));
+
+  // -- trigger volume: fires its event once; wakes a group --
+  const trg = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    const lvl = (once) => T.level([
+      { id: 'enemy.trooper', pos: [80, 0, -80], params: { group: 'g' } },
+      { id: 'trigger.volume', pos: [0, 0, 4], name: 'door', params: { size: [4, 3, 4], event: 'door.open', once, wakeGroup: 'g' } },
+      { id: 'trigger.volume', pos: [0, 0, -60], params: { size: [4, 3, 4], event: 'far' } },
+    ]);
+    T.log.length = 0;
+    T.play(lvl(true));
+    // the camera spawn is inside the volume: it fires on the first frame
+    T.step(1);
+    const first = T.logOf('trigger').map((x) => x.slice(1).join(':'));
+    const woke = g.enemies.puppets[0].alerted;
+    // leave and enter again: once = no second event
+    g.player.pos.set(0, 0, 30); T.step(0.3);
+    g.player.pos.set(0, 0, 4); T.step(0.3);
+    const afterOnce = T.logOf('trigger').length;
+    // the second volume has no name: trigger1
+    g.player.pos.set(0, 0, -60); T.step(0.3);
+    const second = T.logOf('trigger').map((x) => x.slice(1).join(':'));
+    // once: false fires on every entry
+    T.log.length = 0;
+    T.play(lvl(false));
+    T.step(0.5);
+    g.player.pos.set(0, 0, 30); T.step(0.3);
+    g.player.pos.set(0, 0, 4); T.step(0.3);
+    g.player.pos.set(0, 0, 30); T.step(0.3);
+    g.player.pos.set(0, 0, 4); T.step(0.3);
+    const repeat = T.logOf('trigger').filter((x) => x[1] === 'door').length;
+    // a trigger in edit mode never fires
+    t.edit();
+    T.log.length = 0;
+    g.player.pos.set(0, 0, 4); T.step(1);
+    return { first, woke, afterOnce, second, repeat, editFired: T.logOf('trigger').length };
+  });
+  expect('trigger volume: enters -> `trigger:fired` { id: name, event } once, and wakes its group', JSON.stringify(trg.first) === JSON.stringify(['door:door.open']) && trg.woke && trg.afterOnce === 1, JSON.stringify(trg));
+  expect('  an unnamed trigger is "trigger<n>" in file order; once: false fires on every entry; nothing fires in edit mode', JSON.stringify(trg.second[1]) === JSON.stringify('trigger1:far') && trg.repeat === 3 && trg.editFired === 0, JSON.stringify(trg));
+
+  // -- reinforcements: a trigger (or the event) builds the group's listed enemies at the entry marker --
+  const rf = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    const n0 = (() => {
+      T.log.length = 0;
+      T.play(T.level([
+        { id: 'enemy.static', pos: [-6, 0, -4] },
+        { id: 'marker.entry', pos: [0, 0, -30], yaw: 0, params: { group: 'r', enemies: ['enemy.trooper', 'enemy.trooper'] } },
+        { id: 'marker.entry', pos: [20, 0, -30], params: { group: 'other', enemies: ['enemy.static'] } },
+        { id: 'trigger.volume', pos: [0, 0, 4], params: { size: [4, 3, 4], event: 'ambush', spawnGroup: 'r' } },
+      ]));
+      return 1;
+    })();
+    T.step(1);
+    const made = g.enemies.puppets.filter((e) => e.squad === 'r');
+    const first = {
+      total: g.enemies.puppets.length, made: made.length, awake: made.every((e) => e.alerted),
+      near: made.every((e) => Math.hypot(e.pos.x - 0, e.pos.z + 30) < 2), apart: made.length === 2 && Math.abs(made[0].pos.x - made[1].pos.x) > 1,
+      log: T.logOf('spawn'), other: g.enemies.puppets.some((e) => e.squad === 'other'),
+    };
+    // by event
+    g.engine.events.emit('encounter:spawn', 'r');
+    T.step(0.2);
+    const byEvent = g.enemies.puppets.filter((e) => e.squad === 'r').length;
+    // restart: back to the initial enemies
+    T.tap('KeyT');
+    T.step(0.5);
+    const afterRestart = g.enemies.puppets.filter((e) => e.squad === 'r').length;
+    t.edit();
+    // in edit mode the entry is inert
+    const inert = g.encounter.spawnGroup('r');
+    return { first, byEvent, afterRestart, inert, editTotal: g.enemies.puppets.length };
+  });
+  expect('reinforcements: the trigger builds the entry marker\'s listed enemies there, awake, in its group; other groups stay out', rf.first.total === 3 && rf.first.made === 2 && rf.first.awake && rf.first.near && rf.first.apart && !rf.first.other && JSON.stringify(rf.first.log) === JSON.stringify([['spawn', 'r', 2]]), JSON.stringify(rf.first));
+  expect('  `encounter:spawn` does the same; restart reloads the level (the trigger fires again: 2, not 4); nothing spawns in edit mode', rf.byEvent === 4 && rf.afterRestart === 2 && rf.inert === 0 && rf.editTotal === 1, JSON.stringify(rf));
+
+  // -- player spawn: marker.spawn --
+  const sp = await ev(async () => {
+    const g = window.game;
+    const t = T.tool();
+    const { levelSpawn } = await import('/src/game/world/encounter.js');
+    const { SCENES } = await import('/src/game/scenes.js');
+    const lvl = T.level([{ id: 'marker.spawn', pos: [5, 0, -10], yaw: Math.PI / 2 }, { id: 'marker.spawn', pos: [9, 0, -10] }]);
+    const ls = levelSpawn(lvl);
+    T.play(lvl);
+    const camSpawn = g.player.pos.toArray();
+    T.tap('KeyT');
+    T.step(0.3);
+    const restart = g.player.pos.toArray();
+    const rYaw = g.player.facing;
+    t.edit();
+    T.step(0.3);
+    const parked = g.player.pos.toArray();
+    // a normal level load (no tool): the marker is the spawn, gizmos are not built
+    SCENES.testenc = { ...lvl, name: 'testenc' };
+    g.loadScene('testenc');
+    T.step(0.3);
+    const normal = { pos: g.player.pos.toArray(), tool: g.tool, gizmos: g.encounter.items.filter((r) => r.gizmo).length, items: g.encounter.items.length, meshes: T.gizmoMeshes() };
+    g.loadScene('workshop');
+    delete SCENES.testenc;
+    T.step(0.3);
+    // without a marker, level.spawn is used
+    const plain = levelSpawn(T.level([]));
+    return { ls, camSpawn, restart, rYaw, parked, normal, plain };
+  });
+  const near = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]) < 0.05;
+  expect('marker.spawn: levelSpawn picks the first marker (else level.spawn); play in place still starts under the camera', sp.ls.pos[0] === 5 && Math.abs(sp.ls.yaw - Math.PI / 2) < 1e-9 && near(sp.camSpawn, [0, 0, 4]) && sp.plain.pos[2] === 20, JSON.stringify(sp));
+  expect('  restart (T) and a normal level load put the player on the marker; back in edit parks the player there; no gizmos in a normal level', near(sp.restart, [5, 0, -10]) && Math.abs(sp.rYaw - Math.PI / 2) < 1e-6 && near(sp.parked, [5, 0, -10]) && near(sp.normal.pos, [5, 0, -10]) && sp.normal.tool === null && sp.normal.items === 2 && sp.normal.gizmos === 0 && sp.normal.meshes === 0, JSON.stringify(sp));
+
+  // -- checkpoints: the last one reached is where the player respawns --
+  const cp = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    T.log.length = 0;
+    T.play(T.level([
+      { id: 'marker.checkpoint', pos: [0, 0, -10], yaw: 1.5, name: 'cp1' },
+      { id: 'marker.checkpoint', pos: [20, 0, -10], name: 'cp2' },
+    ]));
+    const die = () => { g.player.damage(1000); T.step(0.1); const dead = g.player.dead; T.step(3.6); return { dead, alive: !g.player.dead, health: g.player.health }; };
+    T.step(0.3);
+    const start = g.player.pos.toArray();
+    const none = g.encounter.checkpoint;
+    const d0 = die();
+    const at0 = g.player.pos.toArray(); // no checkpoint yet: back where the run started
+    g.player.pos.set(0.5, 0, -10); T.step(0.3);
+    const c1 = g.encounter.checkpoint?.id;
+    g.player.pos.set(20, 0, -10); T.step(0.3);
+    const c2 = g.encounter.checkpoint?.id;
+    g.player.pos.set(0, 0, -10); T.step(0.3); // back to cp1: the last one reached wins
+    const c1b = g.encounter.checkpoint?.id;
+    g.player.pos.set(30, 0, 30); T.step(0.3);
+    const d1 = die();
+    const at1 = g.player.pos.toArray();
+    const yaw = g.player.facing;
+    const events = T.logOf('checkpoint').map((x) => x[1]);
+    T.tap('KeyT');
+    T.step(0.3);
+    const afterRestart = g.encounter.checkpoint;
+    t.edit();
+    return { start, none, d0, at0, c1, c2, c1b, d1, at1, yaw, events, afterRestart, editCp: g.encounter.checkpoint };
+  });
+  expect('checkpoint: none before one is reached; dying then respawns at the spawn; entering one records it (last reached wins), `checkpoint:reached` per change', cp.none === null && cp.d0.dead && cp.d0.alive && near(cp.at0, cp.start) && cp.c1 === 'cp1' && cp.c2 === 'cp2' && cp.c1b === 'cp1' && JSON.stringify(cp.events) === JSON.stringify(['cp1', 'cp2', 'cp1']), JSON.stringify(cp));
+  expect('  after death the player respawns at the last checkpoint, facing its yaw, full health; restart forgets checkpoints', cp.d1.dead && cp.d1.alive && near(cp.at1, [0, 0, -10]) && Math.abs(cp.yaw - 1.5) < 1e-6 && cp.d1.health >= 100 && cp.afterRestart === null && cp.editCp === null, JSON.stringify(cp));
+
+  // -- leaks: play / edit cycles with every encounter piece (reinforcements, wakes, checkpoints) --
+  const leak = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    if (t.playing) t.edit();
+    t.load(T.level([
+      { id: 'marker.spawn', pos: [2, 0, 10] }, { id: 'marker.checkpoint', pos: [0, 0, 4] },
+      { id: 'marker.entry', pos: [0, 0, -20], params: { group: 'r', enemies: ['enemy.trooper', 'enemy.drone'] } },
+      { id: 'enemy.trooper', pos: [0, 0, -10], params: { group: 'a' } },
+      { id: 'trigger.volume', pos: [0, 0, 4], params: { size: [4, 3, 4], event: 'x', wakeGroup: 'a', spawnGroup: 'r' } },
+      { id: 'pickup.heavy', pos: [-4, 0, 6] },
+    ]));
+    const doc0 = T.doc();
+    g.engine.camera.position.set(0, 6, 4);
+    const cycle = () => {
+      T.tap('KeyP');
+      T.step(1);
+      T.tap('KeyT');
+      T.step(1);
+      T.tap('KeyP');
+      T.step(1);
+    };
+    cycle(); // warms the lazily built pools
+    const first = T.mem();
+    const readings = [];
+    for (let i = 0; i < 4; i++) { cycle(); readings.push(T.mem()); }
+    const out = { first, readings, same: T.doc() === doc0, ok: T.ok().ok, items: g.encounter.items.length };
+    g.loadScene('workshop'); T.step(1);
+    return out;
+  });
+  const same2 = leak.readings.every((r) => r.geometries === leak.first.geometries && r.textures === leak.first.textures && r.objects === leak.first.objects);
+  expect('4 play / edit cycles with every encounter piece (reinforcements, wakes, checkpoint) leak nothing; doc unchanged', same2 && leak.same && leak.ok, JSON.stringify(leak));
+}
+
+// ---- 13. inspector: the selected piece's params as fields (registry meta `fields`), edited through the real DOM ----
+{
+  const INS = '#workshop-inspector';
+  const field = (key) => `${INS} [data-key="${key}"]`;
+  const typeIn = async (key, text) => { await p.click(field(key), { clickCount: 3 }); await (text === '' ? p.keyboard.press('Backspace') : p.keyboard.type(text)); await p.keyboard.press('Enter'); };
+  // earlier sections leave pointer lock on (play): the real mouse needs the cursor
+  await ev(() => { const t = T.tool(); if (t.playing) t.edit(); document.exitPointerLock(); window.game.engine.input.free = false; t.load(window.game.level); t.arm(null); });
+  await p.waitForFunction(() => !document.pointerLockElement);
+  const box = await ev(() => { const t = T.tool(); const i = t.place('env.box', [-20, 0, 40], { size: [3, 1.1, 1], mat: 'low', cover: 'low' }); t.select(i); return i; });
+  const shown = await ev(() => ({
+    vis: document.querySelector('#workshop-inspector').style.display !== 'none',
+    keys: [...document.querySelectorAll('#workshop-inspector [data-key]')].map((e) => e.dataset.key),
+    size: document.querySelector('#workshop-inspector [data-key="size"]').value,
+    mat: document.querySelector('#workshop-inspector [data-key="mat"]').value,
+    cover: document.querySelector('#workshop-inspector [data-key="cover"]').value,
+    shadow: document.querySelector('#workshop-inspector [data-key="shadow"]').checked,
+  }));
+  expect('selecting a piece shows one field per `fields` entry (and its name)', shown.vis && JSON.stringify(shown.keys) === JSON.stringify(['name', 'size', 'mat', 'cover', 'collide', 'shadow']) && shown.size === '3, 1.1, 1' && shown.mat === 'low' && shown.cover === 'low' && shown.shadow === true, JSON.stringify(shown));
+  // every field of every piece id comes from the registry: ids without fields show only the name
+  const meta = await ev(() => { const g = window.game; return g.registry.ids().map((id) => [id, (g.registry.meta(id).fields ?? []).map((f) => f.key)]); });
+  expect('  every registry id has well-formed fields (or none)', await ev(() => window.game.registry.ids().every((id) => (window.game.registry.meta(id).fields ?? []).every((f) => f.key && ['number', 'vec2', 'vec3', 'text', 'bool', 'enum', 'list'].includes(f.type) && (f.type !== 'enum' || f.options)))), JSON.stringify(meta));
+  const mid = await ev(() => { const t = T.tool(); const g = window.game; const out = {}; for (const id of ['marker.spawn', 'marker.entry', 'trigger.volume', 'enemy.mover', 'kit.platform', 'pickup.light']) { const i = t.place(id, [-20, 0, 44]); t.select(i); out[id] = [...document.querySelectorAll('#workshop-inspector [data-key]')].map((e) => e.dataset.key).join(','); } for (let k = 0; k < 6; k++) t.undo(); t.select(-1); return out; });
+  expect('  encounter, enemy, kit and pickup pieces show their own fields', mid['trigger.volume'] === 'name,size,event,once,wakeGroup,spawnGroup' && mid['marker.entry'] === 'name,group,enemies' && mid['enemy.mover'] === 'name,group,to,speed' && mid['marker.spawn'] === 'name' && mid['pickup.light'] === 'name' && mid['kit.platform'].startsWith('name,size,height,stairs,parapets,mat'), JSON.stringify(mid));
+  expect('  nothing selected: inspector hidden', await ev(() => document.querySelector('#workshop-inspector').style.display === 'none'));
+
+  // type + Enter: doc and scene change, one undo step
+  await ev((i) => T.tool().select(i), box);
+  const before = await ev(() => ({ doc: T.doc(), undo: T.tool().undoStack.length, h: T.tool().items.length }));
+  await typeIn('size', '6, 2, 1.5');
+  const a = await ev((i) => { const t = T.tool(); return { p: t.doc.pieces[i], undo: t.undoStack.length, ok: t.verify().ok, size: t.items[i].thing.objects[0].geometry.parameters, val: document.querySelector('#workshop-inspector [data-key="size"]').value }; }, box);
+  expect('editing size (type + Enter) changes the doc and rebuilds the scene piece, as one command', JSON.stringify(a.p.params.size) === '[6,2,1.5]' && a.undo === before.undo + 1 && a.ok && a.size.width === 6 && a.size.height === 2 && a.size.depth === 1.5, JSON.stringify(a));
+  expect('  the field shows the stored value', a.val === '6, 2, 1.5');
+  await p.selectOption(field('mat'), 'high');
+  await p.selectOption(field('cover'), '');
+  await p.uncheck(field('shadow'));
+  await typeIn('name', 'crate1');
+  const b = await ev((i) => { const t = T.tool(); return { p: t.doc.pieces[i], cover: t.coverOf(i), ok: t.verify().ok }; }, box);
+  expect('  mat (select), cover cleared (key removed), shadow (checkbox), name', b.p.params.mat === 'high' && !('cover' in b.p.params) && b.p.params.shadow === false && b.p.name === 'crate1' && b.cover.length === 0 && b.ok, JSON.stringify(b));
+  // undo / redo restore the exact JSON
+  const afterDoc = await ev(() => T.doc());
+  const u = await ev(() => { const t = T.tool(); for (let k = 0; k < 5; k++) t.undo(); const d0 = T.doc(); for (let k = 0; k < 5; k++) t.redo(); return { d0, d1: T.doc(), ok: t.verify().ok, sel: t.sel }; });
+  expect('  undo x5 returns the identical doc from before, redo x5 the edited one', u.d0 === before.doc && u.d1 === afterDoc && u.ok, JSON.stringify({ ok: u.ok, same0: u.d0 === before.doc, same1: u.d1 === afterDoc }));
+  await ev((i) => T.tool().select(i), box);
+  expect('  the inspector follows undo (field shows the doc)', await p.inputValue(field('size')) === '6, 2, 1.5');
+
+  // invalid values: toast, doc untouched, field back to the doc value
+  const docOk = await ev(() => T.doc());
+  const undoN = await ev(() => T.tool().undoStack.length);
+  const bad = {};
+  for (const [key, text] of [['size', '1, 2'], ['size', 'a, b, c'], ['size', '0, 1, 1']]) {
+    await typeIn(key, text);
+    bad[`${key}=${text}`] = await ev(() => ({ toast: T.tool().toastText, doc: T.doc(), val: document.querySelector('#workshop-inspector [data-key="size"]').value }));
+  }
+  expect('invalid values (wrong count, not numbers, below min) toast and leave the doc and history alone; the field is reverted', Object.values(bad).every((r) => r.toast && r.doc === docOk && r.val === '6, 2, 1.5') && await ev(() => T.tool().undoStack.length) === undoN, JSON.stringify(bad));
+  await p.selectOption(field('mat'), 'high');
+  await ev(() => { const t = T.tool(); t.toastText = ''; });
+  const trig = await ev(() => { const t = T.tool(); const i = t.place('trigger.volume', [-20, 0, 50]); t.select(i); return i; });
+  await typeIn('size', '1, 1');
+  expect('  a builder error (trigger size with 2 numbers) is a toast too, nothing changed', await ev((i) => T.tool().toastText !== '' && JSON.stringify(T.tool().doc.pieces[i].params.size) === '[4,3,4]', trig));
+
+  // encounter params
+  await typeIn('size', '8, 3, 6');
+  await typeIn('event', 'door-open');
+  await p.uncheck(field('once'));
+  await typeIn('wakeGroup', 'alpha');
+  await typeIn('spawnGroup', 'reinforce');
+  await typeIn('name', 'gate');
+  const tg = await ev((i) => { const t = T.tool(); return { p: t.doc.pieces[i], ok: t.verify().ok, rec: t.items[i].thing.data ?? null }; }, trig);
+  expect('trigger.volume: size, event, once, wakeGroup, spawnGroup and name edit in the UI', JSON.stringify(tg.p.params) === JSON.stringify({ size: [8, 3, 6], event: 'door-open', once: false, wakeGroup: 'alpha', spawnGroup: 'reinforce' }) && tg.p.name === 'gate' && tg.ok, JSON.stringify(tg));
+  await typeIn('wakeGroup', '');
+  expect('  emptying an optional field removes the key', await ev((i) => !('wakeGroup' in T.tool().doc.pieces[i].params), trig));
+  const ent = await ev(() => { const t = T.tool(); const i = t.place('marker.entry', [-20, 0, 56]); t.select(i); return i; });
+  await typeIn('group', 'wave2');
+  await typeIn('enemies', 'enemy.drone, enemy.trooper , enemy.trooper');
+  expect('marker.entry: group and enemies (comma list)', await ev((i) => JSON.stringify(T.tool().doc.pieces[i].params) === JSON.stringify({ group: 'wave2', enemies: ['enemy.drone', 'enemy.trooper', 'enemy.trooper'] }) && T.tool().verify().ok, ent));
+  await typeIn('enemies', 'kit.wall');
+  expect('  a non-enemy id in the list is a toast, doc unchanged', await ev((i) => T.tool().doc.pieces[i].params.enemies.length === 3, ent));
+  const en = await ev(() => { const t = T.tool(); const i = t.place('enemy.trooper', [-20, 0, 62]); t.select(i); return i; });
+  await typeIn('group', 'alpha');
+  expect('enemy group (trooper)', await ev((i) => T.tool().doc.pieces[i].params.group === 'alpha' && T.tool().items[i].thing.squad === 'alpha' && T.tool().verify().ok, en));
+  const kt = await ev(() => { const t = T.tool(); const i = t.place('kit.platform', [-20, 0, 70]); t.select(i); return i; });
+  await typeIn('size', '10, 6');
+  await p.selectOption(field('stairs'), 'e');
+  await typeIn('height', '2.4');
+  expect('kit.platform: size (2 numbers), stairs (enum), height', await ev((i) => { const q = T.tool().doc.pieces[i].params; return JSON.stringify(q.size) === '[10,6]' && q.stairs === 'e' && q.height === 2.4 && T.tool().verify().ok; }, kt));
+
+  // keyboard focus: typing in a field is the field's, never the editor's
+  await ev((i) => { const t = T.tool(); t.select(i); T.step(0.1); window.__cam = t.game.engine.camera.position.toArray(); window.__n = t.count; window.__g = t.grid; window.__d = T.doc(); }, box);
+  await p.click(field('name'), { clickCount: 3 });
+  for (const k of ['d', 'w', 'r', 'g', 'h']) await p.keyboard.press(k);
+  await p.keyboard.down('d'); await ev(() => T.step(0.5)); await p.keyboard.up('d');
+  await p.keyboard.press('Delete'); await p.keyboard.press('Backspace'); await p.keyboard.press('Control+z'); await p.keyboard.press('PageUp'); await p.keyboard.press('ArrowRight'); await p.keyboard.press('p');
+  const typed = await ev(() => { const t = T.tool(); const el = document.querySelector('#workshop-inspector [data-key="name"]'); return { cam: t.game.engine.camera.position.toArray(), n: t.count, grid: t.grid, same: T.doc() === window.__d, playing: t.playing, keys: [...t.keys], focus: document.activeElement === el, val: el.value, camSame: JSON.stringify(t.game.engine.camera.position.toArray()) === JSON.stringify(window.__cam), skel: window.game.debug }; });
+  expect('typing in a field (d w r g h, held D, Delete, Backspace, Ctrl+Z, PageUp, arrows, p) fires no editor shortcut: no fly, no delete/undo/nudge/play', typed.camSame && typed.n === (await ev(() => window.__n)) && typed.grid === (await ev(() => window.__g)) && !typed.playing && typed.keys.length === 0 && typed.focus, JSON.stringify(typed));
+  expect('  the keys landed in the field', typed.val !== 'crate1' && /d/.test(typed.val), typed.val);
+  await p.keyboard.press('Escape');
+  const esc = await ev((i) => { const t = T.tool(); return { blurred: document.activeElement === document.body, sel: t.sel, val: document.querySelector('#workshop-inspector [data-key="name"]').value, doc: T.doc() === window.__d }; }, box);
+  expect('Esc in a field blurs it, reverts the text, keeps the selection and the doc', esc.blurred && esc.sel === box && esc.val === 'crate1' && esc.doc, JSON.stringify(esc));
+  // control: with the field blurred the same keys do act
+  await p.keyboard.press('Delete');
+  expect('  control: Delete after the field is blurred deletes the selection', await ev((n) => T.tool().count === n - 1, await ev(() => window.__n)));
+  await ev(() => T.tool().undo());
+
+  // a fly key held while a field gains focus and released inside it must not stay held (the field swallows its keyup)
+  await ev((i) => { const t = T.tool(); t.select(i); document.activeElement?.blur?.(); window.game.engine.input.keys.clear(); t.keys.clear(); }, box);
+  await p.keyboard.down('w');
+  const held = await ev(() => { const t = T.tool(); const c0 = t.game.engine.camera.position.toArray(); T.step(0.3); return { c0, c1: t.game.engine.camera.position.toArray(), editor: t.keys.has('KeyW'), input: t.game.engine.input.keys.has('KeyW') }; });
+  await p.focus(field('name'));
+  await p.keyboard.up('w');
+  const stuck = await ev(() => { const t = T.tool(); const c0 = t.game.engine.camera.position.toArray(); T.step(0.5); return { c0, c1: t.game.engine.camera.position.toArray(), editor: [...t.keys], input: [...t.game.engine.input.keys], pressed: [...t.game.engine.input.pressed] }; });
+  await p.evaluate(() => document.activeElement.blur());
+  const after = await ev(() => { const t = T.tool(); const c0 = t.game.engine.camera.position.toArray(); T.step(0.5); return { moved: JSON.stringify(c0) !== JSON.stringify(t.game.engine.camera.position.toArray()), editor: [...t.keys], input: [...t.game.engine.input.keys] }; });
+  expect('control: W held with no field focused flies the camera', JSON.stringify(held.c0) !== JSON.stringify(held.c1) && held.editor && held.input, JSON.stringify(held));
+  expect('W held when a field gets focus and released inside it: no key stays held (editor and engine input), the camera stays put after blur', JSON.stringify(stuck.c0) === JSON.stringify(stuck.c1) && stuck.editor.length === 0 && !stuck.input.includes('KeyW') && !after.moved && after.editor.length === 0 && !after.input.includes('KeyW'), JSON.stringify({ stuck, after }));
+  expect('  focusing a field only clears held keys: pending edge presses are kept', await ev(() => { const e = T.tool().game.engine.input; e.pressed.add('KeyX'); const el = document.querySelector('#workshop-inspector [data-key="size"]'); el.focus(); const kept = e.pressed.has('KeyX'); el.blur(); e.pressed.delete('KeyX'); return kept; }));
+
+  // play hides the panel and frees focus; edit brings it back
+  await ev((i) => T.tool().select(i), box);
+  await p.click(field('name'));
+  await ev(() => T.tap('KeyP'));
+  const pl = await ev(() => { const t = T.tool(); const playing = t.playing; return { playing, hidden: getComputedStyle(document.querySelector('#workshop-inspector')).display === 'none' || document.querySelector('#workshop-inspector').offsetParent === null, focus: document.activeElement.tagName }; });
+  await ev(() => T.tap('KeyP'));
+  const back = await ev(() => ({ playing: T.tool().playing, vis: document.querySelector('#workshop-inspector').offsetParent !== null, n: document.querySelectorAll('#workshop-inspector [data-key]').length }));
+  expect('play hides the inspector and drops field focus; back to edit shows it again with the selection', pl.playing && pl.hidden && pl.focus === 'BODY' && !back.playing && back.vis && back.n === 6, JSON.stringify({ pl, back }));
+
+  // leaks: select / deselect / play cycles, then leaving the scene
+  const lk = await ev((i) => {
+    const t = T.tool();
+    const cycle = () => { for (const k of [i, i + 1, 0, -1, i]) { t.select(k); } T.tap('KeyP'); T.step(0.5); T.tap('KeyP'); T.step(0.2); };
+    cycle();
+    const a = { dom: document.body.querySelectorAll('*').length, mem: T.mem(), insp: document.querySelectorAll('#workshop-inspector').length };
+    for (let n = 0; n < 4; n++) cycle();
+    const c = { dom: document.body.querySelectorAll('*').length, mem: T.mem(), insp: document.querySelectorAll('#workshop-inspector').length };
+    window.game.loadScene('arena'); T.step(2);
+    const gone = { insp: document.querySelectorAll('#workshop-inspector').length, side: document.querySelectorAll('#workshop-palette').length };
+    window.game.loadScene('workshop'); T.step(2);
+    return { a, c, gone, back: document.querySelectorAll('#workshop-inspector').length };
+  }, box);
+  expect('select / deselect / play cycles leave no DOM nodes, geometry or textures behind; one inspector, none after leaving the scene', lk.a.dom === lk.c.dom && lk.a.mem.geometries === lk.c.mem.geometries && lk.a.mem.textures === lk.c.mem.textures && lk.a.insp === 1 && lk.c.insp === 1 && lk.gone.insp === 0 && lk.back === 1, JSON.stringify(lk));
+}
+
+// ---- 14. interior zones (`zone.interior`, encounter owner): edit, undo, save / load, legacy files, play, no leaks ----
+{
+  await ev(() => { const t = T.tool(); if (t.playing) t.edit(); document.exitPointerLock(); window.game.engine.input.free = false; window.game.engine.input.keys.clear(); });
+  await p.waitForFunction(() => !document.pointerLockElement);
+  const FLOORP = { id: 'env.box', pos: [0, -1, 0], params: { size: [300, 1, 300], mat: 'floor' } };
+  await ev((FLOORP) => {
+    const g = window.game;
+    T.zlevel = (pieces) => ({ name: 'zones', title: 'ZONES', spawn: { pos: [0, 0, 20], yaw: 3.14159 }, interiorZones: [], pieces: [FLOORP, ...pieces] });
+    T.zones = () => g.world.interiorZones.map((b) => [b.min.toArray(), b.max.toArray()]);
+  }, FLOORP);
+
+  // -- place, gizmo, no logic and no colliders in edit mode, palette entry, inspector field --
+  const pl = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load(T.zlevel([]));
+    T.step(0.3);
+    const c0 = g.world.colliders.length;
+    const gz0 = T.gizmoMeshes();
+    const i = t.place('zone.interior', [4.2, 0, -3.1]);
+    const rec = t.items[i].thing;
+    t.select(i);
+    return {
+      i, piece: t.doc.pieces[i], owner: t.items[i].owner, gizmo: !!rec.gizmo?.parent && rec.gizmo.visible, meshes: T.gizmoMeshes() - gz0,
+      colliders: g.world.colliders.length - c0, zones: T.zones().length, ok: t.verify().ok,
+      palette: !!document.querySelector('#workshop-palette [data-id="zone.interior"]'),
+      fields: [...document.querySelectorAll('#workshop-inspector [data-key]')].map((e) => e.dataset.key).join(','),
+    };
+  });
+  expect('place zone.interior: a piece with the example size, a gizmo, no collider, not yet a world zone in edit mode; palette entry; inspector size field', pl.piece.id === 'zone.interior' && JSON.stringify(pl.piece.params.size) === '[8,4,8]' && JSON.stringify(pl.piece.pos) === '[4,0,-3]' && pl.owner === 'encounter' && pl.gizmo && pl.meshes > 0 && pl.colliders === 0 && pl.zones === 0 && pl.ok && pl.palette && pl.fields === 'name,size', JSON.stringify(pl));
+
+  // -- move, resize (API and inspector), rotate, name; undo / redo give the identical JSON --
+  const ed = await ev(() => {
+    const t = T.tool();
+    const i = t.doc.pieces.findIndex((q) => q.id === 'zone.interior');
+    const d0 = T.doc();
+    const hist0 = t.undoStack.length;
+    t.move(i, [10.3, 0, 7.6]);
+    t.setParams(i, { size: [12, 5, 6] });
+    const bounds = () => { const g = t.items[i].thing.gizmo; const c = g.children[0]; const lo = [0, 1, 2].map((k) => g.position.getComponent(k) + c.position.getComponent(k) - c.scale.getComponent(k) / 2); const hi = [0, 1, 2].map((k) => g.position.getComponent(k) + c.position.getComponent(k) + c.scale.getComponent(k) / 2); return [lo, hi].map((a) => a.map((v) => Math.round(v * 1e3) / 1e3)); };
+    const gz = bounds();
+    t.rotate(i, 1);
+    const turned = t.doc.pieces[i].params.size;
+    t.setName(i, 'hall');
+    const d1 = T.doc();
+    let err = null;
+    try { t.setParams(i, { size: [0, 1, 1] }); } catch (e) { err = e.message; }
+    let err2 = null;
+    try { t.setParams(i, { size: [1, 2] }); } catch (e) { err2 = e.message; }
+    const unchanged = T.doc() === d1;
+    const n = t.undoStack.length - hist0;
+    for (let k = 0; k < n; k++) t.undo();
+    const back = T.doc();
+    for (let k = 0; k < n; k++) t.redo();
+    return { i, gz, turned, n, err, err2, unchanged, undoIdentical: back === d0, redoIdentical: T.doc() === d1, ok: t.verify().ok, piece: t.doc.pieces[i] };
+  });
+  expect('move (snapped), resize and rotate (a quarter turn swaps w and d) rebuild the gizmo to the new box; name works', JSON.stringify(ed.piece.pos) === '[10.5,0,7.5]' && JSON.stringify(ed.turned) === '[6,5,12]' && ed.piece.name === 'hall' && JSON.stringify(ed.gz) === JSON.stringify([[4.5, 0, 4.5], [16.5, 5, 10.5]]) && ed.n === 4 && ed.ok, JSON.stringify(ed));
+  expect('  bad sizes (zero, two numbers) throw and change nothing; undo x4 is the identical JSON, redo x4 too', !!ed.err && !!ed.err2 && ed.unchanged && ed.undoIdentical && ed.redoIdentical, JSON.stringify(ed));
+  // resize through the real inspector field
+  await ev((i) => T.tool().select(i), ed.i);
+  await p.click('#workshop-inspector [data-key="size"]', { clickCount: 3 });
+  await p.keyboard.type('5, 3, 9');
+  await p.keyboard.press('Enter');
+  const ui = await ev((i) => { const t = T.tool(); const q = t.doc.pieces[i]; t.undo(); const u = JSON.stringify(t.doc.pieces[i].params.size); t.redo(); return { size: q.params.size, undone: u, ok: t.verify().ok }; }, ed.i);
+  expect('  the inspector size field resizes it (one undo step)', JSON.stringify(ui.size) === '[5,3,9]' && ui.undone === '[6,5,12]' && ui.ok, JSON.stringify(ui));
+
+  // -- picking: a zone around a box does not steal the click; an empty spot inside picks the zone --
+  const pk = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load(T.zlevel([{ id: 'env.box', pos: [0, 0, 0], params: { size: [2, 2, 2], mat: 'low' } }, { id: 'zone.interior', pos: [0, 0, 0], params: { size: [10, 4, 10] } }]));
+    T.step(0.3);
+    t.mouse.x = 0; t.mouse.y = 0;
+    g.engine.camera.position.set(0, 4, 8);
+    t.cam.yaw = 0;
+    t.cam.pitch = -0.4; T.step(0.1); t.surface(); const onBox = t.pick();
+    t.cam.pitch = -0.8; T.step(0.1); t.surface(); const inZone = t.pick();
+    return { onBox, inZone, box: t.doc.pieces.findIndex((q) => q.params?.mat === 'low'), zone: t.doc.pieces.findIndex((q) => q.id === 'zone.interior') };
+  });
+  expect('picking: the box inside a zone is picked first; an empty spot inside the zone picks the zone', pk.onBox === pk.box && pk.inZone === pk.zone, JSON.stringify(pk));
+
+  // -- save -> load roundtrip: bytes are stable, the loaded doc equals the saved one, zones are editable again --
+  const rt = await ev(async () => {
+    const g = window.game;
+    const t = T.tool();
+    const { serializeLevel, parseLevel } = await import('/src/game/workshop/io.js');
+    t.load({ ...T.zlevel([]), spawn: { pos: [0, 0, 20], yaw: 3.1416 }, pieces: [...T.zlevel([]).pieces, { id: 'zone.interior', name: 'a', pos: [-8, 0, -20], params: { size: [16, 6, 12] } }, { id: 'zone.interior', pos: [20.5, 1, -20], params: { size: [4, 3, 4] } }] });
+    t.setParams(2, { size: [4.5, 3, 7] });
+    t.move(1, [-6, 0, -22]);
+    const doc = T.doc();
+    const text = serializeLevel(t.doc);
+    const parsed = parseLevel(text, g.registry);
+    t.load(parsed);
+    T.step(0.3);
+    return { same: T.doc() === doc, stable: serializeLevel(t.doc) === text, lines: text.split('\n').filter((l) => l.includes('zone.interior')).length, ok: t.verify().ok, zones: g.encounter.items.filter((r) => r.kind === 'zone').length };
+  });
+  expect('save -> load roundtrip: the zone pieces survive byte-for-byte (serialize is idempotent), the doc is identical, scene = doc', rt.same && rt.stable && rt.lines === 2 && rt.ok && rt.zones === 2, JSON.stringify(rt));
+
+  // -- a level file with the older top-level `interiorZones` opens as editable pieces and plays the same --
+  const leg = await ev(async () => {
+    const g = window.game;
+    const t = T.tool();
+    const { SCENES } = await import('/src/game/scenes.js');
+    const arena = SCENES.arena;
+    const want = arena.interiorZones.map((z) => [z.min, z.max]);
+    t.load({ ...arena, name: 'x' });
+    T.step(0.3);
+    const z = t.doc.pieces.filter((q) => q.id === 'zone.interior');
+    const migrated = { n: z.length, size: z[0]?.params.size, pos: z[0]?.pos, top: t.doc.interiorZones, ok: t.verify().ok };
+    // the same box in play
+    g.engine.camera.position.set(0, 6, -40); t.cam.yaw = 0; t.cam.pitch = -0.4;
+    t.play(); T.step(0.3);
+    const box = T.zones();
+    const inside = g.world.isInterior(g.player.pos);
+    t.edit();
+    return { want, migrated, box, inside };
+  });
+  const near3 = (a, b) => a.every((v, k) => Math.abs(v - b[k]) < 0.01);
+  expect('legacy `interiorZones` (arena) become zone pieces in the editor (top-level emptied) and play builds the same box', leg.migrated.n === 1 && near3(leg.migrated.size, [48, 7, 31.7]) && near3(leg.migrated.pos, [0, 0, -46.15]) && leg.migrated.top.length === 0 && leg.migrated.ok && leg.box.length === 1 && near3(leg.box[0][0], leg.want[0][0]) && near3(leg.box[0][1], leg.want[0][1]) && leg.inside, JSON.stringify(leg));
+
+  // -- play uses the zones: world.isInterior (camera exposure input), HUD label INTERIOR; gizmos gone; edit mode back to gizmos --
+  const run = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load(T.zlevel([{ id: 'zone.interior', pos: [0, 0, 4], params: { size: [6, 4, 6] } }, { id: 'zone.interior', pos: [30, 0, 4], params: { size: [6, 4, 6] } }]));
+    T.step(0.3);
+    const doc0 = T.doc();
+    const editGizmos = T.gizmoMeshes();
+    g.engine.camera.position.set(0, 6, 4); t.cam.yaw = 0; t.cam.pitch = -0.4;
+    g.engine.input.keys.clear();
+    t.play(); T.step(0.4);
+    const label = () => document.getElementById('zone')?.textContent;
+    const inPlay = { zones: T.zones(), gizmos: T.gizmoMeshes(), inside: g.world.isInterior(g.player.pos), cam: g.world.isInterior(g.engine.camera.position), label: label(), colliders: g.world.colliders.length };
+    g.player.pos.set(15, 0, 4); T.step(0.4);
+    const outside = { inside: g.world.isInterior(g.player.pos), label: label() };
+    g.player.pos.set(31, 0, 4); T.step(0.4);
+    const second = { inside: g.world.isInterior(g.player.pos), label: label() };
+    T.tap('KeyT'); T.step(0.4);
+    const restarted = T.zones().length;
+    t.edit(); T.step(0.3);
+    return { editGizmos, inPlay, outside, second, restarted, back: { zones: T.zones().length, gizmos: T.gizmoMeshes(), same: T.doc() === doc0, ok: t.verify().ok } };
+  });
+  expect('play: the zone boxes are built (2, none from the gizmos), the player inside reads INTERIOR, outside the title, the second zone works; no gizmo objects', run.inPlay.zones.length === 2 && run.inPlay.gizmos === 0 && run.inPlay.inside && run.inPlay.label === 'INTERIOR' && !run.outside.inside && run.outside.label === 'ZONES' && run.second.inside && run.second.label === 'INTERIOR', JSON.stringify(run));
+  expect('  restart keeps 2 zones (not 4); back in edit: no world zones, gizmos back, doc identical, scene = doc', run.restarted === 2 && run.back.zones === 0 && run.back.gizmos === run.editGizmos && run.back.same && run.back.ok, JSON.stringify(run));
+
+  // -- a normal level load (no tool) builds the zone as logic only --
+  const norm = await ev(async () => {
+    const g = window.game;
+    const { SCENES } = await import('/src/game/scenes.js');
+    SCENES.testzone = T.zlevel([{ id: 'zone.interior', pos: [0, 0, 20], params: { size: [8, 4, 8] } }]);
+    SCENES.testzone.name = 'testzone';
+    g.loadScene('testzone'); T.step(0.4);
+    const out = { zones: T.zones().length, inside: g.world.isInterior(g.player.pos), gizmos: T.gizmoMeshes(), label: document.getElementById('zone')?.textContent };
+    g.loadScene('workshop');
+    delete SCENES.testzone;
+    T.step(0.3);
+    out.after = T.zones().length;
+    return out;
+  });
+  expect('a normal level load: the zone is logic only (no gizmo), the player spawns inside it; leaving frees it', norm.zones === 1 && norm.inside && norm.gizmos === 0 && norm.label === 'INTERIOR' && norm.after === 0, JSON.stringify(norm));
+
+  // -- leaks: place / delete and play / edit cycles --
+  const lk = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load(T.zlevel([{ id: 'zone.interior', pos: [0, 0, 4], params: { size: [6, 4, 6] } }]));
+    T.step(0.3);
+    const cycle = () => {
+      const i = t.place('zone.interior', [9, 0, 9], { size: [3, 3, 3] }); t.setParams(i, { size: [4, 4, 4] }); t.remove(i); t.undo(); t.undo(); t.undo(); t.redo(); t.redo(); t.redo();
+      g.engine.camera.position.set(0, 6, 4); t.cam.yaw = 0; t.cam.pitch = -0.4;
+      T.tap('KeyP'); T.step(0.3); T.tap('KeyT'); T.step(0.2); T.tap('KeyP'); T.step(0.2);
+    };
+    cycle();
+    const a = { mem: T.mem(), zones: T.zones().length, gz: g.encounter.gizmos, n: t.count };
+    for (let k = 0; k < 4; k++) cycle();
+    const c = { mem: T.mem(), zones: T.zones().length, gz: g.encounter.gizmos, n: t.count };
+    const res = !!g.encounter.res;
+    g.loadScene('arena'); T.step(0.3);
+    const left = { zones: T.zones().length, gz: g.encounter.gizmos, res: !!g.encounter.res };
+    g.loadScene('workshop'); T.step(0.3);
+    return { a, c, res, left };
+  });
+  const same = lk.a.mem.geometries === lk.c.mem.geometries && lk.a.mem.textures === lk.c.mem.textures && lk.a.mem.objects === lk.c.mem.objects;
+  expect('place / delete / undo and play / edit / restart cycles leak nothing (geometries, textures, objects, gizmo count); no world zones in edit; leaving the scene frees the gizmo resources', same && lk.a.gz === lk.c.gz && lk.a.n === lk.c.n && lk.c.zones === 0 && lk.left.gz === 0 && !lk.left.res && lk.left.zones === 1, JSON.stringify(lk));
+}
+
+// ---- 15. lights: a fixed pool, so placing / removing a point light never recompiles shaders (three.js programs depend on the light count) ----
+{
+  await ev(() => { const t = T.tool(); if (t.playing) t.edit(); document.exitPointerLock(); window.game.engine.input.free = false; window.game.engine.input.keys.clear(); });
+  const FLOORP = { id: 'env.box', pos: [0, -1, 0], params: { size: [300, 1, 300], mat: 'floor' } };
+  const lv = await ev((FLOORP) => {
+    const g = window.game;
+    const t = T.tool();
+    t.load({ name: 'lights', title: 'LIGHTS', spawn: { pos: [0, 0, 20], yaw: 3.14159 }, interiorZones: [], pieces: [FLOORP,
+      { id: 'kit.wall', pos: [0, 0, -4], params: { length: 8, height: 3, mat: 'wall' } }, { id: 'enemy.static', pos: [3, 0, 0] }, { id: 'enemy.trooper', pos: [-3, 0, 0] }, { id: 'pickup.light', pos: [0, 0, 2] }] });
+    g.engine.camera.position.set(0, 4, 8); t.cam.yaw = 0; t.cam.pitch = -0.35;
+    // real frames (post stack, shadows, LOD) so every program the scene needs is compiled
+    T.frames = (n) => { g.engine.headless = false; for (let i = 0; i < n; i++) g.engine.step(1 / 60); g.engine.headless = true; };
+    T.programs = () => g.engine.renderer.info.programs.length;
+    T.sceneLights = () => { let n = 0; g.engine.scene.traverse((o) => o.isPointLight && n++); return n; };
+    t.select(1); T.frames(3); t.select(-1); // the selection helper's line material is compiled too
+    T.frames(4);
+    T.tap('KeyP'); T.frames(4); T.tap('KeyP'); T.frames(4); // play once: its materials (merged batches, LOD, shadow) are compiled too
+    return { programs: T.programs(), lights: T.sceneLights(), pool: g.world.pool.length, inUse: g.world.lights.length };
+  }, FLOORP);
+  const TIER = await ev(async () => { const { QUALITY } = await import('/src/game/view/quality.js'); return { name: window.game.settings?.quality ?? 'high', caps: Object.fromEntries(Object.entries(QUALITY).map(([k, v]) => [k, v.lights])) }; });
+  const POOL = TIER.caps[TIER.name];
+  expect('the point-light pool size per tier is 4 / 8 / 12 (the caps in instructions/engine.md)', TIER.caps.low === 4 && TIER.caps.high === 8 && TIER.caps.ultra === 12, JSON.stringify(TIER));
+  expect(`the world owns a fixed pool of ${POOL} point lights (tier ${TIER.name}), all parked at intensity 0 in a level without lights`, lv.pool === POOL && lv.inUse === 0 && lv.lights === POOL + 1, JSON.stringify(lv)); // pool + the muzzle light
+  const r = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    const P0 = T.programs();
+    const L0 = T.sceneLights();
+    const out = { P0, L0, steps: [] };
+    const mark = (name) => { T.frames(3); out.steps.push([name, T.programs(), T.sceneLights()]); };
+    const a = t.place('light.point', [0, 3, 3], { color: '#ff5030', intensity: 40, distance: 14 });
+    mark('placed');
+    const pl = g.world.lights[0];
+    out.lit = { n: g.world.lights.length, intensity: pl.intensity, distance: pl.distance, color: pl.color.getHexString(), pos: pl.position.toArray() };
+    for (let k = 0; k < 4; k++) t.place('light.point', [k * 2 - 3, 3, 1], { color: '#38d8ff', intensity: 20 + k, distance: 10 });
+    mark('five');
+    t.setParams(a, { intensity: 55, color: '#00ff00' });
+    const green = g.world.lights.filter((l) => l.color.getHexString() === '00ff00');
+    out.edited = { n: green.length, intensity: green[0]?.intensity, inUse: g.world.lights.length };
+    mark('edited');
+    t.remove(a); t.remove(t.count - 1);
+    mark('removed');
+    t.undo(); t.undo(); t.redo(); t.undo();
+    mark('undo');
+    out.afterUndo = g.world.lights.length;
+    // duplicate + move
+    const d = t.duplicate(t.count - 1); t.move(d, [5, 3, 5]);
+    mark('dup');
+    T.tap('KeyP'); T.frames(4);
+    out.play = { programs: T.programs(), lights: T.sceneLights(), inUse: g.world.lights.length, lit: g.world.lights.filter((l) => l.intensity > 0).length };
+    T.tap('KeyT'); T.frames(3);
+    out.restart = { programs: T.programs(), inUse: g.world.lights.length };
+    T.tap('KeyP'); T.frames(4);
+    out.back = { programs: T.programs(), lights: T.sceneLights(), inUse: g.world.lights.length, lit: g.world.lights.filter((l) => l.intensity > 0).length, ok: t.verify().ok };
+    // a scene without lights frees them all again
+    for (let k = t.count - 1; k >= 0; k--) if (t.doc.pieces[k].id === 'light.point') t.remove(k);
+    T.frames(2);
+    out.cleared = { inUse: g.world.lights.length, lit: g.world.pool.filter((l) => l.intensity > 0).length, programs: T.programs(), lights: T.sceneLights() };
+    return out;
+  });
+  const same = r.steps.every(([, pr, n]) => pr === r.P0 && n === r.L0);
+  expect('placing, editing, removing, undoing, duplicating point lights in edit mode: renderer.info.programs and the scene light count never change', same, JSON.stringify(r.steps) + ` P0=${r.P0} L0=${r.L0}`);
+  expect('  the placed light is a pool light set up from its piece (colour, intensity, distance, position); editing it rebuilds one light in the pool', r.lit.n === 1 && r.lit.intensity === 40 && r.lit.distance === 14 && r.lit.color === 'ff5030' && JSON.stringify(r.lit.pos) === '[0,3,3]' && r.edited.n === 1 && r.edited.intensity === 55 && r.edited.inUse === 5, JSON.stringify({ lit: r.lit, edited: r.edited }));
+  expect('  play (and restart, and back to edit) with lights: same programs, same light count, the doc\'s lights lit', r.play.programs === r.P0 && r.restart.programs === r.P0 && r.back.programs === r.P0 && r.play.lights === r.L0 && r.back.lights === r.L0 && r.play.inUse === r.afterUndo + 1 && r.play.lit === r.play.inUse && r.back.inUse === r.play.inUse && r.back.ok, JSON.stringify({ play: r.play, restart: r.restart, back: r.back, afterUndo: r.afterUndo }));
+  expect('  deleting every light parks the pool again (intensity 0, none in use)', r.cleared.inUse === 0 && r.cleared.lit === 0 && r.cleared.programs === r.P0 && r.cleared.lights === r.L0, JSON.stringify(r.cleared));
+
+  // past the pool: extra lights are temporary (the count changes, with a warning) and leave nothing behind
+  const over = await ev((POOL) => {
+    const g = window.game;
+    const t = T.tool();
+    const warns = [];
+    const w0 = console.warn;
+    console.warn = (...a) => warns.push(a.join(' '));
+    const L0 = T.sceneLights();
+    const n0 = t.count;
+    const N = POOL + 2;
+    for (let k = 0; k < N; k++) t.place('light.point', [k - 7, 3, -8], { color: '#ffffff', intensity: 5, distance: 6 });
+    const mid = { lights: T.sceneLights(), inUse: g.world.lights.length, pool: g.world.pool.length, ok: t.verify().ok };
+    for (let k = 0; k < N; k++) t.remove(t.count - 1);
+    console.warn = w0;
+    return { warned: warns.length, mid, end: { lights: T.sceneLights(), inUse: g.world.lights.length, n: t.count - n0, pool: g.world.pool.length, parked: g.world.pool.every((l) => l.intensity === 0) }, L0, N };
+  }, POOL);
+  expect('more lights than the tier pool: the extras are temporary scene lights (warned), all gone again after deleting them; the pool is untouched', over.warned >= 1 && over.mid.lights === over.L0 + 2 && over.mid.inUse === POOL + 2 && over.mid.pool === POOL && over.mid.ok && over.end.lights === over.L0 && over.end.inUse === 0 && over.end.n === 0 && over.end.pool === POOL && over.end.parked, JSON.stringify(over));
+
+  // switching quality resizes the pool (a settings action, one recompile); at every tier place / play / restart keep the programs constant
+  const tiers = await ev(async () => {
+    const g = window.game;
+    const t = T.tool();
+    const { applyQuality, QUALITY } = await import('/src/game/view/quality.js');
+    const out = { tiers: {}, resize: null };
+    const base = g.settings?.quality ?? 'high';
+    for (const name of ['low', 'ultra', 'high']) {
+      applyQuality(name, g);
+      T.frames(4);
+      T.tap('KeyP'); T.frames(4); T.tap('KeyP'); T.frames(4); // the new tier's programs (play's materials too) are compiled before the baseline
+      const want = QUALITY[name].lights;
+      const P0 = T.programs();
+      const r = { pool: g.world.pool.length, want, lights: T.sceneLights(), P0, steps: [] };
+      const mark = (n) => { T.frames(3); r.steps.push([n, T.programs(), T.sceneLights()]); };
+      const a = t.place('light.point', [0, 3, 3], { color: '#ff5030', intensity: 40, distance: 14 });
+      mark('placed');
+      t.setParams(a, { intensity: 20 }); mark('edited');
+      T.tap('KeyP'); mark('play');
+      T.tap('KeyT'); mark('restart');
+      T.tap('KeyP'); mark('edit'); // play, restart, back to edit
+      t.remove(a); mark('removed');
+      out.tiers[name] = r;
+    }
+    // lights in use survive a resize: shrinking keeps lit lights as temporary ones, growing adopts them again
+    const warn = console.warn; console.warn = () => {};
+    for (let k = 0; k < 6; k++) t.place('light.point', [k, 3, -8], { color: '#ffffff', intensity: 5, distance: 6 });
+    console.warn = warn;
+    applyQuality('low', g); T.frames(3);
+    const low = { pool: g.world.pool.length, inUse: g.world.lights.length, lit: g.world.lights.filter((l) => l.intensity > 0).length, lights: T.sceneLights() };
+    applyQuality('ultra', g); T.frames(3);
+    const up = { pool: g.world.pool.length, inUse: g.world.lights.length, lit: g.world.lights.filter((l) => l.intensity > 0).length, lights: T.sceneLights(), pooled: g.world.lights.every((l) => l.userData.pooled) };
+    for (let k = 0; k < 6; k++) t.remove(t.count - 1);
+    applyQuality(base, g); T.frames(3);
+    out.resize = { low, up, end: { pool: g.world.pool.length, inUse: g.world.lights.length, lights: T.sceneLights(), parked: g.world.pool.every((l) => l.intensity === 0), ok: t.verify().ok } };
+    return out;
+  });
+  for (const [name, r] of Object.entries(tiers.tiers)) {
+    expect(`quality ${name}: the pool has ${r.want} lights (scene ${r.want + 1} with the muzzle light); place / edit / play / restart / delete keep programs and light count`, r.pool === r.want && r.lights === r.want + 1 && r.steps.every(([, pr, n]) => pr === r.P0 && n === r.lights), JSON.stringify(r));
+  }
+  expect('  a tier switch with 6 lights in use: low keeps them (4 pooled + 2 temporary, scene 6 + muzzle), ultra adopts them (pool 12, none temporary), back to the start tier everything is parked',
+    tiers.resize.low.pool === 4 && tiers.resize.low.inUse === 6 && tiers.resize.low.lit === 6 && tiers.resize.low.lights === 7
+    && tiers.resize.up.pool === 12 && tiers.resize.up.inUse === 6 && tiers.resize.up.lit === 6 && tiers.resize.up.lights === 13 && tiers.resize.up.pooled
+    && tiers.resize.end.pool === POOL && tiers.resize.end.inUse === 0 && tiers.resize.end.lights === POOL + 1 && tiers.resize.end.parked && tiers.resize.end.ok, JSON.stringify(tiers.resize));
 }
 
 expect('no page or console errors', errors.length === 0, errors.join(' | '));

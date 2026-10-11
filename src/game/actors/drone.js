@@ -182,6 +182,11 @@ export class Drone {
     return n;
   }
 
+  // Spawn groups (enemies.js wakeGroup).
+  wake() {
+    if (this.alive) this.awake = true;
+  }
+
   // Returns true if this hit destroyed it.
   damage(amount, point, dir, zone) {
     if (!this.alive || this.falling) return false;

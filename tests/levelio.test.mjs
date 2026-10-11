@@ -16,6 +16,7 @@ const { Registry } = await import('../src/game/registry.js');
 const { WORLD_PIECES } = await import('../src/game/world/world.js');
 const { ENEMY_PIECES } = await import('../src/game/actors/enemies.js');
 const { PICKUP_PIECES } = await import('../src/game/world/pickups.js');
+const { ENCOUNTER_PIECES } = await import('../src/game/world/encounter.js');
 const { serializeLevel, parseLevel, levelNames } = await import('../src/game/workshop/io.js');
 const { SCENES } = await import('../src/game/scenes.js');
 
@@ -33,7 +34,7 @@ const throwsWith = (fn, re) => {
   return 'did not throw';
 };
 
-const registry = new Registry().register('world', WORLD_PIECES).register('enemies', ENEMY_PIECES).register('pickups', PICKUP_PIECES);
+const registry = new Registry().register('world', WORLD_PIECES).register('enemies', ENEMY_PIECES).register('pickups', PICKUP_PIECES).register('encounter', ENCOUNTER_PIECES);
 const r4 = (n) => Math.round(n * 1e4) / 1e4;
 const roundAll = (v) => JSON.parse(JSON.stringify(v, (_, x) => (typeof x === 'number' ? r4(x) : x)));
 
@@ -105,6 +106,19 @@ check('bad pos is named', e3 === '', e3);
 check('missing pieces', throwsWith(() => parseLevel('{"spawn":{"pos":[0,0,0]}}', registry), /"pieces" must be an array/) === '');
 check('null piece', throwsWith(() => parseLevel('{"pieces":[null],"spawn":{"pos":[0,0,0]}}', registry), /piece #0 must be an object/) === '');
 check('no registry: JSON only', parseLevel('{"a":1}').a === 1);
+
+// encounter pieces (#73) are ordinary pieces: they round-trip with their params
+{
+  const lvl = { name: 'enc', spawn: { pos: [0, 0, 0], yaw: 0 }, interiorZones: [], pieces: [
+    { id: 'marker.spawn', pos: [1, 0, 2], yaw: 3.1416 },
+    { id: 'marker.checkpoint', pos: [0, 0, -5], name: 'cp1' },
+    { id: 'marker.entry', pos: [4, 0, -9], params: { group: 'b', enemies: ['enemy.trooper'] } },
+    { id: 'trigger.volume', pos: [0, 0, -3], params: { size: [4, 3, 4], event: 'go', once: true, wakeGroup: 'a', spawnGroup: 'b' } },
+  ] };
+  const text = serializeLevel(lvl);
+  assert.deepEqual(parseLevel(text, registry), roundAll(lvl));
+  check('encounter pieces round-trip', true);
+}
 
 if (failed) {
   console.log(`${failed} failed`);
