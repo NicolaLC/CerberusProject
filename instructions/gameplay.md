@@ -46,8 +46,17 @@
   airborne). A sprint at low cover leaves room for the run-in vault (no snap until touching it); at high cover it slams in.
 - Exit, no button: move away (wish·normal > 0.5, so a diagonal backward push counts), push along the cover past its end
   (stopped at the edge and still pushing for `coverEdgeExit` 0.15 s, not while aiming: that peeks), vault, or jump.
+  Pushing past an end with another cover face ahead is not an exit, see Cover to cover.
   After any exit auto cover waits `autoCoverCooldown` 0.4 s (the timer runs only out of cover) and needs a push
   into the face again, so neither exit snaps straight back.
+- Cover to cover: at that same edge moment (not aiming) `#findCoverHop` looks along the push for the nearest entry spot
+  (face point + normal × 0.45) within `coverHopReach` 5 m: a parallel face (same normal, standing off the current line by
+  at most `coverHopStandoff` 1.5 m, forward or back; a low box next to a high one counts) or a perpendicular one looking
+  back at us (a wall across the line). Needs a clear path (`segmentClear`, half body radius: it may graze a corner),
+  same floor and a free spot; no cover ahead, a crate in the way or too far (7 m gap) exits as before. Found: a committed
+  hunched run (`snap.run`, the cover-move animation with real velocity, hips 0.45 behind low cover) at `coverRunSpeed`
+  6.8 m/s, event `player:coverRun` ({ to, type, collider }) once, then cover on the new face (type from its height,
+  `player:coverSlam`). Like the entry snap, input is ignored until it lands: no aiming, shooting or jump. Rotated boxes are skipped.
 - No on-screen hints or button prompts: the HUD shows state (ammo, health, boss bar, warnings), never instructions.
 - Cover type from height above feet: < 1.7m = low, else high. Boxes are cover only if created with `{ cover }`:
   `'low'` / `'high'` cover blocks, or `'wall'` for walls (building walls, the range separator, the boss arena's
