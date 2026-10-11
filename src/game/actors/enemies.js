@@ -12,20 +12,22 @@ import { CoverMap } from '../ai/cover.js';
 
 // Enemy pieces (registry ids, a public contract: instructions/level.md). Data: { id, pos, yaw?, params? }.
 // The spawn list lives in the level file; builders run against this system and return the actor.
-// params: mover { to: [x, y, z], speed }, drone: pos = the ground under it, boss.spider { arena: { minX, maxX, minZ, maxZ } }.
+// params (all enemies): group (spawn group name, see wakeGroup); mover { to: [x, y, z], speed }, drone: pos = the ground under it, boss.spider { arena: { minX, maxX, minZ, maxZ } }.
 // `stand`: puppets on a pneumatic stand (one instanced base + post each).
+// Inspector fields (level.md, piece meta): every enemy takes a spawn group.
+const GROUP = { key: 'group', type: 'text', optional: true };
 const def = (kind, d) => ({ kind, pos: d.pos, yaw: d.yaw, ...d.params });
 // `example` ({ params, yaw? }) is what the Library spawns; `label` is its one-line stat sheet (level.md, meta convention).
 export const ENEMY_PIECES = {
-  'enemy.static': { stand: true, example: { params: {} }, label: `HP ${HEALTH.default} | stands, takes hits`, build: (sys, d) => new Puppet(sys, def('static', d)) },
-  'enemy.mover': { stand: true, example: { params: { speed: 0 } }, label: `HP ${HEALTH.default} | slides on a rail`, build: (sys, d) => new Puppet(sys, def('mover', d)) },
-  'enemy.shooter': { stand: true, example: { params: {} }, label: `HP ${HEALTH.shooter} | pops up and fires within ${ENGAGE_RANGE} m`, build: (sys, d) => new Puppet(sys, def('shooter', d)) },
+  'enemy.static': { stand: true, example: { params: {} }, label: `HP ${HEALTH.default} | stands, takes hits`, fields: [GROUP], build: (sys, d) => new Puppet(sys, def('static', d)) },
+  'enemy.mover': { stand: true, example: { params: { speed: 0 } }, label: `HP ${HEALTH.default} | slides on a rail`, fields: [GROUP, { key: 'to', type: 'vec3', optional: true }, { key: 'speed', type: 'number', min: 0 }], build: (sys, d) => new Puppet(sys, def('mover', d)) },
+  'enemy.shooter': { stand: true, example: { params: {} }, label: `HP ${HEALTH.shooter} | pops up and fires within ${ENGAGE_RANGE} m`, fields: [GROUP], build: (sys, d) => new Puppet(sys, def('shooter', d)) },
   // moves between cover and shoots back
-  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m`, build: (sys, d) => new Trooper(sys, def('trooper', d)) },
+  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m`, fields: [GROUP], build: (sys, d) => new Trooper(sys, def('trooper', d)) },
   // hovers and strafes, short bursts
-  'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m`, build: (sys, d) => new Drone(sys, def('drone', d)) },
+  'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m`, fields: [GROUP], build: (sys, d) => new Drone(sys, def('drone', d)) },
   // miniboss
-  'boss.spider': { example: { params: {} }, label: `HP ${SPIDER.core} core | wakes at ${SPIDER.wakeRange} m or in its arena`, build: (sys, d) => new SpiderMech(sys, def('boss', d)) },
+  'boss.spider': { example: { params: {} }, label: `HP ${SPIDER.core} core | wakes at ${SPIDER.wakeRange} m or in its arena`, fields: [GROUP], build: (sys, d) => new SpiderMech(sys, def('boss', d)) },
 };
 
 // Flank director: with 2+ troopers engaged, every FLANK_EVERY s one of them is sent around the player.
@@ -55,6 +57,7 @@ export class Enemies {
     this.frozen = false; // Gym AI room (K): enemies stop thinking and moving, bolts in flight still fly
     this.kills = 0;
     this.time = 0;
+    this.woken = new Set(); // groups already woken (this level)
     this.bolts = [];
     this.dirty = true; // hit-mesh list needs a rebuild
     this.targets = [];
@@ -103,7 +106,7 @@ export class Enemies {
     this.bases = stand(this.standGeo.base);
     this.posts = stand(this.standGeo.post);
     // every enemy (puppets and troopers) lives in this one list
-    this.puppets = spawns.map((d) => registry.build('enemies', this, d));
+    this.puppets = spawns.map((d) => this.#make(d));
     this.boss = this.puppets.find((p) => p.kind === 'boss') ?? null;
     return this;
   }
@@ -125,6 +128,7 @@ export class Enemies {
     this.freeStands.length = 0;
     this.kills = 0;
     this.time = 0;
+    this.woken.clear();
     this.flankCooldown = FLANK.firstAfter;
     this._engaged.length = 0;
     this.targets.length = 0;
@@ -142,7 +146,7 @@ export class Enemies {
       if (slot >= this.bases.instanceMatrix.count) this.#growStands(Math.max(16, slot * 2));
       this.standCount = slot; // the Puppet constructor takes standCount++ as its slot
     }
-    const actor = this.registry.build('enemies', this, data);
+    const actor = this.#make(data);
     if (stand) {
       this.standCount = Math.max(used, slot + 1);
       this.bases.count = this.posts.count = this.standCount;
@@ -150,6 +154,38 @@ export class Enemies {
     this.puppets.push(actor);
     this.dirty = true;
     return actor;
+  }
+
+  // Builds one enemy piece; `params.group` (a name) puts it in a spawn group (see wakeGroup).
+  #make(data) {
+    const actor = this.registry.build('enemies', this, data);
+    actor.squad = data.params?.group ?? null;
+    return actor;
+  }
+
+  // Spawn groups (#73): enemies with the same `params.group` wake together. When any member is awake (a trooper is
+  // alerted, a drone or boss is awake) the rest are woken too, once per group; a trigger or the `encounter:wake` event
+  // can wake a group directly. Only actors with a `wake()` take part (troopers, drones, the boss); puppets are always on.
+  wakeGroup(group) {
+    if (group == null) return 0;
+    let n = 0;
+    for (const e of this.puppets) {
+      if (e.squad === group && e.alive && e.wake && !e.awake) {
+        e.wake();
+        n++;
+      }
+    }
+    if (!this.woken.has(group)) {
+      this.woken.add(group);
+      this.events.emit('group:wake', { group });
+    }
+    return n;
+  }
+
+  #groupWake() {
+    for (const e of this.puppets) {
+      if (e.squad != null && e.alive && e.awake && !this.woken.has(e.squad)) this.wakeGroup(e.squad);
+    }
   }
 
   // Removes and frees one enemy built by spawn() (or by load).
@@ -314,6 +350,7 @@ export class Enemies {
       this.#flankDirector(dt, target);
       // `hostile` (Library wake key): this exhibit sees the real player even in a demo level
       for (const p of this.puppets) p.update(dt, p.hostile ? player : target);
+      this.#groupWake();
     }
 
     const cap = player.dead ? null : player.capsule();

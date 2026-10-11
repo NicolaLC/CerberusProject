@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { disposeTree } from '../../engine/dispose.js';
 import { saveLevel, openLevel } from './io.js';
+import { levelSpawn } from '../world/encounter.js';
 
 // Workshop editor (#70, instructions/workshop.md): `?scene=workshop` turns into a level editor (level field
 // `"tool": "workshop"`, a Gym-style tool: new Tool(game, level), update(dt), dispose()).
@@ -27,6 +28,8 @@ const TUNING = {
 const QUARTER = Math.PI / 2;
 const STEP = Math.PI / 12; // 15 degrees
 const TINT = { wall: 0xe8f0ff, high: 0x3aa0ff, low: 0xff9a3a, none: 0xffe14a }; // box helper by cover class
+const font = '11px/1.45 monospace';
+const VOLUME = new Set(['trigger.volume', 'zone.interior']);
 const FIELD = /^(INPUT|SELECT|TEXTAREA)$/;
 const FALLBACK = new THREE.Box3(new THREE.Vector3(-0.45, 0, -0.45), new THREE.Vector3(0.45, 1.9, 0.45)); // enemy / pickup stand-in
 const POINT = new THREE.Box3(new THREE.Vector3(-0.25, -0.25, -0.25), new THREE.Vector3(0.25, 0.25, 0.25)); // lights
@@ -38,11 +41,11 @@ const deg = (rad) => Math.round((rad * 180) / Math.PI);
 const css = (el, style) => Object.assign(el.style, style);
 
 // How a piece turns: 'quarter' kit.* (axis-aligned, yaw in 90 degree steps: kit.js throws otherwise), 'box' env.box /
-// env.strip (builders ignore yaw: a quarter turn swaps width and depth), 'label' (yaw is a param), 'none' (lights),
+// env.strip / trigger.volume / zone.interior (builders ignore yaw: a quarter turn swaps width and depth), 'label' (yaw is a param), 'none' (lights),
 // 'free' everything else (enemies, pickups, props: 15 degree steps).
 export function rotationKind(id) {
   if (id.startsWith('kit.')) return 'quarter';
-  if (id === 'env.box' || id === 'env.strip') return 'box';
+  if (id === 'env.box' || id === 'env.strip' || id === 'trigger.volume' || id === 'zone.interior') return 'box';
   if (id === 'env.label') return 'label';
   if (id === 'light.point') return 'none';
   return 'free';
@@ -79,7 +82,7 @@ export function turned(piece, steps) {
     p.params = { ...p.params };
     const map = steps >= 0 ? TURN : TURN_BACK;
     for (let i = 0; i < Math.abs(steps); i++) {
-      const [w, h, d] = p.params.size;
+      const [w, h, d] = p.params.size ?? (p.id === 'zone.interior' ? [8, 4, 8] : [4, 3, 4]); // trigger.volume / zone.interior default
       p.params.size = [d, h, w];
       if (p.params.faces) p.params.faces = Object.fromEntries(Object.entries(p.params.faces).map(([k, v]) => [map[k] ?? k, v]));
     }
@@ -87,16 +90,67 @@ export function turned(piece, steps) {
   return p;
 }
 
+// A copy of `level` whose top-level `interiorZones` ({ min, max } boxes, the file's older form) are `zone.interior` pieces
+// (appended in order) so the editor can select, move and resize them; `interiorZones` becomes []. Pure.
+export function zonesToPieces(level) {
+  const out = clone(level);
+  const zones = out.interiorZones ?? [];
+  if (!zones.length) return out;
+  for (const { min, max } of zones) out.pieces.push({ id: 'zone.interior', pos: [round((min[0] + max[0]) / 2), round(min[1]), round((min[2] + max[2]) / 2)], params: { size: [round(max[0] - min[0]), round(max[1] - min[1]), round(max[2] - min[2])] } });
+  out.interiorZones = [];
+  return out;
+}
+
+// ---- inspector fields (registry meta `fields`, level.md) ----
+// Text of a stored value in its field. Pure.
+export function formatField(f, v) {
+  if (v == null) return '';
+  if (f.type === 'vec2' || f.type === 'vec3') return v.join(', ');
+  if (f.type === 'list') return v.join(', ');
+  return String(v);
+}
+
+// Value of a field's text: undefined = remove the key (an optional field left empty). Throws a readable error. Pure.
+export function parseField(f, text) {
+  const t = String(text).trim();
+  const name = f.label ?? f.key;
+  if (f.type === 'number') {
+    if (t === '' && f.optional) return undefined;
+    const n = Number(t);
+    if (t === '' || !Number.isFinite(n)) throw new Error(`${name}: a number is needed`);
+    if (f.min != null && n < f.min) throw new Error(`${name}: at least ${f.min}`);
+    return n;
+  }
+  if (f.type === 'vec2' || f.type === 'vec3') {
+    if (t === '' && f.optional) return undefined;
+    const n = f.type === 'vec2' ? 2 : 3;
+    const v = t.split(/[\s,x]+/).filter(Boolean).map(Number);
+    if (v.length !== n || v.some((x) => !Number.isFinite(x))) throw new Error(`${name}: ${n} numbers are needed (like ${n === 2 ? '4, 4' : '4, 3, 4'})`);
+    if (f.min != null && v.some((x) => x < f.min)) throw new Error(`${name}: each at least ${f.min}`);
+    return v;
+  }
+  if (f.type === 'list') {
+    const v = t.split(',').map((x) => x.trim()).filter(Boolean);
+    return v.length || !f.optional ? v : undefined;
+  }
+  return t === '' && f.optional ? undefined : t; // text, enum
+}
+
 export class WorkshopEditor {
   // shown in the key bar (view/keyhints.js); tests/workshop.browser.mjs checks that every key handled below is listed
-  static KEYS = [['W A S D', 'fly'], ['Q / E', 'down / up'], ['Shift', 'fast'], ['RMB', 'look (hold)'], ['LMB', 'place / select / drag'], ['R', 'rotate (Shift: back)'], ['G', 'snap 0.5 / 0.25 / 1 / off'], ['Arrows', 'nudge'], ['PgUp / PgDn', 'raise / lower'], ['Ctrl+D', 'duplicate'], ['Del / Backspace', 'delete'], ['Ctrl+Z / Y', 'undo / redo'], ['Ctrl+S / O', 'save / open'], ['Esc', 'cancel / pause']];
+  static KEYS = [['W A S D', 'fly'], ['Q / E', 'down / up'], ['Shift', 'fast'], ['RMB', 'look (hold)'], ['LMB', 'place / select / drag'], ['R', 'rotate (Shift: back)'], ['G', 'snap 0.5 / 0.25 / 1 / off'], ['Arrows', 'nudge'], ['PgUp / PgDn', 'raise / lower'], ['Ctrl+D', 'duplicate'], ['Del / Backspace', 'delete'], ['Ctrl+Z / Y', 'undo / redo'], ['Ctrl+S / O', 'save / open'], ['P', 'play here / back to edit'], ['T', 'restart (playing)'], ['Esc', 'cancel / pause']];
 
   constructor(game, level) {
     this.game = game;
-    // Edit mode only runs in the workshop scene; in any other level this tool does nothing.
-    this.editing = game.sceneName === 'workshop';
+    // The tool only runs in the workshop scene; in any other level it does nothing. `editing` is the edit half of it
+    // (false while playing in place), which is what game.js checks.
+    this.active = game.sceneName === 'workshop';
+    this.playing = false;
+    this.snapshot = null; // the doc as it was when play started (deep copy)
+    this.playLevel = null; // what play loaded: the snapshot with the spawn moved to the camera
+    this.edit3d = null; // camera state kept while playing
     this.disposed = false;
-    this.doc = clone(level);
+    this.doc = zonesToPieces(level);
     this.items = []; // live handle of doc.pieces[i]: { owner, thing }
     this.undoStack = [];
     this.redoStack = [];
@@ -110,9 +164,9 @@ export class WorkshopEditor {
     this.mouse = { x: 0, y: 0, over: false, looking: false };
     this.drag = null; // { i, px, grab, from, active, target }
     this.ghostPos = null; // where the armed piece would land
-    if (!this.editing) return;
+    if (!this.active) return;
 
-    const { engine, world, enemies, pickups, registry, player } = game;
+    const { engine, enemies, player } = game;
     this.ray = new THREE.Raycaster();
     this.hit = new THREE.Vector3();
     this.canvas = engine.canvas;
@@ -120,24 +174,7 @@ export class WorkshopEditor {
     this.wasFrozen = enemies.frozen;
     enemies.frozen = true;
 
-    // The level file's world pieces were merged into batches (no handles): rebuild them one by one so each doc piece
-    // owns its objects. Enemies and pickups were built in file order already: adopt them.
-    const actors = enemies.puppets.slice();
-    const crates = pickups.items.slice();
-    world.load({ ...level, pieces: level.pieces.filter((p) => registry.owner(p.id) !== 'world') }, registry);
-    let ne = 0;
-    let np = 0;
-    this.items = this.doc.pieces.map((p) => {
-      const owner = registry.owner(p.id);
-      if (owner === 'enemies') {
-        const a = actors[ne++];
-        this.#pose(a);
-        if (a.kind === 'boss') enemies.boss = a;
-        return { owner, thing: a };
-      }
-      if (owner === 'pickups') return { owner, thing: crates[np++] };
-      return this.#build(p);
-    });
+    this.#populate(false);
 
     // camera: above and behind the spawn, looking north
     const s = level.spawn.pos;
@@ -164,6 +201,40 @@ export class WorkshopEditor {
     addEventListener('mouseup', this.onMouseUp);
     this.canvas.addEventListener('mousedown', this.onMouseDown);
     this.#refresh();
+  }
+
+  get editing() {
+    return this.active && !this.playing;
+  }
+
+  // Builds the scene from this.doc for editing: the world pieces one by one (each doc piece owns its objects), the
+  // enemies frozen and posed, the pickups. `reload` false = enemies and pickups are already loaded from the doc
+  // (the scene just opened): adopt them in file order. Anything else (back from play) loads them first.
+  #populate(reload) {
+    const { world, enemies, pickups, encounter, registry } = this.game;
+    const level = this.doc;
+    encounter.unload(); // its pieces are rebuilt below as gizmos
+    world.load({ ...level, pieces: level.pieces.filter((p) => registry.owner(p.id) !== 'world') }, registry);
+    if (reload) {
+      enemies.load(level);
+      pickups.load(level);
+    }
+    enemies.frozen = true;
+    const actors = enemies.puppets.slice();
+    const crates = pickups.items.slice();
+    let ne = 0;
+    let np = 0;
+    this.items = this.doc.pieces.map((p) => {
+      const owner = registry.owner(p.id);
+      if (owner === 'enemies') {
+        const a = actors[ne++];
+        this.#pose(a);
+        if (a.kind === 'boss') enemies.boss = a;
+        return { owner, thing: a };
+      }
+      if (owner === 'pickups') return { owner, thing: crates[np++] };
+      return this.#build(p); // world and encounter pieces
+    });
   }
 
   // ---- document ----
@@ -223,10 +294,24 @@ export class WorkshopEditor {
     return this.#exec({ index: i, before: old, after: turned(old, steps) });
   }
 
-  // Merges `patch` into the params of piece i (undoable).
+  // Merges `patch` into the params of piece i (undoable). A null value removes that key (no params left: no `params`).
   setParams(i, patch) {
     const old = this.#piece(i);
-    return this.#exec({ index: i, before: old, after: { ...clone(old), params: { ...old.params, ...clone(patch) } } });
+    const params = { ...old.params, ...clone(patch) };
+    for (const k of Object.keys(params)) if (params[k] === null) delete params[k];
+    const after = clone(old);
+    if (Object.keys(params).length) after.params = params;
+    else delete after.params;
+    return this.#exec({ index: i, before: old, after });
+  }
+
+  // Sets (or with '' / null removes) the `name` of piece i (undoable).
+  setName(i, name) {
+    const old = this.#piece(i);
+    const after = clone(old);
+    if (name == null || name === '') delete after.name;
+    else after.name = String(name);
+    return this.#exec({ index: i, before: old, after });
   }
 
   remove(i) {
@@ -264,7 +349,7 @@ export class WorkshopEditor {
     this.game.registry.check(level);
     for (let i = this.items.length - 1; i >= 0; i--) this.#unbuild(this.items[i]);
     this.items = [];
-    this.doc = clone(level);
+    this.doc = zonesToPieces(level);
     this.items = this.doc.pieces.map((p) => this.#build(p));
     this.undoStack.length = this.redoStack.length = 0;
     this.sel = -1;
@@ -282,6 +367,8 @@ export class WorkshopEditor {
       if (!it || it.owner !== registry.owner(p.id)) problems.push(`#${i} ${p.id}: wrong handle`);
     });
     if (enemies.puppets.length !== n('enemies')) problems.push(`enemies ${enemies.puppets.length} != ${n('enemies')}`);
+    if (this.game.encounter.items.length !== n('encounter')) problems.push(`encounter ${this.game.encounter.items.length} != ${n('encounter')}`);
+    for (const it of this.items) if (it.owner === 'encounter' && !it.thing.gizmo?.parent) problems.push('an encounter gizmo is detached');
     if (pickups.items.length !== n('pickups')) problems.push(`pickups ${pickups.items.length} != ${n('pickups')}`);
     let colliders = 0;
     for (const it of this.items) {
@@ -293,6 +380,111 @@ export class WorkshopEditor {
     }
     if (colliders !== world.colliders.length) problems.push(`colliders ${world.colliders.length} != ${colliders} owned`);
     return { ok: problems.length === 0, problems, colliders, pieces: this.count };
+  }
+
+  // ---- play in place (#71) ----
+  // P plays the doc: a copy of it is loaded as a normal level (world batches, cover map for the enemies, awake enemies,
+  // pickups), the player stands where the camera is. P again drops that level and rebuilds the editor from the snapshot,
+  // so the doc is exactly what it was. The undo / redo history is kept (its commands act on the doc, which is unchanged).
+
+  // Where the player starts: on the ground under the camera, or the doc's spawn when there is no ground there (or the
+  // spot is inside a wall). Returns { pos, yaw } of a level spawn.
+  spawnAt() {
+    const cam = this.game.engine.camera.position;
+    const spawn = levelSpawn(this.doc); // a marker.spawn piece, else doc.spawn
+    const r = 0.4; // player radius (metrics.md 1: 0.35), with a margin
+    let ground = -Infinity;
+    const cover = (c, lo, hi) => {
+      const b = c.box;
+      return b.max.y > lo && b.min.y < hi && cam.x > b.min.x - r && cam.x < b.max.x + r && cam.z > b.min.z - r && cam.z < b.max.z + r;
+    };
+    const colliders = this.game.world.colliders;
+    for (const c of colliders) {
+      if (c.box.max.y <= cam.y && c.box.max.y > ground && cover(c, -Infinity, Infinity)) ground = c.box.max.y;
+    }
+    // walkable: ground found, and nothing solid where the body would stand (a wall box around the camera's x / z)
+    const blocked = ground === -Infinity || colliders.some((c) => c.box.max.y > ground + 0.5 && cover(c, ground + 0.5, ground + 1.7));
+    if (blocked) return { pos: spawn.pos.slice(), yaw: spawn.yaw ?? Math.PI };
+    return { pos: [round(cam.x), round(ground), round(cam.z)], yaw: this.cam.yaw + Math.PI };
+  }
+
+  // Edit -> play. Returns false when already playing.
+  play() {
+    if (!this.active || this.playing) return false;
+    const { game } = this;
+    const { engine } = game;
+    this.snapshot = clone(this.doc);
+    this.playLevel = { ...clone(this.doc), spawn: this.spawnAt() }; // first play: where the camera is
+    this.edit3d = { pos: engine.camera.position.clone(), fov: engine.camera.fov };
+    // forget the gestures of edit mode
+    this.drag = null;
+    this.keys.clear();
+    this.mouse.looking = false;
+    this.ghost.visible = this.helper.visible = false;
+    if (this.inspector.contains(document.activeElement)) document.activeElement.blur();
+    for (const el of [this.palette, this.side, this.toastEl]) el.style.display = 'none';
+    // the editor's objects are freed by the level reload below (world.load / enemies.load / pickups.load unload first)
+    this.items = [];
+    this.playing = true;
+    game.padPlay = false; // like the game: losing pointer lock pauses
+    if (this.hud) this.hud.style.display = this.hudDisplay;
+    this.#loadPlay(this.playLevel.spawn);
+    game.engine.input.lock();
+    return true;
+  }
+
+  // Loads the play level (also the restart): a fresh copy of the snapshot, enemies awake, player at `spawn`; the
+  // encounter pieces load as logic only (no gizmos, checkpoint forgotten).
+  #loadPlay(spawn) {
+    const { game } = this;
+    const level = game.registry.check(clone({ ...this.snapshot, spawn }));
+    game.dropHelpers();
+    game.world.load(level, game.registry);
+    game.enemies.load(level);
+    game.pickups.load(level);
+    game.encounter.load(level);
+    game.enemies.frozen = false;
+    game.resetRun(level, spawn);
+    game.rebuildHelpers();
+  }
+
+  // Back to the editor: the doc is replaced by the snapshot, the scene rebuilt from it, the camera as it was.
+  edit() {
+    if (!this.active || !this.playing) return false;
+    const { game } = this;
+    const { engine } = game;
+    game.dropHelpers();
+    this.playing = false;
+    this.doc = clone(this.snapshot);
+    this.#populate(true);
+    game.resetRun(this.doc);
+    engine.camera.position.copy(this.edit3d.pos);
+    engine.camera.fov = this.edit3d.fov;
+    engine.camera.updateProjectionMatrix();
+    this.#aim();
+    this.snapshot = this.playLevel = this.edit3d = null;
+    if (this.hud) this.hud.style.display = 'none';
+    for (const el of [this.palette, this.side, this.toastEl]) el.style.display = '';
+    if (engine.input.locked) document.exitPointerLock();
+    engine.input.free = false;
+    game.padPlay = true; // the editor runs without pointer lock
+    game.setRunning?.(true);
+    this.sel = this.sel < this.count ? this.sel : -1;
+    this.#refreshSel();
+    return true;
+  }
+
+  togglePlay() {
+    return this.playing ? this.edit() : this.play();
+  }
+
+  // Plays the encounter again from the snapshot (every enemy and pickup new, checkpoint forgotten). The player goes to
+  // the level's `marker.spawn` when the doc has one, else to where this play started.
+  restart() {
+    if (!this.playing) return false;
+    const marked = this.snapshot.pieces.some((p) => p.id === 'marker.spawn');
+    this.#loadPlay(marked ? levelSpawn(this.snapshot) : this.playLevel.spawn);
+    return true;
   }
 
   // ---- commands ----
@@ -335,7 +527,7 @@ export class WorkshopEditor {
   // ---- scene: the owner's runtime spawn path ----
 
   #build(piece) {
-    const { registry, world, enemies, pickups } = this.game;
+    const { registry, world, enemies, pickups, encounter } = this.game;
     const data = clone(piece); // builders may keep what they are given
     const owner = registry.owner(data.id);
     if (owner === 'world') return { owner, thing: world.spawn(data) };
@@ -346,12 +538,14 @@ export class WorkshopEditor {
       return { owner, thing: a };
     }
     if (owner === 'pickups') return { owner, thing: registry.build('pickups', pickups, data) };
+    if (owner === 'encounter') return { owner, thing: encounter.spawn(data, { gizmo: true }) };
     throw new Error(`workshop: no owner for "${data.id}"`);
   }
 
   #unbuild({ owner, thing }) {
-    const { world, enemies, pickups } = this.game;
+    const { world, enemies, pickups, encounter } = this.game;
     if (owner === 'world') world.despawn(thing);
+    else if (owner === 'encounter') encounter.despawn(thing);
     else if (owner === 'enemies') {
       if (enemies.boss === thing) enemies.boss = null;
       enemies.despawn(thing);
@@ -368,12 +562,12 @@ export class WorkshopEditor {
 
   // World box of live item (union of its objects); a stand-in where the owner has no geometry (lights).
   #boxOf(item, at) {
-    const objs = item.owner === 'world' ? item.thing.objects : item.owner === 'enemies' ? [item.thing.group ?? item.thing.root] : [item.thing.model, item.thing.ring];
+    const objs = item.owner === 'world' ? item.thing.objects : item.owner === 'encounter' ? [item.thing.gizmo] : item.owner === 'enemies' ? [item.thing.group ?? item.thing.root] : [item.thing.model, item.thing.ring];
     const box = new THREE.Box3();
     for (const o of objs) box.expandByObject(o);
     const size = box.getSize(new THREE.Vector3());
     if (box.isEmpty() || Math.max(size.x, size.y, size.z) > TUNING.maxBox || !Number.isFinite(size.x + size.y + size.z)) {
-      const fb = item.owner === 'world' ? POINT : FALLBACK;
+      const fb = item.owner === 'world' || item.owner === 'encounter' ? POINT : FALLBACK;
       return fb.clone().translate(new THREE.Vector3(...at));
     }
     return box;
@@ -452,7 +646,6 @@ export class WorkshopEditor {
 
   #buildPanels() {
     const { registry } = this.game;
-    const font = '11px/1.45 monospace';
     this.palette = document.createElement('div');
     this.palette.id = 'workshop-palette';
     css(this.palette, { position: 'fixed', left: '8px', top: '80px', bottom: '8px', width: '236px', overflowY: 'auto', zIndex: 50, padding: '6px', font, color: '#cfe4f7', background: 'rgba(0,0,0,0.6)' });
@@ -490,9 +683,18 @@ export class WorkshopEditor {
     }
     document.body.appendChild(this.palette);
 
+    // right column: status (no pointer events) over the inspector (fields of the selected piece)
+    this.side = document.createElement('div');
+    css(this.side, { position: 'fixed', right: '8px', top: '8px', bottom: '8px', zIndex: 50, display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end', pointerEvents: 'none', width: '272px' });
     this.status = document.createElement('div');
-    css(this.status, { position: 'fixed', right: '8px', top: '8px', zIndex: 50, padding: '6px 10px', font, whiteSpace: 'pre-wrap', color: '#ffe14a', background: 'rgba(0,0,0,0.6)', pointerEvents: 'none', maxWidth: '40ch' });
-    document.body.appendChild(this.status);
+    css(this.status, { padding: '6px 10px', font, whiteSpace: 'pre-wrap', color: '#ffe14a', background: 'rgba(0,0,0,0.6)', maxWidth: '40ch', alignSelf: 'flex-end' });
+    this.inspector = document.createElement('div');
+    this.inspector.id = 'workshop-inspector';
+    css(this.inspector, { display: 'none', width: '100%', boxSizing: 'border-box', overflowY: 'auto', padding: '6px 8px', font, color: '#cfe4f7', background: 'rgba(0,0,0,0.6)', pointerEvents: 'auto' });
+    this.side.append(this.status, this.inspector);
+    document.body.appendChild(this.side);
+    this.insId = null; // piece id the inspector is built for
+    this.insFields = []; // { f, el }
 
     this.toastEl = document.createElement('div');
     css(this.toastEl, { position: 'fixed', left: '50%', bottom: '28px', transform: 'translateX(-50%)', zIndex: 60, padding: '6px 14px', font: '13px monospace', color: '#fff', background: 'rgba(160,40,40,0.85)', pointerEvents: 'none', opacity: 0 });
@@ -508,8 +710,112 @@ export class WorkshopEditor {
     }
   }
 
+  // ---- inspector: one control per `fields` entry of the selected piece's registry meta (plus its `name`) ----
+
+  #fieldsOf(id) {
+    const { registry, world } = this.game;
+    const mats = Object.keys(world.mats);
+    const fields = [{ key: 'name', type: 'text', optional: true, piece: true }, ...(registry.meta(id).fields ?? [])];
+    return fields.map((f) => (f.options === 'mats' ? { ...f, options: mats } : f));
+  }
+
+  // Shows the selected piece's fields. Rebuilt when the piece id changes, otherwise values are refreshed in place
+  // (a field being typed in keeps its text until committed or cancelled).
+  #syncInspector(force = false) {
+    if (!this.inspector) return;
+    const on = this.editing && this.sel >= 0 && this.sel < this.count;
+    this.inspector.style.display = on ? '' : 'none';
+    if (!on) {
+      if (this.insId !== null) {
+        this.inspector.replaceChildren();
+        this.insFields = [];
+        this.insId = null;
+      }
+      return;
+    }
+    const piece = this.doc.pieces[this.sel];
+    if (this.insId !== piece.id) this.#buildInspector(piece.id);
+    this.head.textContent = `#${this.sel} ${piece.id}`;
+    for (const { f, el } of this.insFields) {
+      if (el === document.activeElement && !force) continue;
+      const v = f.piece ? piece.name : piece.params?.[f.key];
+      if (f.type === 'bool') el.checked = v ?? f.def ?? false;
+      else el.value = f.type === 'enum' ? v ?? '' : formatField(f, v);
+    }
+  }
+
+  #buildInspector(id) {
+    this.insId = id;
+    this.insFields = [];
+    this.head = document.createElement('div');
+    css(this.head, { color: '#ffe14a', letterSpacing: '1px', marginBottom: '4px' });
+    const rows = [this.head];
+    for (const f of this.#fieldsOf(id)) {
+      const row = document.createElement('label');
+      css(row, { display: 'flex', alignItems: 'center', gap: '6px', margin: '2px 0' });
+      const name = document.createElement('span');
+      name.textContent = f.label ?? f.key;
+      css(name, { flex: '0 0 84px', color: '#8fa6b8' });
+      let el;
+      if (f.type === 'enum') {
+        el = document.createElement('select');
+        for (const o of f.optional ? ['', ...f.options] : f.options) el.add(new Option(o === '' ? '(none)' : o, o));
+      } else {
+        el = document.createElement('input');
+        el.type = f.type === 'bool' ? 'checkbox' : 'text';
+        el.spellcheck = false;
+        el.autocomplete = 'off';
+        if (f.type === 'vec2' || f.type === 'vec3') el.placeholder = f.type === 'vec2' ? 'w, d' : 'w, h, d';
+        if (f.type === 'list') el.placeholder = 'a, b';
+      }
+      el.dataset.key = f.key;
+      if (f.type !== 'bool') css(el, { flex: '1', minWidth: 0, font, color: '#cfe4f7', background: 'rgba(16,32,46,0.9)', border: '1px solid #345a78', padding: '2px 4px' });
+      // typing is the field's own: no key leaves it (the editor, the game's debug keys and the engine input never see it)
+      el.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') this.#commitField(f, el);
+        else if (e.code === 'Escape') {
+          this.#syncInspector(true);
+          el.blur();
+        }
+      });
+      el.addEventListener('keyup', (e) => e.stopPropagation());
+      // a key held when the field gains focus is released while typing: its keyup never leaves the field, so drop the
+      // held keys now (editor fly keys and the engine input; edge presses are left alone)
+      el.addEventListener('focus', () => {
+        this.keys.clear();
+        this.game.engine.input.releaseAll();
+      });
+      el.addEventListener('change', () => this.#commitField(f, el));
+      row.append(name, el);
+      rows.push(row);
+      this.insFields.push({ f, el });
+    }
+    this.inspector.replaceChildren(...rows);
+  }
+
+  // Commits one field through the command path (setParams / setName). A bad value is a toast and the field shows the doc again.
+  #commitField(f, el) {
+    const i = this.sel;
+    if (!this.editing || i < 0 || i >= this.count) return;
+    try {
+      const raw = f.type === 'bool' ? el.checked : parseField(f, el.value);
+      const piece = this.doc.pieces[i];
+      const cur = f.piece ? piece.name : piece.params?.[f.key];
+      const same = f.type === 'bool' ? raw === (cur ?? f.def ?? false) : JSON.stringify(raw) === JSON.stringify(cur);
+      if (!same) {
+        if (f.piece) this.setName(i, raw);
+        else this.setParams(i, { [f.key]: raw === undefined ? null : raw });
+      }
+    } catch (err) {
+      this.toast(err.message);
+    }
+    this.#syncInspector(true);
+  }
+
   #refresh() {
     if (!this.status) return;
+    this.#syncInspector();
     for (const [id, b] of this.buttons) b.style.borderColor = this.armed?.id === id ? '#58ff9a' : 'transparent';
     const lines = [`WORKSHOP  ${this.count} pieces   snap ${this.grid ? `${this.grid} m` : 'off'}   undo ${this.undoStack.length} redo ${this.redoStack.length}`];
     if (this.armed) lines.push(`placing ${this.armed.id}  (click to place, R turns, Esc cancels)`);
@@ -557,6 +863,12 @@ export class WorkshopEditor {
     if (!this.#active(e)) return;
     const c = e.code;
     const mod = e.ctrlKey || e.metaKey;
+    if (!mod && !e.repeat && (c === 'KeyP' || (c === 'KeyT' && this.playing))) {
+      this.#guard(() => (c === 'KeyP' ? this.togglePlay() : this.restart()));
+      e.preventDefault();
+      return;
+    }
+    if (this.playing) return; // the game owns every other key
     if (!mod) this.keys.add(c); // held keys fly the camera; a Ctrl chord (Ctrl+D...) must not
     if (mod) {
       let done = true;
@@ -626,7 +938,7 @@ export class WorkshopEditor {
   }
 
   #mouseDown(e) {
-    if (this.game.engine.paused) return;
+    if (this.game.engine.paused || this.playing) return;
     this.#ndc(e);
     if (e.button === 2) {
       this.mouse.looking = true;
@@ -694,7 +1006,8 @@ export class WorkshopEditor {
     for (let i = 0; i < this.count; i++) {
       const b = this.#bounds(i);
       if (!this.ray.ray.intersectBox(b, at)) continue;
-      const d = at.distanceTo(this.ray.ray.origin);
+      // a trigger volume or interior zone often surrounds other pieces: picked only when nothing else is under the cursor
+      const d = at.distanceTo(this.ray.ray.origin) + (VOLUME.has(this.doc.pieces[i].id) ? 1000 : 0);
       const s = b.getSize(new THREE.Vector3());
       const v = s.x * s.y * s.z;
       if (d < bd - 1e-4 || (Math.abs(d - bd) <= 1e-4 && v < bv)) [best, bd, bv] = [i, d, v];
@@ -781,14 +1094,14 @@ export class WorkshopEditor {
 
   dispose() {
     this.disposed = true;
-    if (!this.editing) return;
+    if (!this.active) return;
     removeEventListener('keydown', this.onKeyDown);
     removeEventListener('keyup', this.onKeyUp);
     removeEventListener('blur', this.onBlur);
     removeEventListener('mousemove', this.onMouseMove);
     removeEventListener('mouseup', this.onMouseUp);
     this.canvas.removeEventListener('mousedown', this.onMouseDown);
-    for (const el of [this.palette, this.status, this.toastEl]) el.remove();
+    for (const el of [this.palette, this.side, this.toastEl]) el.remove();
     for (const o of [this.helper, this.ghost]) disposeTree(o);
     if (this.hud) this.hud.style.display = this.hudDisplay;
     this.game.enemies.frozen = this.wasFrozen;

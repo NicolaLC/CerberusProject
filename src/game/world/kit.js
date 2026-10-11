@@ -12,6 +12,9 @@
 // Material key per role: the only place a kit piece names a material.
 export const KIT_MATS = { floor: 'floor', wall: 'wall', low: 'low', high: 'high', platform: 'platform' };
 
+// Inspector field for `mat` (options: 'mats' = every key of World.mats; absent = the piece's role default).
+export const MAT = { key: 'mat', type: 'enum', options: 'mats', optional: true };
+
 // Frozen metrics (metrics.md sections 1, 3, 5).
 const M = {
   tile: 4, tileThickness: 0.2,
@@ -110,6 +113,7 @@ export const KIT_PIECES = {
   'kit.floor': {
     example: { params: { size: [4, 4] } },
     label: 'FLOOR TILE 4.0 × 4.0 × 0.2',
+    fields: [{ key: 'size', type: 'vec2', min: 0.1 }, { key: 'thickness', type: 'number', min: 0.01 }, { key: 'flush', type: 'bool', def: false }, MAT],
     build(world, d) {
       const id = 'kit.floor';
       const p = d.params ?? {};
@@ -123,6 +127,7 @@ export const KIT_PIECES = {
   'kit.wall': {
     example: { params: { length: 4, height: 7 } },
     label: 'WALL 4.0 × 7.0 × 0.5',
+    fields: [{ key: 'length', type: 'number', min: 0.1 }, { key: 'height', type: 'number', min: 0.1 }, { key: 'thickness', type: 'number', min: 0.1 }, MAT],
     build(world, d) {
       const id = 'kit.wall';
       const p = d.params ?? {};
@@ -140,6 +145,7 @@ export const KIT_PIECES = {
   'kit.doorway': {
     example: { params: { width: 4, height: 4 } },
     label: 'DOORWAY 4.0 × 4.0 in 7.0 wall',
+    fields: [{ key: 'width', type: 'number', min: 0.1 }, { key: 'height', type: 'number', min: 0.1 }, { key: 'length', type: 'number', min: 0.1, optional: true }, { key: 'wallHeight', type: 'number', min: 0.1 }, { key: 'thickness', type: 'number', min: 0.1 }, MAT],
     build(world, d) {
       const id = 'kit.doorway';
       const p = d.params ?? {};
@@ -167,6 +173,7 @@ export const KIT_PIECES = {
   'kit.stairs': {
     example: { params: { width: 4, height: 1.6 } },
     label: 'STAIRS rise 0.4 run 1.0 width 4.0 to 1.6',
+    fields: [{ key: 'width', type: 'number', min: 0.1 }, { key: 'height', type: 'number', min: 0.1 }, { key: 'rise', type: 'number', min: 0.01 }, { key: 'run', type: 'number', min: 0.1 }, MAT],
     build(world, d) {
       const id = 'kit.stairs';
       return emit(world, id, d, stairBoxes(id, stairsParams(id, d.params ?? {}, 'platform')).boxes);
@@ -179,6 +186,7 @@ export const KIT_PIECES = {
   'kit.ramp': {
     example: { params: { width: 4, height: 1.6, length: 8 } },
     label: 'RAMP 8.0 long to 1.6 (0.1 steps)',
+    fields: [{ key: 'width', type: 'number', min: 0.1 }, { key: 'height', type: 'number', min: 0.1 }, { key: 'length', type: 'number', min: 0.1 }, { key: 'rise', type: 'number', min: 0.01 }, MAT],
     build(world, d) {
       const id = 'kit.ramp';
       const p = d.params ?? {};
@@ -196,6 +204,7 @@ export const KIT_PIECES = {
   'kit.cover.low': {
     example: { params: { length: 3 } },
     label: 'LOW COVER 1.1 × 3.0',
+    fields: [{ key: 'length', type: 'number', min: 0.1 }, MAT],
     build(world, d) {
       const id = 'kit.cover.low';
       const p = d.params ?? {};
@@ -208,6 +217,7 @@ export const KIT_PIECES = {
   'kit.cover.high': {
     example: { params: { length: 2.4 } },
     label: 'HIGH COVER 2.8 × 2.4',
+    fields: [{ key: 'length', type: 'number', min: 0.1 }, MAT],
     build(world, d) {
       const id = 'kit.cover.high';
       const p = d.params ?? {};
@@ -220,6 +230,7 @@ export const KIT_PIECES = {
   'kit.pillar': {
     example: { params: {} },
     label: 'PILLAR 1.2 × 1.2 high cover',
+    fields: [MAT],
     build(world, d) {
       const id = 'kit.pillar';
       const p = d.params ?? {};
@@ -235,6 +246,7 @@ export const KIT_PIECES = {
   'kit.platform': {
     example: { params: { size: [8, 8], height: 1.6, stairs: 's', parapets: true } },
     label: 'PLATFORM 8.0 × 8.0 × 1.6 + stairs',
+    fields: [{ key: 'size', type: 'vec2', min: 0.1 }, { key: 'height', type: 'number', min: 0.1 }, { key: 'stairs', type: 'enum', options: ['n', 's', 'e', 'w'], optional: true }, { key: 'parapets', type: 'bool', def: false }, MAT, { key: 'coverMat', type: 'enum', options: 'mats', optional: true }],
     build(world, d) {
       const id = 'kit.platform';
       const p = d.params ?? {};

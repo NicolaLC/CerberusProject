@@ -3,13 +3,21 @@ import { gridTexture, applyWorldUVs } from './textures.js';
 import { mergeStatic, mergeGroup } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
 import { GUNS } from '../combat/guns.js';
-import { KIT_PIECES } from './kit.js';
+import { KIT_PIECES, MAT } from './kit.js';
+import { QUALITY } from '../view/quality.js';
 
 // Static level: axis-aligned boxes only (collision, cover and shadows depend on that).
 // Coordinates: x = east, z = south, y = up. Floor is y = 0.
 // The layout lives in the level file (src/levels/*.json, instructions/level.md); this module builds its
 // environment pieces (env.*, light.*) through the piece registry and frees them again (unload). Sky, sun, fog and
 // materials stay in code and outlive every level.
+
+// Point lights are a fixed pool: three.js compiles every lit material's program for the number of lights in the scene, so
+// the count must never change while a level is loaded or edited (a hitch per light placed, per scene switch). The pool is
+// built with the World and sized by the quality tier (QUALITY[tier].lights = the point-light cap in instructions/engine.md);
+// only a quality change resizes it (setLightPool, one recompile, a settings action). An unused light has intensity 0 and waits far
+// below the floor (three still loops it in the shader). Asking for more than the pool makes extra lights that are removed again.
+const PARKED = new THREE.Vector3(0, -1000, 0);
 
 export const SUN_DIR = new THREE.Vector3(0.45, 0.78, 0.43).normalize();
 
@@ -28,6 +36,7 @@ export const WORLD_PIECES = {
   'env.box': {
     example: { params: { size: [3, 1.1, 1], mat: 'low', cover: 'low' } },
     label: 'BOX any size, axis-aligned',
+    fields: [{ key: 'size', type: 'vec3', min: 0.1 }, { ...MAT, optional: false }, { key: 'cover', type: 'enum', options: ['low', 'high', 'wall'], optional: true }, { key: 'collide', type: 'bool', def: true }, { key: 'shadow', type: 'bool', def: true }],
     build: (world, d) => {
       const { size, cover, collide, shadow } = d.params;
       const opts = { cover: cover ?? null, collide: collide ?? true, shadow: shadow ?? true };
@@ -38,6 +47,7 @@ export const WORLD_PIECES = {
   'env.strip': {
     example: { params: { size: [4, 0.2, 0.2], mat: 'stripCyan' } },
     label: 'STRIP emissive, no collision',
+    fields: [{ key: 'size', type: 'vec3', min: 0.01 }, { ...MAT, optional: false }],
     build: (world, d) => {
       const m = world.strip(d.pos[0], d.pos[1], d.pos[2], ...d.params.size, world.material(d.params, d.params.ownMaterial));
       if (d.name) world.named.set(d.name, m);
@@ -48,6 +58,7 @@ export const WORLD_PIECES = {
   'light.point': {
     example: { params: { color: '#38d8ff', intensity: 40, distance: 14 } },
     label: 'POINT LIGHT colour, intensity, distance',
+    fields: [{ key: 'color', type: 'text' }, { key: 'intensity', type: 'number', min: 0 }, { key: 'distance', type: 'number', min: 0 }],
     build: (world, d) => {
       const { color, intensity, distance, flicker } = d.params;
       let f = null;
@@ -65,18 +76,19 @@ export const WORLD_PIECES = {
   'env.label': {
     example: { params: { text: 'LABEL', size: 0.6 } },
     label: 'LABEL text sign, no collision',
+    fields: [{ key: 'text', type: 'text' }, { key: 'size', type: 'number', min: 0.1 }, { key: 'flat', type: 'bool', def: false }],
     build: (world, d) => world.label(d.pos, d.params),
   },
   // Display model of one gun (Library). params: gun (key of GUNS). The model sits at pos with its stock at the origin,
   // barrel along +Z turned by yaw. No collision; freed on unload.
-  'prop.gun': { example: { params: { gun: 'rifle' } }, label: 'display model of one gun', build: (world, d) => world.gunProp(d) },
+  'prop.gun': { example: { params: { gun: 'rifle' } }, label: 'display model of one gun', fields: [{ key: 'gun', type: 'enum', options: Object.keys(GUNS) }], build: (world, d) => world.gunProp(d) },
 };
 
 export class World {
   // Two lifetimes. Permanent (built once): materials + grid textures, sky, fog, hemisphere and sun. Per level
   // (load / unload, mirrored step by step): zones, boxes and strips (+ merged batches), point lights, colliders.
   // The arrays are cleared in place, other systems hold them by reference.
-  constructor(scene) {
+  constructor(scene, { lights = QUALITY.high.lights } = {}) {
     this.scene = scene;
     this.named = new Map(); // piece name -> mesh (for references between pieces, e.g. a light flickering a strip)
     this.colliders = []; // { box: Box3, mesh, cover: 'low' | 'high' | null }
@@ -85,7 +97,8 @@ export class World {
     this.interiorZones = [];
     this.flickerLights = [];
     this.staticMeshes = []; // every level box; merged per material for rendering, kept as raycast proxies
-    this.lights = []; // the level's point lights
+    this.lights = []; // the level's point lights in use (pool lights, plus any beyond the pool)
+    this.pool = []; // permanent point lights (QUALITY lights); those not in `lights` are parked at intensity 0
     this.labels = []; // env.label meshes: own geometry, material and canvas texture each
     this.props = []; // prop.gun display models: own merged geometry, shared materials
     this.registry = null; // of the loaded level, for spawn()
@@ -102,6 +115,31 @@ export class World {
     this.keep = new Set([...Object.values(this.mats), ...Object.values(this.propMats)]); // shared across levels: never disposed with a level
     this.#buildSky();
     this.#buildLights();
+    this.setLightPool(lights);
+  }
+
+  // Resizes the pool (quality change only: the light count changes, so shaders recompile once). Growing adopts temporary extra
+  // lights first; shrinking drops parked lights first, and a lit light that no longer fits becomes a temporary one.
+  setLightPool(n) {
+    if (n === this.pool.length) return;
+    while (this.pool.length < n) {
+      let l = this.lights.find((x) => !x.userData.pooled);
+      if (l) l.userData.pooled = true;
+      else {
+        l = new THREE.PointLight(0xffffff, 0, 1, 2);
+        l.position.copy(PARKED);
+        l.userData.pooled = true;
+        this.scene.add(l);
+      }
+      this.pool.push(l);
+    }
+    while (this.pool.length > n) {
+      let i = this.pool.findLastIndex((x) => !x.userData.used);
+      if (i < 0) i = this.pool.length - 1;
+      const [l] = this.pool.splice(i, 1);
+      if (l.userData.used) l.userData.pooled = false; // stays in the scene as a temporary light until released
+      else disposeTree(l);
+    }
   }
 
   // level: parsed level file; registry: Registry holding WORLD_PIECES.
@@ -118,7 +156,7 @@ export class World {
   unload() {
     for (const m of this.staticMeshes) disposeTree(m, { keep: this.keep });
     for (const m of [...this.batches, this.batches.shadow]) if (m) disposeTree(m, { keep: this.keep });
-    for (const l of this.lights) disposeTree(l);
+    for (const l of this.lights.slice()) this.releaseLight(l);
     // disposeTree leaves textures alone (shared caches); a label's canvas texture is its own
     for (const m of this.labels) {
       m.material.map.dispose();
@@ -140,8 +178,10 @@ export class World {
 
   // Removes and frees what spawn() built (boxes, labels, lights, props, and their collision).
   despawn(handle) {
+    if (handle.piece?.isPointLight) this.releaseLight(handle.piece); // pool lights are not scene additions: no object in the handle
     const gone = new Set(handle.objects);
     for (const o of handle.objects) {
+      if (o.isPointLight) continue; // an over-pool light, already freed by releaseLight
       if (this.labels.includes(o)) o.material.map.dispose();
       disposeTree(o, { keep: this.keep });
     }
@@ -381,13 +421,37 @@ export class World {
     return this.box(cx, y, cz, w, h, d, mat, { collide: false, shadow: false });
   }
 
+  // Takes a light from the pool (or, past the pool, a temporary one) and sets it up.
   pointLight(x, y, z, color, intensity, distance, flicker = null) {
-    const l = new THREE.PointLight(color, intensity, distance, 2);
+    let l = this.pool.find((p) => !p.userData.used);
+    if (l) {
+      l.color.set(color);
+      l.intensity = intensity;
+      l.distance = distance;
+      l.userData.used = true;
+    } else {
+      console.warn(`world: more than ${this.pool.length} point lights: the extra light changes the light count (shaders recompile)`);
+      l = new THREE.PointLight(color, intensity, distance, 2);
+      this.scene.add(l);
+    }
     l.position.set(x, y, z);
-    this.scene.add(l);
     this.lights.push(l);
     if (flicker) this.flickerLights.push({ light: l, base: intensity, seed: Math.random() * 100, strip: flicker.strip });
     return l;
+  }
+
+  // Gives a light back: a pool light is parked at intensity 0, a temporary one is removed from the scene.
+  releaseLight(l) {
+    let i = this.lights.indexOf(l);
+    if (i >= 0) this.lights.splice(i, 1);
+    i = this.flickerLights.findIndex((f) => f.light === l);
+    if (i >= 0) this.flickerLights.splice(i, 1);
+    if (l.userData.pooled) {
+      l.intensity = 0;
+      l.distance = 1;
+      l.position.copy(PARKED);
+      l.userData.used = false;
+    } else disposeTree(l);
   }
 
   // Text sign, see env.label. Not merged into the static batches (one texture per sign).

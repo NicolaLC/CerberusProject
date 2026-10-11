@@ -24,7 +24,7 @@ src/
     registry.js           piece registry: stable string id -> how a piece is built from data (ids: level.md)
     controls.js           BINDINGS table + intents (move, look, aiming, running, firing, slots...)
     settings.js           player settings + start-panel bindings
-    world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), textures.js, pickups.js (pickup.* pieces)
+    world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), textures.js, pickups.js (pickup.* pieces), encounter.js (marker.* / trigger.* pieces: spawn, checkpoints, trigger volumes, reinforcements; workshop.md)
     actors/ rig.js (skeleton, animator, IK), parts.js (model building blocks, debris), soldier.js (player model),
             looks.js (trooper / puppet models), player.js,
             enemy.js (shared enemy body: hit zones, weak spots, flash, debris death),
@@ -43,7 +43,7 @@ src/
 - Systems get their direct dependencies through the constructor. Only `game.js` sees everything.
 - Gameplay reads input only through `Controls` (no key codes outside `controls.js`).
 - Levels are data, built through the piece registry: each system module exports a table of the pieces it owns
-  (`WORLD_PIECES`, `ENEMY_PIECES`, `PICKUP_PIECES`: id -> builder run against that system); `game.js` registers the
+  (`WORLD_PIECES`, `ENEMY_PIECES`, `PICKUP_PIECES`, `ENCOUNTER_PIECES`: id -> builder run against that system); `game.js` registers the
   tables in a `Registry` and gives it to the systems, which build from a level file in `load(level)`. `registry.js` imports nothing, so
   gameplay modules never reach each other through it. Piece ids are a public contract (levels, saves, tools): never rename or reuse one.
 - **Every per-level system must be disposable.** A system has a permanent part (built once in the constructor:
@@ -66,14 +66,13 @@ src/
 old level (enemies → pickups → world), loads the new one (world → enemies → pickups), puts the player at `level.spawn`
 with full health, resets camera / weapon / fx / hud / juice. `?scene=<name>` picks the first scene (unknown → arena + console warning);
 `window.game.loadScene` is there with `?debug`. A malformed file throws before anything is unloaded. Point lights are
-the only thing three.js recompiles shaders for: switching scenes hitches once (the "never add lights at runtime"
-rule is about gameplay frames).
+the only thing three.js recompiles shaders for, so they come from a fixed pool owned by `World` (engine.md, Per-encounter budget): scene switches and the editor do not recompile.
 
 ## Frame order (declared in `game.js`)
 | phase | systems | dt |
 |---|---|---|
 | pre | controls (+ hitstop time scale, aim assist, look, shoulder, debug keys), stats toggle | real |
-| simulate (substeps ≤ 20 ms) | player → weapon → enemies → pickups | scaled |
+| simulate (substeps ≤ 20 ms) | player → weapon → enemies → encounter → pickups | scaled |
 | late | camera → aimProbe (what the crosshair is on) | scaled (shake uses real) |
 | present | fx → world (lights, sun, player visibility) → hud → audio (MG spin) | scaled |
 | render | post (exposure, grade, bloom) | real |
@@ -103,6 +102,10 @@ Payload objects marked * are reused: copy what you keep.
 | `player:step` | *{ run, raised } (each heel strike; not in the air) | audio |
 | `enemy:step` | position (trooper / moving puppet heel strike) | audio (fades out by 28 m from the camera) |
 | `puppet:down` | puppet | pickups (drop), audio |
+| `trigger:fired` | { id, event } (a `trigger.volume` was entered) | – (objectives, #12, later) |
+| `checkpoint:reached` | { id, pos, yaw } | hud toast |
+| `group:wake` / `group:spawn` | { group } / { group, count } | – |
+| `encounter:wake` / `encounter:spawn` | group name (requests, listened by `Encounter`) | emitted by nobody yet (objectives) |
 | `bolt:fired` / `bolt:impact` | position / *{ point, normal } | audio / fx |
 | `pickup:collected` / `pickup:full` | label ('LIGHT AMMO +n AR ...') / – (all guns of the class full) | hud toast, audio |
 | `weapon:charge` | true (railgun charge started) / false (cancelled) | audio (the HUD ring reads `weapon.charging`) |
@@ -118,6 +121,6 @@ Payload objects marked * are reused: copy what you keep.
 ## Rules
 - World geometry is axis-aligned boxes only (`world.box`). Collision, cover normals and ground checks rely on it.
 - Colors > 1.0 on emissive/basic materials are intentional: they feed bloom (threshold 0.92).
-- Never add/remove lights during play (shader recompiles). Toggle intensity instead (see muzzle flash). Only a scene load adds/removes a level's point lights.
+- Never add/remove lights from the scene (shader recompiles). Level point lights are a fixed pool in `World` (`LIGHT_POOL`); toggle intensity instead (see muzzle flash).
 - Tuning constants live in a `TUNING` object at the top of each module.
 - Units: meters, seconds, radians. +Z south, -Z north (building), +Y up. Characters face +Z in local space.
