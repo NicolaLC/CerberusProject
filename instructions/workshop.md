@@ -89,7 +89,7 @@ Keys (the key bar shows them; `static KEYS` is the source and the suite checks i
     one undoable command each, validated by the builder first. A bad value (`parseField` error, or the builder throws) is a toast and the field shows the doc value again.
     An optional field left empty removes its key (`setParams` patch value `null` = delete key; no params left = no `params`); `setName('')` removes `name`.
   - **Focus rules**: the field's own `keydown` / `keyup` stop propagation, so no editor shortcut, engine input or game debug key (H, F3, `) sees typing;
-    the editor's `#active` also ignores events whose target is an input / select. Esc in a field reverts its text and blurs it (selection kept);
+    the editor's `#active` also ignores events whose target is an input / select. Because a field swallows the keyup of a key held when it got focus, a field's `focus` clears the editor's held keys and `input.releaseAll()` (edge presses stay). Esc in a field reverts its text and blurs it (selection kept);
     a click on the canvas blurs it. Entering play blurs it and hides the whole right column.
   - Fields by piece: `env.box` size, mat, cover, collide, shadow; `env.strip` size, mat; `env.label` text, size, flat; `light.point` color, intensity, distance;
     `prop.gun` gun; every `kit.*` its size params + mat (`kit.platform`: size, height, stairs, parapets, mat, coverMat); enemies `group` (`enemy.mover` also `to`, `speed`);

@@ -768,6 +768,12 @@ export class WorkshopEditor {
         }
       });
       el.addEventListener('keyup', (e) => e.stopPropagation());
+      // a key held when the field gains focus is released while typing: its keyup never leaves the field, so drop the
+      // held keys now (editor fly keys and the engine input; edge presses are left alone)
+      el.addEventListener('focus', () => {
+        this.keys.clear();
+        this.game.engine.input.releaseAll();
+      });
       el.addEventListener('change', () => this.#commitField(f, el));
       row.append(name, el);
       rows.push(row);
