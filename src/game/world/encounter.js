@@ -9,6 +9,8 @@ import * as THREE from 'three';
 //  marker.checkpoint  entering it in play records it; the player respawns there after dying.
 //  marker.entry       reinforcement entry point: params { group, enemies: [enemy ids] }; spawnGroup(group) builds those
 //                     enemies here, awake, as members of `group`.
+//  zone.interior      box (pos = centre x / bottom y / centre z, params { size [w,h,d] }): an interior zone. In play it is added to
+//                     `world.interiorZones` (camera exposure, HUD label INTERIOR, drones); the file's own `interiorZones` still work.
 //  trigger.volume     box (pos = centre x / bottom y / centre z). Fires `trigger:fired` { id, event } when the player
 //                     enters. params { size [w,h,d], event, once (true), wakeGroup?, spawnGroup? }.
 // Events out: `trigger:fired` { id, event }, `checkpoint:reached` { id, pos, yaw }, `group:wake` { group } (Enemies),
@@ -19,9 +21,10 @@ export const TUNING = {
   checkpointReach: 2.5, // m, vertical reach (feet to marker)
   spread: 1.5, // m between reinforcements side by side
   size: [4, 3, 4], // default trigger volume
+  zone: [8, 4, 8], // example interior zone
 };
 
-const COLOR = { spawn: 0x58ff9a, checkpoint: 0x3affff, entry: 0xff7a3a, trigger: 0xff4bd6 };
+const COLOR = { spawn: 0x58ff9a, checkpoint: 0x3affff, entry: 0xff7a3a, trigger: 0xff4bd6, zone: 0x4aa8ff };
 
 // The level's player start: the first `marker.spawn` piece, else `level.spawn`. Pure.
 export function levelSpawn(level) {
@@ -38,6 +41,7 @@ export const ENCOUNTER_PIECES = {
   'marker.spawn': { example: { params: {}, yaw: Math.PI }, label: 'player start (overrides level.spawn)', build: (sys, d) => sys.add('spawn', d) },
   'marker.checkpoint': { example: { params: {} }, label: `respawn point after a death, ${TUNING.checkpointRadius} m reach`, build: (sys, d) => sys.add('checkpoint', d) },
   'marker.entry': { example: { params: { group: 'reinforce', enemies: ['enemy.trooper', 'enemy.trooper'] } }, label: 'reinforcement entry: spawns its listed enemies for its group', fields: [{ key: 'group', type: 'text' }, { key: 'enemies', type: 'list' }], build: entry },
+  'zone.interior': { example: { params: { size: [...TUNING.zone] } }, label: 'interior zone: camera exposure up, HUD reads INTERIOR', fields: [{ key: 'size', type: 'vec3', min: 0.1 }], build: (sys, d) => sys.add('zone', d) },
   'trigger.volume': { example: { params: { size: [...TUNING.size], event: 'trigger', once: true } }, label: 'fires an event when the player enters; can wake / spawn a group', fields: [{ key: 'size', type: 'vec3', min: 0.1 }, { key: 'event', type: 'text' }, { key: 'once', type: 'bool', def: true }, { key: 'wakeGroup', type: 'text', optional: true }, { key: 'spawnGroup', type: 'text', optional: true }], build: (sys, d) => sys.add('trigger', d) },
 };
 
@@ -45,8 +49,8 @@ const _right = new THREE.Vector3();
 
 export class Encounter {
   // Permanent: event listeners. Per level (load / unload): the records.
-  constructor({ scene, events, registry, enemies }) {
-    Object.assign(this, { scene, events, registry, enemies });
+  constructor({ scene, events, registry, enemies, world }) {
+    Object.assign(this, { scene, events, registry, enemies, world });
     this.items = []; // records: { id, kind, name, pos, yaw, params, gizmo, inside, fired, ... }
     this.checkpoint = null; // { id, pos: [x, y, z], yaw } of the last checkpoint reached (play)
     this.cpRec = null;
@@ -67,7 +71,10 @@ export class Encounter {
   }
 
   unload() {
-    for (const r of this.items) this.#dropGizmo(r);
+    for (const r of this.items) {
+      this.#dropZone(r);
+      this.#dropGizmo(r);
+    }
     this.items.length = 0;
     this.checkpoint = this.cpRec = null;
     this.triggers = 0;
@@ -87,6 +94,7 @@ export class Encounter {
     const i = this.items.indexOf(rec);
     if (i < 0) return;
     this.items.splice(i, 1);
+    this.#dropZone(rec);
     this.#dropGizmo(rec);
     if (this.cpRec === rec) this.checkpoint = this.cpRec = null;
   }
@@ -96,6 +104,16 @@ export class Encounter {
     const id = d.id;
     const p = d.params ?? {};
     const rec = { id, kind, name: d.name ?? null, pos: new THREE.Vector3(...d.pos), yaw: d.yaw ?? 0, params: p, gizmo: null, inert: this.gizmoMode, inside: false, fired: false };
+    if (kind === 'zone') {
+      const size = p.size ?? TUNING.zone;
+      if (!Array.isArray(size) || size.length !== 3 || size.some((n) => !(n > 0))) bad(id, 'size must be [w, h, d], all above 0');
+      rec.size = size;
+      if (!this.gizmoMode) {
+        const [w, h, d] = size;
+        rec.box = new THREE.Box3(new THREE.Vector3(rec.pos.x - w / 2, rec.pos.y, rec.pos.z - d / 2), new THREE.Vector3(rec.pos.x + w / 2, rec.pos.y + h, rec.pos.z + d / 2));
+        this.world.interiorZones.push(rec.box);
+      }
+    }
     if (kind === 'trigger') {
       const size = p.size ?? TUNING.size;
       if (!Array.isArray(size) || size.length !== 3 || size.some((n) => !(n > 0))) bad(id, 'size must be [w, h, d], all above 0');
@@ -196,6 +214,14 @@ export class Encounter {
     return (this.res = { geo, mat });
   }
 
+  // an interior zone leaves world.interiorZones with its record (the world may have cleared the list already)
+  #dropZone(rec) {
+    if (!rec.box) return;
+    const i = this.world.interiorZones.indexOf(rec.box);
+    if (i >= 0) this.world.interiorZones.splice(i, 1);
+    rec.box = null;
+  }
+
   #dropGizmo(rec) {
     if (!rec.gizmo) return;
     rec.gizmo.removeFromParent();
@@ -211,7 +237,7 @@ export class Encounter {
     const m = mat[r.kind];
     const g = new THREE.Group();
     g.position.copy(r.pos);
-    g.rotation.y = r.kind === 'trigger' ? 0 : r.yaw;
+    g.rotation.y = r.kind === 'trigger' || r.kind === 'zone' ? 0 : r.yaw;
     const part = (geo, mat, pos, scale) => {
       const o = geo === G.edges ? new THREE.LineSegments(geo, mat) : new THREE.Mesh(geo, mat);
       o.position.set(...pos);
@@ -225,7 +251,7 @@ export class Encounter {
       part(G.box, m.fill, pos, scale);
       part(G.edges, m.line, pos, scale);
     };
-    if (r.kind === 'trigger') {
+    if (r.kind === 'trigger' || r.kind === 'zone') {
       const [w, h, d] = r.size;
       solidBox([0, h / 2, 0], [w, h, d]);
     } else if (r.kind === 'spawn') {

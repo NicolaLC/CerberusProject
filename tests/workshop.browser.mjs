@@ -1165,6 +1165,192 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   expect('select / deselect / play cycles leave no DOM nodes, geometry or textures behind; one inspector, none after leaving the scene', lk.a.dom === lk.c.dom && lk.a.mem.geometries === lk.c.mem.geometries && lk.a.mem.textures === lk.c.mem.textures && lk.a.insp === 1 && lk.c.insp === 1 && lk.gone.insp === 0 && lk.back === 1, JSON.stringify(lk));
 }
 
+// ---- 14. interior zones (`zone.interior`, encounter owner): edit, undo, save / load, legacy files, play, no leaks ----
+{
+  await ev(() => { const t = T.tool(); if (t.playing) t.edit(); document.exitPointerLock(); window.game.engine.input.free = false; window.game.engine.input.keys.clear(); });
+  await p.waitForFunction(() => !document.pointerLockElement);
+  const FLOORP = { id: 'env.box', pos: [0, -1, 0], params: { size: [300, 1, 300], mat: 'floor' } };
+  await ev((FLOORP) => {
+    const g = window.game;
+    T.zlevel = (pieces) => ({ name: 'zones', title: 'ZONES', spawn: { pos: [0, 0, 20], yaw: 3.14159 }, interiorZones: [], pieces: [FLOORP, ...pieces] });
+    T.zones = () => g.world.interiorZones.map((b) => [b.min.toArray(), b.max.toArray()]);
+  }, FLOORP);
+
+  // -- place, gizmo, no logic and no colliders in edit mode, palette entry, inspector field --
+  const pl = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load(T.zlevel([]));
+    T.step(0.3);
+    const c0 = g.world.colliders.length;
+    const gz0 = T.gizmoMeshes();
+    const i = t.place('zone.interior', [4.2, 0, -3.1]);
+    const rec = t.items[i].thing;
+    t.select(i);
+    return {
+      i, piece: t.doc.pieces[i], owner: t.items[i].owner, gizmo: !!rec.gizmo?.parent && rec.gizmo.visible, meshes: T.gizmoMeshes() - gz0,
+      colliders: g.world.colliders.length - c0, zones: T.zones().length, ok: t.verify().ok,
+      palette: !!document.querySelector('#workshop-palette [data-id="zone.interior"]'),
+      fields: [...document.querySelectorAll('#workshop-inspector [data-key]')].map((e) => e.dataset.key).join(','),
+    };
+  });
+  expect('place zone.interior: a piece with the example size, a gizmo, no collider, not yet a world zone in edit mode; palette entry; inspector size field', pl.piece.id === 'zone.interior' && JSON.stringify(pl.piece.params.size) === '[8,4,8]' && JSON.stringify(pl.piece.pos) === '[4,0,-3]' && pl.owner === 'encounter' && pl.gizmo && pl.meshes > 0 && pl.colliders === 0 && pl.zones === 0 && pl.ok && pl.palette && pl.fields === 'name,size', JSON.stringify(pl));
+
+  // -- move, resize (API and inspector), rotate, name; undo / redo give the identical JSON --
+  const ed = await ev(() => {
+    const t = T.tool();
+    const i = t.doc.pieces.findIndex((q) => q.id === 'zone.interior');
+    const d0 = T.doc();
+    const hist0 = t.undoStack.length;
+    t.move(i, [10.3, 0, 7.6]);
+    t.setParams(i, { size: [12, 5, 6] });
+    const bounds = () => { const g = t.items[i].thing.gizmo; const c = g.children[0]; const lo = [0, 1, 2].map((k) => g.position.getComponent(k) + c.position.getComponent(k) - c.scale.getComponent(k) / 2); const hi = [0, 1, 2].map((k) => g.position.getComponent(k) + c.position.getComponent(k) + c.scale.getComponent(k) / 2); return [lo, hi].map((a) => a.map((v) => Math.round(v * 1e3) / 1e3)); };
+    const gz = bounds();
+    t.rotate(i, 1);
+    const turned = t.doc.pieces[i].params.size;
+    t.setName(i, 'hall');
+    const d1 = T.doc();
+    let err = null;
+    try { t.setParams(i, { size: [0, 1, 1] }); } catch (e) { err = e.message; }
+    let err2 = null;
+    try { t.setParams(i, { size: [1, 2] }); } catch (e) { err2 = e.message; }
+    const unchanged = T.doc() === d1;
+    const n = t.undoStack.length - hist0;
+    for (let k = 0; k < n; k++) t.undo();
+    const back = T.doc();
+    for (let k = 0; k < n; k++) t.redo();
+    return { i, gz, turned, n, err, err2, unchanged, undoIdentical: back === d0, redoIdentical: T.doc() === d1, ok: t.verify().ok, piece: t.doc.pieces[i] };
+  });
+  expect('move (snapped), resize and rotate (a quarter turn swaps w and d) rebuild the gizmo to the new box; name works', JSON.stringify(ed.piece.pos) === '[10.5,0,7.5]' && JSON.stringify(ed.turned) === '[6,5,12]' && ed.piece.name === 'hall' && JSON.stringify(ed.gz) === JSON.stringify([[4.5, 0, 4.5], [16.5, 5, 10.5]]) && ed.n === 4 && ed.ok, JSON.stringify(ed));
+  expect('  bad sizes (zero, two numbers) throw and change nothing; undo x4 is the identical JSON, redo x4 too', !!ed.err && !!ed.err2 && ed.unchanged && ed.undoIdentical && ed.redoIdentical, JSON.stringify(ed));
+  // resize through the real inspector field
+  await ev((i) => T.tool().select(i), ed.i);
+  await p.click('#workshop-inspector [data-key="size"]', { clickCount: 3 });
+  await p.keyboard.type('5, 3, 9');
+  await p.keyboard.press('Enter');
+  const ui = await ev((i) => { const t = T.tool(); const q = t.doc.pieces[i]; t.undo(); const u = JSON.stringify(t.doc.pieces[i].params.size); t.redo(); return { size: q.params.size, undone: u, ok: t.verify().ok }; }, ed.i);
+  expect('  the inspector size field resizes it (one undo step)', JSON.stringify(ui.size) === '[5,3,9]' && ui.undone === '[6,5,12]' && ui.ok, JSON.stringify(ui));
+
+  // -- picking: a zone around a box does not steal the click; an empty spot inside picks the zone --
+  const pk = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load(T.zlevel([{ id: 'env.box', pos: [0, 0, 0], params: { size: [2, 2, 2], mat: 'low' } }, { id: 'zone.interior', pos: [0, 0, 0], params: { size: [10, 4, 10] } }]));
+    T.step(0.3);
+    t.mouse.x = 0; t.mouse.y = 0;
+    g.engine.camera.position.set(0, 4, 8);
+    t.cam.yaw = 0;
+    t.cam.pitch = -0.4; T.step(0.1); t.surface(); const onBox = t.pick();
+    t.cam.pitch = -0.8; T.step(0.1); t.surface(); const inZone = t.pick();
+    return { onBox, inZone, box: t.doc.pieces.findIndex((q) => q.params?.mat === 'low'), zone: t.doc.pieces.findIndex((q) => q.id === 'zone.interior') };
+  });
+  expect('picking: the box inside a zone is picked first; an empty spot inside the zone picks the zone', pk.onBox === pk.box && pk.inZone === pk.zone, JSON.stringify(pk));
+
+  // -- save -> load roundtrip: bytes are stable, the loaded doc equals the saved one, zones are editable again --
+  const rt = await ev(async () => {
+    const g = window.game;
+    const t = T.tool();
+    const { serializeLevel, parseLevel } = await import('/src/game/workshop/io.js');
+    t.load({ ...T.zlevel([]), spawn: { pos: [0, 0, 20], yaw: 3.1416 }, pieces: [...T.zlevel([]).pieces, { id: 'zone.interior', name: 'a', pos: [-8, 0, -20], params: { size: [16, 6, 12] } }, { id: 'zone.interior', pos: [20.5, 1, -20], params: { size: [4, 3, 4] } }] });
+    t.setParams(2, { size: [4.5, 3, 7] });
+    t.move(1, [-6, 0, -22]);
+    const doc = T.doc();
+    const text = serializeLevel(t.doc);
+    const parsed = parseLevel(text, g.registry);
+    t.load(parsed);
+    T.step(0.3);
+    return { same: T.doc() === doc, stable: serializeLevel(t.doc) === text, lines: text.split('\n').filter((l) => l.includes('zone.interior')).length, ok: t.verify().ok, zones: g.encounter.items.filter((r) => r.kind === 'zone').length };
+  });
+  expect('save -> load roundtrip: the zone pieces survive byte-for-byte (serialize is idempotent), the doc is identical, scene = doc', rt.same && rt.stable && rt.lines === 2 && rt.ok && rt.zones === 2, JSON.stringify(rt));
+
+  // -- a level file with the older top-level `interiorZones` opens as editable pieces and plays the same --
+  const leg = await ev(async () => {
+    const g = window.game;
+    const t = T.tool();
+    const { SCENES } = await import('/src/game/scenes.js');
+    const arena = SCENES.arena;
+    const want = arena.interiorZones.map((z) => [z.min, z.max]);
+    t.load({ ...arena, name: 'x' });
+    T.step(0.3);
+    const z = t.doc.pieces.filter((q) => q.id === 'zone.interior');
+    const migrated = { n: z.length, size: z[0]?.params.size, pos: z[0]?.pos, top: t.doc.interiorZones, ok: t.verify().ok };
+    // the same box in play
+    g.engine.camera.position.set(0, 6, -40); t.cam.yaw = 0; t.cam.pitch = -0.4;
+    t.play(); T.step(0.3);
+    const box = T.zones();
+    const inside = g.world.isInterior(g.player.pos);
+    t.edit();
+    return { want, migrated, box, inside };
+  });
+  const near3 = (a, b) => a.every((v, k) => Math.abs(v - b[k]) < 0.01);
+  expect('legacy `interiorZones` (arena) become zone pieces in the editor (top-level emptied) and play builds the same box', leg.migrated.n === 1 && near3(leg.migrated.size, [48, 7, 31.7]) && near3(leg.migrated.pos, [0, 0, -46.15]) && leg.migrated.top.length === 0 && leg.migrated.ok && leg.box.length === 1 && near3(leg.box[0][0], leg.want[0][0]) && near3(leg.box[0][1], leg.want[0][1]) && leg.inside, JSON.stringify(leg));
+
+  // -- play uses the zones: world.isInterior (camera exposure input), HUD label INTERIOR; gizmos gone; edit mode back to gizmos --
+  const run = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load(T.zlevel([{ id: 'zone.interior', pos: [0, 0, 4], params: { size: [6, 4, 6] } }, { id: 'zone.interior', pos: [30, 0, 4], params: { size: [6, 4, 6] } }]));
+    T.step(0.3);
+    const doc0 = T.doc();
+    const editGizmos = T.gizmoMeshes();
+    g.engine.camera.position.set(0, 6, 4); t.cam.yaw = 0; t.cam.pitch = -0.4;
+    g.engine.input.keys.clear();
+    t.play(); T.step(0.4);
+    const label = () => document.getElementById('zone')?.textContent;
+    const inPlay = { zones: T.zones(), gizmos: T.gizmoMeshes(), inside: g.world.isInterior(g.player.pos), cam: g.world.isInterior(g.engine.camera.position), label: label(), colliders: g.world.colliders.length };
+    g.player.pos.set(15, 0, 4); T.step(0.4);
+    const outside = { inside: g.world.isInterior(g.player.pos), label: label() };
+    g.player.pos.set(31, 0, 4); T.step(0.4);
+    const second = { inside: g.world.isInterior(g.player.pos), label: label() };
+    T.tap('KeyT'); T.step(0.4);
+    const restarted = T.zones().length;
+    t.edit(); T.step(0.3);
+    return { editGizmos, inPlay, outside, second, restarted, back: { zones: T.zones().length, gizmos: T.gizmoMeshes(), same: T.doc() === doc0, ok: t.verify().ok } };
+  });
+  expect('play: the zone boxes are built (2, none from the gizmos), the player inside reads INTERIOR, outside the title, the second zone works; no gizmo objects', run.inPlay.zones.length === 2 && run.inPlay.gizmos === 0 && run.inPlay.inside && run.inPlay.label === 'INTERIOR' && !run.outside.inside && run.outside.label === 'ZONES' && run.second.inside && run.second.label === 'INTERIOR', JSON.stringify(run));
+  expect('  restart keeps 2 zones (not 4); back in edit: no world zones, gizmos back, doc identical, scene = doc', run.restarted === 2 && run.back.zones === 0 && run.back.gizmos === run.editGizmos && run.back.same && run.back.ok, JSON.stringify(run));
+
+  // -- a normal level load (no tool) builds the zone as logic only --
+  const norm = await ev(async () => {
+    const g = window.game;
+    const { SCENES } = await import('/src/game/scenes.js');
+    SCENES.testzone = T.zlevel([{ id: 'zone.interior', pos: [0, 0, 20], params: { size: [8, 4, 8] } }]);
+    SCENES.testzone.name = 'testzone';
+    g.loadScene('testzone'); T.step(0.4);
+    const out = { zones: T.zones().length, inside: g.world.isInterior(g.player.pos), gizmos: T.gizmoMeshes(), label: document.getElementById('zone')?.textContent };
+    g.loadScene('workshop');
+    delete SCENES.testzone;
+    T.step(0.3);
+    out.after = T.zones().length;
+    return out;
+  });
+  expect('a normal level load: the zone is logic only (no gizmo), the player spawns inside it; leaving frees it', norm.zones === 1 && norm.inside && norm.gizmos === 0 && norm.label === 'INTERIOR' && norm.after === 0, JSON.stringify(norm));
+
+  // -- leaks: place / delete and play / edit cycles --
+  const lk = await ev(() => {
+    const g = window.game;
+    const t = T.tool();
+    t.load(T.zlevel([{ id: 'zone.interior', pos: [0, 0, 4], params: { size: [6, 4, 6] } }]));
+    T.step(0.3);
+    const cycle = () => {
+      const i = t.place('zone.interior', [9, 0, 9], { size: [3, 3, 3] }); t.setParams(i, { size: [4, 4, 4] }); t.remove(i); t.undo(); t.undo(); t.undo(); t.redo(); t.redo(); t.redo();
+      g.engine.camera.position.set(0, 6, 4); t.cam.yaw = 0; t.cam.pitch = -0.4;
+      T.tap('KeyP'); T.step(0.3); T.tap('KeyT'); T.step(0.2); T.tap('KeyP'); T.step(0.2);
+    };
+    cycle();
+    const a = { mem: T.mem(), zones: T.zones().length, gz: g.encounter.gizmos, n: t.count };
+    for (let k = 0; k < 4; k++) cycle();
+    const c = { mem: T.mem(), zones: T.zones().length, gz: g.encounter.gizmos, n: t.count };
+    const res = !!g.encounter.res;
+    g.loadScene('arena'); T.step(0.3);
+    const left = { zones: T.zones().length, gz: g.encounter.gizmos, res: !!g.encounter.res };
+    g.loadScene('workshop'); T.step(0.3);
+    return { a, c, res, left };
+  });
+  const same = lk.a.mem.geometries === lk.c.mem.geometries && lk.a.mem.textures === lk.c.mem.textures && lk.a.mem.objects === lk.c.mem.objects;
+  expect('place / delete / undo and play / edit / restart cycles leak nothing (geometries, textures, objects, gizmo count); no world zones in edit; leaving the scene frees the gizmo resources', same && lk.a.gz === lk.c.gz && lk.a.n === lk.c.n && lk.c.zones === 0 && lk.left.gz === 0 && !lk.left.res && lk.left.zones === 1, JSON.stringify(lk));
+}
+
 expect('no page or console errors', errors.length === 0, errors.join(' | '));
 await b.close();
 process.exit(fail.length ? 1 : 0);

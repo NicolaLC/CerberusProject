@@ -4,7 +4,7 @@
 Plain JSON (an editor can write it), imported by `scenes.js`, validated by `Registry.check`. Layout, enemies and
 pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 ```
-{ name, title, tool?, demo?, spawn: { pos, yaw }, interiorZones: [{ min, max }],
+{ name, title, tool?, demo?, spawn: { pos, yaw }, interiorZones: [{ min, max }] (older form, may be []; new levels use `zone.interior` pieces),
   pieces: [ { id, pos: [x, y, z], yaw?, params?, name? }, ... ] }
 ```
 - `pieces` is one ordered list; each system builds the ones it owns, in file order. Order matters: boxes are merged
@@ -44,6 +44,7 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `marker.spawn` | encounter | the player start (`yaw` = facing). Overrides `level.spawn` (first one in the file wins; `spawn` stays required) |
 | `marker.checkpoint` | encounter | respawn point after a death once the player has been within 2 m; `name` shows up in `checkpoint:reached` |
 | `marker.entry` | encounter | reinforcement entry: `group` (string), `enemies` (list of `enemy.*` / `boss.*` ids) built here when `group` is spawned |
+| `zone.interior` | encounter | `size [w,h,d]` (8,4,8). `pos` = centre x / bottom y / centre z. An interior zone (camera exposure, HUD INTERIOR, drones); logic only in play, the Workshop draws a gizmo |
 | `trigger.volume` | encounter | `size [w,h,d]` (4,3,4), `event` ('trigger'), `once` (true), `wakeGroup?`, `spawnGroup?`. `pos` = centre x / bottom y / centre z. Fires `trigger:fired { id, event }` when the player enters (`id` = `name`, else `trigger<n>`) |
 
 Encounter pieces are logic only in a played level (no geometry, no collision); the Workshop draws gizmos for them (workshop.md, Encounters).
@@ -65,7 +66,7 @@ A registry table entry may be `{ build, ...meta }` (read with `registry.meta(id)
 Every entry has `example` and `label` (enemies, pickups, `kit.*`, `env.*`, `light.point`, `prop.gun`); new entries must too. A new id with an `example` shows up in the Library's kit aisle by itself
 (`tool: library`, gym.md); `tests/library.browser.mjs` spawns every id from its example.
 
-Interior zones (camera exposure) are `interiorZones` boxes, not pieces. Dropped clips are runtime, not data.
+Interior zones (camera exposure) are `zone.interior` pieces. The top-level `interiorZones: [{ min, max }]` of older files (arena) is still read by `World`; the Workshop converts it to pieces on open. Dropped clips are runtime, not data.
 
 ## Save and load (`src/game/workshop/io.js`, #72)
 The editor (#70) calls four functions plus `levelNames()`; the level is the plain object of the format above.

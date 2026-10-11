@@ -93,7 +93,7 @@ Keys (the key bar shows them; `static KEYS` is the source and the suite checks i
     a click on the canvas blurs it. Entering play blurs it and hides the whole right column.
   - Fields by piece: `env.box` size, mat, cover, collide, shadow; `env.strip` size, mat; `env.label` text, size, flat; `light.point` color, intensity, distance;
     `prop.gun` gun; every `kit.*` its size params + mat (`kit.platform`: size, height, stairs, parapets, mat, coverMat); enemies `group` (`enemy.mover` also `to`, `speed`);
-    `marker.entry` group, enemies (comma list); `trigger.volume` size, event, once, wakeGroup, spawnGroup. Markers (`marker.spawn`, `marker.checkpoint`), pickups and `boss.spider`'s arena have only `name` / `group`.
+    `marker.entry` group, enemies (comma list); `zone.interior` size; `trigger.volume` size, event, once, wakeGroup, spawnGroup. Markers (`marker.spawn`, `marker.checkpoint`), pickups and `boss.spider`'s arena have only `name` / `group`.
   - Not in the UI: `faces`, `ownMaterial`, `flicker`, `env.label` colors, `boss.spider` arena, `kit.*` `yaw` (use R).
 - **Selection**: a `Box3Helper` tinted by cover class (wall white, high blue, low orange, none yellow) and the status
   panel (right): count, snap, undo / redo depth, the piece's id, pos, yaw, size and cover flags.
@@ -111,14 +111,15 @@ bar, real mouse placing / selecting / dragging, cover tint, `load`, play in plac
 returns the identical doc and history, no leak over play / edit cycles).
 
 ## Encounters (#73)
-Code: `src/game/world/encounter.js` (`Encounter` system, `ENCOUNTER_PIECES`, `levelSpawn`). Registry owner `encounter`, so the four pieces show up
-in the palette (`encounter marker.*`, `encounter trigger.*`) and follow the doc / command / undo rules like any piece. Params are edited
+Code: `src/game/world/encounter.js` (`Encounter` system, `ENCOUNTER_PIECES`, `levelSpawn`). Registry owner `encounter`, so the five pieces show up
+in the palette (`encounter marker.*`, `encounter zone.*`, `encounter trigger.*`) and follow the doc / command / undo rules like any piece. Params are edited
 in the inspector (see Panels and helpers) or with `setParams`.
 | id | params | gizmo (edit mode only) |
 |---|---|---|
 | `marker.spawn` | – (`yaw` = facing) | green box + arrow. **The player start**: `levelSpawn(level)` = first `marker.spawn` piece, else `level.spawn` (stays required in the file) |
 | `marker.checkpoint` | – (`yaw` = facing on respawn, `name` = id in events) | cyan flag + ring of its 2 m reach |
 | `marker.entry` | `group`, `enemies: [enemy.* ids]` | orange pad, arrow, one block per listed enemy |
+| `zone.interior` | `size [w,h,d]` (8,4,8). `pos` = centre x / bottom y / centre z. **An interior zone** (below) | blue translucent box |
 | `trigger.volume` | `size [w,h,d]` (4,3,4), `event` ('trigger'), `once` (true), `wakeGroup?`, `spawnGroup?`. `pos` = centre x / bottom y / centre z | magenta translucent box |
 - **Gizmos** exist only in edit mode: `Encounter.spawn(data, { gizmo: true })` builds them (shared permanent geometry / materials, nothing to
   free per piece) and marks the record inert. In play (and in any normal level) `Encounter.load(level)` builds logic only: no objects, no
@@ -142,6 +143,12 @@ in the inspector (see Panels and helpers) or with `setParams`.
   gizmos only in edit, picking vs trigger volumes, group wake (+ control), trigger once / repeat / wake, reinforcements (trigger, event, restart, inert in edit),
   `marker.spawn` (camera spawn kept, restart, normal load), checkpoint respawn, no leaks over play / edit cycles.
 
+- **Interior zones** are what `world.isInterior(p)` tests: post exposure 1.0 -> 1.9 and grade when the camera is inside, the HUD zone label reads INTERIOR when the player is,
+  drones (`drone.js`). They are `zone.interior` pieces (`Encounter.add('zone')`): in play the record pushes a `Box3` into `world.interiorZones` (removed again on unload /
+  despawn), in edit / Library (gizmo mode, inert) it is only the gizmo, so the editor's own exposure does not change. Move, resize (inspector `size`), rotate (quarter turn swaps w / d),
+  name, undo and duplicate are the generic piece commands. A picked zone loses to any other piece under the cursor, like a trigger volume.
+  The older top-level `interiorZones: [{ min, max }]` still loads and plays (`world.load`); the editor converts it on open / `load` (`zonesToPieces`: `zone.interior` pieces appended,
+  `interiorZones` emptied), so saving rewrites the file in the piece form. Suite section 14: place / move / resize / rotate, undo / redo identity, save -> load, legacy file, play (isInterior, HUD label, no gizmos, restart), picking, leaks.
+
 ## Not yet
-Interior zones editing, faces / flicker / label colours / boss arena in the inspector, light-placement
-hitch (adding a point light recompiles shaders once).
+Faces / flicker / label colours / boss arena in the inspector, light-placement hitch (adding a point light recompiles shaders once).
