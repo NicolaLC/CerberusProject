@@ -17,6 +17,16 @@ const p = await b.newPage({ viewport: { width: 960, height: 540 } });
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 p.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+// No real pointer lock in this suite: headless Chromium answers lock requests racily, and when the answers interleave (play -> edit -> play ...,
+// a request, an error and a late grant) it can be left swallowing every real mouse event for the rest of the page (document-level
+// mousedown never fires, only keys arrive), which made the real-DOM inspector sections (13+) flaky. Refusing the lock is the path
+// the game takes in a sandboxed frame (free-mouse mode, input.js), so play still works and the mouse stays deterministic.
+await p.addInitScript(() => {
+  Element.prototype.requestPointerLock = function () {
+    setTimeout(() => document.dispatchEvent(new Event('pointerlockerror')), 0);
+    return Promise.reject(new DOMException('refused by the test', 'NotAllowedError'));
+  };
+});
 await p.goto(withScene('workshop'));
 await p.waitForFunction(() => window.game?.engine);
 
