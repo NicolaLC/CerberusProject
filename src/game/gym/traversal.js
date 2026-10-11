@@ -28,6 +28,7 @@ export const STATIONS = [
   { name: 'standard stair + platform (item 20)', pos: [-10, 0, -271], yaw: Math.PI },
   { name: 'peek tests', pos: [0, 0, -297], yaw: Math.PI },
   { name: 'cover chain (cover to cover run)', pos: [-22.5, 0, -317], yaw: Math.PI },
+  { name: 'cover corners (outside, inside)', pos: [10, 0, -317], yaw: Math.PI },
 ];
 
 const PANEL_STYLE = [

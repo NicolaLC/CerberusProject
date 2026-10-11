@@ -46,7 +46,7 @@
   airborne). A sprint at low cover leaves room for the run-in vault (no snap until touching it); at high cover it slams in.
 - Exit, no button: move away (wish·normal > 0.5, so a diagonal backward push counts), push along the cover past its end
   (stopped at the edge and still pushing for `coverEdgeExit` 0.15 s, not while aiming: that peeks), vault, or jump.
-  Pushing past an end with another cover face ahead is not an exit, see Cover to cover.
+  Pushing past an end with another cover face ahead, or a face to wrap round, is not an exit, see Cover to cover and Corners.
   After any exit auto cover waits `autoCoverCooldown` 0.4 s (the timer runs only out of cover) and needs a push
   into the face again, so neither exit snaps straight back.
 - Cover to cover: at that same edge moment (not aiming) `#findCoverHop` looks along the push for the nearest entry spot
@@ -58,6 +58,23 @@
   6.8 m/s, event `player:coverRun` ({ to, type, collider }) once, then cover on the new face (type from its height,
   `player:coverSlam`). Like the entry snap, input is ignored until it lands: no aiming, shooting or jump. Rotated boxes are skipped.
 - No on-screen hints or button prompts: the HUD shows state (ammo, health, boss bar, warnings), never instructions.
+  Jump (`Space`) during the run or a corner move cancels it: the snap and its pending cover are dropped, the velocity stays,
+  and the normal jet burst fires (none while `jetTimer` runs: plain free movement); auto cover waits its cooldown. The cover
+  entry snap and vaults can't be cancelled.
+- Corners (at the same edge moment, not aiming; checked in this order: inside corner, cover-to-cover run, outside corner;
+  a run target within reach wins over a wrap, so rows of cover keep chaining):
+  - Inside: a cover wall B whose face looks back along the push, touching or within ~0.3 m of the end (closer than the run's
+    0.45 entry offset) and standing out past our face. Short straight turn `coverTurnTime` 0.2 s to the spot in front of B,
+    cover on B (normal = -push), event `player:coverCorner` ({ kind: 'inside' }).
+  - Outside: the face looking along the push at the end of the same box, or of an abutting cover box flush with its end and
+    face (an L of walls; the longest wins), >= `coverWrapFace` 0.9 m long (the minimum high cover length: a 0.5 wall end such as a door jamb walks on), with a free spot (player radius, same floor, clear
+    path at half radius) 0.2 m inside its near end. A curve through the corner point, `coverWrapTime` 0.3 s, hunched (low
+    cover: crouch run), cover on that face (normal = push direction, type from height), `{ kind: 'outside' }`. Thinner faces,
+    a blocked spot or no face: exits as before. Free-standing box with nothing in reach: hold the stick to circle it.
+  - After a corner the stick keeps meaning "on": while it is held within ~45 deg of where it was (and the camera hasn't
+    swung > 0.8 rad) the push is remapped along the new face (outside: back into the box; inside: away from the wall we
+    left), so there is no bounce and no "moving away" exit; that exit is also off for `coverCornerGrace` 0.25 s.
+    Input is ignored during the move like the run (no aim, shoot; jump cancels).
 - Cover type from height above feet: < 1.7m = low, else high. Boxes are cover only if created with `{ cover }`:
   `'low'` / `'high'` cover blocks, or `'wall'` for walls (building walls, the range separator, the boss arena's
   walls). Walls behave as high cover: peek at their ends and doorways.
