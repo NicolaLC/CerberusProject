@@ -195,12 +195,12 @@ Measures what content costs, so encounters can be budgeted (numbers: `engine.md`
 - **Enemies don't fight**: the tool sets `enemies.demo` (they see a dead player), so only rendering and update cost is measured.
   Killing puppets still drops ammo clips (Pickups, 45%, gone after 25 s).
 - **Runtime spawning**: `Enemies.spawn(piece)` / `Enemies.despawn(actor)` (stand slots are reused, the stand buffers grow on demand).
-  Lights are built with the `light.point` builder and freed by the tool (`disposeTree`); `dispose()` frees everything it spawned.
+  Lights are built with the `light.point` builder (pool lights, `world.releaseLight` frees them; past 12 the extras are temporary); `dispose()` frees everything it spawned.
 - **Test** (`tests/gym-stress.browser.mjs`): per-unit draws / triangles / geometries are asserted linear and stable (0..32 of each
   kind, worst case: all in view, near LOD, culling off); frame time only printed. Also: far LOD cost, debris cost, enemies never
   fire, keys and sweep, clearing returns geometries / textures / scene objects to the baseline, scene switches with 80 units spawned
   leave no leak. `SHOT=/path.png` saves a screenshot with a crowd; `ONLY=fx` runs the cost table of one kind.
-- Gotchas: adding / removing point lights recompiles shaders (a hitch, not a leak; the sweep's `settle` skips it). The fx pools
+- Gotchas: the first 12 lights take pool lights (no recompile); lights 13+ are temporary scene lights and recompile shaders (a hitch, not a leak; the sweep's `settle` skips it). The fx pools
   create hidden meshes on demand, so the scene object count grows up to the most particles ever alive at once, then stays.
 
 ---

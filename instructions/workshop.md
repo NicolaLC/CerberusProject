@@ -150,5 +150,9 @@ in the inspector (see Panels and helpers) or with `setParams`.
   The older top-level `interiorZones: [{ min, max }]` still loads and plays (`world.load`); the editor converts it on open / `load` (`zonesToPieces`: `zone.interior` pieces appended,
   `interiorZones` emptied), so saving rewrites the file in the piece form. Suite section 14: place / move / resize / rotate, undo / redo identity, save -> load, legacy file, play (isInterior, HUD label, no gizmos, restart), picking, leaks.
 
+- **Lights**: `light.point` pieces take a light from `World`'s fixed pool of 12 (engine.md), so placing, editing, deleting, undoing and playing never change the scene's
+  light count and never recompile shaders (suite section 15: equal `renderer.info.programs`, measured +5 per light before). A light piece has no scene object of its own
+  (its handle's `objects` is empty; the editor's bounds use the 0.5 m stand-in). Placing a 13th light works but adds a temporary light and a console warning.
+
 ## Not yet
-Faces / flicker / label colours / boss arena in the inspector, light-placement hitch (adding a point light recompiles shaders once).
+Faces / flicker / label colours / boss arena in the inspector.

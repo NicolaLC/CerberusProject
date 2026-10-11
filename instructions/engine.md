@@ -78,7 +78,7 @@ Costs are WORST CASE per unit: in view, near LOD, sun shadow pass included (draw
 | puppet (`enemy.static`) | 7 | 15.3k | 8 | 1 / 7.5k | + 22 draws for 5 s (debris, was 75 before #75), then the stand sinks |
 | trooper (`enemy.trooper`) | 9 | 47.4k | 10 | 1 / 23.7k | + 23 draws for 5 s (was 119) |
 | drone (`enemy.drone`) | 4 | 9.2k | 5 | 1 / 9.2k (shadow stays) | + 2 (falls in one piece) |
-| point light (`light.point`) | 0 | 0 | 0 | | cost is per lit fragment, not per draw; adding / removing one recompiles shaders |
+| point light (`light.point`) | 0 | 0 | 0 | | cost is per lit fragment, not per draw; takes a pool light (no recompile, below) |
 | effect burst (`blast`: sparks, smoke, ring) | 3 | 0.4k | 0 | | sparks capped at 256 (16 bursts); lives 0.3-0.6 s |
 
 Triangles are doubled by the shadow pass (a trooper is ~23.7k triangles drawn twice). The empty room (floor, 16 cover boxes, the
@@ -107,9 +107,13 @@ Assumptions, stated plainly:
 | ultra | 10 | 6 | 15 | 12 | 12 | 15 |
 
 If kills must get denser still: merge a whole body's chunks into one moving batch, or shorten `DEBRIS_LIFE`.
-**Rule: never add or remove lights during play.** three.js recompiles every lit material when the light count changes (a
-hitch). Lights belong to the level (built on load); a dynamic light stays in the scene and is switched with its intensity,
-like the muzzle flash light in `fx.js`. The light cap counts the level's lights.
+**Rule: the number of lights in the scene never changes after start-up.** three.js recompiles every lit material when the light count changes (a
+hitch; measured in the Workshop: +5 programs per light placed). `World` therefore owns a fixed pool of `LIGHT_POOL` (12, the ultra cap) point lights,
+built with the World; `light.point` takes one (colour, intensity, distance, position) and gives it back on unload / despawn (`releaseLight`: intensity 0,
+parked below the floor; three skips the shading of a light with no colour). Scene loads, editor placement and play do not recompile. A dynamic light is
+still a permanent light switched with its intensity, like the muzzle flash in `fx.js`. The pool is the level's light budget: past 12 a temporary extra
+light is added with a console warning (the count changes, so it recompiles, once on the way in and once out; the stress room's 64-light sweep does this).
+Unused pool lights cost a little per lit fragment (the loop still visits them), which is why the pool is not larger. `tests/workshop.browser.mjs` section 15 asserts equal `renderer.info.programs`.
 
 **Frame-time budgets must be confirmed by running `?scene=gym-stress` on the target hardware** (press P: the sweep prints avg / p95 ms,
 draws and triangles for 0-64 of each kind); the caps above are draw and triangle derived, not GPU measured.
