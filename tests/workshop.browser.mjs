@@ -1127,6 +1127,19 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   expect('  control: Delete after the field is blurred deletes the selection', await ev((n) => T.tool().count === n - 1, await ev(() => window.__n)));
   await ev(() => T.tool().undo());
 
+  // a fly key held while a field gains focus and released inside it must not stay held (the field swallows its keyup)
+  await ev((i) => { const t = T.tool(); t.select(i); document.activeElement?.blur?.(); window.game.engine.input.keys.clear(); t.keys.clear(); }, box);
+  await p.keyboard.down('w');
+  const held = await ev(() => { const t = T.tool(); const c0 = t.game.engine.camera.position.toArray(); T.step(0.3); return { c0, c1: t.game.engine.camera.position.toArray(), editor: t.keys.has('KeyW'), input: t.game.engine.input.keys.has('KeyW') }; });
+  await p.focus(field('name'));
+  await p.keyboard.up('w');
+  const stuck = await ev(() => { const t = T.tool(); const c0 = t.game.engine.camera.position.toArray(); T.step(0.5); return { c0, c1: t.game.engine.camera.position.toArray(), editor: [...t.keys], input: [...t.game.engine.input.keys], pressed: [...t.game.engine.input.pressed] }; });
+  await p.evaluate(() => document.activeElement.blur());
+  const after = await ev(() => { const t = T.tool(); const c0 = t.game.engine.camera.position.toArray(); T.step(0.5); return { moved: JSON.stringify(c0) !== JSON.stringify(t.game.engine.camera.position.toArray()), editor: [...t.keys], input: [...t.game.engine.input.keys] }; });
+  expect('control: W held with no field focused flies the camera', JSON.stringify(held.c0) !== JSON.stringify(held.c1) && held.editor && held.input, JSON.stringify(held));
+  expect('W held when a field gets focus and released inside it: no key stays held (editor and engine input), the camera stays put after blur', JSON.stringify(stuck.c0) === JSON.stringify(stuck.c1) && stuck.editor.length === 0 && !stuck.input.includes('KeyW') && !after.moved && after.editor.length === 0 && !after.input.includes('KeyW'), JSON.stringify({ stuck, after }));
+  expect('  focusing a field only clears held keys: pending edge presses are kept', await ev(() => { const e = T.tool().game.engine.input; e.pressed.add('KeyX'); const el = document.querySelector('#workshop-inspector [data-key="size"]'); el.focus(); const kept = e.pressed.has('KeyX'); el.blur(); e.pressed.delete('KeyX'); return kept; }));
+
   // play hides the panel and frees focus; edit brings it back
   await ev((i) => T.tool().select(i), box);
   await p.click(field('name'));
