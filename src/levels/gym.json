@@ -310,6 +310,17 @@
     {"id":"kit.ramp","name":"kit:ramp","pos":[-16,0,70],"params":{"width":4,"height":1.6,"length":8}},
     {"id":"env.label","pos":[-16,0,75.5],"params":{"text":"RAMP\n0.1 steps, 8.0 long to 1.6","size":0.45,"flat":true,"color":"#9fe8ff"}},
     {"id":"kit.platform","name":"kit:platform","pos":[4,0,70],"params":{"size":[8,8],"height":1.6,"stairs":"s","parapets":true}},
-    {"id":"env.label","pos":[4,0,79.5],"params":{"text":"PLATFORM\n8.0 x 8.0 x 1.6 + stairs","size":0.45,"flat":true,"color":"#9fe8ff"}}
+    {"id":"env.label","pos":[4,0,79.5],"params":{"text":"PLATFORM\n8.0 x 8.0 x 1.6 + stairs","size":0.45,"flat":true,"color":"#9fe8ff"}},
+    {"id":"env.box","name":"chain-a:low","pos":[-22.5,0,-324],"params":{"size":[3,1.1,1],"mat":"low","cover":"low"}},
+    {"id":"env.box","name":"chain-b:low","pos":[-17.5,0,-324],"params":{"size":[3,1.1,1],"mat":"low","cover":"low"}},
+    {"id":"env.box","name":"chain-c:high","pos":[-11.8,0,-324],"params":{"size":[2.4,2.8,0.6],"mat":"high","cover":"high"}},
+    {"id":"env.box","name":"chain-d:low","pos":[-7.6,0,-324],"params":{"size":[3,1.1,1],"mat":"low","cover":"low"}},
+    {"id":"env.box","name":"chain-e:wall","pos":[-3.3,0,-324],"params":{"size":[0.6,2.8,6],"mat":"high","cover":"high"}},
+    {"id":"env.label","pos":[-22.5,0,-321.5],"params":{"text":"low 3\ngap 2.0","size":0.55,"flat":true,"color":"#ffb070"}},
+    {"id":"env.label","pos":[-17.5,0,-321.5],"params":{"text":"low 3\ngap 3.0","size":0.55,"flat":true,"color":"#ffb070"}},
+    {"id":"env.label","pos":[-11.8,0,-321.5],"params":{"text":"high 2.4\ngap 1.5","size":0.55,"flat":true,"color":"#9cc4ff"}},
+    {"id":"env.label","pos":[-7.6,0,-321.5],"params":{"text":"low 3\ngap 2.5","size":0.55,"flat":true,"color":"#ffb070"}},
+    {"id":"env.label","pos":[-3.3,0,-320.5],"params":{"text":"wall across","size":0.55,"flat":true,"color":"#9cc4ff"}},
+    {"id":"env.label","pos":[-13,5,-330],"params":{"text":"COVER CHAIN (cover to cover run)\nenter the first box, slide east at its end: you run to the next one","size":0.5,"color":"#ffe27a","bg":"rgba(0,0,0,0.7)"}}
   ]
 }

@@ -83,6 +83,49 @@ const r = await p.evaluate(() => {
   keys.add('Mouse2'); keys.add('KeyD'); step(120); keys.delete('Mouse2'); keys.delete('KeyD');
   out.c3.aimStays = !!player.cover;
 
+  // (c4) cover-to-cover run: at the end of cover, pushing along it runs hunched to another cover face ahead
+  // (a clear spot of the level, boxes spawned for the case and removed after)
+  const free = (() => {
+    for (let z = 40; z < 120; z += 4) for (let x = -60; x < 60; x += 4) {
+      if (!world.colliders.some((c) => c.box.min.x < x + 20 && c.box.max.x > x - 4 && c.box.min.z < z + 8 && c.box.max.z > z - 8)) return { x, z };
+    }
+    return null;
+  })();
+  out.c4 = { free: !!free };
+  if (free) {
+    const runEvents = [];
+    engine.events.on('player:coverRun', (d) => runEvents.push(d.type));
+    const mk = (x0, x1, z, d, h, cover = 'low') => world.box((x0 + x1) / 2, 0, z, x1 - x0, h, d, world.mats[cover === 'high' ? 'high' : 'low'], { cover: cover === 'none' ? null : cover });
+    const chain = (boxes, { aim = false, frames = 200 } = {}) => {
+      const made = boxes.map((b) => mk(...b));
+      const A = made[0].userData.collider;
+      reset(free.x + 1, free.z + 4);
+      runEvents.length = 0;
+      hold('KeyW', 60);
+      const entered = player.cover?.collider === A;
+      let maxSpeed = 0;
+      let crouchMin = 1;
+      if (aim) keys.add('Mouse2');
+      keys.add('KeyD');
+      for (let i = 0; i < frames; i++) { step(); maxSpeed = Math.max(maxSpeed, Math.hypot(player.vel.x, player.vel.z)); if (player.snap?.run) crouchMin = Math.min(crouchMin, player.crouchBlend); if (runEvents.length && !player.snap && player.cover) break; }
+      keys.delete('KeyD');
+      keys.delete('Mouse2');
+      const res = { entered, onB: made.slice(1).findIndex((m) => player.cover?.collider === m.userData.collider) + 1, type: player.cover?.type ?? null, nz: player.cover ? +player.cover.normal.z.toFixed(2) : null, nx: player.cover ? +player.cover.normal.x.toFixed(2) : null, cover: !!player.cover, snap: !!player.snap, runs: runEvents.length, runType: runEvents[0] ?? null, x: +player.pos.x.toFixed(2), z: +player.pos.z.toFixed(2), maxSpeed: +maxSpeed.toFixed(1), crouchMin: +crouchMin.toFixed(2) };
+      for (const m of made) world.despawn({ objects: [m] });
+      return res;
+    };
+    const z = free.z;
+    const x = free.x;
+    out.c4.lowLow = chain([[x, x + 3, z, 1, 1.1], [x + 5, x + 8, z, 1, 1.1]]);
+    out.c4.lowHigh = chain([[x, x + 3, z, 1, 1.1], [x + 5, x + 8, z, 0.6, 2.8, 'high']]);
+    out.c4.forward = chain([[x, x + 3, z, 1, 1.1], [x + 5, x + 8, z + 1, 1, 1.1]]); // next box 1 m in front of the line
+    out.c4.back = chain([[x, x + 3, z, 1, 1.1], [x + 5, x + 8, z - 1, 1, 1.1]]); // 1 m behind it
+    out.c4.far = chain([[x, x + 3, z, 1, 1.1], [x + 10, x + 13, z, 1, 1.1]]); // gap 7: out of reach
+    out.c4.blocked = chain([[x, x + 3, z, 1, 1.1], [x + 5, x + 8, z, 1, 1.1], [x + 3.7, x + 4.8, z + 0.7, 1.6, 1.5, 'none']]); // a crate in the gap
+    out.c4.aim = chain([[x, x + 3, z, 1, 1.1], [x + 5, x + 8, z, 1, 1.1]], { aim: true });
+    out.c4.perp = chain([[x, x + 3, z, 1, 1.1], [x + 5.5, x + 6.1, z, 6, 2.8, 'high']]); // a wall across the line, facing back
+  }
+
   // (d) Space on open ground: a burst, then back down
   reset(0, 30);
   let peak = 0;
@@ -249,6 +292,17 @@ expect('(c) no instant re-entry, but it grabs again after the cooldown', !r.c.in
 expect('(c2) a diagonal backward push exits cover', r.c2.inC2 && r.c2.exited);
 expect('(c3) pushing along the cover past its end exits and walks on', r.c3.exitX !== null && !r.c3.cover && !r.c3.snap && r.c3.endX > r.c3.boxMaxX + 0.5);
 expect('(c3) aiming at the end keeps the cover (peek)', r.c3.aimStays);
+if (r.c4.free) {
+  const c4 = r.c4;
+  expect('(c4) low -> low, gap 2: runs to the second box once and ends in low cover on it, facing out', c4.lowLow.entered && c4.lowLow.onB === 1 && c4.lowLow.runs === 1 && c4.lowLow.type === 'low' && c4.lowLow.nz === 1 && !c4.lowLow.snap);
+  expect('(c4) the run is a real hunched run: speed > 5 m/s, hips half up (not a kneel)', c4.lowLow.maxSpeed > 5 && c4.lowLow.crouchMin < 0.7);
+  expect('(c4) low -> high in line: ends in high cover on the high box', c4.lowHigh.onB === 1 && c4.lowHigh.type === 'high' && c4.lowHigh.runs === 1 && c4.lowHigh.runType === 'high');
+  expect('(c4) a box 1 m in front of / behind the line is reached too', c4.forward.onB === 1 && c4.forward.runs === 1 && c4.back.onB === 1 && c4.back.runs === 1);
+  expect('(c4) gap 7 (beyond reach): exits cover and walks on, no run', c4.far.entered && !c4.far.cover && c4.far.runs === 0 && c4.far.onB === 0);
+  expect('(c4) a crate in the gap blocks the path: exits as before', c4.blocked.entered && !c4.blocked.cover && c4.blocked.runs === 0);
+  expect('(c4) aiming at the end peeks: stays in cover, no run', c4.aim.cover && c4.aim.onB === 0 && c4.aim.runs === 0);
+  expect('(c4) a wall across the line (perpendicular): runs up to it, cover normal faces back along the push', c4.perp.runs === 1 && c4.perp.onB === 1 && c4.perp.type === 'high' && c4.perp.nx === -1);
+} else expect('(c4) found a free area for the cover-run cases', false);
 expect('(d) Space on open ground: burst peaks 1.2-1.8 m and lands back', r.d.peak > 1.2 && r.d.peak < 1.8 && r.d.y === 0 && !r.d.airborne && r.d.jetting > 0.15);
 expect('(d) player:jet (nozzle ~1.2 m up, exhaust down) then player:land', r.d.events.length === 2 && /^player:jet@1\.2\d?\/-1$/.test(r.d.events[0]) && r.d.events[1] === 'player:land');
 expect('(d) no double jump in the air', r.d.noDouble);

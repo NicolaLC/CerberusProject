@@ -9,7 +9,7 @@ const STEP = { run: false, raised: false }; // player:step payload (reused)
 
 // The player character: movement, collision, cover state machine, health; drives its rig animator.
 // Reads intents from Controls; reports what happened through events ('player:coverSlam', 'player:land',
-// 'player:jet', 'player:vault').
+// 'player:jet', 'player:vault', 'player:coverRun').
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _f = new THREE.Vector3();
@@ -17,6 +17,9 @@ const _r = new THREE.Vector3();
 const _o = new THREE.Vector3();
 const _prev = new THREE.Vector3();
 const _n = new THREE.Vector3();
+const _hd = new THREE.Vector3(); // cover hop: push direction along the cover
+const _hop = { x: 0, z: 0, nx: 0, nz: 0, col: null }; // cover hop: entry spot, face normal, collider of the best face
+const _run = { to: new THREE.Vector3(), type: '', collider: null }; // 'player:coverRun' payload (reused)
 const _ray = new THREE.Raycaster();
 const _move = { x: 0, y: 0 };
 const _jet = { point: new THREE.Vector3(), dir: new THREE.Vector3(0, -1, 0) }; // 'player:jet' payload (reused)
@@ -37,6 +40,9 @@ const TUNING = {
   autoCoverReach: 0.35, // m beyond the body radius: pushing into a cover face this close snaps into cover
   autoCoverCooldown: 0.4, // s after leaving cover before it can grab again
   coverEdgeExit: 0.15, // s of pushing along the cover while stopped at its end before walking on past it
+  coverHopReach: 5, // m from the player to the entry spot of the next cover, along the push, for the cover-to-cover run
+  coverHopStandoff: 1.5, // m the next face may sit in front of / behind the current cover line
+  coverRunSpeed: 6.8, // m/s of that hunched run (sprint is 7.4)
   maxShields: 100,
   maxHealth: 100,
   shieldDelay: 3.5,
@@ -110,7 +116,7 @@ export class Player {
 
   // In cover and moving along it (not shooting): hunched run facing the travel direction.
   coverMoving() {
-    return !!this.cover && !this.aiming && this.lastShot >= 0.6 && this.vel.x * this.vel.x + this.vel.z * this.vel.z > 0.6;
+    return (!!this.cover || !!this.snap?.run) && !this.aiming && this.lastShot >= 0.6 && this.vel.x * this.vel.x + this.vel.z * this.vel.z > 0.6;
   }
 
   // True during the hip slide over deep low cover: aiming and shooting stay available.
@@ -243,7 +249,7 @@ export class Player {
       const s = this.snap;
       s.t = Math.min(1, s.t + dt / s.dur);
       // a slide keeps its momentum (linear); cover entry and the hop ease in and out
-      const e = s.vault === 'slide' ? s.t : s.t * s.t * (3 - 2 * s.t);
+      const e = s.vault === 'slide' || s.run ? s.t : s.t * s.t * (3 - 2 * s.t);
       this.pos.x = THREE.MathUtils.lerp(s.from.x, s.to.x, e);
       this.pos.z = THREE.MathUtils.lerp(s.from.z, s.to.z, e);
       const ground = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.stepHeight);
@@ -251,11 +257,16 @@ export class Player {
       const lift = s.vault === 'slide' ? (s.t < 0.2 ? Math.sin((s.t / 0.2) * Math.PI * 0.5) : s.t > 0.8 ? Math.cos(((s.t - 0.8) / 0.2) * Math.PI * 0.5) : 1) : Math.sin(Math.PI * s.t);
       // vault height from the take-off and landing floors (not the floor underneath: that's the block's top)
       this.pos.y = s.hop ? THREE.MathUtils.lerp(s.from.y, s.toY ?? s.from.y, e) + lift * s.hop : ground;
-      if (s.vault) {
-        this.facing = lerpAngle(this.facing, s.yaw, damp(20, dt)); // turn into the vault
+      if (s.vault || s.run) {
+        this.facing = lerpAngle(this.facing, s.yaw, damp(20, dt)); // turn into the vault / the run
+      }
+      if (s.run) {
+        this.vel.x += (s.vx - this.vel.x) * damp(30, dt);
+        this.vel.z += (s.vz - this.vel.z) * damp(30, dt);
       }
       if (s.t >= 1) {
         this.snap = null;
+        if (s.run) this.cover = s.next; // settled on the new face; the cover slide eases the velocity out
         if (s.hop) this.events.emit('player:land', 'vault');
         else this.events.emit('player:coverSlam');
         this.pos.y = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.stepHeight);
@@ -394,8 +405,9 @@ export class Player {
     const blocked = Math.abs(step) > 1e-4 && before.distanceToSquared(this.pos) < 1e-8;
     this.edgeTime = blocked && !this.aiming && Math.abs(wish.dot(c.tangent)) > 0.3 ? this.edgeTime + dt : 0;
     if (this.edgeTime >= t.coverEdgeExit) {
-      this.cover = null;
       this.edgeTime = 0;
+      if (this.#findCoverHop(c, _hd.copy(c.tangent).multiplyScalar(Math.sign(wish.dot(c.tangent))))) this.#startCoverRun(_hd);
+      this.cover = null;
       return;
     }
     // real slide velocity (eased like free movement), so the legs step along the wall and settle at its end
@@ -405,6 +417,85 @@ export class Player {
     c.edgeR = !this.#coverHitAt(_v.copy(this.pos).addScaledVector(c.tangent, 0.45), c.normal);
     c.edgeL = !this.#coverHitAt(_v.copy(this.pos).addScaledVector(c.tangent, -0.45), c.normal);
     if (!this.#coverHitAt(this.pos, c.normal)) this.cover = null;
+  }
+
+  // Another cover face to run to from the end of cover `c`, in direction d (unit, along the cover): a parallel face
+  // (same normal, standoff <= coverHopStandoff) whose near end is ahead, or a perpendicular one looking back at us.
+  // Nearest entry spot within coverHopReach with a clear path, same floor. Fills _hop. Axis-aligned boxes only.
+  // Hot path rules: no allocation unless a candidate gets as far as the path test.
+  #findCoverHop(c, d) {
+    const t = this.t;
+    const off = t.radius + 0.05;
+    const nx = c.normal.x;
+    const nz = c.normal.z;
+    if (Math.abs(nx * nz) > 0.01 || Math.abs(d.x * d.z) > 0.01) return false;
+    const px = this.pos.x;
+    const py = this.pos.y;
+    const pz = this.pos.z;
+    const s0 = px * d.x + pz * d.z; // position along the push
+    const l0 = px * nx + pz * nz; // position along the normal
+    let best = t.coverHopReach;
+    let found = false;
+    for (const col of this.world.colliders) {
+      if (!col.cover || col === c.collider) continue;
+      const b = col.box;
+      if (b.min.y > py + t.stepHeight || b.max.y <= py + 0.5) continue;
+      // extent along the push (lo..hi) and along the normal (llo..lhi)
+      const sa = b.min.x * d.x + b.min.z * d.z;
+      const sb = b.max.x * d.x + b.max.z * d.z;
+      const lo = Math.min(sa, sb);
+      const hi = Math.max(sa, sb);
+      const la = b.min.x * nx + b.min.z * nz;
+      const lb = b.max.x * nx + b.max.z * nz;
+      const llo = Math.min(la, lb);
+      const lhi = Math.max(la, lb);
+      // parallel: its face looking along n is at lhi when n points up the axis, else at llo
+      const up = nx + nz > 0;
+      const face = up ? lhi : llo;
+      let es = lo + 0.2; // entry along the push: 0.2 inside the near end, like the slide stop
+      let el = face + (up ? off : -off);
+      const par = Math.abs(el - l0) <= t.coverHopStandoff && hi - lo >= 0.4 && es > s0;
+      let ok = par;
+      if (!ok) {
+        // perpendicular: its face looking back at us (outward normal -d) is the one at `lo`; we must line up with it
+        es = lo - off;
+        el = l0;
+        ok = es >= s0 && l0 > llo + 0.2 && l0 < lhi - 0.2;
+      }
+      if (!ok) continue;
+      const ex = el * nx + es * d.x; // back to world x / z: n and d are perpendicular unit axes
+      const ez = el * nz + es * d.z;
+      const dist = Math.hypot(ex - px, ez - pz);
+      if (dist >= best) continue;
+      if (Math.abs(this.world.groundAt(ex, ez, py + t.stepHeight, t.radius * 0.5) - py) > 0.1) continue;
+      _n.set(ex, py, ez);
+      if (!this.world.segmentClear(this.pos, _n, t.radius * 0.5)) continue; // half the body: the run may graze the corner of a box in front of / behind the line
+      best = dist;
+      found = true;
+      _hop.x = ex;
+      _hop.z = ez;
+      _hop.col = col;
+      // outward normal of the face we run to: n for a parallel one, -d for a perpendicular one
+      _hop.nx = par ? nx : -d.x;
+      _hop.nz = par ? nz : -d.z;
+    }
+    return found;
+  }
+
+  // Committed hunched run (a snap with `run`) to the spot found by #findCoverHop, then cover on the new face.
+  #startCoverRun(d) {
+    const t = this.t;
+    const to = new THREE.Vector3(_hop.x, this.pos.y, _hop.z);
+    const len = to.distanceTo(this.pos);
+    const type = _hop.col.box.max.y - this.pos.y < 1.7 ? 'low' : 'high';
+    const next = { normal: new THREE.Vector3(_hop.nx, 0, _hop.nz), tangent: new THREE.Vector3(), type, collider: _hop.col, edgeL: false, edgeR: false };
+    const dir = _v.subVectors(to, this.pos).setY(0).normalize();
+    this.snap = { from: this.pos.clone(), to, t: 0, dur: Math.max(0.1, len / t.coverRunSpeed), hop: 0, run: true, low: this.cover.type === 'low', next, yaw: Math.atan2(dir.x, dir.z), vx: dir.x * t.coverRunSpeed, vz: dir.z * t.coverRunSpeed };
+    this.edgeTime = 0;
+    _run.to.copy(to);
+    _run.type = type;
+    _run.collider = _hop.col;
+    this.events.emit('player:coverRun', _run);
   }
 
   #coverHitAt(p, n) {
@@ -554,7 +645,7 @@ export class Player {
     const k = damp(12, dt);
     const moving = this.coverMoving();
     // behind low cover the hips come half up while moving along it (crouch-run), full kneel when still
-    const target = this.crouched ? (moving ? 0.45 : 1) : this.snap && !this.snap.hop ? 1 : 0;
+    const target = this.crouched ? (moving ? 0.45 : 1) : this.snap?.run ? (this.snap.low ? 0.45 : 0) : this.snap && !this.snap.hop ? 1 : 0;
     this.crouchBlend += (target - this.crouchBlend) * k;
     const combat = this.aiming || this.lastShot < 0.6;
     this.recoil = Math.max(0, this.recoil - dt * 11);
