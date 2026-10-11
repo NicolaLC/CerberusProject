@@ -51,6 +51,9 @@ Camera clearances (derived from the table above):
 | Cover slide | A/D; stops 0.2 before an edge | `player.js:#updateCover` (`margin` 0.2) |
 | Edge / peek clearance | edge flagged when no cover face 0.45 along the tangent; peek = 0.2 weight shift + 0.6 rad lean | `#updateCover`, `PEEK` |
 | Pinned | high cover with no edge within 0.45: no aiming or shooting | `player.js` (`pinned`) |
+| Cover-to-cover run reach | **5** m from the player to the entry spot (face + 0.45), along the push at the end of cover; a gap of 7 is out. Chosen: the Gym chain has 1.5-3 m gaps, + 0.65 entry offset (0.45 + 0.2 inside) = 2.2-3.7 m, so 5 leaves margin for boxes set 1.5 m off the line; longer is a sprint, not a hop (5 m at 6.8 m/s = 0.75 s exposed) | `TUNING.coverHopReach`, `player.js:#findCoverHop` |
+| Cover-to-cover standoff | next face may sit **1.5** m in front of / behind the current line (a 1 m deep box set forward or back), clear path checked at half body radius (0.2) | `TUNING.coverHopStandoff` |
+| Cover-to-cover speed | **6.8** m/s, below the sprint 7.4 so it reads as a dash, not a sprint; 2 m gap = 0.3 s | `TUNING.coverRunSpeed` |
 | Run-in vault reach | 2.2 | `TUNING.coverReach`, `VAULT.runInReach` |
 | Min length, high cover (derived) | center positions run from 0.2 to L - 0.2 from the ends; a pinned spot needs one > 0.45 from both ends so L >= 0.9; both ends peekable always; **proposed minimum 1.2** (existing pillars 1.2 x 1.2) | derived |
 | Min length, low cover (proposed) | 1.6 (two-body wide: 0.8 + 0.8). Existing: 3-4 m, 1 m posts only as part of a row | proposed |

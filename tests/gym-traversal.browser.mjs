@@ -374,6 +374,29 @@ const r = await p.evaluate(() => {
   };
   out.peek.door = { walk: doorTry(false), sprint: doorTry(true), size: [4, dl.y] };
 
+  // ---------- cover chain: slide east along each box, at its end the run goes to the next (low, low, high, low, wall across) ----------
+  {
+    const names = ['chain-a:low', 'chain-b:low', 'chain-c:high', 'chain-d:low', 'chain-e:wall'];
+    const blocks = names.map(pc);
+    const runs = [];
+    const off = engine.events.on('player:coverRun', (d) => runs.push(d.type));
+    put(blocks[0].x, 0, blocks[0].zS + 4, 'N');
+    keys.add('KeyW');
+    for (let i = 0; i < 90 && !player.cover; i++) step();
+    keys.clear();
+    const seen = [];
+    keys.add('KeyD');
+    for (let i = 0; i < 900; i++) {
+      step();
+      const idx = blocks.findIndex((b) => player.cover?.collider.mesh.position.x === b.x);
+      if (idx >= 0 && seen[seen.length - 1] !== idx) seen.push(idx);
+      if (idx === 4 && !player.snap) break;
+    }
+    keys.clear();
+    out.chain = { seen, runs: runs.slice(), type: player.cover?.type ?? null, nx: player.cover?.normal.x ?? null, x: f(player.pos.x) };
+    if (typeof off === 'function') off();
+  }
+
   // ---------- the tool itself: panel, keys, teleport, free on dispose ----------
   const panel = () => document.getElementById('gym-traversal');
   const tl = {};
@@ -446,6 +469,7 @@ console.log('\nitem 20 jet onto the 1.6 platform (start distances 0.6 1.0 1.4 1.
 for (const [m, v] of Object.entries(r.jetOn)) console.log(`  ${m} ${v}`);
 console.log('\nitem 19 camera against 1.1 cover, crouched:', JSON.stringify(r.camCover));
 console.log('\npeek tests:', JSON.stringify(r.peek));
+console.log('cover chain:', JSON.stringify(r.chain));
 
 // ----- assertions -----
 console.log('');
@@ -482,6 +506,7 @@ expect('the standard 0.4 / 1.0 / 4 wide stair reaches the 1.6 platform; its para
 expect('a wall end, a cover corner and a pillar are peekable (edge flag)', r.peek.wallEnd.edgeR && r.peek.hcornerWest.edgeL && r.peek.pillar.edgeR);
 expect('aiming at a wall end keeps the cover and leans out (peek)', r.peek.aim.cover && r.peek.aim.aiming && r.peek.aim.shift > 0.1 && r.peek.aim.side !== 0, JSON.stringify(r.peek.aim));
 expect('the 4 x 4 door in the 7 m wall passes at walk and sprint', r.peek.door.walk.passed && r.peek.door.sprint.passed);
+expect('cover chain: sliding east at each box end runs to the next one (low, low, high, low, wall across), one run each', JSON.stringify(r.chain.seen) === '[0,1,2,3,4]' && JSON.stringify(r.chain.runs) === '["low","high","low","high"]' && r.chain.type === 'high' && r.chain.nx === -1, JSON.stringify(r.chain));
 expect('tool: panel on load, T hides and shows it, G teleports to the next station', r.tool.panel && r.tool.hidden && r.tool.shown && r.tool.next);
 expect('tool: the panel reads cover, vault, jet and camera', ['feet y', 'cover', 'vault', 'jet', 'camera'].every((k) => r.tool.text.includes(k)), r.tool.text);
 expect('tool: the panel is removed on a scene switch and comes back once', r.tool.removed && r.tool.back);
