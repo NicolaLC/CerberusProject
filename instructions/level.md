@@ -55,10 +55,14 @@ key per role (floor / wall / low / high / platform), overridable per piece with 
 the hook for region skins.
 
 ### Piece meta (Library convention)
-A registry table entry may be `{ build, ...meta }` (read with `registry.meta(id)`). Two metas feed the Library:
+A registry table entry may be `{ build, ...meta }` (read with `registry.meta(id)`). Three metas feed the Library and the Workshop:
 - `example: { params, yaw? }`: what the Library spawns for the id (it must build with just these and `pos`).
 - `label`: one short line of key stats (HP, ranges, respawn...), read from the owner's `TUNING` where there is one.
-Every entry has both (enemies, pickups, `kit.*`, `env.*`, `light.point`, `prop.gun`); new entries must too. A new id with an `example` shows up in the Library's kit aisle by itself
+- `fields` (Workshop inspector, workshop.md): the editable params, `[{ key, type, label?, options?, min?, optional?, def? }]`. `type`: `number`, `vec2` / `vec3`
+  (typed "a, b, c"), `text`, `bool` (checkbox; `def` = value when absent), `enum` (`options` list, or `'mats'` = keys of `World.mats`), `list` (comma separated strings).
+  `optional: true` = empty removes the key. `min` is a generic floor (the builder's own checks still win and surface as a toast). `key` is a top-level `params` key.
+  Shared fields live next to the owner (`MAT` in `kit.js`, `GROUP` in `enemies.js`). Pieces without `fields` (or whose params are not listed) show only `name`.
+Every entry has `example` and `label` (enemies, pickups, `kit.*`, `env.*`, `light.point`, `prop.gun`); new entries must too. A new id with an `example` shows up in the Library's kit aisle by itself
 (`tool: library`, gym.md); `tests/library.browser.mjs` spawns every id from its example.
 
 Interior zones (camera exposure) are `interiorZones` boxes, not pieces. Dropped clips are runtime, not data.
