@@ -58,6 +58,7 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `objective.destroy` | encounter | mission objective: `group?` (enemy squad; absent = any enemy), `count?` (absent = all matching alive when it becomes current, plus reinforcements) |
 | `objective.survive` | encounter | mission objective: `time` (30 s, above 0) |
 | `objective.interact` | encounter | mission objective: `radius` (2 m, above 0): the player alive within it (2.5 m vertical) presses interact (G) |
+| `log.line` | encounter | a STEM-00 log line (#40): `text`, `on` (start, `trigger:<id>`, `checkpoint:<id>`, `objective:<id>`, `objective:<id>:done`, `discovered:<gun>`, `mission:complete`), `priority?` ('normal' / 'high'), `once?` (true), `delay?` (s, 0). Logic only in play; the Workshop draws an amber screen gizmo. Writing rules: narrative.md |
 
 Every `objective.*` also takes `text` (HUD state line), `order?` (mission order; absent = position among the objectives), `limit?` (s to finish it, else the mission fails), `wakeGroup?`, `spawnGroup?` (run when it becomes current). Rules: workshop.md "Missions".
 
@@ -75,7 +76,7 @@ A registry table entry may be `{ build, ...meta }` (read with `registry.meta(id)
 - `label`: one short line of key stats (HP, ranges, respawn...), read from the owner's `TUNING` where there is one.
 - `fields` (Workshop inspector, workshop.md): the editable params, `[{ key, type, label?, options?, min?, optional?, def? }]`. `type`: `number`, `vec2` / `vec3`
   (typed "a, b, c"), `text`, `bool` (checkbox; `def` = value when absent), `enum` (`options` list, or `'mats'` = keys of `World.mats`; a fixed `options` list is also checked by `Registry.check`), `list` (comma separated strings).
-  `optional: true` = empty removes the key. `min` is a generic floor (the builder's own checks still win and surface as a toast). `key` is a top-level `params` key.
+  `optional: true` = empty removes the key. `check(params, registry)` (optional): returns a problem string or null; `Registry.check` throws it for every piece of that id in a level (`log.line`). `min` is a generic floor (the builder's own checks still win and surface as a toast). `key` is a top-level `params` key.
   Shared fields live next to the owner (`MAT` in `kit.js`, `GROUP` in `enemies.js`). Pieces without `fields` (or whose params are not listed) show only `name`.
 Every entry has `example` and `label` (enemies, pickups, `kit.*`, `env.*`, `light.point`, `prop.gun`); new entries must too. A new id with an `example` shows up in the Library's kit aisle by itself
 (`tool: library`, gym.md); `tests/library.browser.mjs` spawns every id from its example.

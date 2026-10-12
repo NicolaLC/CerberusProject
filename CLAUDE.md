@@ -21,4 +21,5 @@
 - `instructions/gym.md` — the four Gym rooms: layout, tools, keys, which tests use them
 - `instructions/workshop.md` — in-game level editor: keys, doc model, save/load, test hooks
 - `instructions/metrics.md` — level metrics: player, cover, vault, spaces, ranges (FROZEN, change rule in section 9)
+- `instructions/narrative.md` — STEM-00's log lines: voice by act, writing rules, `log.line` pieces
 - `instructions/sfx-prompts.md` — ElevenLabs prompts for the sounds still synthesized or missing
