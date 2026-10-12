@@ -45,6 +45,7 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
   (`renderer.info.memory.geometries` / `textures` and scene object count identical after every cycle, exact, no tolerance).
   This suite RENDERS (info.memory counts uploads) and, before each reading, draws once with culling off and both LOD variants,
   because three uploads lazily and the counts would otherwise follow what the camera happens to see.
+- `tests/mission.browser.mjs`: mission framework (objective pieces, full mission in play, order, reinforcements, trigger reach, limit, restart / edit / scene switch, bad params); uses `?scene=workshop`.
 - `tests/gym-traversal|gym-range|gym-ai|gym-stress.browser.mjs`: the Gym rooms as fixtures (instructions/gym.md); they
   also print the measured metrics (metrics.md 8b). gym-stress takes several minutes under SwiftShader.
 - Semi-auto guns (sniper, railgun, pistol) in tests need a fire press edge: `engine.input.pressed.add('Mouse0')`.

@@ -27,7 +27,7 @@ other level is inert (`tool.editing === false`).
 - Rotation (`rotationKind`, `fitYaw`, `turned` are exported pure functions):
   - `kit.*`: 90 degree steps on `yaw`. A free yaw given to `place` is fitted to 90 (kit.js throws otherwise).
   - `env.box`, `env.strip`: 90 degree steps swap width and depth (and turn `faces`); no `yaw` is stored (builders ignore it).
-  - `trigger.volume`: like `env.box` (a quarter turn swaps width and depth of `size`). `marker.*`: 15 degree steps on `yaw`.
+  - `trigger.volume`, `objective.reach`: like `env.box` (a quarter turn swaps width and depth of `size`). `marker.*`: 15 degree steps on `yaw`.
   - `env.label`: 15 degree steps on `params.yaw`. `light.point`: does not turn.
   - enemies, pickups, `prop.gun`: 15 degree steps on `yaw`.
 - A mover's rail (`params.to`) and a boss arena (`params.arena`) move with the piece.
@@ -93,7 +93,7 @@ Keys (the key bar shows them; `static KEYS` is the source and the suite checks i
     a click on the canvas blurs it. Entering play blurs it and hides the whole right column.
   - Fields by piece: `env.box` size, mat, cover, collide, shadow; `env.strip` size, mat; `env.label` text, size, flat; `light.point` color, intensity, distance;
     `prop.gun` gun; every `kit.*` its size params + mat (`kit.platform`: size, height, stairs, parapets, mat, coverMat); enemies `group` (`enemy.mover` also `to`, `speed`);
-    `marker.entry` group, enemies (comma list); `zone.interior` size; `trigger.volume` size, event, once, wakeGroup, spawnGroup. Markers (`marker.spawn`, `marker.checkpoint`), pickups and `boss.spider`'s arena have only `name` / `group`.
+    `marker.entry` group, enemies (comma list); `zone.interior` size; `trigger.volume` size, event, once, wakeGroup, spawnGroup; `objective.*` text, order, limit, wakeGroup, spawnGroup + their own (Missions). Markers (`marker.spawn`, `marker.checkpoint`), pickups and `boss.spider`'s arena have only `name` / `group`.
   - Not in the UI: `faces`, `ownMaterial`, `flicker`, `env.label` colors, `boss.spider` arena, `kit.*` `yaw` (use R).
 - **Selection**: a `Box3Helper` tinted by cover class (wall white, high blue, low orange, none yellow) and the status
   panel (right): count, snap, undo / redo depth, the piece's id, pos, yaw, size and cover flags.
@@ -131,9 +131,8 @@ in the inspector (see Panels and helpers) or with `setParams`.
   `wake()` take part (trooper, drone, boss); puppets are always on. The editor's enemies are frozen, so nothing wakes in edit mode.
 - **Triggers**: fire on the frame the player's feet enter the box (starting inside counts); `once: true` fires one time per run. Fire =
   `events.emit('trigger:fired', { id, event })` with `id` = the piece `name`, else `trigger<n>` (n = order among triggers in the file),
-  then `wakeGroup` / `spawnGroup`. **The mission / objective framework (#12) does not exist**: objectives will subscribe to `trigger:fired`
-  (and `checkpoint:reached`, `group:wake`, `group:spawn`) and may request `encounter:wake` / `encounter:spawn` (payload: group name).
-  Nothing else consumes them yet.
+  then `wakeGroup` / `spawnGroup`.
+  Objectives (#12, Missions below) subscribe to `trigger:fired` / `checkpoint:reached` / `group:spawn`.
 - **Reinforcements**: `spawnGroup(group)` (trigger action or `encounter:spawn`) builds every `marker.entry` of that group's listed enemies
   side by side (1.5 m) at the marker, facing its yaw, through `enemies.spawn` with `params.group`, and wakes them. Repeats on each call; `group:spawn { group, count }`.
 - **Checkpoints**: in play, the player within 2 m (horizontal, 2.5 m vertical) of a checkpoint records it (`checkpoint:reached { id, pos, yaw }`, HUD
@@ -154,6 +153,25 @@ in the inspector (see Panels and helpers) or with `setParams`.
 - **Lights**: `light.point` pieces take a light from `World`'s fixed pool, sized by the quality tier (4 / 8 / 12, engine.md), so placing, editing, deleting, undoing and playing never change the scene's
   light count and never recompile shaders (suite section 15: equal `renderer.info.programs`, measured +5 per light before). A light piece has no scene object of its own
   (its handle's `objects` is empty; the editor's bounds use the 0.5 m stand-in). Placing more lights than the tier pool works but adds a temporary light and a console warning.
+
+## Missions (#12)
+Code: `src/game/world/mission.js` (`Mission`, `game.mission`), objective records in `encounter.js`. `Encounter.load` hands the non-inert `objective.*` records to
+`Mission.start`, `unload` calls `stop` (so `Game.loadScene` and the editor's play / restart / edit are covered), and `Encounter.update` ticks `Mission.update(dt, player, interact)`
+after the checkpoint / trigger scan, also while the player is dead (timers run on). Logic only: no scene objects. In edit mode and the Library the records are inert gizmos, the mission stays `none`.
+| id | params | completes when | gizmo (yellow) |
+|---|---|---|---|
+| `objective.reach` | `size` (4,3,4), `trigger?` | the player's feet are in the box (as `trigger.volume`); with `trigger` instead on `trigger:fired` / `checkpoint:reached` with that `id` (box ignored) | translucent box |
+| `objective.destroy` | `group?`, `count?` | `puppet:down` of an enemy of `group` (any if absent) from the moment it is current, `count` times, or all that were alive then; `group:spawn` adds its count to an absent `count` target; 0 targets completes at once | pad + block |
+| `objective.survive` | `time` (30) | `time` s of simulated time | pole + rings |
+| `objective.interact` | `radius` (2) | player alive within `radius` (2.5 m vertical) and the `interact` intent (G / pad B) pressed | ring + terminal block |
+All: `text` (HUD line, default per kind), `order?`, `limit?`, `wakeGroup?`, `spawnGroup?`; bad values throw `objective.x: ...` (inspector fields: text, order, limit, group fields, then the kind's own).
+- **Order**: sorted by `order`, absent = position among the objective pieces in the file; ties keep file order. Id in events = piece `name`, else `objective<n>` (n = file position).
+- **Becoming current**: elapsed / progress reset, destroy target set, then `wakeGroup` / `spawnGroup` (`encounter:wake` / `encounter:spawn`), then `mission:objective`.
+- **Events**: `mission:objective` and `mission:objective:done` `{ index, total, id, kind, text }`, `mission:complete` `{ total }`, `mission:failed` `{ index, id, reason: 'time' }` (`limit` s after it became current; nothing updates afterwards).
+- **State**: `mission.state` `'none'` (no objectives) / `'active'` / `'complete'` / `'failed'`, `current`, `index`, `elapsed`, `progress`, `target`, `hudText()`.
+- **HUD** (`#objective`, under the top bar, hidden when `hudText()` is null): `TEXT  n / N` (destroy), `TEXT  m:ss` remaining (survive; `limit` on the others), `MISSION COMPLETE`, `MISSION FAILED`. State only; toasts OBJECTIVE COMPLETE / MISSION COMPLETE / MISSION FAILED.
+- Input: `interact` binding (`controls.js`: G, pad B). The editor ignores G while playing (it snaps the grid in edit mode only).
+- Suite `tests/mission.browser.mjs`: pieces and gizmos, a full mission (reach, destroy, survive, interact), `order`, reinforcement targets, zero targets, trigger / checkpoint reach, `limit` and a dead player, restart / edit / scene switch, bad params.
 
 ## Not yet
 Faces / flicker / label colours / boss arena in the inspector.

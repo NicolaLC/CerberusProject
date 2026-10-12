@@ -43,6 +43,7 @@ export class Hud {
       overlay: $('overlay'),
       death: $('death'),
       zone: $('zone'),
+      objective: $('objective'),
       gunName: $('gun-name'),
       ar: $('areload'),
       arGood: document.querySelector('#areload .good'),
@@ -82,6 +83,9 @@ export class Hud {
     events.on('boss:wake', (b) => this.toast(`⚠ ${b.name}`, 3));
     events.on('boss:down', () => this.toast('CORE EXPOSED', 2));
     events.on('boss:dead', () => this.toast('MECH DESTROYED', 3));
+    events.on('mission:objective:done', () => this.toast('OBJECTIVE COMPLETE'));
+    events.on('mission:complete', () => this.toast('MISSION COMPLETE', 4)); // after the last objective's toast: wins
+    events.on('mission:failed', () => this.toast('MISSION FAILED', 4));
     return this;
   }
 
@@ -120,7 +124,7 @@ export class Hud {
     css(this.el.dmgDir, 'transform', `translate(-50%, -50%) rotate(${-rel}rad)`);
   }
 
-  update(dt, { player, weapon, enemies, camRig, world }) {
+  update(dt, { player, weapon, enemies, camRig, world, mission }) {
     const e = this.el;
     this.#boss(enemies.boss);
     // lock-on marker on the boss while the camera follows it
@@ -203,6 +207,9 @@ export class Hud {
 
     text(e.kills, `${enemies.kills} / ${enemies.puppets.length}`);
     text(e.zone, world.isInterior(player.pos) ? 'INTERIOR' : this.zoneName);
+    const line = mission.hudText();
+    text(e.objective, line ?? '');
+    css(e.objective, 'display', line ? 'block' : 'none');
 
     this.dmgTime -= dt;
     const lowHp = player.shields <= 0 ? 0.35 + (1 - player.health / 100) * 0.5 : 0;

@@ -46,6 +46,12 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `marker.entry` | encounter | reinforcement entry: `group` (string), `enemies` (list of `enemy.*` / `boss.*` ids) built here when `group` is spawned |
 | `zone.interior` | encounter | `size [w,h,d]` (8,4,8). `pos` = centre x / bottom y / centre z. An interior zone (camera exposure, HUD INTERIOR, drones); logic only in play, the Workshop draws a gizmo |
 | `trigger.volume` | encounter | `size [w,h,d]` (4,3,4), `event` ('trigger'), `once` (true), `wakeGroup?`, `spawnGroup?`. `pos` = centre x / bottom y / centre z. Fires `trigger:fired { id, event }` when the player enters (`id` = `name`, else `trigger<n>`) |
+| `objective.reach` | encounter | mission objective: `size [w,h,d]` (4,3,4), `trigger?` (a `trigger:fired` / `checkpoint:reached` id that completes it instead of the box). `pos` = centre x / bottom y / centre z |
+| `objective.destroy` | encounter | mission objective: `group?` (enemy squad; absent = any enemy), `count?` (absent = all matching alive when it becomes current, plus reinforcements) |
+| `objective.survive` | encounter | mission objective: `time` (30 s, above 0) |
+| `objective.interact` | encounter | mission objective: `radius` (2 m, above 0): the player alive within it (2.5 m vertical) presses interact (G) |
+
+Every `objective.*` also takes `text` (HUD state line), `order?` (mission order; absent = position among the objectives), `limit?` (s to finish it, else the mission fails), `wakeGroup?`, `spawnGroup?` (run when it becomes current). Rules: workshop.md "Missions".
 
 Encounter pieces are logic only in a played level (no geometry, no collision); the Workshop draws gizmos for them (workshop.md, Encounters).
 Every enemy piece also takes `params.group` (string): enemies of one group wake together.

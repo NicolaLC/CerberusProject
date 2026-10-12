@@ -3,6 +3,7 @@ import { Engine } from '../engine/engine.js';
 import { Registry } from './registry.js';
 import { World, WORLD_PIECES } from './world/world.js';
 import { Pickups, PICKUP_PIECES } from './world/pickups.js';
+import { Mission } from './world/mission.js';
 import { Encounter, ENCOUNTER_PIECES, levelSpawn } from './world/encounter.js';
 import { Player } from './actors/player.js';
 import { Enemies, ENEMY_PIECES } from './actors/enemies.js';
@@ -54,7 +55,8 @@ export class Game {
     const player = new Player({ scene, world, events, spawn: levelSpawn(registry.check(SCENES[first])) });
     const enemies = new Enemies({ scene, world, events, registry });
     const pickups = new Pickups({ scene, events, registry });
-    const encounter = new Encounter({ scene, events, registry, enemies, world });
+    const mission = new Mission({ events, enemies });
+    const encounter = new Encounter({ scene, events, registry, enemies, world, mission });
     const weapon = new Weapon({ camera, rig: camRig, player, world, enemies, events });
     const fx = new FX(scene, camera, world).listen(events);
     const hud = new Hud().listen(events, camRig);
@@ -81,7 +83,7 @@ export class Game {
       if (near > 0) input.rumble(near * 0.35, 0, 70);
     });
     addEventListener('pointerdown', () => audio.init()); // resumes audio started from a controller
-    Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, weapon, fx, hud, audio, post, juice, settings });
+    Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, mission, weapon, fx, hud, audio, post, juice, settings });
 
     // skeleton debug overlay (H): the player's helper is permanent, the enemies' come and go with the level
     this.skeletons = false;
@@ -132,7 +134,7 @@ export class Game {
     });
     engine.add({ name: 'weapon', update: (dt) => !this.editing && weapon.update(dt, controls) });
     engine.add({ name: 'enemies', update: (dt) => enemies.update(dt, player) });
-    engine.add({ name: 'encounter', update: (dt) => !this.editing && encounter.update(dt, player) });
+    engine.add({ name: 'encounter', update: (dt) => !this.editing && encounter.update(dt, player, controls.pressed('interact')) });
     engine.add({ name: 'pickups', update: (dt) => !this.editing && pickups.update(dt, player, weapon) });
     // boss lock-on: an engaged boss within range stays framed (CameraRig.focus)
     const bossFocus = new THREE.Vector3();
@@ -181,7 +183,7 @@ export class Game {
       name: 'hud',
       phase: 'present',
       update: (dt) => {
-        hud.update(dt, { player, weapon, enemies, camRig, world });
+        hud.update(dt, { player, weapon, enemies, camRig, world, mission });
       },
     });
     engine.add({
