@@ -143,9 +143,11 @@ The prototype's spider mech (section 8.4) is the Arachne miniboss from the roste
   perfect geometry, endless light, total silence between machines. Factories run, trains pass and drones sweep, and
   STEM-00 is the only thing out of place.
 - **Scale:** a tiny protagonist among colossal machines, cathedrals of steel and war machines the size of buildings.
-- **Palette:** clean geometric architecture lit by cold white and cyan, with HiveMind units glowing in that colour.
-  STEM-00 is gunmetal and scratched, with a single warm amber light that grows brighter as it becomes more alive. The
-  Rejects use warm, broken colours: rust, orange and flickering lights.
+- **Style:** grim industrial military sci-fi, never childish: function-first war machines, heavy and weathered
+  (rule: `instructions/art-style.md`).
+- **Palette:** teal-cyan haze and cold white light. HiveMind war units wear worn ochre livery over dark metal, and
+  their sensors (their weak spots) glow violet. STEM-00 is olive drab and scratched, with a single warm amber light
+  that grows brighter as it becomes more alive. The Rejects use warm, broken colours: rust, orange and flickering lights.
 - **Prototype art** is procedural grid geometry (section 9). The final art direction is not decided (section 13).
 
 ## 3. Player
