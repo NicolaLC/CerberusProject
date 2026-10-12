@@ -276,7 +276,8 @@ the burst (which also leaves cover).
 
 ## 6. Weapons
 
-Six guns, switched with 1-6 or the wheel (0.45 s lower/raise). Ammo is tracked per gun. Every gun has a hip and an
+Six guns, switched with 1-6 or the wheel (0.45 s lower/raise). Ammo is tracked per gun. In the prototype all six are
+available from the start; in the game they are discovered one at a time and the pistol never runs dry (6.5, planned). Every gun has a hip and an
 aimed spread, a fixed recoil pattern and its own seeded RNG.
 
 ### 6.1 Stats
@@ -360,6 +361,30 @@ enemy on its line** (no limit: drones, puppets, troopers, spider legs), once eac
 line crosses on that enemy. It stops at the first wall, cover box or armored part (boss hull, turret, closed
 shutters), so the shell protects the core. The trail is drawn to where it stops.
 
+### 6.5 Weapon discovery and the pistol (planned, decided by the owner)
+Not in the code yet (#91): the prototype, Gym and Library keep all six guns with finite ammo.
+- **STEM-00 starts with the KP-12 Ember only.** Every other gun is **discovered** in play: taken from a defeated
+  unit or found in the world (armoury rack, crate). Picking a gun up for the first time is a small beat: a toast, a
+  STEM-00 log line, and the gun goes into the hideout armoury for good.
+- **The pistol has infinite reserve ammo.** Its magazine (12) and reload still apply, so active reload still
+  matters, but the reserve never runs out: the player always has a gun that works. The HUD shows `∞` for its
+  reserve, light ammo pickups don't count it, and it can never be dropped or swapped out.
+- **Loadout:** pistol plus up to 2 primaries carried; swap a primary by picking another gun up (#34). Discovered
+  guns can be chosen at the hideout before a mission.
+- **Discovery order** (proposal, tune per mission; each gun shows up first where its role is needed):
+
+| When | Gun | Where it comes from |
+|---|---|---|
+| Prologue (start) | KP-12 Ember | STEM-00's own sidearm |
+| Prologue (the purge) | KR-7 Warden | A calibration armoury rack, or the first destroyed trooper |
+| Act 1 (Foundry Belt) | KB-3 Tribune | LEGION patrols guarding the factory lines |
+| Act 1 (before VIGIL) | KS-5 Farsight | A Lancer's rifle, to answer long sight lines and drones |
+| Act 2 (LEGION's war) | KM-90 Bulwark | A heavy trooper squad, for the mass assaults |
+| Act 3 (Cold Core) | KX-9 Halberd | An ancient armoury near COLOSSUS: the answer to armour and lines of enemies |
+
+- Encounters are built around what the player has: no mission requires a gun the player can't own yet, and every
+  fight can be finished with the pistol alone (slowly).
+
 ## 7. Ammo and pickups
 
 | | Light (cyan glow, small case, one band) | Heavy (orange glow, tall case, two bands) |
@@ -370,6 +395,7 @@ shutters), so the shell protects the core. The trail is drawn to where it stops.
 | Fixed crates | 7 | 3 (range, interior, boss arena back) |
 
 - A pickup refills only its own class, each gun by its own amount, capped at that gun's max reserve.
+- Planned (6.5): the pistol's reserve is infinite, so pickups skip it, and only guns the player carries are refilled.
 - Crates sit at 10 fixed spots (yard, west platform, range, interior, boss arena gate at (28, -17) and back), respawn
   after 15 s.
 - Destroyed puppets drop a clip 45% of the time; 25% of drops are heavy. A drop vanishes after 25 s and blinks for
@@ -594,7 +620,8 @@ document. **Nothing here is decided.**
   naming; the game title, `CERBERUS` start panel and product name, and the "Mass Effect-like feel" wording in
   `instructions/project.md` may need to change. Not decided.
 - **(gap)** Controller cannot reach the burst rifle or railgun directly (d-pad has four slots; BR and RG only via
-  next-gun). Not decided whether to add a radial/second layer or remap.
+  next-gun). Not decided whether to add a radial/second layer or remap. The planned loadout (pistol plus 2
+  primaries, 6.5) fits the d-pad and may settle it.
 - **(gap)** No on-screen cue for an armored hit beyond sparks and a non-red crosshair (`weapon:armored` is emitted,
   nothing listens). Add one, or keep it learn-by-playing per pillar 4: not decided.
 - **(gap)** No flank warning for troopers; deliberate per current HUD rules. Whether to add an audio cue is not decided.
@@ -602,7 +629,8 @@ document. **Nothing here is decided.**
   to add music or enemy voice, is not decided.
 - **(gap)** Only one boss, one arena and no progression; there is no win state beyond ARENA CLEAR and no restart
   short of reloading the page (destroyed enemies stay destroyed).
-- **(gap)** Prototype art only; direction for final art, and settings for audio volume, FOV or screen shake, are not decided.
+- **(gap)** Prototype art only. Final art direction is now a rule (`instructions/art-style.md`, applied in #87);
+  settings for audio volume, FOV or screen shake are not decided.
 - **(gap)** Railgun and sniper share the heavy ammo class and low reserves (24 and 40 max); balance versus the pierce
   power of the railgun is untested.
 
