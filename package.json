@@ -11,7 +11,8 @@
     "build:artifact": "node scripts/build-artifact.mjs",
     "test": "node tests/ballistics.test.mjs && node tests/levelio.test.mjs",
     "desktop": "vite build && electron .",
-    "desktop:dist": "vite build && electron-builder"
+    "desktop:dist": "vite build && electron-builder",
+    "test:browser": "node tests/run-browser.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"

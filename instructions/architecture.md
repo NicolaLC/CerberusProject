@@ -80,7 +80,7 @@ the only thing three.js recompiles shaders for, so they come from a fixed pool o
 Paused (start panel): only `whilePaused` systems run (controls, stats, camera, post).
 
 ## Events
-Payload objects marked * are reused: copy what you keep.
+Payload objects marked * are reused: copy what you keep. `src/types.js` holds JSDoc typedefs for these payloads and the engine `System` shape (editor hints only, keep in sync).
 | event | payload | listeners |
 |---|---|---|
 | `weapon:shot` | *{ from, to, dir, right, heavy, gun, flash, mag } | fx (tracer, flash, casing), audio |
