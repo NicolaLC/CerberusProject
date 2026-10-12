@@ -23,7 +23,7 @@ Goal: hold 60 fps, never freeze on a bug, scale to a much bigger game.
 - Raycast target lists are cached (`enemies.hitMeshes()` rebuilds only when puppets die / respawn).
 - DOM HUD writes go through `text()` / `css()`, which skip unchanged values.
 - Dynamic resolution (`perf.js`): smoothed CPU work time of the frame (tick, measured in `engine.#frame`) > 1.12× budget for 0.75 s → pixel ratio −0.1 (min 0.5);
-  < 0.8× budget for 4 s → +0.1 (up to `perf.maxScale`). Also "slow": the rAF gap over budget AND >1.25× the best gap seen (GPU-bound frame on a display that can go faster); 30/50 Hz displays never count as slow. `perf.fps` is the real fps from the gap. Emits `engine:resize`; post follows.
+  < 0.8× budget for 4 s → +0.1 (up to `perf.maxScale`). Also "slow": the rAF gap over budget AND >1.25× the best gap seen (GPU-bound frame on a display that can go faster); 30/50 Hz displays never count as slow. After a gap-triggered step down there is no step up for 30 s (`gpuHold`, avoids GPU-bound oscillation); then one probe. `perf.fps` is the real fps from the gap. Emits `engine:resize`; post follows.
 - Graphics presets (`game/view/quality.js`, setting `quality`, panel "Graphics", applied live):
   | preset | max pixel ratio | MSAA | bloom | sun shadow map | anisotropy |
   |---|---|---|---|---|---|

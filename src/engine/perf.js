@@ -8,6 +8,7 @@ const TUNING = {
   downAfter: 0.75, // seconds of slow frames before stepping down
   upAfter: 4, // seconds of fast frames before stepping up
   step: 0.1,
+  gpuHold: 30, // s; after a step down caused by the gap (GPU-bound) alone, no step up: stepping back up would just stall again
   minScale: 0.5,
 };
 
@@ -24,6 +25,7 @@ export class Perf {
     this.slowFor = 0;
     this.fastFor = 0;
     this.enabled = true;
+    this.hold = 0; // seconds left of the GPU hold
     this.warmup = 2; // ignore the first seconds (shader compiles, texture uploads)
   }
 
@@ -43,10 +45,12 @@ export class Perf {
       return;
     }
     this.minGap = Math.min(this.minGap, this.avg);
+    this.hold -= dtSec;
     if (!this.enabled) return;
     const t = this.t;
     const gapSlow = this.avg > t.budget * t.slow && this.avg > this.minGap * 1.25;
-    if (this.work > t.budget * t.slow || gapSlow) {
+    const workSlow = this.work > t.budget * t.slow;
+    if (workSlow || gapSlow) {
       this.slowFor += dtSec;
       this.fastFor = 0;
     } else if (this.work < t.budget * t.fast) {
@@ -55,8 +59,11 @@ export class Perf {
     } else {
       this.slowFor = this.fastFor = 0;
     }
-    if (this.slowFor > t.downAfter && this.scale > t.minScale) this.#set(this.scale - t.step);
-    else if (this.fastFor > t.upAfter && this.scale < this.maxScale) this.#set(this.scale + t.step);
+    if (this.slowFor > t.downAfter && this.scale > t.minScale) {
+      const hold = workSlow ? 0 : t.gpuHold;
+      this.#set(this.scale - t.step);
+      this.hold = hold; // one probe up after the hold; slow by gap again re-arms it
+    } else if (this.fastFor > t.upAfter && this.scale < this.maxScale && this.hold <= 0) this.#set(this.scale + t.step);
   }
 
   #set(s) {
