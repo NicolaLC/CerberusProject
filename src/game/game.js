@@ -218,6 +218,7 @@ export class Game {
   loadScene(name) {
     const key = resolveScene(name);
     const level = this.registry.check(SCENES[key]);
+    if (level.tool && !TOOLS[level.tool]) throw new Error(`level "${key}": unknown tool "${level.tool}"`); // before anything is unloaded
     const { world, enemies, pickups, encounter } = this;
     if (this.sceneName) this.#unloadLevel();
     this.sceneName = key;
@@ -228,11 +229,30 @@ export class Game {
     pickups.load(level);
     encounter.load(level);
     this.resetRun(level);
-    if (level.tool && !TOOLS[level.tool]) throw new Error(`level "${key}": unknown tool "${level.tool}"`);
     this.tool = level.tool ? new TOOLS[level.tool](this, level) : null;
     this.keyHints.set({ debug: this.debug, tool: this.tool });
     this.rebuildHelpers();
+    this.#warmShaders();
     return this;
+  }
+
+  // Compiles the programs first used mid-fight (pooled fx sit invisible, rigs draw their far LOD only at range) now, at
+  // the load, so they don't hitch the first time: everything hidden is shown, compiled, hidden again; rigs go far and back.
+  // Synchronous. Debris shares the far LOD material (parts.js), so it is covered. Skipped when headless (nothing is drawn).
+  #warmShaders() {
+    const { engine, enemies } = this;
+    if (engine.headless) return;
+    const hidden = [];
+    engine.scene.traverse((o) => {
+      if (!o.visible) hidden.push(o);
+    });
+    for (const o of hidden) o.visible = true;
+    const skins = enemies.puppets.map((e) => e.skin).filter(Boolean);
+    const far = skins.map((k) => k.far);
+    for (const k of skins) k.setFar(true);
+    engine.renderer.compile(engine.scene, engine.camera);
+    skins.forEach((k, i) => k.setFar(far[i]));
+    for (const o of hidden) o.visible = false;
   }
 
   // Player at the level's spawn with full health, camera / weapon / fx / hud / juice reset: the start of a run on

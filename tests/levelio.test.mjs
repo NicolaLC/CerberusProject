@@ -66,7 +66,7 @@ for (const f of files) {
   check(`${f}: one piece per line`, start > 0 && pieceLines.every((l) => /^ {4}\{.*\},?$/.test(l)) && lines[start + 1 + level.pieces.length] === '  ]');
   check(`${f}: ends with one newline`, text.endsWith('}\n') && !text.endsWith('\n\n'));
   const keyOrder = lines.slice(1, start).map((l) => /^ {2}"(\w+)"/.exec(l)?.[1]);
-  const wanted = ['name', 'title', 'tool', 'demo', 'spawn', 'interiorZones'].filter((k) => k in level);
+  const wanted = ['version', 'name', 'title', 'tool', 'demo', 'spawn', 'interiorZones'].filter((k) => k in level);
   check(`${f}: top-level keys one per line, name/title/tool/demo/spawn/interiorZones first`, wanted.every((k, i) => keyOrder[i] === k) && keyOrder.length === Object.keys(level).length - 1);
 }
 check('all bundled level files covered', files.length === Object.keys(SCENES).length && levelNames().join() === Object.keys(SCENES).join(), `${files.length} files`);
@@ -85,8 +85,8 @@ const small = {
 };
 const out = serializeLevel(small);
 const L = out.split('\n');
-check('top-level key order', L.slice(1, 7).map((l) => /"(\w+)"/.exec(l)[1]).join() === 'name,title,spawn,interiorZones,extra,pieces');
-check('piece key order', L[7] === '    {"id":"env.box","name":"a","pos":[0.3,0,3],"yaw":1.5708,"params":{"size":[1.2,1,0.5],"mat":"wall"}},');
+check('top-level key order', L.slice(1, 8).map((l) => /"(\w+)"/.exec(l)[1]).join() === 'version,name,title,spawn,interiorZones,extra,pieces');
+check('piece key order', L[8] === '    {"id":"env.box","name":"a","pos":[0.3,0,3],"yaw":1.5708,"params":{"size":[1.2,1,0.5],"mat":"wall"}},');
 check('rounding: no float noise', !/00000|99999/.test(out) && out.includes('"size":[1.2,1,0.5]'));
 check('negative zero is written as 0', !out.includes('-0'));
 check('spawn yaw rounded', out.includes('"spawn": {"yaw":3.1416,"pos":[0,0,1]}'));
@@ -95,7 +95,7 @@ check('rejects NaN', throwsWith(() => serializeLevel({ name: 'n', pieces: [{ id:
 
 // bad files give readable errors
 const base = serializeLevel({ name: 'ok', spawn: { pos: [0, 0, 0] }, interiorZones: [], pieces: [{ id: 'env.box', pos: [0, 0, 0], params: { size: [1, 1, 1], mat: 'wall' } }] });
-const e1 = throwsWith(() => parseLevel(base.replace('"interiorZones": [],', '"interiorZones": [,'), registry), /not valid JSON \(line 4\)/);
+const e1 = throwsWith(() => parseLevel(base.replace('"interiorZones": [],', '"interiorZones": [,'), registry), /not valid JSON \(line 5\)/);
 check('bad JSON names the line', e1 === '', e1);
 check('empty file', throwsWith(() => parseLevel('', registry), /not valid JSON/) === '');
 check('not an object', throwsWith(() => parseLevel('[1]', registry), /JSON object/) === '');
@@ -105,6 +105,10 @@ const e3 = throwsWith(() => parseLevel(base.replace('"pos":[0,0,0],"params"', '"
 check('bad pos is named', e3 === '', e3);
 check('missing pieces', throwsWith(() => parseLevel('{"spawn":{"pos":[0,0,0]}}', registry), /"pieces" must be an array/) === '');
 check('null piece', throwsWith(() => parseLevel('{"pieces":[null],"spawn":{"pos":[0,0,0]}}', registry), /piece #0 must be an object/) === '');
+const v0 = parseLevel('{"pieces":[],"spawn":{"pos":[0,0,0]}}', registry);
+check('missing version upgrades to current', v0.version === 1);
+check('future version is rejected', throwsWith(() => parseLevel('{"version":99,"pieces":[],"spawn":{"pos":[0,0,0]}}', registry), /version 99 is newer/) === '');
+check('saves carry the version', serializeLevel({ name: 'v', pieces: [] }).includes('"version": 1'));
 check('no registry: JSON only', parseLevel('{"a":1}').a === 1);
 
 // encounter pieces (#73) are ordinary pieces: they round-trip with their params

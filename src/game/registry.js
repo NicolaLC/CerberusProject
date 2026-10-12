@@ -8,6 +8,11 @@
 // the registry itself imports nothing and gameplay modules never reach each other through it.
 // Table entry: a builder function, or { build, ...meta } (meta, e.g. `stand: true`, is read through `meta(id)`).
 
+// Level file format version (instructions/level.md, Save and load). MIGRATIONS[v] upgrades a version-v level to v + 1
+// in place; a file without `version` is 0. Add a step here and bump LEVEL_VERSION when the format changes.
+export const LEVEL_VERSION = 1;
+const MIGRATIONS = { 0: () => {} }; // 0 -> 1: the field itself
+
 export class Registry {
   #entries = new Map(); // id -> { owner, build, meta }
 
@@ -50,8 +55,16 @@ export class Registry {
     return e.build(system, data);
   }
 
-  // Throws a readable error for a malformed level (unknown ids, bad positions).
+  // Throws a readable error for a malformed level (unknown ids, bad positions, a newer format). Upgrades an older
+  // one in place (MIGRATIONS), so the level it returns is always at LEVEL_VERSION.
   check(level) {
+    const v = level.version ?? 0;
+    if (!Number.isInteger(v) || v < 0) throw new Error(`level: bad "version" ${JSON.stringify(level.version)}`);
+    if (v > LEVEL_VERSION) throw new Error(`level: format version ${v} is newer than this build supports (${LEVEL_VERSION})`);
+    for (let i = v; i < LEVEL_VERSION; i++) {
+      MIGRATIONS[i](level);
+      level.version = i + 1;
+    }
     if (!Array.isArray(level.pieces)) throw new Error('level: "pieces" must be an array');
     if (!Array.isArray(level.spawn?.pos)) throw new Error('level: "spawn.pos" is required');
     level.pieces.forEach((p, i) => {
