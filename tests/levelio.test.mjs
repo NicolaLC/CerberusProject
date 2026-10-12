@@ -113,7 +113,7 @@ check('no registry: JSON only', parseLevel('{"a":1}').a === 1);
 
 // encounter pieces (#73) are ordinary pieces: they round-trip with their params
 {
-  const lvl = { name: 'enc', spawn: { pos: [0, 0, 0], yaw: 0 }, interiorZones: [], pieces: [
+  const lvl = { version: 1, name: 'enc', spawn: { pos: [0, 0, 0], yaw: 0 }, interiorZones: [], pieces: [
     { id: 'marker.spawn', pos: [1, 0, 2], yaw: 3.1416 },
     { id: 'marker.checkpoint', pos: [0, 0, -5], name: 'cp1' },
     { id: 'marker.entry', pos: [4, 0, -9], params: { group: 'b', enemies: ['enemy.trooper'] } },
