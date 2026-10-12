@@ -12,6 +12,7 @@ import { GUN_ORDER } from './combat/guns.js';
 import { CameraRig } from './view/camera.js';
 import { FX } from './view/fx.js';
 import { Hud } from './view/hud.js';
+import { Log } from './view/log.js';
 import { Audio } from './view/audio.js';
 import { Post } from './view/post.js';
 import { Juice } from './view/juice.js';
@@ -65,6 +66,7 @@ export class Game {
     const weapon = new Weapon({ camera, rig: camRig, player, world, enemies, events });
     const fx = new FX(scene, camera, world).listen(events);
     const hud = new Hud().listen(events, camRig);
+    const log = new Log().listen(events);
     const audio = new Audio(weapon, camera).listen(events);
     const post = new Post(renderer, scene, camera, events);
     applyQuality(settings.quality, { engine, post, world });
@@ -88,7 +90,7 @@ export class Game {
       if (near > 0) input.rumble(near * 0.35, 0, 70);
     });
     addEventListener('pointerdown', () => audio.init()); // resumes audio started from a controller
-    Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, mission, weapon, fx, hud, audio, post, juice, settings });
+    Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, mission, weapon, fx, hud, log, audio, post, juice, settings });
 
     // skeleton debug overlay (H): the player's helper is permanent, the enemies' come and go with the level
     this.skeletons = false;
@@ -194,6 +196,7 @@ export class Game {
         hud.update(dt, { player, weapon, enemies, camRig, world, mission });
       },
     });
+    engine.add({ name: 'log', phase: 'present', update: (dt) => log.update(dt) });
     engine.add({
       name: 'audio',
       phase: 'present',
@@ -262,12 +265,13 @@ export class Game {
   // the level the systems were just loaded with (loadScene, and the Workshop's play in place).
   // `spawn` defaults to the level's own (levelSpawn: a `marker.spawn` piece, else `level.spawn`).
   resetRun(level, spawn = levelSpawn(level)) {
-    const { player, camRig, weapon, fx, hud, juice } = this;
+    const { player, camRig, weapon, fx, hud, log, juice } = this;
     player.place(spawn);
     camRig.reset(player.facing);
     weapon.reset(level.loadout);
     fx.reset();
     hud.reset(level);
+    log.reset();
     juice.reset();
   }
 

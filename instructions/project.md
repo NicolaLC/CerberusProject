@@ -54,6 +54,7 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
   enemy glows violet / magenta only, STEM-00's amber only and `setCore`, arena `weathered` skin vs Library grids, no red arena light.
 - `scripts/screenshots.mjs <outDir> [names]`: the fixed art-review screenshot set (20 angles, canvas only, no HUD), for before / after.
 - `tests/loadout.browser.mjs`: owned guns (#91): a pistol-only `loadout` (keys, wheel, pad, HUD ∞ and slots), `pickup.gun` discovery (event once, switch, toast, then ammo), no `loadout` = all six, bad ids fail validation; uses `?scene=workshop`.
+- `tests/log.browser.mjs`: STEM-00 log lines (#40): `log.line` on start / trigger / objective done / discovered, once, delay, priority queue, entries, validation; uses `?scene=workshop`.
 - `tests/mission.browser.mjs`: mission framework (objective pieces, full mission in play, order, reinforcements, trigger reach, limit, restart / edit / scene switch, bad params); uses `?scene=workshop`.
 - `tests/gym-traversal|gym-range|gym-ai|gym-stress.browser.mjs`: the Gym rooms as fixtures (instructions/gym.md); they
   also print the measured metrics (metrics.md 8b). gym-stress takes several minutes under SwiftShader.
