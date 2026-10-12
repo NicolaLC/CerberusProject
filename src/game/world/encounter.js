@@ -17,6 +17,7 @@ import * as THREE from 'three';
 //                     Common params { text, order?, limit?, wakeGroup?, spawnGroup? }; see OBJECTIVES below and workshop.md "Missions".
 //  log.line           a STEM-00 log line (#40, instructions/narrative.md): params { text, on, priority? ('normal'), once? (true), delay? (s, 0) }.
 //                     When `on` happens (LOG_ON below) it emits `log:say` { text, priority } after `delay`; the Log view (view/log.js) shows it.
+//                     Never in a fight: a fired line waits until STEM-00 has been out of combat for TUNING.calm s, `delay` counts from then.
 // Events out: `trigger:fired` { id, event }, `checkpoint:reached` { id, pos, yaw }, `group:wake` { group } (Enemies),
 // `group:spawn` { group, count }, `log:say` { text, priority }. Events in (the mission, mission.js; tests): `encounter:wake` group, `encounter:spawn` group.
 
@@ -28,6 +29,8 @@ export const TUNING = {
   zone: [8, 4, 8], // example interior zone
   survive: 30, // s, default survive time
   radius: 2, // m, default interact radius
+  combatRange: 30, // m: an awake enemy this close means STEM-00 is in combat (log lines wait)
+  calm: 3, // s without combat (no awake enemy in range, no shot fired, no hit taken) before a log line may play
 };
 
 const COLOR = { spawn: 0x58ff9a, checkpoint: 0x3affff, entry: 0xff7a3a, trigger: 0xff4bd6, zone: 0x4aa8ff, objective: 0xffd23a, log: 0xffb347 };
@@ -92,7 +95,8 @@ export class Encounter {
     this.gizmoMode = false; // set while spawn() builds a gizmo piece
     this.res = null; // gizmo geometry + materials: built with the first gizmo, freed with the last (nothing stays on the GPU in play)
     this.gizmos = 0;
-    this.lines = []; // log lines waiting for their delay (play): { t, rec }
+    this.lines = []; // log lines waiting for calm and their delay (play): { t, rec }
+    this.calm = TUNING.calm; // s since the last combat signal (a run starts calm)
     // requests from outside (the mission, tests); the stored fns are permanent
     events.on('encounter:wake', (g) => this.enemies.wakeGroup(g));
     events.on('encounter:spawn', (g) => this.spawnGroup(g));
@@ -103,6 +107,8 @@ export class Encounter {
     events.on('mission:objective:done', (e) => this.#log(`objective:${e.id}:done`));
     events.on('weapon:discovered', (e) => this.#log(`discovered:${e.gun}`));
     events.on('mission:complete', () => this.#log('mission:complete'));
+    events.on('weapon:shot', () => (this.calm = 0));
+    events.on('player:hurt', () => (this.calm = 0));
   }
 
   // Queues the log lines waiting for `key` (an `on` value). They are emitted from update, after their delay.
@@ -130,6 +136,7 @@ export class Encounter {
     }
     this.items.length = 0;
     this.lines.length = 0;
+    this.calm = TUNING.calm;
     this.checkpoint = this.cpRec = null;
     this.triggers = 0;
     this.mission?.stop();
@@ -251,7 +258,11 @@ export class Encounter {
   update(dt, player, interact = false) {
     if (!player.dead && this.items.length) this.#scan(player);
     this.mission?.update(dt, player, interact);
-    if (!this.lines.length) return;
+    // log lines: you either fight or read, so they wait while an awake enemy is near, and for TUNING.calm s after any shot or hit
+    const r2 = TUNING.combatRange ** 2;
+    if (this.enemies.all.some((a) => a.alive && a.awake && a.pos.distanceToSquared(player.pos) < r2)) this.calm = 0;
+    else this.calm += dt;
+    if (!this.lines.length || this.calm < TUNING.calm) return;
     for (const l of this.lines) if ((l.t -= dt) <= 0) this.events.emit('log:say', { text: l.rec.params.text, priority: l.rec.params.priority ?? 'normal' });
     this.lines = this.lines.filter((l) => l.t > 0);
   }

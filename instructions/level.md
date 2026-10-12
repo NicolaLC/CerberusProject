@@ -58,7 +58,7 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `objective.destroy` | encounter | mission objective: `group?` (enemy squad; absent = any enemy), `count?` (absent = all matching alive when it becomes current, plus reinforcements) |
 | `objective.survive` | encounter | mission objective: `time` (30 s, above 0) |
 | `objective.interact` | encounter | mission objective: `radius` (2 m, above 0): the player alive within it (2.5 m vertical) presses interact (G) |
-| `log.line` | encounter | a STEM-00 log line (#40): `text`, `on` (start, `trigger:<id>`, `checkpoint:<id>`, `objective:<id>`, `objective:<id>:done`, `discovered:<gun>`, `mission:complete`), `priority?` ('normal' / 'high'), `once?` (true), `delay?` (s, 0). Logic only in play; the Workshop draws an amber screen gizmo. Writing rules: narrative.md |
+| `log.line` | encounter | a STEM-00 log line (#40): `text`, `on` (start, `trigger:<id>`, `checkpoint:<id>`, `objective:<id>`, `objective:<id>:done`, `discovered:<gun>`, `mission:complete`), `priority?` ('normal' / 'high'), `once?` (true), `delay?` (s, 0). Never shown in a fight (waits 3 s out of combat). Logic only in play; the Workshop draws an amber screen gizmo. Writing rules: narrative.md |
 
 Every `objective.*` also takes `text` (HUD state line), `order?` (mission order; absent = position among the objectives), `limit?` (s to finish it, else the mission fails), `wakeGroup?`, `spawnGroup?` (run when it becomes current). Rules: workshop.md "Missions".
 

@@ -116,6 +116,46 @@ await ev(() => {
   expect('discovered:rifle fires on a rifle pickup.gun with a pistol-only loadout', r.before.length === 0 && r.after.join() === '> ITEM: KR-7. FUNCTION: KILL.' && r.owned.includes('rifle'), JSON.stringify(r));
 }
 
+// ---- 3b. never in a fight: lines wait for calm ----
+{
+  const r = await ev(() => {
+    const g = window.game;
+    T.play({ loadout: ['pistol'] }, [
+      ['enemy.trooper', [0, 0, -70], { group: 'squad' }],
+      ['trigger.volume', [4, 0, 0], { size: [2, 3, 2] }, 'gate'],
+      ['log.line', [0, 0, 6], { text: 'AFTER', on: 'trigger:gate' }],
+      ['trigger.volume', [-4, 0, 0], { size: [2, 3, 2] }, 'shot'],
+      ['log.line', [1, 0, 6], { text: 'QUIET', on: 'trigger:shot' }],
+    ]);
+    // a pistol shot (no enemy awake), then a line: it waits 3 s from the shot
+    g.engine.input.keys.add('Mouse0');
+    g.engine.input.pressed.add('Mouse0');
+    T.step(1 / 60);
+    g.engine.input.keys.delete('Mouse0');
+    g.player.pos.set(-4, 0, 0);
+    T.step(1.5);
+    const afterShot = T.texts();
+    T.step(2);
+    const calmShot = T.texts();
+    // an awake enemy in range holds a line; out of range, it plays 3 s later
+    const asleep = !g.enemies.all[0].awake;
+    g.encounter.wakeGroup('squad');
+    g.enemies.freeze(true); // awake but not firing: the test is about distance, not about its shots
+    g.player.pos.set(4, 0, 0);
+    g.enemies.all[0].pos.set(0, 0, -12);
+    T.step(4);
+    const awake = T.texts();
+    g.player.pos.set(80, 0, 0);
+    T.step(2);
+    const away2 = T.texts();
+    T.step(1.5);
+    g.enemies.freeze(false);
+    return { asleep, afterShot, calmShot, awake, away2, away: T.texts() };
+  });
+  expect('a line waits 3 s after a shot', r.afterShot.length === 0 && r.calmShot.join() === 'QUIET', JSON.stringify(r));
+  expect('  an awake enemy in range holds it; it plays 3 s after leaving combat', r.asleep && r.awake.join() === 'QUIET' && r.away2.join() === 'QUIET' && r.away.join() === 'QUIET,AFTER', JSON.stringify(r));
+}
+
 // ---- 4. priority queue ----
 {
   const r = await ev(() => {

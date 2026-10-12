@@ -180,12 +180,14 @@ Gizmo: an amber screen on a post; inert in edit mode and the Library (like objec
   `checkpoint:<id>` (`checkpoint:reached`), `objective:<id>` (`mission:objective`, it becomes current), `objective:<id>:done` (`mission:objective:done`),
   `discovered:<gun>` (`weapon:discovered`, gun = a `GUNS` key), `mission:complete`. Anything else, an empty `text`, a bad priority / once / delay: `Registry.check` throws
   `level: piece #i ("log.line") ...` (meta `check`, `logLineProblem`), the builder throws `<id>: ...` (inspector toast).
-- **Firing**: `Encounter` queues the matching records (`once` = one time per run), and emits `log:say { text, priority }` from its update once `delay` has passed (the first `start` line shows
+- **Never in a fight**: a queued line waits while STEM-00 is in combat: an awake enemy alive within 30 m (`TUNING.combatRange`), or a `weapon:shot` / `player:hurt`. It plays once
+  none of that has happened for 3 s (`TUNING.calm`, `encounter.calm`; a run starts calm). `delay` counts from then.
+- **Firing**: `Encounter` queues the matching records (`once` = one time per run), and emits `log:say { text, priority }` from its update once calm and `delay` have passed (the first `start` line shows
   on the first play frame, after `resetRun`). Pending lines are dropped on unload.
 - **Log view** (`src/game/view/log.js`, `game.log`, `#log` in the HUD): one line at a time, bottom centre, amber monospace typed at 40 chars/s with a blinking cursor, held
   `max(2.5 s, 0.06 s per char)`, faded 0.5 s. `say(text, { priority })`: `high` replaces the current line, `normal` waits (more than 4 waiting: the oldest is dropped).
   Every shown line goes to `log.entries` `{ text, t }` (t = s since the run began) for the pause-menu Log (not built). `Game.resetRun` clears it all (`log.reset()`).
-- Suite `tests/log.browser.mjs`: start / restart / once, trigger, objective done, delay, `discovered:rifle`, priority queue and entries, validation.
+- Suite `tests/log.browser.mjs`: start / restart / once, trigger, objective done, delay, waiting for calm (shot, awake enemy), `discovered:rifle`, priority queue and entries, validation.
 
 ## Not yet
 Faces / flicker / label colours / boss arena in the inspector.
