@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { bound } from '../controls.js';
 
 // Gym tool: Traversal and cover room (#64, level src/levels/gym.json, notes in instructions/gym.md).
 // A readout panel (T) for what the room measures: feet / ground height, speed, cover, vault, jet, and how far the
@@ -70,8 +71,8 @@ export class TraversalTool {
     ];
     this.onKey = (e) => {
       if (e.repeat || e.target?.closest?.('select, input, textarea')) return;
-      if (e.code === 'KeyT') this.toggle();
-      else if (e.code === 'KeyG') this.next();
+      if (bound('travToggle', e.code)) this.toggle();
+      else if (bound('travNext', e.code)) this.next();
     };
     addEventListener('keydown', this.onKey);
   }

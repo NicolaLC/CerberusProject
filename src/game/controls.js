@@ -32,7 +32,46 @@ export const BINDINGS = {
   lookDown: ['ArrowDown'],
   skeleton: ['KeyH'],
   stats: ['F3', 'Backquote', 'Pad8'],
+  // Gym tools (keydown listeners ask `bound(action, e.code)`; no free gamepad buttons, so keyboard only)
+  rangeClear: ['KeyB'],
+  rangeToggle: ['KeyN'],
+  rangeReset: ['KeyM'],
+  aiRespawn: ['KeyJ'],
+  aiFreeze: ['KeyK'],
+  aiInvisible: ['KeyL'],
+  aiOverlays: ['KeyO'],
+  travToggle: ['KeyT'],
+  travNext: ['KeyG'],
+  stressUp: ['BracketRight'],
+  stressDown: ['BracketLeft'],
+  stressSweep: ['KeyP'],
+  wakeToggle: ['KeyV'],
+  // Workshop editor (keyboard only; the fly keys reuse forward/back/left/right/run)
+  edFlyUp: ['KeyE'],
+  edFlyDown: ['KeyQ'],
+  edModifier: ['ControlLeft', 'ControlRight', 'MetaLeft'],
+  edPlay: ['KeyP'],
+  edRestart: ['KeyT'],
+  edUndo: ['KeyZ'],
+  edRedo: ['KeyY'],
+  edSave: ['KeyS'],
+  edOpen: ['KeyO'],
+  edDuplicate: ['KeyD'],
+  edTurn: ['KeyR'],
+  edGrid: ['KeyG'],
+  edDelete: ['Delete', 'Backspace'],
+  edCancel: ['Escape'],
+  edNudgeUp: ['ArrowUp'],
+  edNudgeDown: ['ArrowDown'],
+  edNudgeLeft: ['ArrowLeft'],
+  edNudgeRight: ['ArrowRight'],
+  edRaise: ['PageUp'],
+  edLower: ['PageDown'],
 };
+
+// Does this device code (a KeyboardEvent.code) trigger `action`? For keydown listeners and held-key sets.
+export const bound = (action, code) => BINDINGS[action].includes(code);
+export const boundIn = (action, codes) => BINDINGS[action].some((c) => codes.has(c));
 
 const KEY_LOOK = { x: 900, y: 500 }; // px/s equivalent for arrow-key look
 // Right stick look, in mouse px/s at full tilt: a curve for fine aim near the center, and a turn boost when the

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { disposeTree } from '../../engine/dispose.js';
 import { saveLevel, openLevel } from './io.js';
 import { levelSpawn } from '../world/encounter.js';
+import { bound, boundIn } from '../controls.js';
 
 // Workshop editor (#70, instructions/workshop.md): `?scene=workshop` turns into a level editor (level field
 // `"tool": "workshop"`, a Gym-style tool: new Tool(game, level), update(dt), dispose()).
@@ -774,7 +775,7 @@ export class WorkshopEditor {
       el.addEventListener('keydown', (e) => {
         e.stopPropagation();
         if (e.key === 'Enter') this.#commitField(f, el);
-        else if (e.code === 'Escape') {
+        else if (bound('edCancel', e.code)) {
           this.#syncInspector(true);
           el.blur();
         }
@@ -863,8 +864,8 @@ export class WorkshopEditor {
     if (!this.#active(e)) return;
     const c = e.code;
     const mod = e.ctrlKey || e.metaKey;
-    if (!mod && !e.repeat && (c === 'KeyP' || (c === 'KeyT' && this.playing))) {
-      this.#guard(() => (c === 'KeyP' ? this.togglePlay() : this.restart()));
+    if (!mod && !e.repeat && (bound('edPlay', c) || (bound('edRestart', c) && this.playing))) {
+      this.#guard(() => (bound('edPlay', c) ? this.togglePlay() : this.restart()));
       e.preventDefault();
       return;
     }
@@ -872,28 +873,28 @@ export class WorkshopEditor {
     if (!mod) this.keys.add(c); // held keys fly the camera; a Ctrl chord (Ctrl+D...) must not
     if (mod) {
       let done = true;
-      if (c === 'KeyZ') (e.shiftKey ? this.redo() : this.undo());
-      else if (c === 'KeyY') this.redo();
-      else if (c === 'KeyS') this.save();
-      else if (c === 'KeyO') this.open();
-      else if (c === 'KeyD') this.sel >= 0 && this.#guard(() => this.duplicate(this.sel));
+      if (bound('edUndo', c)) (e.shiftKey ? this.redo() : this.undo());
+      else if (bound('edRedo', c)) this.redo();
+      else if (bound('edSave', c)) this.save();
+      else if (bound('edOpen', c)) this.open();
+      else if (bound('edDuplicate', c)) this.sel >= 0 && this.#guard(() => this.duplicate(this.sel));
       else done = false;
       if (done) e.preventDefault();
       return;
     }
     if (e.repeat && !/^(Arrow|Page)/.test(c)) return;
-    if (c === 'KeyR') this.#turn(e.shiftKey ? -1 : 1);
-    else if (c === 'KeyG') {
+    if (bound('edTurn', c)) this.#turn(e.shiftKey ? -1 : 1);
+    else if (bound('edGrid', c)) {
       this.gridIndex = (this.gridIndex + 1) % TUNING.grids.length;
       this.#refresh();
-    } else if (c === 'Delete' || c === 'Backspace') {
+    } else if (bound('edDelete', c)) {
       if (this.sel >= 0) this.#guard(() => this.remove(this.sel));
-    } else if (c === 'Escape') this.#cancel();
-    else if (c === 'ArrowUp' || c === 'ArrowDown' || c === 'ArrowLeft' || c === 'ArrowRight') this.#nudge(c);
-    else if (c === 'PageUp' || c === 'PageDown') {
+    } else if (bound('edCancel', c)) this.#cancel();
+    else if (bound('edNudgeUp', c) || bound('edNudgeDown', c) || bound('edNudgeLeft', c) || bound('edNudgeRight', c)) this.#nudge(c);
+    else if (bound('edRaise', c) || bound('edLower', c)) {
       if (this.sel < 0) return;
       const p = this.doc.pieces[this.sel].pos;
-      this.#guard(() => this.move(this.sel, [p[0], p[1] + (c === 'PageUp' ? 1 : -1) * TUNING.nudgeY, p[2]]));
+      this.#guard(() => this.move(this.sel, [p[0], p[1] + (bound('edRaise', c) ? 1 : -1) * TUNING.nudgeY, p[2]]));
     } else return;
     e.preventDefault();
   }
@@ -913,8 +914,8 @@ export class WorkshopEditor {
     const fx = -Math.sin(this.cam.yaw);
     const fz = -Math.cos(this.cam.yaw);
     const [ax, az] = Math.abs(fx) > Math.abs(fz) ? [Math.sign(fx), 0] : [0, Math.sign(fz)];
-    const sign = code === 'ArrowUp' || code === 'ArrowRight' ? 1 : -1;
-    const [dx, dz] = code === 'ArrowUp' || code === 'ArrowDown' ? [ax, az] : [-az, ax];
+    const sign = bound('edNudgeUp', code) || bound('edNudgeRight', code) ? 1 : -1;
+    const [dx, dz] = bound('edNudgeUp', code) || bound('edNudgeDown', code) ? [ax, az] : [-az, ax];
     const step = this.grid || 0.1;
     const p = this.doc.pieces[this.sel].pos;
     this.#guard(() => this.move(this.sel, [p[0] + sign * dx * step, p[1], p[2] + sign * dz * step]));
@@ -1027,12 +1028,12 @@ export class WorkshopEditor {
     if (!this.editing) return;
     const cam = this.game.engine.camera;
     // free-fly
-    if (!this.keys.has('ControlLeft') && !this.keys.has('ControlRight') && !this.keys.has('MetaLeft')) {
+    if (!boundIn('edModifier', this.keys)) {
       const k = this.keys;
-      const f = (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0);
-      const s = (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0);
-      const u = (k.has('KeyE') ? 1 : 0) - (k.has('KeyQ') ? 1 : 0);
-      const v = TUNING.fly * dt * (k.has('ShiftLeft') || k.has('ShiftRight') ? TUNING.fast : 1);
+      const f = (boundIn('forward', k) ? 1 : 0) - (boundIn('back', k) ? 1 : 0);
+      const s = (boundIn('right', k) ? 1 : 0) - (boundIn('left', k) ? 1 : 0);
+      const u = (boundIn('edFlyUp', k) ? 1 : 0) - (boundIn('edFlyDown', k) ? 1 : 0);
+      const v = TUNING.fly * dt * (boundIn('run', k) ? TUNING.fast : 1);
       const { yaw, pitch } = this.cam;
       cam.position.x += (-Math.sin(yaw) * Math.cos(pitch) * f + Math.cos(yaw) * s) * v;
       cam.position.y += (Math.sin(pitch) * f + u) * v;

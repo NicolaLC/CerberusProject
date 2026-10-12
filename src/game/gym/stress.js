@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { bound } from '../controls.js';
 
 // Gym tool: Performance stress room (#67, instructions/gym.md). A panel spawns N of each kind through the
 // registry builders (the same ids as level files) and reports what they cost: frame time, draw calls, triangles,
@@ -297,11 +298,11 @@ export class StressTool {
 
   #key(e) {
     const k = KINDS[this.selected];
-    if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
-      const step = (e.code === 'BracketRight' ? 1 : -1) * (e.shiftKey ? 4 : 1);
+    if (bound('stressUp', e.code) || bound('stressDown', e.code)) {
+      const step = (bound('stressUp', e.code) ? 1 : -1) * (e.shiftKey ? 4 : 1);
       this.sweep = null; // manual control cancels a running sweep
       this.setCount(k.key, this.counts[k.key] + step);
-    } else if (e.code === 'KeyP' && !e.repeat) this.startSweep();
+    } else if (bound('stressSweep', e.code) && !e.repeat) this.startSweep();
   }
 
   dispose() {
