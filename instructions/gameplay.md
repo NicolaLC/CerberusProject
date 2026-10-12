@@ -180,7 +180,7 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
 - Attacks: cannon bursts (0.7 s eye charge, 6 bolts × 9 dmg, cooldown 2.2-3.4 s, needs line of sight);
   plasma mortar every 6-8.5 s (×1.8 faster while the player is in cover) lobbed at the player's position with a ground
   ring telegraph, 3.6 m blast, 34 dmg; stomp when the player is within 6.5 m (0.75 s rear-up, 7 m blast, 24 dmg).
-- Movement: keeps 11-20 m, circles the player, turns round when blocked; collision radius 3.6 m (the whole leg
+- Movement: keeps 11-20 m, circles the player, turns round when blocked; collision radius 4.2 m (the whole leg
   span, so legs don't reach into walls), walks over low cover, not through walls. A foot whose spot is behind or on
   a wall is pulled in toward the body. Legs: tripod gait, IK (femur 2.4, tibia 3.8, knees up), a foot steps when 1.3 m from home.
 

@@ -11,7 +11,8 @@ Cerberus is a third-person sci-fi cover shooter with a Mass Effect-like feel. Yo
 training arena that exists to prove five things: aiming, shooting, cover, enemies and lighting. You deploy into
 a yard with low and high cover lines, an east shooting range, an interior building and a walled boss arena,
 and fight training puppets, cover-using troopers, hovering drones and a six-legged spider mech miniboss with six
-weapons. Art is prototype-grade (procedural geometry, grid textures, synthesized audio plus recorded weapon sounds).
+weapons. Art is prototype-grade (procedural geometry with weathered materials, grid textures in the Gym, weathered metal in
+the arena, synthesized audio plus recorded weapon sounds), following the art style rule (`instructions/art-style.md`).
 
 ### Platforms
 - **Web:** Vite build, runs from any folder or sub-path; keyboard + mouse, trackpad or gamepad; also a single-file page.
@@ -225,7 +226,8 @@ look with arrow keys.
 
 ### Cover types
 Cover type comes from height: under 1.7 m is low, otherwise high. Walls (building walls, range separator, boss
-arena walls) behave as high cover. Colour code in the arena: orange = low, blue = high, light grey = walls.
+arena walls) behave as high cover. Colour code in the Gym rooms (grid textures): orange = low, blue = high, light grey = walls.
+The arena wears weathered metal panels instead: low cover darker and warmer, high cover cooler and lighter.
 
 Low cover: crouched; aiming or firing pops up (fire waits until standing); can be vaulted or jumped onto.
 High cover and walls: standing; shooting is blocked away from edges (pinned); peek at ends and doorways.
@@ -391,7 +393,8 @@ down. Destroyed enemies stay destroyed until the page is reloaded.
 | Spider mech (SX-6 Tarantula) | 1 | core 900, legs 160 each | Miniboss |
 
 ### 8.1 Puppets
-- Look: crash-test mannequin robots on a pneumatic post, yellow (static, mover) or red-orange (shooter), bullseye
+- Look: crash-test mannequin robots on a pneumatic post, matte scuffed calibration ochre (static, mover) or darker ochre
+  (shooter), small violet sensors, bone-and-black bullseye
   on the chest.
 - Static and mover puppets never attack. Each puppet gets 2 random body parts marked as weak spots (x3).
 - **Shooter cycle:** hidden, up, telegraph (visor glow 0.45 s), 3 bolts, hide. Only engages a player within 30 m
@@ -399,7 +402,7 @@ down. Destroyed enemies stay destroyed until the page is reloaded.
 - **Bolts:** 34 m/s, 7 damage, collide with the world and the player.
 
 ### 8.2 Troopers
-Armed assault robots (gunmetal frame, slate armor, red faction plates, red visor slit), 150 HP, 1 weak spot.
+Armed assault robots (gunmetal frame, dark metal armor, worn ochre livery, a small violet sensor cluster), 150 HP, 1 weak spot.
 They are the cover-versus-cover test.
 
 | Property | Value |
@@ -431,7 +434,7 @@ They are the cover-versus-cover test.
   `trooper:flank` event has no listener on screen); the player has to notice it.
 
 ### 8.3 Drones
-- Ducted quad-rotors (armored pod, orange spine plate, red lens cluster, slung cannon) hovering 3.5 to 5 m up: four in the yard / range, two escorting the boss arena.
+- Ducted quad-rotors (dark metal pod, worn ochre spine plate, small violet sensor cluster, slung cannon) hovering 3.5 to 5 m up: four in the yard / range, two escorting the boss arena.
 - Wake on sight within 36 m with line of sight, or when hit. Then circle the player at 9 to 18 m (speed 5.5 m/s),
   flipping direction every 2.5 to 5.5 s.
 - Fire 2-bolt bursts (6 damage, 0.16 s apart) after a 0.45 s eye flare; cooldown 1.6 to 2.8 s.
@@ -439,7 +442,8 @@ They are the cover-versus-cover test.
   down they tumble and burst on landing (no damage). They stay in the yard and never enter the building.
 
 ### 8.4 Spider mech miniboss (SX-6 Tarantula)
-Located in the north-east arena. Dormant (crouched, eye dim) until the player enters the arena, comes within 28 m
+A six-legged saucer walker: ochre saucer hull, a sensor band of small violet lens clusters, twin-barrel gun pods on
+side pylons, tall splayed legs, the core under a hatch on top. Located in the north-east arena. Dormant (crouched, sensors dim) until the player enters the arena, comes within 28 m
 with line of sight, or shoots it. On wake: toast "(warning sign) SX-6 TARANTULA" and the boss bar appears.
 
 **Armor, legs, core:**
@@ -462,7 +466,7 @@ with line of sight, or shoots it. On wake: toast "(warning sign) SX-6 TARANTULA"
 | Plasma mortar | Ground ring at the player's position, 1.5 s flight | Every 6 to 8.5 s (x1.8 faster while the player is in cover; min range 8 m), 3.6 m blast, 34 damage |
 | Stomp | 0.75 s rear-up | When the player is within 6.5 m; 7 m blast, 24 damage, cooldown 3 s |
 
-**Movement:** keeps 11 to 20 m from the player and circles, turns round when blocked; collision radius 3.6 m (the
+**Movement:** keeps 11 to 20 m from the player and circles, turns round when blocked; collision radius 4.2 m (the
 whole leg span); walks over low cover, not through walls. Legs walk a tripod gait with IK.
 
 **Camera lock-on:** while the boss is awake, alive and within 40 m, the camera drifts toward it when the player is
@@ -523,8 +527,8 @@ resolution keeps running under all of them (target 60 fps). See `instructions/en
 | Boss | Leg break: hitstop and trauma; death: 0.15 s hitstop, big trauma, kill flash; footsteps and blasts shake by distance |
 
 ### Post-processing
-Bloom 0.4 outside, 0.7 inside (threshold 0.92, so emissive colours above 1.0 glow on purpose). Grade: warm tint
-outside, cool inside; vignette tightens while aiming; screen desaturates and reddens at low health. Chromatic
+Bloom 0.4 outside, 0.7 inside (threshold 1.0, so only emissive colours glow). Grade: desaturated surfaces with teal
+shadows (emissives keep their colour), slightly colder inside; vignette tightens while aiming; screen desaturates and reddens at low health. Chromatic
 aberration and grain, damage and kill flashes, then ACES tone mapping.
 
 ### Rumble (controller, only while the pad is in use)

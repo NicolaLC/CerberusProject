@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { EnemyBody, box } from './enemy.js';
+import { EnemyBody, box, VISOR_REST } from './enemy.js';
 import { buildPuppet, puppetMaterials } from './looks.js';
 import { damp, wrapAngle } from '../../engine/math.js';
 
@@ -23,7 +23,7 @@ export class Puppet extends EnemyBody {
       pos: def.pos,
       yaw: def.yaw ?? 0,
       health: def.kind === 'shooter' ? HEALTH.shooter : HEALTH.default,
-      mats: puppetMaterials(def.kind === 'shooter' ? 0xd04a2a : 0xe8c23a),
+      mats: puppetMaterials(def.kind === 'shooter' ? 0x8a6a24 : 0xc9a640), // shooters: a darker ochre
     });
     buildPuppet(this.rig, this.mats, this.visor);
     this.home = this.pos.clone();
@@ -102,7 +102,7 @@ export class Puppet extends EnemyBody {
         }
         break;
       case 'telegraph':
-        this.visor.emissiveIntensity = 1.5 + (0.45 - this.timer) * 18;
+        this.visor.emissiveIntensity = VISOR_REST + (0.45 - this.timer) * 18;
         if (this.timer <= 0) {
           this.state = 'fire';
           this.shotsLeft = 3;
@@ -117,7 +117,7 @@ export class Puppet extends EnemyBody {
           if (this.shotsLeft <= 0) {
             this.state = 'hold';
             this.timer = 0.6;
-            this.visor.emissiveIntensity = 1.5;
+            this.visor.emissiveIntensity = VISOR_REST;
           }
         }
         break;
@@ -157,14 +157,14 @@ function targetMat() {
   c.width = c.height = 64;
   const g = c.getContext('2d');
   for (let i = 0; i < 4; i++) {
-    g.fillStyle = i % 2 ? '#ffffff' : '#d01818';
+    g.fillStyle = i % 2 ? '#cfc8b4' : '#1c1d1f'; // calibration rings: bone white on black, matte
     g.beginPath();
     g.arc(32, 32, 32 - i * 8, 0, Math.PI * 2);
     g.fill();
   }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  _target = new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: 0.6 });
-  _target.userData.lodColor = new THREE.Color(0xd86a6a); // average of the red/white rings for the far LOD
+  _target = new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: 0.85 });
+  _target.userData.lodColor = new THREE.Color(0x77736a); // average of the rings for the far LOD
   return _target;
 }

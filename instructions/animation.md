@@ -18,10 +18,13 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
 
 ## Player model (`src/game/actors/soldier.js`)
 - `buildSoldier(rig)` builds a procedural military combat robot (mood reference: olive drab plate carrier and
-  pads over an exposed mechanical frame): rounded boxes / cylinders / capsules per bone. Palette: dark mesh
-  fabric, olive drab hard plates, grey-green padded cordura (pouches, shoulder and knee pads), black metal frame
-  (waist actuator, neck pistons, shin hydraulics), yellow hazard rings, amber HDR LEDs; a boxy sensor head with
-  a big lens; radio backpack attached to Spine2. Every detail is a child of a bone part, so it follows the body;
+  pads over an exposed mechanical frame): rounded boxes / cylinders / capsules per bone. Palette (art-style.md):
+  dark mesh fabric, scratched olive drab hard plates, grey-green padded cordura (pouches, shoulder and knee pads),
+  black metal frame (waist actuator, neck pistons, shin hydraulics, welded patch plates), dark metal bands and
+  stencilled `STEM-00` serial plates (`marking`, backpack and right shoulder), small amber HDR LEDs and the amber
+  chest core (`core`, `Player.setCore(0..1)` sets its brightness: the story hook of #49); a boxy sensor head with
+  a big lens; radio backpack attached to Spine2. Weathering comes from shared wear maps (`wornMaterial` in
+  `world/textures.js`), not from extra materials. Every detail is a child of a bone part, so it follows the body;
   RigidSkin batches it to one draw per material (keep to the 8 materials in `soldierMaterials`). The player rig is created with `dummy: false`; puppets keep the dummy.
 - Same contract as the dummy: each bone's group is its part, so `rig.setPart` swaps in a modeled piece.
 
@@ -31,14 +34,19 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
 - Gameplay never depends on the look: humanoid enemies keep the rig's dummy boxes as invisible hitboxes (hit zones,
   weak-spot placement), drone and spider keep their old boxes invisible (`HITBOX_MAT`); only weak parts (spider
   knees and core) are drawn as their own hitbox. Looks are baked by RigidSkin like the player's parts.
-- `looks.js`: troopers (`buildTrooper`: gunmetal frame, slate armor, red faction plates, visor slit, power pack;
+- Enemy palette (art-style.md): dark metal under worn matte ochre livery (`wornMaterial`), violet sensors (`VISOR` in
+  `enemy.js`) dimmer at rest than the magenta weak spots, which stay the brightest thing on every enemy. Sensors are
+  small uneven clusters, never two big eyes or a slit that reads as a face. HiveMind shots are violet-white (`PROJECTILE`).
+- `looks.js`: troopers (`buildTrooper`: gunmetal frame, dark metal armor, ochre livery, sensor cluster, power pack;
   the visor material also lights the LEDs, so they flare with the aim telegraph) and puppets (`buildPuppet`:
-  crash-test mannequin in the kind's shell color, black hinge drums; chest front stays behind the bullseye at
+  crash-test mannequin in matte calibration ochre (shooters darker), black hinge drums; chest front stays behind the bullseye at
   z 0.155). Keep limb fronts near the dummy boxes' front faces: weak spots are placed there.
-- `drone.js`: armored pod, orange spine plate, lens cluster (eye material), slung cannon, core in a housing
-  underneath, ducted rotors (blades on the spinning rotor bones). `spider.js`: hull in pieces, hazard chevrons,
-  skirts with hip drums, turret with spider-eye cluster, twin barrels, mortar tube; legs with rams, shin guards,
-  foot pads. Leg bones twist arbitrarily (IK), so leg looks stay round-ish.
+- `drone.js`: armored pod, ochre spine plate, small asymmetric sensor cluster (eye material), slung cannon, core in a housing
+  underneath, ducted rotors (blades on the spinning rotor bones). `spider.js` (the owner's walker concept): a saucer hull in
+  pieces (ochre shells, dark keel and rim, hub underneath with the hip drums), the core on top under a split hatch, a dark
+  sensor band that turns on the rim (`turret` bone, yaw) with small uneven violet lens clusters, twin-barrel gun pods on
+  side pylons (`guns` bone under the turret, pitch; shots alternate pods, `GUN_SIDE`), mortar tube and antennas; tall
+  splayed legs with rams, cable bundles, shin guards, wide foot pads (limb hitboxes match the thicker legs). Leg bones twist arbitrarily (IK), so leg looks stay round-ish.
 - Death debris: `debrisCopy(piece)` merges the baked proxies of each piece on a bone (one chunk per look group,
   weak spot or gun, one mesh per material); `disposeDebris` frees it. Split a look into several groups if it
   should break into more chunks.
