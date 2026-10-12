@@ -9,8 +9,8 @@ Goal: hold 60 fps, never freeze on a bug, scale to a much bigger game.
   slows down instead of spiralling). Scaled by `engine.timeScale` (hitstop, owned by Juice).
 - Edge presses (`input.wasPressed`) are only visible in the first substep: a press is consumed once.
 - `engine.headless`: simulate without drawing (tests); `scene.updateMatrixWorld()` replaces the render phase.
-- Every system call is wrapped: an exception is logged, the frame continues. 10 failures in a row disable the
-  system and emit `engine:systemFailed` (the HUD shows SYSTEM FAULT). Event listeners are isolated the same way.
+- Every system call is wrapped: an exception is logged, the frame continues. a failure score (+1 per exception, -1 per second of success) reaching 10 disables the
+  system (so one that throws every other frame is caught too; only the first failure of a burst and the disabling are logged) and emit `engine:systemFailed` (the HUD shows SYSTEM FAULT). Event listeners are isolated the same way.
 - `engine.stop()` + `engine.step(dt)` run exact frames without the browser loop (deterministic tests).
 - `random.js`: seedable `Rng` streams; give each gameplay system its own.
 - WebGL context loss pauses rendering until restore. `engine.timings[name]` = smoothed ms per system.
@@ -22,8 +22,8 @@ Goal: hold 60 fps, never freeze on a bug, scale to a much bigger game.
   numbers). Decals are a fixed ring buffer. Warm pools at load so the first fight doesn't compile shaders.
 - Raycast target lists are cached (`enemies.hitMeshes()` rebuilds only when puppets die / respawn).
 - DOM HUD writes go through `text()` / `css()`, which skip unchanged values.
-- Dynamic resolution (`perf.js`): average frame time > 1.12× budget for 0.75 s → pixel ratio −0.1 (min 0.5);
-  < 0.8× budget for 4 s → +0.1 (up to `perf.maxScale`). Emits `engine:resize`; post follows.
+- Dynamic resolution (`perf.js`): smoothed CPU work time of the frame (tick, measured in `engine.#frame`) > 1.12× budget for 0.75 s → pixel ratio −0.1 (min 0.5);
+  < 0.8× budget for 4 s → +0.1 (up to `perf.maxScale`). Also "slow": the rAF gap over budget AND >1.25× the best gap seen (GPU-bound frame on a display that can go faster); 30/50 Hz displays never count as slow. After a gap-triggered step down there is no step up for 30 s (`gpuHold`, avoids GPU-bound oscillation); then one probe. `perf.fps` is the real fps from the gap. Emits `engine:resize`; post follows.
 - Graphics presets (`game/view/quality.js`, setting `quality`, panel "Graphics", applied live):
   | preset | max pixel ratio | MSAA | bloom | sun shadow map | anisotropy |
   |---|---|---|---|---|---|

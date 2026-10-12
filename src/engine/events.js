@@ -6,15 +6,15 @@ export class Events {
 
   on(type, fn) {
     let list = this.#map.get(type);
-    if (!list) this.#map.set(type, (list = []));
-    list.push(fn);
+    if (!list) list = [];
+    this.#map.set(type, list.concat(fn)); // copy-on-write (see off)
     return () => this.off(type, fn);
   }
 
   off(type, fn) {
     const list = this.#map.get(type);
     const i = list ? list.indexOf(fn) : -1;
-    if (i >= 0) list.splice(i, 1);
+    if (i >= 0) this.#map.set(type, list.toSpliced(i, 1)); // copy-on-write: an emit in progress keeps its array
   }
 
   emit(type, data) {

@@ -270,5 +270,29 @@ for (const name of SCENES) {
   await p.close();
 }
 
+// fault isolation: a system throwing every frame, and one throwing every OTHER frame, both get disabled; a good one lives
+{
+  const p = await b.newPage({ viewport: { width: 320, height: 180 } });
+  await p.goto(withScene(null));
+  await p.waitForFunction(() => window.game?.engine);
+  const r = await p.evaluate(() => {
+    const { engine } = window.game;
+    engine.stop();
+    const err = console.error;
+    console.error = () => {};
+    let n = 0;
+    const bad = engine.add({ name: 'bad', update() { throw 1; } });
+    const flaky = engine.add({ name: 'flaky', update() { if (n++ % 2) throw 1; } });
+    const good = engine.add({ name: 'good', update() {} });
+    for (let i = 0; i < 60; i++) engine.step(1 / 60);
+    console.error = err;
+    const out = { bad: bad.disabled, flaky: flaky.disabled, good: good.disabled };
+    for (const s of [bad, flaky, good]) engine.remove(s);
+    return out;
+  });
+  expect('fault isolation: a system that throws every frame, or every other frame, is disabled; a good one is not', r.bad && r.flaky && !r.good, JSON.stringify(r));
+  await p.close();
+}
+
 await b.close();
 process.exit(fail.length ? 1 : 0);
