@@ -103,19 +103,21 @@ Payload objects marked * are reused: copy what you keep. `src/types.js` holds JS
 | `weapon:reload` | 'start' \| 'done' \| 'good' \| 'perfect' \| 'jam' | audio, juice |
 | `weapon:switch` / `weapon:dry` | gun id / – | audio |
 | `weapon:armored` | enemy | – (no listener: the HUD shows no hint) |
-| `boss:wake` / `boss:down` | boss | hud toast, audio |
+| `boss:wake` / `boss:down` | boss | hud toast (both), audio (wake) |
 | `blast` / `boss:leg` / `boss:dead` | *{ point, radius, kind } (blast kind: mortar, stomp, drone) | fx, juice, audio |
 | `boss:step` | *{ point, big } | juice, audio |
 | `boss:charge` / `boss:stomp` / `boss:mortar` | boss / boss / position | audio |
 | `player:hurt` | *{ amount, dir } | hud (direction), juice, audio |
 | `player:coverSlam` / `player:land` | – / 'vault' \| 'jet' | juice, audio (land) |
 | `player:jet` | *{ point, dir } (nozzle, exhaust direction) | fx, audio, juice |
-| `player:vault` | 'hop' \| 'slide' | – |
+| `player:vault` | 'hop' \| 'slide' | Gym traversal tool |
 | `player:coverRun` | *{ to, type, collider } (cover-to-cover run starts; ends with `player:coverSlam`) | – |
+| `player:coverCorner` | *{ kind } ('outside' wrap / 'inside' turn; a corner move starts) | no listener yet (tests only) |
 | `player:vaultRefused` | *{ collider, blocker } (landing spot blocked; a jet burst fires instead) | Gym traversal tool |
 | `player:step` | *{ run, raised } (each heel strike; not in the air) | audio |
 | `enemy:step` | position (trooper / moving puppet heel strike) | audio (fades out by 28 m from the camera) |
 | `puppet:down` | actor (any enemy type; emitted by `ctx.reportKill`, which also counts the kill and fires `arena:clear` on the last one) | pickups (drop), audio, mission (destroy) |
+| `arena:clear` | – (emitted by `Enemies.#reportKill` when the kill count reaches `all.length`) | hud toast |
 | `trigger:fired` | { id, event } (a `trigger.volume` was entered) | mission (reach with `trigger`) |
 | `checkpoint:reached` | { id, pos, yaw } | hud toast, mission (reach with `trigger`) |
 | `group:wake` / `group:spawn` | { group } / { group, count } | – / mission (destroy without `count`) |
@@ -128,6 +130,7 @@ Payload objects marked * are reused: copy what you keep. `src/types.js` holds JS
 | `trooper:flank` | trooper | – (tests; no HUD message) |
 | `engine:resize` | { width, height, pixelRatio } | post |
 | `engine:systemFailed` | { name, error } | hud toast |
+| `engine:contextLost` / `engine:contextRestored` | – / – (WebGL context lost / restored; the engine stops rendering while lost) | no listener yet |
 
 ## Adding things
 - New system: a class with `update(dt, ...)`, registered in `game.js` with a name and phase.

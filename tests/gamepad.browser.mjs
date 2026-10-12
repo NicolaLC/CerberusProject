@@ -27,7 +27,7 @@ const r = await p.evaluate(() => {
   const { engine, player, camRig, weapon, enemies } = g;
   engine.stop();
   engine.headless = true; // simulate only: nothing here checks pixels
-  for (const e of enemies.puppets) e.alive = false; // quiet arena
+  for (const e of enemies.all) e.alive = false; // quiet arena
   enemies.dirty = true;
   const pad = window.__pad;
   const step = (n = 1) => { for (let i = 0; i < n; i++) engine.step(1 / 60); };

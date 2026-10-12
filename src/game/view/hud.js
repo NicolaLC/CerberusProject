@@ -207,7 +207,7 @@ export class Hud {
     css(e.health, 'width', `${player.health}%`);
 
 
-    text(e.kills, `${enemies.kills} / ${enemies.puppets.length}`);
+    text(e.kills, `${enemies.kills} / ${enemies.all.length}`);
     text(e.zone, world.isInterior(player.pos) ? 'INTERIOR' : this.zoneName);
     const line = mission.hudText();
     text(e.objective, line ?? '');

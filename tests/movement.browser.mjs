@@ -15,7 +15,7 @@ const r = await p.evaluate(() => {
   const { engine, player, enemies, camRig, world } = g;
   engine.stop();
   engine.headless = true; // simulate only
-  for (const e of enemies.puppets) e.alive = false;
+  for (const e of enemies.all) e.alive = false;
   enemies.dirty = true;
   const keys = engine.input.keys;
   const step = (n = 1) => { for (let i = 0; i < n; i++) engine.step(1 / 60); };

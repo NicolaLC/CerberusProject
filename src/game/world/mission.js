@@ -108,7 +108,7 @@ export class Mission {
   #begin(i) {
     const r = (this.current = this.objectives[(this.index = i)]);
     this.elapsed = this.progress = 0;
-    this.target = r.obj === 'destroy' ? r.params.count ?? this.enemies.puppets.filter((a) => a.alive && (r.params.group == null || a.squad === r.params.group)).length : 0;
+    this.target = r.obj === 'destroy' ? r.params.count ?? this.enemies.all.filter((a) => a.alive && (r.params.group == null || a.squad === r.params.group)).length : 0;
     if (r.params.wakeGroup != null) this.events.emit('encounter:wake', r.params.wakeGroup);
     if (r.params.spawnGroup != null) this.events.emit('encounter:spawn', r.params.spawnGroup);
     this.events.emit('mission:objective', this.#info(r));

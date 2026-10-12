@@ -22,8 +22,8 @@ const r = await p.evaluate(() => {
   const shadowCalls = calls - info.calls;
   g.world.sun.castShadow = true;
   g.engine.step(1 / 60);
-  const far = g.enemies.puppets.filter((pp) => pp.pos.distanceTo(g.engine.camera.position) > 40);
-  const lodFar = g.enemies.puppets.filter((pp) => pp.pos.distanceTo(g.engine.camera.position) > 34);
+  const far = g.enemies.all.filter((pp) => pp.pos.distanceTo(g.engine.camera.position) > 40);
+  const lodFar = g.enemies.all.filter((pp) => pp.pos.distanceTo(g.engine.camera.position) > 34);
   const lodOk = lodFar.every((pp) => pp.skin.far && pp.skin.lodMesh.visible && pp.skin.meshes.every((m) => !m.visible));
   // a far (LOD) puppet must still be hittable: its hitboxes are untouched proxies.
   // Many far puppets are legitimately behind walls from the spawn, so any one in sight must read as an enemy.
@@ -42,7 +42,7 @@ const r = await p.evaluate(() => {
       break;
     }
   }
-  const skins = [g.player.skin, ...g.enemies.puppets.map((pp) => pp.skin)];
+  const skins = [g.player.skin, ...g.enemies.all.map((pp) => pp.skin)];
   return {
     calls,
     lodOk,
@@ -54,7 +54,7 @@ const r = await p.evaluate(() => {
     minCullRadius: Math.min(...skins.flatMap((s) => s.meshes.map((m) => m.boundingSphere.radius))),
     proxiesHidden: g.world.meshes.every((m) => !m.visible),
     proxiesFrozen: skins.every((s) => s.proxies.length > 20 && s.proxies.every((m) => !m.matrixWorldAutoUpdate && !m.matrixAutoUpdate)),
-    hitMeshesHidden: g.enemies.puppets.every((pp) => pp.hitMeshes.every((m) => !m.visible)),
+    hitMeshesHidden: g.enemies.all.every((pp) => pp.hitMeshes.every((m) => !m.visible)),
   };
 });
 console.log(r);

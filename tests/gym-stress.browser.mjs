@@ -48,14 +48,14 @@ await p.evaluate(() => {
       o.frustumCulled = false;
     });
     for (const far of [true, false]) {
-      for (const en of g.enemies.puppets) en.skin?.setFar(far);
+      for (const en of g.enemies.all) en.skin?.setFar(far);
       e.renderer.render(e.scene, e.camera);
     }
     for (const o of culled) o.frustumCulled = true;
     let objects = 0;
     e.scene.traverse(() => objects++);
     const m = e.renderer.info.memory;
-    return { geometries: m.geometries, textures: m.textures, objects, lights: g.world.lights.length, puppets: g.enemies.puppets.length };
+    return { geometries: m.geometries, textures: m.textures, objects, lights: g.world.lights.length, puppets: g.enemies.all.length };
   };
   // one frame's renderer totals with culling off
   const frame = () => {
@@ -245,8 +245,8 @@ for (const kind of ['puppets', 'troopers', 'drones']) {
       g.engine.step(1 / 60);
       bolts = Math.max(bolts, g.enemies.bolts.length);
     }
-    for (const e of g.enemies.puppets) if (e.alerted || e.awake) awake++;
-    const out = { bolts, awake, hurt: g.player.health < hp, count: g.enemies.puppets.length };
+    for (const e of g.enemies.all) if (e.alerted || e.awake) awake++;
+    const out = { bolts, awake, hurt: g.player.health < hp, count: g.enemies.all.length };
     g.engine.headless = false;
     t.clear();
     return out;
@@ -268,7 +268,7 @@ for (const kind of ['puppets', 'troopers', 'drones']) {
     const one = t.counts.puppets; // selected kind starts at puppets
     press('BracketRight', { shiftKey: true });
     const five = t.counts.puppets;
-    const spawned = g.enemies.puppets.length;
+    const spawned = g.enemies.all.length;
     t.clear();
     // sweep: stepped headless
     g.engine.headless = true;
@@ -277,7 +277,7 @@ for (const kind of ['puppets', 'troopers', 'drones']) {
     let frames = 0;
     while (t.sweep && frames++ < 60 * 200) g.engine.step(1 / 60);
     g.engine.headless = false;
-    return { panel, one, five, spawned, started, frames, rows: t.results.length, kinds: [...new Set(t.results.map((x) => x.kind))], left: g.enemies.puppets.length + g.world.lights.length, done: !t.sweep };
+    return { panel, one, five, spawned, started, frames, rows: t.results.length, kinds: [...new Set(t.results.map((x) => x.kind))], left: g.enemies.all.length + g.world.lights.length, done: !t.sweep };
   });
   expect('the panel exists', r.panel);
   expect('[ and ] step the selected count', r.one === 1 && r.five === 5 && r.spawned === 5, JSON.stringify(r));
@@ -334,7 +334,7 @@ for (const kind of ['puppets', 'troopers', 'drones']) {
       window.__t.step(4);
       g.loadScene('arena'); // switches away with 80 units spawned: the tool frees them
       window.dispatchEvent(new KeyboardEvent('keydown', { code: 'BracketRight' })); // the old tool must not hear it
-      const stray = g.enemies.puppets.length - g.registry.piecesOf(g.level, 'enemies').length;
+      const stray = g.enemies.all.length - g.registry.piecesOf(g.level, 'enemies').length;
       listenerLeak ||= stray !== 0 || !!document.getElementById('stress-panel') || g.enemies.demo === true;
       window.__t.step(2);
       arena.push(read());

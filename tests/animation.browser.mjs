@@ -14,7 +14,7 @@ const r = await p.evaluate(() => {
   const g = window.game;
   g.engine.stop();
   g.engine.headless = true;
-  const t = g.enemies.puppets.find((x) => x.kind === 'trooper');
+  const t = g.enemies.all.find((x) => x.kind === 'trooper');
   const V = t.pos.constructor;
   const out = {};
   // [name, speed, run, local move direction (x = left, z = forward)]
@@ -64,7 +64,7 @@ const r = await p.evaluate(() => {
 const pl = await p.evaluate(() => {
   const g = window.game;
   const { engine, player, enemies, camRig } = g;
-  for (const e of enemies.puppets) e.alive = false;
+  for (const e of enemies.all) e.alive = false;
   const keys = engine.input.keys;
   const step = (n = 1) => { for (let i = 0; i < n; i++) engine.step(1 / 60); };
   const press = (code, frames = 1) => { keys.add(code); engine.input.pressed.add(code); step(frames); keys.delete(code); };
@@ -140,7 +140,7 @@ const cadence = await p.evaluate(() => {
   const { engine, enemies, player } = window.game;
   engine.stop();
   engine.headless = true;
-  const ts = enemies.puppets.filter((x) => x.kind === 'trooper' && x.animator);
+  const ts = enemies.all.filter((x) => x.kind === 'trooper' && x.animator);
   const near = ts[0];
   const far = ts[1];
   if (!near || !far) return null;

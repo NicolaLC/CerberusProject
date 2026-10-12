@@ -89,7 +89,7 @@ export class AiTool {
     enemies.demo = hidden; // load() resets it from the level
     // the skeleton helpers (H) belong to the old rigs: rebuild them like Game.loadScene does
     for (const h of game.helpers) disposeTree(h);
-    game.helpers = enemies.puppets.filter((p) => p.rig).map((p) => {
+    game.helpers = enemies.all.filter((p) => p.rig).map((p) => {
       const h = p.rig.helper();
       h.visible = game.skeletons;
       game.engine.scene.add(h);
@@ -137,7 +137,7 @@ export class AiTool {
     document.body.appendChild(this.layer);
 
     // dynamic lines (vision, cover, route, arena bounds): vertex colours, drawRange set every frame
-    const cap = 8 * this.enemies.puppets.length + 64;
+    const cap = 8 * this.enemies.all.length + 64;
     this.linePos = new Float32Array(cap * 6);
     this.lineCol = new Float32Array(cap * 6);
     const geo = new THREE.BufferGeometry();
@@ -185,7 +185,7 @@ export class AiTool {
     for (const t of this.tags) t.el.remove();
     this.rings.length = 0;
     this.tags.length = 0;
-    this.snapshot = [...this.enemies.puppets];
+    this.snapshot = [...this.enemies.all];
     this.#buildMarkers();
     const ring = (enemy, color, radius) => {
       const mesh = new THREE.Mesh(this.ringGeo, this.ringMat(color));
@@ -193,7 +193,7 @@ export class AiTool {
       this.group.add(mesh);
       this.rings.push({ enemy, mesh, radius });
     };
-    for (const e of this.enemies.puppets) {
+    for (const e of this.enemies.all) {
       if (e.kind === 'trooper') {
         ring(e, COLORS.notice, () => e.t.sight);
         ring(e, COLORS.engage, () => e.t.engage);
@@ -213,7 +213,7 @@ export class AiTool {
       this.tags.push({ enemy: e, el, text: '' });
     }
     // the drone's circling band is around the player: two rings that follow it
-    this.orbit = this.enemies.puppets.some((e) => e.kind === 'drone') ? [9, 18].map((r) => {
+    this.orbit = this.enemies.all.some((e) => e.kind === 'drone') ? [9, 18].map((r) => {
       const mesh = new THREE.Mesh(this.ringGeo, this.ringMat(COLORS.orbit));
       mesh.scale.setScalar(r);
       this.group.add(mesh);
@@ -270,7 +270,7 @@ export class AiTool {
     }
     if (!this.group) return;
     // the enemy list can change under us (a scene reload keeps the tool, a test can call enemies.load)
-    const list = this.enemies.puppets;
+    const list = this.enemies.all;
     if (list.length !== this.snapshot.length || list.some((e, i) => e !== this.snapshot[i])) this.#rebuildEnemyOverlays();
     if (!this.overlaysOn) return;
     const { player, engine } = this.game;
@@ -284,7 +284,7 @@ export class AiTool {
       r.mesh.scale.setScalar(r.radius());
       r.mesh.position.set(e.pos.x, e.pos.y + RING_Y, e.pos.z);
     }
-    const drones = this.enemies.puppets.some((e) => e.kind === 'drone' && e.alive && e.awake);
+    const drones = this.enemies.all.some((e) => e.kind === 'drone' && e.alive && e.awake);
     for (const m of this.orbit) {
       m.visible = drones;
       m.position.set(player.pos.x, player.pos.y + RING_Y, player.pos.z);
@@ -300,7 +300,7 @@ export class AiTool {
       for (let k = 0; k < 2; k++) _col.toArray(this.lineCol, n * 6 + k * 3);
       n++;
     };
-    for (const e of this.enemies.puppets) {
+    for (const e of this.enemies.all) {
       if (!e.alive) continue;
       const eye = this.#eye(e, _a);
       if (eye && !player.dead && eye.distanceTo(eyeP) < 90 && this.#sees(eye, eyeP)) {
@@ -378,7 +378,7 @@ export class AiTool {
   #refreshPanel() {
     const on = (v) => (v ? 'ON ' : 'off');
     const { enemies, game } = this;
-    const live = enemies.puppets.filter((e) => e.alive);
+    const live = enemies.all.filter((e) => e.alive);
     const awake = live.filter((e) => e.awake || (e.kind === 'trooper' && e.alerted)).length;
     const lines = [
       'GYM · ENEMIES',
@@ -386,7 +386,7 @@ export class AiTool {
       `K  freeze AI       ${on(enemies.frozen)}`,
       `L  player hidden   ${on(enemies.demo)}`,
       `O  overlays        ${game.debug ? on(this.overlaysOn) : 'needs ?debug'}`,
-      `room ${this.#roomOf(game.player.pos)} · enemies ${live.length}/${enemies.puppets.length} · awake ${awake}`,
+      `room ${this.#roomOf(game.player.pos)} · enemies ${live.length}/${enemies.all.length} · awake ${awake}`,
     ];
     const text = lines.join('\n');
     if (text !== this.text) this.panel.textContent = this.text = text;
