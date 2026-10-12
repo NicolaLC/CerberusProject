@@ -1,9 +1,10 @@
 // Workshop level file I/O (#72). Contract shared by the editor (#70): the edited level is a plain level object
 // (instructions/level.md format); these functions turn it into a file and back. Format and rules: level.md, Save and load.
 import { SCENES } from '../scenes.js';
+import { LEVEL_VERSION } from '../registry.js';
 
 const NAME_RE = /^[a-z0-9-]+$/; // a level name is a file name: nothing that can climb out of src/levels
-const TOP_FIRST = ['name', 'title', 'tool', 'demo', 'spawn', 'interiorZones']; // then any other keys, then pieces
+const TOP_FIRST = ['version', 'name', 'title', 'tool', 'demo', 'spawn', 'interiorZones']; // then any other keys, then pieces
 const PIECE_KEYS = ['id', 'name', 'pos', 'yaw', 'params'];
 
 // 4 decimals: float noise (1.2000000000000028) never reaches a file, and 0.0001 m is far below anything visible.
@@ -16,7 +17,7 @@ const compact = (v) => JSON.stringify(v, (_, x) => (typeof x === 'number' ? roun
 // Level object -> diff-friendly JSON text: top-level keys one per line, one piece per line, a trailing newline.
 // Key order is fixed, so saving an unchanged level gives an unchanged file.
 export function serializeLevel(level) {
-  const { pieces = [], ...rest } = level;
+  const { pieces = [], ...rest } = { ...level, version: LEVEL_VERSION }; // saves are always the current format
   const keys = [...TOP_FIRST.filter((k) => k in rest), ...Object.keys(rest).filter((k) => !TOP_FIRST.includes(k))];
   const lines = keys.filter((k) => rest[k] !== undefined).map((k) => `  ${JSON.stringify(k)}: ${compact(rest[k])}`);
   const rows = pieces.map((p) => {

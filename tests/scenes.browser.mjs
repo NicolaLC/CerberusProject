@@ -99,6 +99,23 @@ for (const name of SCENES) {
     return g.sceneName;
   });
   expect('loadScene with an unknown name also falls back to the arena', bad === 'arena');
+  // a level that fails after the old one would have been unloaded (unknown tool): the current scene must survive intact
+  const kept = await p.evaluate(async () => {
+    const g = window.game;
+    const { SCENES } = await import('/src/game/scenes.js');
+    SCENES.broken = { ...SCENES.gym, tool: 'no-such-tool' };
+    const before = g.world.meshes.length;
+    let threw = false;
+    try {
+      g.loadScene('broken');
+    } catch {
+      threw = true;
+    }
+    delete SCENES.broken;
+    g.loadScene('arena'); // still a working game: switching on works
+    return { threw, scene: g.sceneName, intact: g.world.meshes.length === before };
+  });
+  expect('loadScene with an unknown tool throws before unloading, the scene stays loaded and usable', kept.threw && kept.scene === 'arena' && kept.intact, JSON.stringify(kept));
   expect('  no errors', errors.length === 0, errors.join(' | '));
   await p.close();
 }

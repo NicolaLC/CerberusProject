@@ -4,7 +4,6 @@ import { mergeStatic, mergeGroup } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
 import { GUNS } from '../combat/guns.js';
 import { KIT_PIECES, MAT } from './kit.js';
-import { QUALITY } from '../view/quality.js';
 
 // Static level: axis-aligned boxes only (collision, cover and shadows depend on that).
 // Coordinates: x = east, z = south, y = up. Floor is y = 0.
@@ -88,7 +87,7 @@ export class World {
   // Two lifetimes. Permanent (built once): materials + grid textures, sky, fog, hemisphere and sun. Per level
   // (load / unload, mirrored step by step): zones, boxes and strips (+ merged batches), point lights, colliders.
   // The arrays are cleared in place, other systems hold them by reference.
-  constructor(scene, { lights = QUALITY.high.lights } = {}) {
+  constructor(scene, { lights = 8 } = {}) {
     this.scene = scene;
     this.named = new Map(); // piece name -> mesh (for references between pieces, e.g. a light flickering a strip)
     this.colliders = []; // { box: Box3, mesh, cover: 'low' | 'high' | null }

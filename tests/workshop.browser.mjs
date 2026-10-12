@@ -1261,7 +1261,7 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
     const g = window.game;
     const t = T.tool();
     const { serializeLevel, parseLevel } = await import('/src/game/workshop/io.js');
-    t.load({ ...T.zlevel([]), spawn: { pos: [0, 0, 20], yaw: 3.1416 }, pieces: [...T.zlevel([]).pieces, { id: 'zone.interior', name: 'a', pos: [-8, 0, -20], params: { size: [16, 6, 12] } }, { id: 'zone.interior', pos: [20.5, 1, -20], params: { size: [4, 3, 4] } }] });
+    t.load({ version: 1, ...T.zlevel([]), spawn: { pos: [0, 0, 20], yaw: 3.1416 }, pieces: [...T.zlevel([]).pieces, { id: 'zone.interior', name: 'a', pos: [-8, 0, -20], params: { size: [16, 6, 12] } }, { id: 'zone.interior', pos: [20.5, 1, -20], params: { size: [4, 3, 4] } }] });
     t.setParams(2, { size: [4.5, 3, 7] });
     t.move(1, [-6, 0, -22]);
     const doc = T.doc();
