@@ -81,9 +81,13 @@ for (const f of files) {
   check('prologue.json: every objective has an explicit, unique order', chain.every((o) => Number.isFinite(o.params.order)) && new Set(chain.map((o) => o.params.order)).size === chain.length);
   const wakes = chain.filter((o) => o.params.wakeGroup).map((o) => o.params.wakeGroup);
   check('prologue.json: purge-1..6 are woken once each, in order', wakes.join() === 'purge-1,purge-2,purge-3,purge-4,purge-5,purge-6', wakes.join());
-  const orders = chain.map((o) => o.params.order);
-  const slot = orders.findIndex((n, i) => i && n - orders[i - 1] > 10);
-  check('prologue.json: a free order slot (60) sits between the shooters (purge-2) and the troopers (purge-3)', chain[slot - 1]?.params.wakeGroup === 'purge-2' && chain[slot]?.params.wakeGroup === 'purge-3' && orders[slot - 1] < 60 && orders[slot] > 60);
+  // the armoury (#93): order 60 between the shooters (purge-2) and the troopers (purge-3); a skip trigger that exists; the troopers carry the drop
+  const arm = chain.find((o) => o.params.order === 60);
+  const prev = chain.filter((o) => o.params.order < 60).at(-1);
+  const next = chain.find((o) => o.params.order > 60 && o.params.wakeGroup);
+  check('prologue.json: the armoury (order 60, interact, grants the rifle) sits between the shooters (purge-2) and the troopers (purge-3)', arm?.id === 'objective.interact' && arm.params.grantGun === 'rifle' && prev?.params.wakeGroup === 'purge-2' && next?.params.wakeGroup === 'purge-3');
+  check('prologue.json: the armoury skipOn names a trigger.volume of the file', lv.pieces.some((p) => p.id === 'trigger.volume' && p.name === arm?.params.skipOn && p.params.once === false));
+  check('prologue.json: every trooper of purge-3 / purge-4 drops the rifle', lv.pieces.filter((p) => p.id === 'enemy.trooper' && /^purge-[34]$/.test(p.params?.group)).every((p) => p.params.dropGun === 'rifle'));
 }
 check('all bundled level files covered', files.length === Object.keys(SCENES).length && levelNames().join() === Object.keys(SCENES).join(), `${files.length} files`);
 

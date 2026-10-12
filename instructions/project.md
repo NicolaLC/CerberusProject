@@ -56,6 +56,7 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
   enemy glows violet / magenta only, STEM-00's amber only and `setCore`, arena `weathered` skin vs Library grids, no red arena light.
 - `scripts/screenshots.mjs <outDir> [names]`: the fixed art-review screenshot set (20 angles, canvas only, no HUD), for before / after.
 - `tests/loadout.browser.mjs`: owned guns (#91): a pistol-only `loadout` (keys, wheel, pad, HUD ∞ and slots), `pickup.gun` discovery (event once, switch, toast, then ammo), no `loadout` = all six, bad ids fail validation; uses `?scene=workshop`.
+- `tests/prologue-warden.browser.mjs`: the Prologue weapon discovery (#93): armoury rack, skip and trooper drop, pause before the troopers.
 - `tests/log.browser.mjs`: STEM-00 log lines (#40): `log.line` on start / trigger / objective done / discovered, once, delay, priority queue, entries, validation; uses `?scene=workshop`.
 - `tests/intro.browser.mjs`: boot intro (#13): `intro.boot` overlay and input lock, `intro:done`, `log.line` on `intro:done`, skip only once seen, pause, restart / edit, validation; uses `?scene=workshop`.
 - `tests/prologue.browser.mjs`: the Prologue level (`?scene=prologue`): boot overlay, input lock, `intro:done` within 12 s, first log line and objective, pistol only (HUD ∞), skip only with the seen flag, passive yard, dormant `purge-*` groups.

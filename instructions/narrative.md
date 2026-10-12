@@ -34,6 +34,9 @@ Purge lines (placed after a wave, they wait for calm):
 - `> TARGETS: ARMED. DIRECTIVE: STILL NONE. QUERY: WHO ARMED THEM?`
 - `> HOSTILES DESTROYED: 18. ORDERS RECEIVED: 0. SOURCE: UNKNOWN.`
 
+Weapon discovery (`log.line on: discovered:rifle`, Prologue armoury, #93; the one allowed "feel": it is a query about the gun's weight, the first thing STEM-00 cannot explain):
+- `> ITEM: KR-7. FUNCTION: KILL. QUERY: WHY DOES IT FEEL HEAVY?`
+
 ### Act 1: first habits
 Still uppercase and terse, but the pairs start to bend: it names, counts, compares. A first "I" may slip in late in the act.
 - `> UNIT DESIGNATION: STEM-00. CORRECTION: STEM.`
