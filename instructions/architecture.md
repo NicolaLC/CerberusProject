@@ -52,9 +52,9 @@ src/
   shared materials and textures, sky, sun, pools, pooled geometry, event listeners) and a per-level part
   (`load(level)` builds it, `unload()` removes and frees it; `load` calls `unload` first). Today: `World` (boxes +
   merged batches, colliders, cover, point lights, interior zones), `Enemies` (actors incl. debris / rigs / skins /
-  materials, stands, bolts in flight, cover map, kill count), `Pickups` (crates and dropped clips), the debug
+  materials, stands, bolts in flight, cover map, kill count), `Pickups` (crates, dropped clips, gun stands), the debug
   skeleton helpers. Presentation and player state expose `reset()` (`FX` particles / decals / numbers, `Hud` boss bar
-  and toast, `Juice` hitstop, `CameraRig` lock-on / shake / zoom, `Weapon` loadout, `Player.place(spawn)`).
+  and toast, `Juice` hitstop, `CameraRig` lock-on / shake / zoom, `Weapon` loadout (`reset(level.loadout)`: owned guns), `Player.place(spawn)`).
 - `disposeTree` frees what a level owns; it never touches `World.mats` (kept in `world.keep`), materials flagged
   `userData.shared`, or textures (grid textures are cached across levels). Arrays other systems hold
   (`world.colliders`, `world.meshes`...) are cleared in place. Listeners stay permanent: never `events.on` per
@@ -102,6 +102,7 @@ Payload objects marked * are reused: copy what you keep. `src/types.js` holds JS
 | `weapon:impact` | *{ point, normal } | fx |
 | `weapon:reload` | 'start' \| 'done' \| 'good' \| 'perfect' \| 'jam' | audio, juice |
 | `weapon:switch` / `weapon:dry` | gun id / – | audio |
+| `weapon:discovered` | { gun } (first time a gun is owned in this level: `weapon.grant`) | hud toast `<NAME> ACQUIRED` |
 | `weapon:armored` | enemy | – (no listener: the HUD shows no hint) |
 | `boss:wake` / `boss:down` | boss | hud toast (both), audio (wake) |
 | `blast` / `boss:leg` / `boss:dead` | *{ point, radius, kind } (blast kind: mortar, stomp, drone) | fx, juice, audio |

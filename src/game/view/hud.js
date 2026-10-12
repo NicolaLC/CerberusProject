@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GUN_ORDER } from '../combat/guns.js';
+import { GUNS, GUN_ORDER } from '../combat/guns.js';
 
 const _p = new THREE.Vector3();
 
@@ -80,6 +80,7 @@ export class Hud {
     events.on('player:hurt', (h) => this.damage(h.dir, camRig));
     events.on('pickup:collected', (msg) => this.toast(msg));
     events.on('pickup:full', () => this.toast('AMMO FULL'));
+    events.on('weapon:discovered', ({ gun }) => this.toast(`${GUNS[gun].name} ACQUIRED`, 3)); // ponytail: no STEM-00 log line until #40 builds one
     events.on('arena:clear', () => this.toast('ARENA CLEAR', 6));
     events.on('boss:wake', (b) => this.toast(`⚠ ${b.name}`, 3));
     events.on('boss:down', () => this.toast('CORE EXPOSED', 2));
@@ -178,7 +179,10 @@ export class Hud {
 
     text(e.ammo, weapon.ammo);
     text(e.gunName, weapon.t.name);
-    for (const id in e.slots) e.slots[id].classList.toggle('on', id === (weapon.pending ?? weapon.current));
+    for (const id in e.slots) {
+      e.slots[id].classList.toggle('on', id === (weapon.pending ?? weapon.current));
+      css(e.slots[id], 'display', weapon.owned.has(id) ? '' : 'none'); // only owned guns have a slot
+    }
     text(e.reserve, weapon.t.infinite ? '∞' : weapon.reserve);
     e.ammo.classList.toggle('low', weapon.ammo <= Math.max(1, Math.floor(weapon.t.mag * LOW_AMMO)));
     css(e.reload, 'display', weapon.reloading > 0 ? 'block' : 'none');

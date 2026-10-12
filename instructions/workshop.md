@@ -93,7 +93,7 @@ the mode is `'play'` (`game.editing` false) and the player, weapon, pickups and 
     a click on the canvas blurs it. Entering play blurs it and hides the whole right column.
   - Fields by piece: `env.box` size, mat, cover, collide, shadow; `env.strip` size, mat; `env.label` text, size, flat; `light.point` color, intensity, distance;
     `prop.gun` gun; every `kit.*` its size params + mat (`kit.platform`: size, height, stairs, parapets, mat, coverMat); enemies `group` (`enemy.mover` also `to`, `speed`);
-    `marker.entry` group, enemies (comma list); `zone.interior` size; `trigger.volume` size, event, once, wakeGroup, spawnGroup; `objective.*` text, order, limit, wakeGroup, spawnGroup + their own (Missions). Markers (`marker.spawn`, `marker.checkpoint`), pickups and `boss.spider`'s arena have only `name` / `group`.
+    `marker.entry` group, enemies (comma list); `zone.interior` size; `trigger.volume` size, event, once, wakeGroup, spawnGroup; `objective.*` text, order, limit, wakeGroup, spawnGroup + their own (Missions). `pickup.gun` gun, ammo. Markers (`marker.spawn`, `marker.checkpoint`), ammo pickups and `boss.spider`'s arena have only `name` / `group`.
   - Not in the UI: `faces`, `ownMaterial`, `flicker`, `env.label` colors, `boss.spider` arena, `kit.*` `yaw` (use R).
 - **Selection**: a `Box3Helper` tinted by cover class (wall white, high blue, low orange, none yellow) and the status
   panel (right): count, snap, undo / redo depth, the piece's id, pos, yaw, size and cover flags.

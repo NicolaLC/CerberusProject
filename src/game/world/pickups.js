@@ -1,9 +1,12 @@
 import * as THREE from 'three';
+import { GUNS } from '../combat/guns.js';
+import { disposeTree } from '../../engine/dispose.js';
 
 // Ammo pickups ("thermal clips"): fixed crates that respawn, plus clips dropped by destroyed puppets.
 // Two ammo classes (guns.js `ammo`): light (cyan: AR, MG, BR) and heavy (orange: SR, RG); the pistol is infinite. A pickup only
 // refills its own class. Walk over one to collect it; every gun of the class full = not collected.
-// Emits 'pickup:collected' / 'pickup:full'.
+// Emits 'pickup:collected' / 'pickup:full'. A gun pickup (pickup.gun) gives a gun the player doesn't own yet (weapon.grant:
+// 'weapon:discovered', auto-switch), or that gun's ammo if it is owned; it never respawns.
 const TUNING = {
   dropChance: 0.45,
   heavyDropChance: 0.25, // share of drops that are heavy ammo
@@ -17,12 +20,20 @@ const TUNING = {
 export const PICKUP_PIECES = {
   'pickup.light': { example: { params: {} }, label: `light ammo (AR MG BR) | respawns in ${TUNING.respawn} s`, build: (pickups, d) => pickups.addCrate(d.pos, 'light') },
   'pickup.heavy': { example: { params: {} }, label: `heavy ammo (SR RG) | respawns in ${TUNING.respawn} s`, build: (pickups, d) => pickups.addCrate(d.pos, 'heavy') },
+  // params: gun (key of GUNS), ammo? (rounds into the reserve, default the gun's crate refill). `yaw` turns the stand.
+  'pickup.gun': {
+    example: { params: { gun: 'rifle' } },
+    label: 'gun on a stand: discovers it, else gives its ammo | no respawn',
+    fields: [{ key: 'gun', type: 'enum', options: Object.keys(GUNS) }, { key: 'ammo', type: 'number', min: 0, optional: true }],
+    build: (pickups, d) => pickups.addGun(d.pos, d.params ?? {}, d.yaw),
+  },
 };
 
 export class Pickups {
   // Permanent: shared geometry and materials. Per level (load / unload): the crates and dropped clips (items).
-  constructor({ scene, events, registry }) {
+  constructor({ scene, events, registry, world }) {
     this.scene = scene;
+    this.world = world; // gun display models (world.gunModel, shared materials in world.keep)
     this.events = events;
     this.registry = registry;
     this.t = TUNING;
@@ -31,6 +42,7 @@ export class Pickups {
     this.fullCooldown = 0;
 
     const caseMat = new THREE.MeshStandardMaterial({ color: 0x2a2e35, metalness: 0.6, roughness: 0.4 });
+    caseMat.userData.shared = true; // gun stands use it too: disposeTree leaves it alone
     const hex = { light: 0x38d8ff, heavy: 0xffa11c };
     const looks = {
       light: { glow: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: hex.light, emissiveIntensity: 3 }), body: [0.34, 0.2, 0.22], band: [0.36, 0.05, 0.24], bandY: [0] },
@@ -57,7 +69,8 @@ export class Pickups {
     };
     this.ringGeo = new THREE.RingGeometry(0.45, 0.55, 32).rotateX(-Math.PI / 2);
     const ringMat = (c) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(2), transparent: true, opacity: 0.5, depthWrite: false });
-    this.ringMats = { light: ringMat(hex.light), heavy: ringMat(hex.heavy) };
+    this.ringMats = { light: ringMat(hex.light), heavy: ringMat(hex.heavy), gun: ringMat(0xeaf6fa) };
+    this.standMat = caseMat;
   }
 
   // Builds the crates of a level file (registry pieces owned by 'pickups'). Unloads the current items first.
@@ -67,9 +80,9 @@ export class Pickups {
     return this;
   }
 
-  // Removes every crate and dropped clip. Their geometry and materials are shared by all items: nothing to free.
+  // Removes every crate, dropped clip and gun stand. Shared geometry and materials stay; gun models are freed (#free).
   unload() {
-    for (const it of this.items) this.scene.remove(it.model, it.ring);
+    for (const it of this.items) this.#free(it);
     this.items.length = 0;
     this.time = 0;
     this.fullCooldown = 0;
@@ -78,6 +91,29 @@ export class Pickups {
   // a fixed crate that respawns after it is collected
   addCrate(pos, type) {
     return this.#spawn(new THREE.Vector3(...pos), { crate: true, type });
+  }
+
+  // a gun on a stand (pickup.gun). Stand and gun geometry are the item's own, freed with it: a shared stand geometry would
+  // upload on the first gun stand drawn and break the exact GPU memory check in scenes.browser.mjs.
+  addGun(pos, { gun, ammo }, yaw = 0) {
+    if (ammo != null && !(typeof ammo === 'number' && ammo >= 0)) throw new Error(`pickup.gun: ammo must be a number >= 0, got ${JSON.stringify(ammo)}`);
+    const gunModel = this.world.gunModel(gun, 'pickup.gun');
+    gunModel.position.set(0, 0.82, -0.45);
+    gunModel.traverse((o) => (o.castShadow = o.isMesh));
+    const stand = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.8, 1.0).translate(0, 0.4, 0), this.standMat); // waist-high, the gun lies along +Z
+    stand.castShadow = true;
+    gunModel.add(stand);
+    stand.position.set(0, -0.82, 0.45);
+    const model = new THREE.Group().add(gunModel);
+    model.position.set(...pos);
+    model.rotation.y = yaw;
+    const ring = new THREE.Mesh(this.ringGeo, this.ringMats.gun);
+    ring.position.set(pos[0], pos[1] + 0.02, pos[2]);
+    ring.scale.setScalar(1.5);
+    this.scene.add(model, ring);
+    const item = { pos: new THREE.Vector3(...pos), model, ring, gunModel, gun, ammo: ammo ?? GUNS[gun].pickup?.crate ?? 0, crate: false, active: true };
+    this.items.push(item);
+    return item;
   }
 
   #spawn(pos, { crate, type }) {
@@ -101,6 +137,7 @@ export class Pickups {
   update(dt, player, weapon) {
     this.time += dt;
     this.fullCooldown -= dt;
+    this.ringMats.gun.opacity = 0.35 + 0.25 * Math.sin(this.time * 1.6); // slow highlight on every gun stand
 
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
@@ -110,6 +147,10 @@ export class Pickups {
           it.active = true;
           it.model.visible = it.ring.visible = true;
         }
+        continue;
+      }
+      if (it.gun) {
+        if (this.#reached(player, it)) this.#takeGun(i, it, weapon);
         continue;
       }
       it.model.position.y = it.pos.y + 0.45 + Math.sin(this.time * 2.5 + it.phase) * 0.08;
@@ -123,10 +164,7 @@ export class Pickups {
         it.model.visible = it.timer > 4 || Math.sin(this.time * 20) > 0; // blink before vanishing
       }
 
-      if (player.dead) continue;
-      const dx = player.pos.x - it.pos.x;
-      const dz = player.pos.z - it.pos.z;
-      if (dx * dx + dz * dz > this.t.radius ** 2 || Math.abs(player.pos.y - it.pos.y) > 1.2) continue;
+      if (!this.#reached(player, it)) continue;
       const got = weapon.addAmmo(it.crate ? 'crate' : 'drop', it.type);
       if (!got) {
         if (this.fullCooldown <= 0) this.events.emit('pickup:full');
@@ -144,15 +182,43 @@ export class Pickups {
     }
   }
 
-  // Removes one item built by addCrate() (tools); dropped clips use #remove.
+  #reached(player, it) {
+    const dx = player.pos.x - it.pos.x;
+    const dz = player.pos.z - it.pos.z;
+    return !player.dead && dx * dx + dz * dz <= this.t.radius ** 2 && Math.abs(player.pos.y - it.pos.y) <= 1.2;
+  }
+
+  // A new gun is granted and raised; an owned one only takes the ammo (stays while that gun is full).
+  #takeGun(i, it, weapon) {
+    if (weapon.owned.has(it.gun)) {
+      const got = weapon.grant(it.gun, { ammo: it.ammo });
+      if (!got) {
+        if (this.fullCooldown <= 0) this.events.emit('pickup:full');
+        this.fullCooldown = 1.4;
+        return;
+      }
+      this.events.emit('pickup:collected', `${GUNS[it.gun].short} AMMO  +${got}`);
+    } else {
+      weapon.grant(it.gun, { ammo: it.ammo });
+      weapon.switchTo(it.gun);
+    }
+    this.#remove(i);
+  }
+
+  // Removes one item built by addCrate() / addGun() (tools); dropped clips use #remove.
   despawn(item) {
     const i = this.items.indexOf(item);
     if (i >= 0) this.#remove(i);
   }
 
   #remove(i) {
-    const it = this.items[i];
-    this.scene.remove(it.model, it.ring);
+    this.#free(this.items[i]);
     this.items.splice(i, 1);
+  }
+
+  // Detaches an item; a gun stand's geometry (gun model + stand) is its own and is freed (crate and ring geometry are shared).
+  #free(it) {
+    if (it.gunModel) disposeTree(it.gunModel, { keep: this.world.keep });
+    this.scene.remove(it.model, it.ring);
   }
 }

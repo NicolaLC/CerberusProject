@@ -39,13 +39,17 @@ export class Weapon {
     this.reset();
   }
 
-  // Fresh loadout and no running action (new level): full magazines, rifle up, nothing reloading or charging.
-  reset() {
+  // Fresh loadout and no running action (new level): full magazines, nothing reloading or charging.
+  // `loadout`: the guns owned at the start (level file `loadout`, absent = all six); the pistol is always owned.
+  // Owned guns start with their default reserve, the others with a full magazine and an empty reserve (grant() fills it).
+  // The rifle is raised if owned, else the first owned gun in GUN_ORDER.
+  reset(loadout = GUN_ORDER) {
+    this.owned = new Set(['pistol', ...loadout]);
     this.state = {};
-    for (const id of GUN_ORDER) this.state[id] = { ammo: GUNS[id].mag, reserve: GUNS[id].reserve, boost: false };
+    for (const id of GUN_ORDER) this.state[id] = { ammo: GUNS[id].mag, reserve: this.owned.has(id) ? GUNS[id].reserve : 0, boost: false };
     this.active = null; // { total, attempted, result } while a reload runs
     this.result = null; // last active-reload result for the HUD: { kind, time }
-    this.current = 'rifle';
+    this.current = this.owned.has('rifle') ? 'rifle' : GUN_ORDER.find((id) => this.owned.has(id));
     this.cooldown = 0;
     this.reloading = 0;
     this.switching = 0; // > 0 while lowering / raising
@@ -152,18 +156,41 @@ export class Weapon {
   }
 
   // Fills the guns of one ammo class from a pickup (kind: 'crate' | 'drop', type: 'light' | 'heavy').
-  // Returns a short label, or '' if every gun of that class was already full. Infinite guns are skipped.
+  // Returns a short label, or '' if every gun of that class was already full. Infinite and unowned guns are skipped.
   addAmmo(kind, type = 'light') {
     let parts = '';
     for (const id of GUN_ORDER) {
       const g = GUNS[id];
-      if (g.ammo !== type || g.infinite) continue;
+      if (g.ammo !== type || g.infinite || !this.owned.has(id)) continue;
       const s = this.state[id];
       const got = Math.max(0, Math.min(g.pickup[kind], g.maxReserve - s.reserve));
       s.reserve += got;
       if (got > 0) parts += `  +${got} ${g.short}`;
     }
     return parts ? `${type.toUpperCase()} AMMO${parts}` : '';
+  }
+
+  // Gives the player a gun (pickup.gun) and `ammo` rounds into its reserve, capped at its max. The first time a gun is
+  // owned in this level it emits 'weapon:discovered' { gun }. Returns the rounds added.
+  grant(id, { ammo = 0 } = {}) {
+    const g = GUNS[id];
+    const s = this.state[id];
+    const got = g.infinite ? 0 : Math.max(0, Math.min(ammo, g.maxReserve - s.reserve));
+    s.reserve += got;
+    if (!this.owned.has(id)) {
+      this.owned.add(id);
+      this.events.emit('weapon:discovered', { gun: id });
+    }
+    return got;
+  }
+
+  // Next owned gun from `from` in GUN_ORDER, stepping `dir` (+1 / -1). The pistol is always owned, so it ends.
+  #nextOwned(from, dir) {
+    const n = GUN_ORDER.length;
+    let i = GUN_ORDER.indexOf(from);
+    do i = (i + dir + n) % n;
+    while (!this.owned.has(GUN_ORDER[i]));
+    return GUN_ORDER[i];
   }
 
   switchTo(id) {
@@ -230,13 +257,10 @@ export class Weapon {
   }
 
   update(dt, controls) {
-    // switching: number keys, or the mouse wheel (not in trackpad mode, where the wheel looks around)
+    // switching: number keys, or the mouse wheel (not in trackpad mode, where the wheel looks around); owned guns only
     const slot = controls.slotPressed;
-    if (slot >= 0 && slot < GUN_ORDER.length) this.switchTo(GUN_ORDER[slot]);
-    if (controls.cycle) {
-      const i = GUN_ORDER.indexOf(this.pending ?? this.current);
-      this.switchTo(GUN_ORDER[(i + controls.cycle + GUN_ORDER.length) % GUN_ORDER.length]);
-    }
+    if (slot >= 0 && slot < GUN_ORDER.length && this.owned.has(GUN_ORDER[slot])) this.switchTo(GUN_ORDER[slot]);
+    if (controls.cycle) this.switchTo(this.#nextOwned(this.pending ?? this.current, controls.cycle));
     if (this.switching > 0) {
       const before = this.switching;
       this.switching -= dt;

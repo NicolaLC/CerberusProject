@@ -4,7 +4,7 @@
 Plain JSON (an editor can write it), imported by `scenes.js`, validated by `Registry.check`. Layout, enemies and
 pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 ```
-{ name, title, tool?, demo?, skin?, spawn: { pos, yaw }, interiorZones: [{ min, max }] (older form, may be []; new levels use `zone.interior` pieces),
+{ name, title, tool?, demo?, skin?, loadout?, spawn: { pos, yaw }, interiorZones: [{ min, max }] (older form, may be []; new levels use `zone.interior` pieces),
   pieces: [ { id, pos: [x, y, z], yaw?, params?, name? }, ... ] }
 ```
 - `pieces` is one ordered list; each system builds the ones it owns, in file order. Order matters: boxes are merged
@@ -17,6 +17,10 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 - `skin`: a key of `World.skins` (`weathered`), swaps every material key for that skin's material of the same role (same keys,
   same draw calls). Absent = the grid prototype textures. The Gym rooms, Library and Workshop keep the grids (metrics read off
   them); "real" scenes (arena, later the Prologue) use `weathered`. Unknown skin throws.
+- `loadout`: the gun ids (keys of `GUNS`) the player owns at the start, e.g. `["pistol"]` (the Prologue). Absent = all six
+  (arena, Gym, Library, Workshop). The pistol is always owned even if left out. The rifle is raised if owned, else the first
+  owned gun in `GUN_ORDER`; unowned guns start with a full magazine and an empty reserve. Unknown ids fail `Registry.check`.
+  Other guns are discovered in play with `pickup.gun` (gameplay.md, Owned guns).
 - `spawn.yaw` is the player's initial facing (3.14159 = north, -Z). A `marker.spawn` piece replaces `spawn` as the start (`levelSpawn(level)` in `world/encounter.js`). The boss arena bounds are data of `boss.spider`.
 - Add a piece: append `{ "id": ..., "pos": [...], "params": {...} }`. Add a new kind: put a builder in the owning
   module's table (`WORLD_PIECES` / `ENEMY_PIECES` / `PICKUP_PIECES` / `ENCOUNTER_PIECES`) and document the id here. Never rename an id.
@@ -44,6 +48,7 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `enemy.drone` | enemies | `pos` = the ground under it |
 | `boss.spider` | enemies | `yaw?`, `arena: { minX, maxX, minZ, maxZ }` (the boss stays inside; wakes when the player enters) |
 | `pickup.light` / `pickup.heavy` | pickups | respawning ammo crate of that class |
+| `pickup.gun` | pickups | `gun` (key of `GUNS`), `ammo?` (rounds into the reserve; default the gun's crate refill). The gun's display model on a waist-high stand (`yaw` turns it), slow pulsing ring. Walking within 1.1 m: an unowned gun is discovered (`weapon.grant`, `weapon:discovered`, the gun is raised); an owned one only takes the ammo (stays while that gun is full). Never respawns; the gun model is freed with the item |
 | `marker.spawn` | encounter | the player start (`yaw` = facing). Overrides `level.spawn` (first one in the file wins; `spawn` stays required) |
 | `marker.checkpoint` | encounter | respawn point after a death once the player has been within 2 m; `name` shows up in `checkpoint:reached` |
 | `marker.entry` | encounter | reinforcement entry: `group` (string), `enemies` (list of `enemy.*` / `boss.*` ids) built here when `group` is spawned |
@@ -69,7 +74,7 @@ A registry table entry may be `{ build, ...meta }` (read with `registry.meta(id)
 - `example: { params, yaw? }`: what the Library spawns for the id (it must build with just these and `pos`).
 - `label`: one short line of key stats (HP, ranges, respawn...), read from the owner's `TUNING` where there is one.
 - `fields` (Workshop inspector, workshop.md): the editable params, `[{ key, type, label?, options?, min?, optional?, def? }]`. `type`: `number`, `vec2` / `vec3`
-  (typed "a, b, c"), `text`, `bool` (checkbox; `def` = value when absent), `enum` (`options` list, or `'mats'` = keys of `World.mats`), `list` (comma separated strings).
+  (typed "a, b, c"), `text`, `bool` (checkbox; `def` = value when absent), `enum` (`options` list, or `'mats'` = keys of `World.mats`; a fixed `options` list is also checked by `Registry.check`), `list` (comma separated strings).
   `optional: true` = empty removes the key. `min` is a generic floor (the builder's own checks still win and surface as a toast). `key` is a top-level `params` key.
   Shared fields live next to the owner (`MAT` in `kit.js`, `GROUP` in `enemies.js`). Pieces without `fields` (or whose params are not listed) show only `name`.
 Every entry has `example` and `label` (enemies, pickups, `kit.*`, `env.*`, `light.point`, `prop.gun`); new entries must too. A new id with an `example` shows up in the Library's kit aisle by itself
