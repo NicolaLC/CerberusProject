@@ -49,6 +49,10 @@ repeats every caster). Budget: ≤ 140 calls per frame at the spawn view, ≤ 25
 - `RigidSkin(root, skeleton, { exclude })`: every mesh on a rig's bones → one SkinnedMesh per material,
   vertices fully weighted to their bone. Bound at the current pose. Adding/removing parts later needs
   `skin.rebuild()` (puppet weak spots do this on respawn). Culling uses one padded sphere per rig.
+- Rig proxies are FROZEN (`matrixAutoUpdate = matrixWorldAutoUpdate = false`, local matrix as of the bake): a rig carries ~100
+  of them and they would be recomputed every frame. Their `matrixWorld` is only valid after `skin.syncProxies()` (all,
+  from the parents' fresh matrices; `EnemyBody.#die` does it before cutting debris) or `skin.syncHit(mesh)` (one raycast
+  target, e.g. a weak spot; `Enemies.animate` does it). Do not move a proxy after the bake; `rebuild()` wakes and re-freezes them.
 - `mergeGroup(group)`: rigid sub-models (guns) → one mesh per material inside the group.
 - Instancing for many copies of one thing: puppet stands, sparks (per-instance HDR color), casings, decals.
 - New per-object visuals: prefer adding to an existing batch/instanced mesh over new Mesh objects.

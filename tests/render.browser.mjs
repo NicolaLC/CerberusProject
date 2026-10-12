@@ -53,6 +53,7 @@ const r = await p.evaluate(() => {
     shadowOnlyHidden: skins.every((s) => !s.shadow || !s.shadow.visible),
     minCullRadius: Math.min(...skins.flatMap((s) => s.meshes.map((m) => m.boundingSphere.radius))),
     proxiesHidden: g.world.meshes.every((m) => !m.visible),
+    proxiesFrozen: skins.every((s) => s.proxies.length > 20 && s.proxies.every((m) => !m.matrixWorldAutoUpdate && !m.matrixAutoUpdate)),
     hitMeshesHidden: g.enemies.puppets.every((pp) => pp.hitMeshes.every((m) => !m.visible)),
   };
 });
@@ -82,6 +83,7 @@ expect('a far LOD puppet is still hittable', r.hittable);
 expect('shadow-only meshes never drawn in the color pass', r.shadowOnlyHidden);
 expect('skinned meshes have a real culling sphere', r.minCullRadius > 0.5);
 expect('world and hitbox proxies are not drawn', r.proxiesHidden && r.hitMeshesHidden);
+expect('rig proxies stay out of the per-frame matrix updates', r.proxiesFrozen);
 expect('low preset: no MSAA, no bloom, 2048 shadows, 1x', q.low.samples === 0 && !q.low.bloom && q.low.shadow === 2048 && q.low.maxScale <= 1 && q.low.calls > 0);
 expect('ultra preset: supersampled, MSAA >= high (capped by the GPU), 4096 shadows', q.ultra.maxScale > q.high.maxScale && q.ultra.samples >= q.high.samples && q.ultra.shadow === 4096);
 expect('only the scene target is multisampled', Object.values(q).every((v) => v.other === 0));

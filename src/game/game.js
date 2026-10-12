@@ -134,6 +134,8 @@ export class Game {
     });
     engine.add({ name: 'weapon', update: (dt) => !this.editing && weapon.update(dt, controls) });
     engine.add({ name: 'enemies', update: (dt) => enemies.update(dt, player) });
+    engine.add({ name: 'playerPose', phase: 'late', update: () => !this.editing && player.pose() });
+    engine.add({ name: 'enemyAnim', phase: 'late', update: (dt) => enemies.animate(dt, camera) });
     engine.add({ name: 'encounter', update: (dt) => !this.editing && encounter.update(dt, player, controls.pressed('interact')) });
     engine.add({ name: 'pickups', update: (dt) => !this.editing && pickups.update(dt, player, weapon) });
     // boss lock-on: an engaged boss within range stays framed (CameraRig.focus)

@@ -133,6 +133,36 @@ expect(`player stops without a pop (${pl.stop.jumpMm} mm/frame)`, pl.stop.jumpMm
 expect('moving along low cover: crouch-run facing the move, feet on the floor', pl.coverMove.crouch < 0.6 && pl.coverMove.facingErr < 0.2 && pl.coverMove.low > 0.07);
 expect('Space + forward in cover jumps a thin block', pl.coverVault.kind === 'hop' && pl.coverVault.z < -0.7 && pl.coverVault.y < 0.05);
 expect('running at a deep block slides over it (not over the head)', pl.runVault.kind === 'slide' && pl.runVault.z < 2.6 && pl.runVault.peak < 1.4);
+// enemy rigs pose once per frame (late phase), not per substep; far or off-screen ones every few frames, no terrain IK
+await p.reload(); // fresh arena: the runs above leave the enemies dead
+await p.waitForFunction(() => window.game?.engine);
+const cadence = await p.evaluate(() => {
+  const { engine, enemies, player } = window.game;
+  engine.stop();
+  engine.headless = true;
+  const ts = enemies.puppets.filter((x) => x.kind === 'trooper' && x.animator);
+  const near = ts[0];
+  const far = ts[1];
+  if (!near || !far) return null;
+  near.pos.set(player.pos.x, 0, player.pos.z + 3);
+  far.pos.set(player.pos.x, 0, player.pos.z + 60);
+  let nNear = 0;
+  let nFar = 0;
+  const on = near.animator.update.bind(near.animator);
+  const of = far.animator.update.bind(far.animator);
+  near.animator.update = (...a) => (nNear++, on(...a));
+  far.animator.update = (...a) => (nFar++, of(...a));
+  for (let i = 0; i < 3; i++) engine.step(0.05); // settles the far flag (3 substeps per frame)
+  nNear = nFar = 0;
+  for (let i = 0; i < 30; i++) engine.step(0.05);
+  near.animator.update = on;
+  far.animator.update = of;
+  return { nNear, nFar, farLod: far.animator.lod, nearLod: near.animator.lod };
+});
+if (cadence) {
+  expect(`near trooper poses once per frame, not per substep (${cadence.nNear} poses / 30 frames)`, cadence.nNear === 30 && !cadence.nearLod);
+  expect(`far trooper poses every few frames without terrain IK (${cadence.nFar} poses / 30 frames)`, cadence.nFar > 0 && cadence.nFar <= 12 && cadence.farLod);
+}
 expect('no page errors', errors.length === 0);
 if (errors.length) console.log(errors);
 await b.close();

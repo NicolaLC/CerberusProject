@@ -44,6 +44,9 @@ export class EnemyBody {
     this.rig = new Rig({ materials: { body: HITBOX_MAT } });
     for (const p of Object.values(this.rig.parts)) p.visible = false; // hitboxes only: not baked, still raycast
     this.animator = new Animator(this.rig, { armed, ground: armed ? (x, z, maxY) => sys.world.groundAt(x, z, maxY) : null });
+    // pose state for the animator, filled by think() every substep; Enemies.animate poses the rig once per frame
+    this.animState = { speed: 0, run: false, crouch: 0, aimPitch: 0, combat: false, recoil: 0, vel: null, yaw: 0 };
+    this.animDt = 0; // time since the last pose (rigs far away or off screen pose every few frames)
     this.animator.onStep = () => this.alive && sys.events.emit('enemy:step', this.pos);
     this.group.add(this.rig.root);
     sys.scene.add(this.group);
@@ -118,6 +121,7 @@ export class EnemyBody {
     this.sys.events.emit('puppet:down', this);
     if (this.sys.kills === this.sys.puppets.length) this.sys.events.emit('arena:clear');
     this.group.updateMatrixWorld(true);
+    this.skin.syncProxies(); // debris is cut from the proxies' world matrices
     // break apart: every piece on a bone (look, weak spot, gun) becomes a debris chunk
     for (const bone of this.rig.skeleton.bones) {
       for (const piece of bone.children) {

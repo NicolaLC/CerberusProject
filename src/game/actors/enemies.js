@@ -44,6 +44,10 @@ const _ray = new THREE.Raycaster();
 const _hits = [];
 const SEP_REACH = 3; // separate(): neighbours are looked up within this many minDist (positions move a little during the substep)
 const _sep = new Grid(4); // living troopers, refilled every update (see separate)
+const _frustum = new THREE.Frustum();
+const _pv = new THREE.Matrix4();
+const _sphere = new THREE.Sphere(undefined, 1.6);
+const SLOW_EVERY = 3; // rigs far away or off screen pose every Nth frame
 // reused event payloads: listeners must copy what they keep
 const HURT = { amount: 0, dir: new THREE.Vector3() };
 const BOLT_HIT = { point: null, normal: new THREE.Vector3() };
@@ -344,6 +348,31 @@ export class Enemies {
         this.events.emit('trooper:flank', e);
         return;
       }
+    }
+  }
+
+  // Poses every living humanoid once per frame (late phase) with the dt of the whole frame, after the substeps moved the
+  // bodies (think() only fills `animState`). Rigs beyond the far LOD or outside the view pose every SLOW_EVERY-th frame
+  // (staggered by list index, dt accumulated) without terrain foot IK. Weak spots (raycast targets, frozen proxies)
+  // get their world matrix here.
+  animate(dt, camera) {
+    if (this.frozen) return;
+    this.animFrame = (this.animFrame ?? 0) + 1;
+    camera.updateMatrixWorld();
+    _frustum.setFromProjectionMatrix(_pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    const list = this.puppets;
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      if (!p.alive || !p.animator) continue;
+      p.animDt += dt;
+      _sphere.center.copy(p.pos).y += 1;
+      const slow = p.skin.far || !_frustum.intersectsSphere(_sphere);
+      if (slow && (this.animFrame + i) % SLOW_EVERY) continue;
+      p.animator.lod = slow;
+      p.group.updateWorldMatrix(false, false);
+      p.animator.update(p.animDt, p.animState);
+      p.animDt = 0;
+      for (const w of p.weakSpots) p.skin.syncHit(w);
     }
   }
 

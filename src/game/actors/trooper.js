@@ -314,16 +314,16 @@ export class Trooper extends EnemyBody {
     const flat = Math.hypot(target.x - this.pos.x, target.z - this.pos.z);
     this.aimPitch += (Math.atan2(target.y - eyeY, flat) - this.aimPitch) * damp(10, dt);
 
-    this.animator.update(dt, {
-      speed,
-      run: speed > 2.5,
-      crouch: this.crouch,
-      aimPitch: this.aimPitch,
-      combat: combat || (this.alerted && !moving),
-      recoil: this.recoil,
-      vel: this.vel,
-      yaw: this.yaw,
-    });
+    // posed once per frame by Enemies.animate (late phase), from the state of the last substep
+    const as = this.animState;
+    as.speed = speed;
+    as.run = speed > 2.5;
+    as.crouch = this.crouch;
+    as.aimPitch = this.aimPitch;
+    as.combat = combat || (this.alerted && !moving);
+    as.recoil = this.recoil;
+    as.vel = this.vel;
+    as.yaw = this.yaw;
     this.group.position.copy(this.pos).add(this.offset);
     this.rig.root.position.y = 0;
     this.rig.root.rotation.y = this.yaw;
