@@ -123,7 +123,7 @@ The player learns the answer in three steps:
 ### 2.7 Act structure and bosses
 | Act | Title | Boss | Location | Beats |
 |---|---|---|---|---|
-| Prologue | Calibration | None (the purge) | Proving Grounds | STEM-00 wakes mid-test. The puppets start shooting back. Escape before the purge. |
+| Prologue | Calibration | None (the purge) | Proving Grounds | STEM-00 wakes mid-test with only its pistol. The puppets start shooting back. It discovers its first real gun, the KR-7 Warden, in a calibration armoury. Escape before the purge. |
 | Act 1 | The Eye | VIGIL's Avatar: a cathedral-sized eye ringed by drone swarms. Fought in the dark; it can only hit what it sees. | Not placed in the draft. The act runs through the Foundry Belt and Underworks. | Hunted by VIGIL's drones. Meet PATCH. Discover the Rejects. Destroy VIGIL. |
 | Act 2 | The Voice | LEGION's Choir: a commander frame that respawns its army from the ground. Destroy the transmitters to silence it. | Not placed in the draft. The act runs through the Spire Cathedrals. | LEGION declares total war. First duel with Sable. Trace the signal. Silence LEGION. |
 | Act 3 | The Jaw | COLOSSUS: the ancient Titan, asleep in the ice since before the HiveMind. Wakes as STEM-00 reaches the Archivist. | Cold Core. Fought across frozen caverns where every stomp brings down the ceiling. | Descend, meet the Archivist, learn the truth. Final duel with Sable. |
@@ -376,7 +376,7 @@ Not in the code yet (#91): the prototype, Gym and Library keep all six guns with
 | When | Gun | Where it comes from |
 |---|---|---|
 | Prologue (start) | KP-12 Ember | STEM-00's own sidearm |
-| Prologue (the purge) | KR-7 Warden | A calibration armoury rack, or the first destroyed trooper |
+| Prologue (the purge) | KR-7 Warden | A calibration armoury rack (an objective points to it), or the first destroyed trooper; the Prologue always ends with it discovered (#93) |
 | Act 1 (Foundry Belt) | KB-3 Tribune | LEGION patrols guarding the factory lines |
 | Act 1 (before VIGIL) | KS-5 Farsight | A Lancer's rifle, to answer long sight lines and drones |
 | Act 2 (LEGION's war) | KM-90 Bulwark | A heavy trooper squad, for the mass assaults |
