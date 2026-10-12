@@ -134,7 +134,7 @@ export class Enemies {
     };
     this.bases = stand(this.standGeo.base);
     this.posts = stand(this.standGeo.post);
-    // every enemy (puppets and troopers) lives in this one list
+    // every enemy kind lives in this one list
     this.all = spawns.map((d) => this.#make(d));
     this.boss = this.all.find((p) => p.kind === 'boss') ?? null;
     return this;
@@ -165,10 +165,6 @@ export class Enemies {
     this.dirty = true;
   }
 
-  // Deprecated alias of `all` (the Workshop editor still reads it).
-  get puppets() {
-    return this.all;
-  }
 
   // Death bookkeeping for every actor type: the kill counts, the hit-mesh list is rebuilt, listeners hear it,
   // and the last enemy down clears the arena.

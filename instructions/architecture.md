@@ -66,7 +66,7 @@ src/
   player / time / all getters, spawnBolt, hurtPlayer, alertNear, separate, reportKill, markDirty, takeStand, setStand) and never
   write system fields. Shared helpers instead of inheritance: `sightRay` (enemy.js), `DebrisBank` (parts.js: death chunks are
   baked once per enemy kind at spawn and shared by every death, pooled chunk objects, geometry freed by `Enemies.unload`).
-  Tool APIs: `freeze(on)`, `setBoss(actor)`, `pose(actor, { viewer })`. `puppets` is a deprecated alias of `all`.
+  Tool APIs: `freeze(on)`, `setBoss(actor)`, `pose(actor, { viewer })`.
 - Cross-system reactions (puppet dies → pickup drop) are wired in `game.js` with `events.on`.
 
 ## Scenes
