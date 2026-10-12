@@ -189,7 +189,9 @@ export class Drone {
 
   // Spawn groups (enemies.js wakeGroup).
   wake() {
-    if (this.alive) this.awake = true;
+    if (!this.alive) return;
+    this.dormant = false;
+    this.awake = true;
   }
 
   // Returns true if this hit destroyed it.
@@ -197,7 +199,7 @@ export class Drone {
     if (!this.alive || this.falling) return false;
     this.health -= amount;
     this.flash = 0.08;
-    this.awake = true;
+    if (!this.dormant) this.awake = true;
     // knocked by the hit
     this.vel.addScaledVector(dir, 2.5);
     this.tilt.x += dir.z * 0.4;
@@ -221,7 +223,7 @@ export class Drone {
     const eye = player.chest(_v);
     const body = this.body.getWorldPosition(_w);
     const dist = body.distanceTo(eye);
-    if (!this.awake && !player.dead && dist < this.t.sight && this.#sees(eye)) this.awake = true;
+    if (!this.awake && !this.dormant && !player.dead && dist < this.t.sight && this.#sees(eye)) this.awake = true;
     const active = this.awake && !player.dead;
     this.#move(dt, player, active);
     if (active) this.#shoot(dt, player);

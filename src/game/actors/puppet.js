@@ -42,6 +42,19 @@ export class Puppet extends EnemyBody {
     this.finishBody();
   }
 
+  // Spawn groups (enemies.js wakeGroup): only a dormant puppet takes part. `awake` stays false for ordinary puppets
+  // (always on, not counted as awake by the group / combat checks); a dormant shooter becomes awake once woken.
+  get awake() {
+    return this.woken === true;
+  }
+
+  wake() {
+    if (!this.dormant) return false;
+    this.dormant = false;
+    this.woken = true;
+    return true;
+  }
+
   // the empty post sinks into its base once the debris is gone
   onDebrisCleared() {
     this.ctx.setStand(this.index, this.pos, 0.02);
@@ -59,7 +72,7 @@ export class Puppet extends EnemyBody {
       if (dt > 0) this.vel.subVectors(this.pos, prev).divideScalar(dt);
     }
 
-    if (this.kind === 'shooter') this.#shooterAI(dt, player);
+    if (this.kind === 'shooter' && !this.dormant) this.#shooterAI(dt, player);
     else this.lift += (0 - this.lift) * damp(4, dt);
 
     const as = this.animState; // posed once per frame by Enemies.animate

@@ -92,7 +92,7 @@ the mode is `'play'` (`game.editing` false) and the player, weapon, pickups and 
     the editor's `#active` also ignores events whose target is an input / select. Because a field swallows the keyup of a key held when it got focus, a field's `focus` clears the editor's held keys and `input.releaseAll()` (edge presses stay). Esc in a field reverts its text and blurs it (selection kept);
     a click on the canvas blurs it. Entering play blurs it and hides the whole right column.
   - Fields by piece: `env.box` size, mat, cover, collide, shadow; `env.strip` size, mat; `env.label` text, size, flat; `light.point` color, intensity, distance;
-    `prop.gun` gun; every `kit.*` its size params + mat (`kit.platform`: size, height, stairs, parapets, mat, coverMat); enemies `group` (`enemy.mover` also `to`, `speed`);
+    `prop.gun` gun; every `kit.*` its size params + mat (`kit.platform`: size, height, stairs, parapets, mat, coverMat); enemies `group`, `dormant` (`enemy.mover` also `to`, `speed`);
     `marker.entry` group, enemies (comma list); `zone.interior` size; `trigger.volume` size, event, once, wakeGroup, spawnGroup; `objective.*` text, order, limit, wakeGroup, spawnGroup + their own (Missions). `pickup.gun` gun, ammo; `log.line` text, on, priority, once, delay (Log lines); `intro.boot` lines (separated by `|`), duration, skippable (Boot intro). Markers (`marker.spawn`, `marker.checkpoint`), ammo pickups and `boss.spider`'s arena have only `name` / `group`.
   - Not in the UI: `faces`, `ownMaterial`, `flicker`, `env.label` colors, `boss.spider` arena, `kit.*` `yaw` (use R).
 - **Selection**: a `Box3Helper` tinted by cover class (wall white, high blue, low orange, none yellow) and the status
@@ -128,7 +128,8 @@ in the inspector (see Panels and helpers) or with `setParams`.
   when nothing else is under the cursor (it often surrounds other pieces). The Library shows them as gizmo exhibits.
 - **Spawn groups**: an enemy piece takes `params.group` (any string; stored on the actor as `squad`). `Enemies` wakes the whole group once any
   member is awake (trooper alerted, drone / boss awake; `group:wake { group }` once per group), or on `wakeGroup(group)`. Only actors with
-  `wake()` take part (trooper, drone, boss); puppets are always on. The editor's enemies are frozen, so nothing wakes in edit mode.
+  `wake()` take part (trooper, drone, boss, dormant puppets); other puppets are always on and never count as awake.
+  `params.dormant: true` (every enemy, needs a `group`, else `Registry.check` errors): never wakes itself (no sight, hearing, arena entry or damage wake; a shooter never pops up or fires), still takes hits and dies; only `wakeGroup` / `encounter:wake` wakes it, then it behaves normally. Restart and reload rebuild it from the level data. The editor's enemies are frozen, so nothing wakes in edit mode.
 - **Triggers**: fire on the frame the player's feet enter the box (starting inside counts); `once: true` fires one time per run. Fire =
   `events.emit('trigger:fired', { id, event })` with `id` = the piece `name`, else `trigger<n>` (n = order among triggers in the file),
   then `wakeGroup` / `spawnGroup`.
@@ -201,7 +202,7 @@ Gizmo: a monitor with text bars on a post; inert in edit mode and the Library. V
 - State for tests: `boot.active`, `boot.t`, `boot.duration`, `boot.inputLocked`, `boot.canSkip`, `boot.seen`, `boot.lines`, `boot.fade`.
 - Suite `tests/intro.browser.mjs`: overlay and lock at start, typed lines and the HIVEMIND span, no movement / fire / look / switch while locked, `intro:done` within the duration and the eased return, `log.line` on `intro:done`, pacing, skip (only once seen; fire / jump / interact / pad A; `skippable: false`; blocked storage), pause, restart / edit / scene load, validation.
 
-- `src/levels/prologue.json` (the Prologue, #2) is authored in the Workshop from now on: open it (`levelNames()`), edit, save over the file. Its `purge-*` enemy groups are dormant on purpose; the purge waves (#14) will wake or spawn them from triggers and objectives. Gap: a `enemy.shooter` has no dormant state (puppets are always on, only `trooper` / `drone` / `boss` have `wake()`), so the `purge-1` / `purge-2` shooters fire as soon as the player is within 30 m with line of sight. A foundation feature (shooters that wait for `wakeGroup`) is needed before the purge, not mission code.
+- `src/levels/prologue.json` (the Prologue, #2) is authored in the Workshop from now on: open it (`levelNames()`), edit, save over the file. Its `purge-*` enemy groups are dormant on purpose; the purge waves (#14) will wake or spawn them from triggers and objectives. Every enemy of a `purge-*` group is `dormant`.
 
 ## Not yet
 Faces / flicker / label colours / boss arena in the inspector.

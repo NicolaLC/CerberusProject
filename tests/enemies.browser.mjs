@@ -98,9 +98,64 @@ const r = await p.evaluate(() => {
   out.allInRange = enemies.all.filter((t) => t.kind === 'trooper' && t.alive && t.alerted && t.spot).every((t) => t.spot.pos.distanceTo(player.pos) <= 34.5);
   return out;
 });
-console.log(r);
+
+// 5. dormant enemies (params.dormant): inert in sight and in range, still take hits, only wakeGroup wakes them
+await p.reload();
+await p.waitForFunction(() => window.game?.engine);
+const d = await p.evaluate(() => {
+  const g = window.game;
+  const { engine, enemies, player } = g;
+  engine.stop();
+  engine.headless = true;
+  const step = (s) => { for (let i = 0; i < s * 60; i++) engine.step(1 / 60); };
+  for (const e of enemies.all) e.alive = false; // clear the field: only the spawned ones below act
+  enemies.dirty = true;
+  const out = {};
+  player.respawn();
+  player.shields = player.health = 1e6;
+  player.pos.set(2, 0, -15.3 + 12);
+  const mk = (id, dx, params) => enemies.spawn({ id, pos: [2 + dx, 0, -15.3], params });
+  const sh = mk('enemy.shooter', 0, { group: 'dz', dormant: true });
+  const tr = mk('enemy.trooper', 3, { group: 'dz', dormant: true });
+  const live = mk('enemy.static', -3, { group: 'dz', dormant: true });
+  const plain = mk('enemy.static', -6, { group: 'dz' });
+  let fired = 0;
+  engine.events.on('bolt:fired', () => fired++);
+  step(15);
+  out.inert = fired === 0 && !sh.awake && !tr.awake && !tr.alerted && sh.state === 'hidden' && sh.dormant && tr.dormant;
+  // damage never wakes it
+  sh.damage(10, sh.pos.clone().setY(1), new sh.pos.constructor(0, 0, 1), 'body');
+  tr.damage(10, tr.pos.clone().setY(1), new tr.pos.constructor(0, 0, 1), 'body');
+  step(3);
+  out.hit = sh.health === 110 && tr.health < tr.maxHealth && !sh.awake && !tr.awake && fired === 0;
+  out.plainNotAwake = plain.awake === false && live.awake === false;
+  // an ordinary puppet is not counted when the group wakes; the dormant three are
+  out.woke = enemies.wakeGroup('dz');
+  out.awake = sh.awake && tr.awake && !sh.dormant && !tr.dormant && live.awake && !plain.awake;
+  step(8);
+  out.fires = fired > 0;
+  // dormant enemies can die
+  const dead = mk('enemy.shooter', 6, { group: 'dz2', dormant: true });
+  for (let i = 0; i < 10 && dead.alive; i++) dead.damage(50, dead.pos.clone().setY(1), new dead.pos.constructor(0, 0, 1), 'body');
+  out.dies = !dead.alive;
+  // validation: dormant needs a group
+  const lvl = (params) => ({ version: g.level.version, spawn: { pos: [0, 0, 0] }, pieces: [{ id: 'enemy.trooper', pos: [0, 0, 0], params }] });
+  const tryCheck = (params) => { try { g.registry.check(lvl(params)); return null; } catch (e) { return e.message; } };
+  out.noGroup = tryCheck({ dormant: true });
+  out.okGroup = tryCheck({ dormant: true, group: 'a' });
+  out.okPlain = tryCheck({});
+  return out;
+});
+console.log(d);
 const fail = [];
 const expect = (name, ok) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`); if (!ok) fail.push(name); };
+expect('dormant: a shooter in range and a trooper in sight stay inert for 15 s', d.inert);
+expect('dormant: they take damage without waking, nothing fires', d.hit && d.plainNotAwake);
+expect('dormant: wakeGroup wakes the dormant ones (3), not an ordinary puppet', d.woke === 3 && d.awake);
+expect('dormant: the woken shooter / trooper now fire', d.fires);
+expect('dormant: a dormant enemy can be killed', d.dies);
+expect('dormant: without a group it fails validation with a clear message', /dormant/.test(d.noGroup ?? '') && /group/.test(d.noGroup ?? '') && d.okGroup === null && d.okPlain === null);
+console.log(r);
 expect('destroyed puppet stays destroyed after 15 s', r.stillDead);
 expect('its debris is cleaned up', r.debrisCleared);
 expect('its debris chunks use the type\'s shared baked geometry', r.debrisShared);

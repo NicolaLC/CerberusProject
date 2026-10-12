@@ -156,6 +156,57 @@ for (const seen of [true, false]) {
   await p.close();
 }
 
+// ---- 6: dormant purge-* enemies stay inert with the player among them; wakeGroup wakes exactly that group ----
+{
+  const { p } = await open(true);
+  const r = await p.evaluate(() => {
+    const g = window.game;
+    const { engine } = g;
+    T.step(1 / 60);
+    T.press('Mouse0');
+    T.step(0.5);
+    T.press('Mouse0'); // skip the intro
+    T.bolts = 0;
+    T.hurt = 0;
+    const purge = () => g.enemies.all.filter((e) => String(e.squad).startsWith('purge-'));
+    const out = { dormantAll: purge().every((e) => e.dormant === true), n: purge().length };
+    // stand in the yard among the purge shooters / troopers, in the open, for 20 s
+    const shooter = g.enemies.all.find((e) => e.squad === 'purge-1' && e.kind === 'shooter' && e.pos.x === 2);
+    const trooper = g.enemies.all.find((e) => e.squad === 'purge-3' && e.kind === 'trooper');
+    for (let i = 0; i < 20 * 60; i++) {
+      g.player.pos.set(2, 0, -20);
+      g.player.vel?.set(0, 0, 0);
+      engine.step(1 / 60);
+      T.bolts += g.enemies.bolts.length;
+    }
+    out.shooterDist = shooter.pos.distanceTo(g.player.pos);
+    out.trooperDist = trooper.pos.distanceTo(g.player.pos);
+    out.awake = purge().filter((e) => e.awake).length;
+    out.bolts = T.bolts;
+    out.hurt = T.hurt;
+    out.woken = [...g.enemies.woken];
+    out.shooterState = shooter.state;
+    // wake purge-1 only
+    const n = g.encounter.wakeGroup('purge-1');
+    out.n1 = n;
+    out.purge1 = purge().filter((e) => e.squad === 'purge-1').every((e) => e.awake && !e.dormant);
+    out.others = purge().filter((e) => e.squad !== 'purge-1' && (e.awake || !e.dormant)).length;
+    engine.events.emit('encounter:wake', 'purge-3');
+    out.purge3 = purge().filter((e) => e.squad === 'purge-3').every((e) => e.awake);
+    out.after = purge().filter((e) => e.awake).length;
+    out.expect = purge().filter((e) => e.squad === 'purge-1' || e.squad === 'purge-3').length;
+    // a woken shooter may fire now
+    T.step(6);
+    out.fired = T.bolts > 0;
+    return out;
+  });
+  expect('every purge-* enemy is dormant in the level data', r.dormantAll && r.n > 0, JSON.stringify(r));
+  expect('player among a purge shooter and trooper for 20 s: none awake, no bolt, no hurt', r.shooterDist < 15 && r.trooperDist < 15 && r.awake === 0 && r.bolts === 0 && r.hurt === 0 && r.woken.length === 0 && r.shooterState === 'hidden', JSON.stringify(r));
+  expect('wakeGroup("purge-1") wakes exactly that group; encounter:wake wakes purge-3; the rest stay dormant', r.n1 === 4 && r.purge1 && r.others === 0 && r.purge3 && r.after === r.expect, JSON.stringify(r));
+  expect('  a woken shooter fires', r.fired, JSON.stringify(r));
+  await p.close();
+}
+
 await b.close();
 if (fail.length) { console.log(`\n${fail.length} FAILED`); process.exit(1); }
 console.log('\nall prologue checks passed');

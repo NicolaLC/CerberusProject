@@ -169,7 +169,7 @@
 - Shooters only engage a player within `ENGAGE_RANGE` (30 m) with line of sight.
 
 ## Spawn groups (#73)
-Enemies with the same `params.group` wake together: when any troopers / drone / boss member is awake the rest wake too (once). Triggers and reinforcements: workshop.md, Encounters.
+Enemies with the same `params.group` wake together: when any troopers / drone / boss member is awake the rest wake too (once). `dormant: true` enemies (troopers, drones, boss, shooters) ignore sight, sound, arena entry and damage and wait for `wakeGroup`; plain puppets are always on. Triggers and reinforcements: workshop.md, Encounters.
 On death the player respawns after 3 s at the last checkpoint reached, else at the spawn.
 
 ## Drones (`game/actors/drone.js` TUNING)
