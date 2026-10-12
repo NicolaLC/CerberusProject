@@ -8,6 +8,7 @@ import { Encounter, ENCOUNTER_PIECES, levelSpawn } from './world/encounter.js';
 import { Player } from './actors/player.js';
 import { Enemies, ENEMY_PIECES } from './actors/enemies.js';
 import { Weapon } from './combat/weapon.js';
+import { GUN_ORDER } from './combat/guns.js';
 import { CameraRig } from './view/camera.js';
 import { FX } from './view/fx.js';
 import { Hud } from './view/hud.js';
@@ -45,7 +46,7 @@ export class Game {
     this.debug = debug;
 
     // ---- level + piece registry: every system builds its part of the level from data ----
-    const registry = new Registry().register('world', WORLD_PIECES).register('enemies', ENEMY_PIECES).register('pickups', PICKUP_PIECES).register('encounter', ENCOUNTER_PIECES);
+    const registry = new Registry({ guns: GUN_ORDER }).register('world', WORLD_PIECES).register('enemies', ENEMY_PIECES).register('pickups', PICKUP_PIECES).register('encounter', ENCOUNTER_PIECES);
     this.registry = registry;
     const first = resolveScene(sceneName);
 
@@ -58,7 +59,7 @@ export class Game {
     const camRig = new CameraRig(camera, world);
     const player = new Player({ scene, world, events, spawn: levelSpawn(registry.check(SCENES[first])) });
     const enemies = new Enemies({ scene, world, events, registry });
-    const pickups = new Pickups({ scene, events, registry });
+    const pickups = new Pickups({ scene, events, registry, world });
     const mission = new Mission({ events, enemies });
     const encounter = new Encounter({ scene, events, registry, enemies, world, mission });
     const weapon = new Weapon({ camera, rig: camRig, player, world, enemies, events });
@@ -264,7 +265,7 @@ export class Game {
     const { player, camRig, weapon, fx, hud, juice } = this;
     player.place(spawn);
     camRig.reset(player.facing);
-    weapon.reset();
+    weapon.reset(level.loadout);
     fx.reset();
     hud.reset(level);
     juice.reset();

@@ -276,8 +276,8 @@ the burst (which also leaves cover).
 
 ## 6. Weapons
 
-Six guns, switched with 1-6 or the wheel (0.45 s lower/raise). Ammo is tracked per gun. In the prototype all six are
-available from the start; in the game they are discovered one at a time and the pistol never runs dry (6.5, planned). Every gun has a hip and an
+Six guns, switched with 1-6 or the wheel (0.45 s lower/raise). Ammo is tracked per gun. The arena, Gym and Library start
+with all six; a level can start with fewer (`loadout`) and the rest are discovered one at a time, and the pistol never runs dry (6.5). Every gun has a hip and an
 aimed spread, a fixed recoil pattern and its own seeded RNG.
 
 ### 6.1 Stats
@@ -366,10 +366,14 @@ shutters), so the shell protects the core. The trail is drawn to where it stops.
   still matters, but the reserve never runs out: the player always has a gun that works. The HUD shows `∞` for its
   reserve and ammo pickups skip it. A data flag (`infinite` in `GUNS`), so any gun can use it.
 
-Planned (#91), not in the code yet: the prototype, Gym and Library keep all six guns.
-- **STEM-00 starts with the KP-12 Ember only.** Every other gun is **discovered** in play: taken from a defeated
-  unit or found in the world (armoury rack, crate). Picking a gun up for the first time is a small beat: a toast, a
-  STEM-00 log line, and the gun goes into the hideout armoury for good.
+- **Owned guns (implemented).** A level lists the guns the player starts with (`loadout`, e.g. pistol only); no list =
+  all six (arena, Gym, Library, Workshop). Switching only reaches owned guns. A gun on a stand (`pickup.gun`) found in the
+  world discovers its gun: a toast `<NAME> ACQUIRED` and the gun is raised; a gun already owned gives its ammo instead.
+
+Planned (#91), not in the code yet:
+- **STEM-00 starts with the KP-12 Ember only** (the Prologue's `loadout`, #93). Every other gun is **discovered** in play: taken from a defeated
+  unit (enemy gun drops) or found in the world (armoury rack, crate: `pickup.gun`). Picking a gun up for the first time is a
+  small beat: a toast (implemented), a STEM-00 log line (#40), and the gun goes into the hideout armoury for good (#39, saved: #53).
 - **The pistol can never be dropped or swapped out.**
 - **Loadout:** pistol plus up to 2 primaries carried; swap a primary by picking another gun up (#34). Discovered
   guns can be chosen at the hideout before a mission.
@@ -398,7 +402,7 @@ Planned (#91), not in the code yet: the prototype, Gym and Library keep all six 
 
 - A pickup refills only its own class, each gun by its own amount, capped at that gun's max reserve.
 - The pistol's reserve is infinite (6.5), so pickups skip it: an empty pistol never stops "AMMO FULL".
-- Planned (6.5): only guns the player carries are refilled.
+- Only guns the player owns are refilled (6.5).
 - Crates sit at 10 fixed spots (yard, west platform, range, interior, boss arena gate at (28, -17) and back), respawn
   after 15 s.
 - Destroyed puppets drop a clip 45% of the time; 25% of drops are heavy. A drop vanishes after 25 s and blinks for

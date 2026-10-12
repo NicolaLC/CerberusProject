@@ -106,6 +106,12 @@
   R again inside `perfect` = instant + ×1.25 damage for that magazine (ammo counter glows); inside `good` = instant;
   outside = jam, +1s, and the bar disappears (nothing left to read: the reload just runs on). One try per reload. The magazine auto-reloads when it hits 0 (also after switching to an empty gun).
 - 1–6 (AR, MG, SR, BR burst, RG railgun, PS pistol) or mouse wheel switches (0.45s lower/raise, model swaps at the bottom). Ammo is tracked per gun.
+- Owned guns (`weapon.owned`, a Set): keys, wheel, d-pad and next gun only reach owned guns (unowned keys do nothing, cycling
+  skips them); the HUD shows a slot only for an owned gun. The level's `loadout` sets them at load (level.md; absent = all six,
+  the pistol always). `weapon.grant(id, { ammo })` adds a gun and rounds to its reserve (capped at max) and emits
+  `weapon:discovered { gun }` the first time it is owned in the level; the HUD toasts `<NAME> ACQUIRED` for 3 s. `pickup.gun`
+  calls it and raises the new gun. Ammo crates refill only owned guns. Planned: STEM-00 log line on discovery (#40), 2-primary
+  limit and swapping (#34), hideout armoury (#39), owned guns in the save (#53), enemy gun drops.
 - The ammo counter turns red at 25% of the magazine or less (`LOW_AMMO` in hud.js, at least the last round): AR ≤ 8, MG ≤ 22, SR / RG ≤ 1, pistol ≤ 3.
 - KR-7 Warden (AR): 540 rpm, mag 32, reserve 192/384, reload 1.8s, 18 dmg, head ×2.5, weak ×3, limbs ×0.8.
   Spread hip 0.022 / aim 0.004 + bloom 0.007 per shot.

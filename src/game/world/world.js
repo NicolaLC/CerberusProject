@@ -214,11 +214,17 @@ export class World {
     for (const [k, v] of this.named) if (gone.has(v)) this.named.delete(k);
   }
 
-  // prop.gun: the gun's own model builder, merged to one mesh per material, standing at pos.
+  // A gun's display model: its own model builder, merged to one mesh per material (shared propMats: free it with
+  // disposeTree(g, { keep: world.keep })). Stock at the origin, barrel along +Z. `who` names the piece in the error.
+  gunModel(gun, who = 'prop.gun') {
+    const def = GUNS[gun];
+    if (!def) throw new Error(`${who}: unknown gun "${gun}"`);
+    return mergeGroup(def.build(this.propMats));
+  }
+
+  // prop.gun: the gun's display model standing at pos.
   gunProp({ pos, yaw = 0, params }) {
-    const def = GUNS[params?.gun];
-    if (!def) throw new Error(`prop.gun: unknown gun "${params?.gun}"`);
-    const g = mergeGroup(def.build(this.propMats));
+    const g = this.gunModel(params?.gun);
     g.position.set(...pos);
     g.rotation.y = yaw;
     g.traverse((o) => (o.castShadow = o.isMesh));
