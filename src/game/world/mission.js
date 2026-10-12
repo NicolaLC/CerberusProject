@@ -3,6 +3,8 @@
 // `Encounter` owns the records and calls start / stop / update; the listeners here are permanent and look at `current`.
 // Logic only: no scene objects, nothing to dispose. Events out: `mission:objective` / `mission:objective:done` { index, total, id, kind, text },
 // `mission:complete` { total }, `mission:failed` { index, id, reason }. Actions on becoming current: `encounter:wake` / `encounter:spawn`.
+// Optional objectives: `skipOn` (a trigger / checkpoint id) completes the current one when it fires, flagged `skipped`.
+// On done: `grantGun` / `grantAmmo` emit `mission:grant` { gun, ammo } (game.js hands it to the Weapon), never when skipped.
 
 export const TUNING = {
   reach: 2.5, // m, vertical reach of an interact terminal (feet to marker)
@@ -25,7 +27,9 @@ export class Mission {
     this.target = 0; // destroy: kills needed
     const fired = (e) => {
       const r = this.current;
-      if (r?.obj === 'reach' && r.params.trigger != null && r.params.trigger === e.id) this.#complete();
+      if (!r) return;
+      if (r.obj === 'reach' && r.params.trigger != null && r.params.trigger === e.id) this.#complete();
+      else if (r.params.skipOn != null && r.params.skipOn === e.id) this.#complete(true); // optional objective: the player moved on without it
     };
     events.on('trigger:fired', fired);
     events.on('checkpoint:reached', fired);
@@ -96,8 +100,8 @@ export class Mission {
     return s;
   }
 
-  #info(r) {
-    return { index: this.index, total: this.objectives.length, id: r.oid, kind: r.obj, text: r.text };
+  #info(r, skipped = false) {
+    return { index: this.index, total: this.objectives.length, id: r.oid, kind: r.obj, text: r.text, skipped };
   }
 
   #matches(r, a) {
@@ -115,9 +119,11 @@ export class Mission {
     if (r.obj === 'destroy' && this.target <= 0) this.#complete(); // nothing to destroy: done at once
   }
 
-  #complete() {
+  // skipped: `skipOn` fired instead of the objective being done (no grantGun then).
+  #complete(skipped = false) {
     const r = this.current;
-    this.events.emit('mission:objective:done', this.#info(r));
+    if (!skipped && r.params.grantGun != null) this.events.emit('mission:grant', { gun: r.params.grantGun, ammo: r.params.grantAmmo ?? 0 }); // before :done, so discovered:<gun> lines queue first
+    this.events.emit('mission:objective:done', this.#info(r, skipped));
     if (this.index + 1 < this.objectives.length) return this.#begin(this.index + 1);
     this.current = null;
     this.state = 'complete';

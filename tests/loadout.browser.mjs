@@ -44,7 +44,10 @@ await ev(() => {
     const doc = { ...JSON.parse(JSON.stringify(t.doc)), pieces: [] };
     delete doc.loadout;
     t.load({ ...doc, ...extra });
-    for (const [id, pos, params] of pieces) t.place(id, pos, params);
+    for (const [id, pos, params, name] of pieces) {
+      const i = t.place(id, pos, params);
+      if (name) t.setName(i, name);
+    }
     t.play();
     g.player.pos.set(0, 0, 0);
     T.step(0.6);
@@ -142,6 +145,102 @@ await ev(() => {
   });
   expect('bad loadout id: clear error', /loadout.*unknown gun "laser"/.test(r.loadout) && /loadout/.test(r.shape), JSON.stringify(r));
   expect('bad pickup.gun gun: clear error', /pickup\.gun.*gun "laser"/.test(r.piece) && /pickup\.gun: unknown gun "laser"/.test(r.build) && r.ok === null, JSON.stringify(r));
+}
+
+// ---- 5. enemy gun drops (dropGun / dropAmmo / dropOnce, #93) ----
+{
+  const r = await ev(() => {
+    const g = window.game;
+    if (!g.tool) g.loadScene('workshop');
+    const kill = (e) => { for (let i = 0; i < 80 && e.alive; i++) e.damage(100, e.pos.clone().setY(1), new e.pos.constructor(0, 0, -1), 'body'); T.step(0.1); };
+    const guns = () => g.pickups.items.filter((i) => i.gun);
+    const statics = (extra) => [20, 22, 24].map((x) => ['enemy.static', [x, 0, 20], extra]);
+    const out = {};
+    // pistol-only: the first kill drops one Warden, the second drops nothing, the player walks over it
+    T.play({ loadout: ['pistol'] }, statics({ dropGun: 'rifle', dropAmmo: 40 }));
+    window.DISC.length = 0;
+    const [a, b, c] = g.enemies.all;
+    out.before = guns().length;
+    kill(a);
+    out.first = guns().map((i) => ({ gun: i.gun, ammo: i.ammo, x: i.pos.x, stand: !!i.model.children[0].children.find((m) => m.geometry?.type === 'BoxGeometry') }));
+    kill(b);
+    out.second = guns().length;
+    g.player.pos.set(a.pos.x, 0, a.pos.z);
+    T.step(0.3);
+    out.owned = [...g.weapon.owned].join();
+    out.reserve = g.weapon.state.rifle.reserve;
+    out.disc = [...window.DISC];
+    out.gone = guns().length;
+    kill(c);
+    out.third = guns().length; // owned now: nothing more
+    // a gun that is already owned: no drop
+    T.play({ loadout: ['rifle'] }, statics({ dropGun: 'rifle' }));
+    kill(g.enemies.all[0]);
+    out.ownedNoDrop = guns().length;
+    // dropOnce false: every kill drops while the gun is not owned
+    T.play({ loadout: ['pistol'] }, statics({ dropGun: 'rifle', dropOnce: false }));
+    kill(g.enemies.all[0]); kill(g.enemies.all[1]);
+    out.repeat = guns().length;
+    out.defaultAmmo = guns()[0]?.ammo;
+    // a reload of the level forgets that a gun was dropped
+    T.play({ loadout: ['pistol'] }, statics({ dropGun: 'rifle' }));
+    kill(g.enemies.all[0]);
+    out.fresh = guns().length;
+    // validation
+    const lvl = (params) => ({ name: 't', spawn: { pos: [0, 0, 0], yaw: 0 }, pieces: [{ id: 'enemy.trooper', pos: [0, 0, 0], params }] });
+    const err = (params) => { try { g.registry.check(lvl(params)); return null; } catch (e) { return e.message; } };
+    out.errs = { gun: err({ dropGun: 'laser' }), ammo: err({ dropGun: 'rifle', dropAmmo: -1 }), orphan: err({ dropAmmo: 5 }), once: err({ dropGun: 'rifle', dropOnce: 'yes' }), ok: err({ dropGun: 'rifle', dropAmmo: 10, dropOnce: false }) };
+    out.fields = g.registry.meta('enemy.trooper').fields.map((f) => f.key).join();
+    return out;
+  });
+  expect('enemy drop: nothing before a kill, the first kill leaves one Warden pickup with dropAmmo, bare on the floor (no stand)', r.before === 0 && r.first.length === 1 && r.first[0].gun === 'rifle' && r.first[0].ammo === 40 && !r.first[0].stand, JSON.stringify(r));
+  expect('  a second death drops nothing (dropOnce)', r.second === 1, JSON.stringify(r));
+  expect('  picking it up discovers the Warden once, with the ammo (a random clip may add to it); the pickup is gone', r.owned === 'pistol,rifle' && r.reserve >= 40 && r.disc.join() === 'rifle' && r.gone === 0, JSON.stringify(r));
+  expect('  once owned, a further death drops nothing', r.third === 0, JSON.stringify(r));
+  expect('a gun the player owns is never dropped', r.ownedNoDrop === 0, JSON.stringify(r));
+  expect('dropOnce false: every death drops while the gun is not owned; the default ammo is the gun\'s drop size', r.repeat === 2 && r.defaultAmmo === 32, JSON.stringify(r));
+  expect('a fresh level drops again', r.fresh === 1, JSON.stringify(r));
+  expect('drop params are validated and shown as inspector fields', /dropGun "laser"/.test(r.errs.gun) && /dropAmmo/.test(r.errs.ammo) && /no dropGun/.test(r.errs.orphan) && /dropOnce/.test(r.errs.once) && r.errs.ok === null && /dropGun,dropAmmo,dropOnce/.test(r.fields), JSON.stringify([r.errs, r.fields]));
+}
+
+// ---- 6. objective grantGun / skipOn (#93): an optional objective ----
+{
+  const r = await ev(() => {
+    const g = window.game;
+    if (!g.tool) g.loadScene('workshop');
+    const G = () => { g.engine.input.keys.add('KeyG'); g.engine.input.pressed.add('KeyG'); T.step(1 / 60); g.engine.input.keys.delete('KeyG'); T.step(0.1); };
+    const pieces = [
+      ['trigger.volume', [30, 0, 0], { size: [4, 3, 4], event: 'trigger', once: false }, 'rackskip'],
+      ['objective.interact', [10, 0, 0], { text: 'SALVAGE', radius: 2, grantGun: 'rifle', grantAmmo: 64, skipOn: 'rackskip' }],
+      ['objective.survive', [0, 0, 0], { time: 100 }],
+    ];
+    const out = {};
+    const grants = [];
+    g.engine.events.on('mission:grant', (e) => grants.push(e.gun));
+    const run = (name, fn) => {
+      T.play({ loadout: ['pistol'] }, pieces);
+      grants.length = 0; window.DISC.length = 0;
+      out[name] = fn();
+    };
+    const state = () => ({ cur: g.mission.current?.oid ?? g.mission.state, owned: [...g.weapon.owned].join(), reserve: g.weapon.state.rifle.reserve, mag: g.weapon.state.rifle.ammo, disc: [...window.DISC], grants: [...grants], gun: g.weapon.pending ?? g.weapon.current });
+    run('take', () => {
+      g.player.pos.set(0, 0, 0); G(); const far = state();
+      g.player.pos.set(10, 0, 0); T.step(0.2); const near = state(); G();
+      return { far, near, after: state(), objective: g.mission.index };
+    });
+    run('skip', () => {
+      g.player.pos.set(30, 0, 0); T.step(0.2);
+      return { after: state(), index: g.mission.index };
+    });
+    const lvl = (params) => ({ name: 't', spawn: { pos: [0, 0, 0], yaw: 0 }, pieces: [{ id: 'objective.interact', pos: [0, 0, 0], params }] });
+    const err = (params) => { try { g.registry.check(lvl(params)); return null; } catch (e) { return e.message; } };
+    out.errs = { gun: err({ grantGun: 'laser' }), ammo: err({ grantAmmo: 5 }), neg: err({ grantGun: 'rifle', grantAmmo: -1 }), skip: err({ skipOn: '' }), ok: err({ grantGun: 'rifle', grantAmmo: 5, skipOn: 'x' }) };
+    return out;
+  });
+  expect('objective grantGun: out of range or without G nothing is granted', r.take.far.owned === 'pistol' && r.take.near.owned === 'pistol', JSON.stringify(r.take));
+  expect('  G at the rack grants the Warden: full magazine, the ammo, selected, discovered once, objective done', r.take.after.owned === 'pistol,rifle' && r.take.after.reserve === 64 && r.take.after.mag === 32 && r.take.after.disc.join() === 'rifle' && r.take.after.grants.join() === 'rifle' && r.take.after.gun === 'rifle' && r.take.objective === 1, JSON.stringify(r.take));
+  expect('  skipOn: reaching the trigger completes it without a gun (no grant, no discovery) and the next objective starts', r.skip.after.owned === 'pistol' && !r.skip.after.grants.length && !r.skip.after.disc.length && r.skip.index === 1, JSON.stringify(r.skip));
+  expect('  validation: unknown gun, ammo without gun, negative ammo, empty skipOn', /grantGun "laser"/.test(r.errs.gun) && /grantAmmo needs grantGun/.test(r.errs.ammo) && /grantAmmo must be/.test(r.errs.neg) && /skipOn/.test(r.errs.skip) && r.errs.ok === null, JSON.stringify(r.errs));
 }
 
 expect('no page or console errors', errors.length === 0, errors.join(' | '));

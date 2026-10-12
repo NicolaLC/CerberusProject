@@ -73,7 +73,14 @@ export class Game {
     const boot = new Boot({ controls, post }).listen(events);
     applyQuality(settings.quality, { engine, post, world });
     const juice = new Juice({ camRig, post, fx }).listen(events);
-    events.on('puppet:down', (p) => pickups.drop(p.pos));
+    events.on('puppet:down', (p) => {
+      pickups.drop(p.pos);
+      if (p.dropGun) pickups.dropGun(p.pos, p.dropGun, weapon.owned); // enemy params dropGun / dropAmmo / dropOnce
+    });
+    events.on('mission:grant', ({ gun, ammo }) => {
+      weapon.grant(gun, { ammo }); // emits weapon:discovered the first time (toast, discovered:<gun> log line)
+      weapon.switchTo(gun);
+    });
     events.on('checkpoint:reached', () => hud.toast('CHECKPOINT'));
     // env.alarm: the lighting state (the siren is Audio's)
     events.on('alarm:on', (a) => world.setAlarm(a.color, a.strength));

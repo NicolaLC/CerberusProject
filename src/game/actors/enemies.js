@@ -9,6 +9,7 @@ import { CoverMap } from '../ai/cover.js';
 import { Grid } from '../world/grid.js';
 import { DebrisBank } from './parts.js';
 import { PROJECTILE } from './enemy.js';
+import { GUNS } from '../combat/guns.js';
 
 // The enemy system: spawns every enemy (training puppets, troopers, drones, the boss: one list, `all`), owns enemy
 // projectiles, the cover map, the instanced puppet stands, the death-debris bank and the cached raycast target list.
@@ -26,18 +27,29 @@ const GROUP = { key: 'group', type: 'text', optional: true };
 // fires) but still takes hits and dies; only wakeGroup(its group) wakes it. Needs a group, or it could never wake.
 const DORMANT = { key: 'dormant', type: 'bool', def: false };
 const dormantCheck = (p) => (p.dormant && (typeof p.group !== 'string' || !p.group) ? 'is dormant but has no group: nothing could ever wake it (set "group")' : null);
+// `dropGun` (every enemy): the gun id it leaves on the floor when destroyed (a pickup, Pickups.dropGun), unless the player owns it already.
+// `dropAmmo`: rounds in that pickup (default the gun's drop size). `dropOnce` (true): only the first destroyed enemy of the level drops that gun.
+const DROP = [{ key: 'dropGun', type: 'enum', options: Object.keys(GUNS), optional: true }, { key: 'dropAmmo', type: 'number', min: 0, optional: true }, { key: 'dropOnce', type: 'bool', def: true }];
+export function dropProblem(p, guns = null) {
+  if (p.dropGun == null) return p.dropAmmo != null || p.dropOnce != null ? 'has dropAmmo / dropOnce but no dropGun' : null;
+  if (typeof p.dropGun !== 'string' || !GUNS[p.dropGun] || (guns && !guns.includes(p.dropGun))) return `dropGun ${JSON.stringify(p.dropGun)} is not a known gun`;
+  if (p.dropAmmo != null && !(typeof p.dropAmmo === 'number' && p.dropAmmo >= 0)) return 'dropAmmo must be a number, at least 0 (rounds)';
+  if (p.dropOnce != null && typeof p.dropOnce !== 'boolean') return 'dropOnce must be true or false';
+  return null;
+}
+const enemyCheck = (p, registry) => dormantCheck(p) ?? dropProblem(p, registry.guns);
 const def = (kind, d) => ({ kind, pos: d.pos, yaw: d.yaw, ...d.params });
 // `example` ({ params, yaw? }) is what the Library spawns; `label` is its one-line stat sheet (level.md, meta convention).
 export const ENEMY_PIECES = {
-  'enemy.static': { stand: true, example: { params: {} }, label: `HP ${HEALTH.default} | stands, takes hits`, check: dormantCheck, fields: [GROUP, DORMANT], build: (sys, d) => new Puppet(sys.ctx, def('static', d)) },
-  'enemy.mover': { stand: true, example: { params: { speed: 0 } }, label: `HP ${HEALTH.default} | slides on a rail`, check: dormantCheck, fields: [GROUP, DORMANT, { key: 'to', type: 'vec3', optional: true }, { key: 'speed', type: 'number', min: 0 }], build: (sys, d) => new Puppet(sys.ctx, def('mover', d)) },
-  'enemy.shooter': { stand: true, example: { params: {} }, label: `HP ${HEALTH.shooter} | pops up and fires within ${ENGAGE_RANGE} m`, check: dormantCheck, fields: [GROUP, DORMANT], build: (sys, d) => new Puppet(sys.ctx, def('shooter', d)) },
+  'enemy.static': { stand: true, example: { params: {} }, label: `HP ${HEALTH.default} | stands, takes hits`, check: enemyCheck, fields: [GROUP, DORMANT, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('static', d)) },
+  'enemy.mover': { stand: true, example: { params: { speed: 0 } }, label: `HP ${HEALTH.default} | slides on a rail`, check: enemyCheck, fields: [GROUP, DORMANT, { key: 'to', type: 'vec3', optional: true }, { key: 'speed', type: 'number', min: 0 }, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('mover', d)) },
+  'enemy.shooter': { stand: true, example: { params: {} }, label: `HP ${HEALTH.shooter} | pops up and fires within ${ENGAGE_RANGE} m`, check: enemyCheck, fields: [GROUP, DORMANT, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('shooter', d)) },
   // moves between cover and shoots back
-  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m`, check: dormantCheck, fields: [GROUP, DORMANT], build: (sys, d) => new Trooper(sys.ctx, def('trooper', d)) },
+  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m`, check: enemyCheck, fields: [GROUP, DORMANT, ...DROP], build: (sys, d) => new Trooper(sys.ctx, def('trooper', d)) },
   // hovers and strafes, short bursts
-  'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m`, check: dormantCheck, fields: [GROUP, DORMANT], build: (sys, d) => new Drone(sys.ctx, def('drone', d)) },
+  'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m`, check: enemyCheck, fields: [GROUP, DORMANT, ...DROP], build: (sys, d) => new Drone(sys.ctx, def('drone', d)) },
   // miniboss
-  'boss.spider': { example: { params: {} }, label: `HP ${SPIDER.core} core | wakes at ${SPIDER.wakeRange} m or in its arena`, check: dormantCheck, fields: [GROUP, DORMANT], build: (sys, d) => new SpiderMech(sys.ctx, def('boss', d)) },
+  'boss.spider': { example: { params: {} }, label: `HP ${SPIDER.core} core | wakes at ${SPIDER.wakeRange} m or in its arena`, check: enemyCheck, fields: [GROUP, DORMANT, ...DROP], build: (sys, d) => new SpiderMech(sys.ctx, def('boss', d)) },
 };
 
 // Flank director: with 2+ troopers engaged, every FLANK_EVERY s one of them is sent around the player.
@@ -226,6 +238,8 @@ export class Enemies {
     const actor = this.registry.build('enemies', this, data);
     actor.squad = data.params?.group ?? null;
     actor.dormant = !!data.params?.dormant;
+    const { dropGun, dropAmmo, dropOnce } = data.params ?? {};
+    actor.dropGun = dropGun ? { gun: dropGun, ammo: dropAmmo, once: dropOnce ?? true } : null; // see DROP
     return actor;
   }
 
