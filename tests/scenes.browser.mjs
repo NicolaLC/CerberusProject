@@ -33,7 +33,7 @@ const probe = (frames) => {
     o.frustumCulled = false;
   });
   for (const far of [true, false]) {
-    for (const e of g.enemies.puppets) e.skin?.setFar(far);
+    for (const e of g.enemies.all) e.skin?.setFar(far);
     engine.renderer.render(engine.scene, engine.camera);
   }
   for (const o of culled) o.frustumCulled = true;
@@ -47,7 +47,7 @@ const probe = (frames) => {
     spawn: g.level.spawn.pos,
     pos: [g.player.pos.x, g.player.pos.y, g.player.pos.z],
     facing: g.player.facing,
-    enemies: g.enemies.puppets.length,
+    enemies: g.enemies.all.length,
     enemyPieces: pieces('enemies'),
     pickups: g.pickups.items.length,
     pickupPieces: pieces('pickups'),
@@ -175,7 +175,7 @@ for (const name of SCENES) {
     const out = {};
     // wake the boss (the player walks into its arena), hurt the player, kill a puppet, change gun
     player.pos.set((boss.arena.minX + boss.arena.maxX) / 2, 0, (boss.arena.minZ + boss.arena.maxZ) / 2);
-    const pup = enemies.puppets.find((x) => x.kind === 'static');
+    const pup = enemies.all.find((x) => x.kind === 'static');
     pup.damage(999, pup.pos.clone(), pup.pos.clone().set(0, 0, 1), 'torso');
     player.damage(40);
     g.weapon.current = 'sniper';
@@ -239,9 +239,9 @@ for (const name of SCENES) {
     out.demo = enemies.demo;
     out.maxBolts = maxBolts;
     out.unhurt = player.health === 100 && player.shields === player.t.maxShields && !player.dead;
-    out.awake = enemies.puppets.filter((x) => x.awake).map((x) => x.kind);
+    out.awake = enemies.all.filter((x) => x.awake).map((x) => x.kind);
     // exhibits still take hits
-    const pup = enemies.puppets.find((x) => x.kind === 'static');
+    const pup = enemies.all.find((x) => x.kind === 'static');
     pup.damage(999, pup.pos.clone(), pup.pos.clone().set(0, 0, 1), 'torso');
     step(2);
     out.hitWorks = enemies.kills === 1;

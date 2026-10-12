@@ -56,7 +56,7 @@ const result = await p.evaluate(() => {
   step(30);
 
   // --- crosshair over an enemy, first shot lands on it ---
-  const pp = enemies.puppets.find((x) => x.kind === 'static' && x.pos.x === 10 && x.pos.z === 18);
+  const pp = enemies.all.find((x) => x.kind === 'static' && x.pos.x === 10 && x.pos.z === 18);
   player.pos.set(9, 0, 30);
   const chest = pp.rig.bones.Spine2.getWorldPosition(pp.pos.clone());
   keys.add('Mouse2');
@@ -106,7 +106,7 @@ const result = await p.evaluate(() => {
   out.jam = { result: weapon.result?.kind, barUp, barAfter: +document.getElementById('areload').style.opacity, stillReloading: weapon.reloading > 0 };
 
   // --- wall cover: no aiming or shooting away from the wall's ends ---
-  for (const e of enemies.puppets) e.alive = false;
+  for (const e of enemies.all) e.alive = false;
   enemies.dirty = true;
   step(200); // finish the reload
   player.pos.set(34, 0, -21.3); // south face of the arena wall at (34, -23), 6 m long
@@ -188,8 +188,8 @@ const result = await p.evaluate(() => {
   step(20);
   out.rail.fired = r0 - weapon.ammo;
   // pierce: a second puppet placed on the line in front of the aimed one, one slug drops both
-  const A = enemies.puppets.find((x) => x.kind === 'static' && x.pos.x === -10 && x.pos.z === 18);
-  const B = enemies.puppets.find((x) => x.kind === 'static' && x.pos.x === 34 && x.pos.z === 20);
+  const A = enemies.all.find((x) => x.kind === 'static' && x.pos.x === -10 && x.pos.z === 18);
+  const B = enemies.all.find((x) => x.kind === 'static' && x.pos.x === 34 && x.pos.z === 20);
   for (const e of [A, B]) { e.alive = true; e.health = 100; e.rig.root.visible = true; }
   enemies.dirty = true;
   player.pos.set(-10, 0, 34);
@@ -221,7 +221,7 @@ const result = await p.evaluate(() => {
 
   // --- railgun charge ring: visible mid-charge, filling, gone after the shot ---
   weapon.state.rail.ammo = 4;
-  for (const e of enemies.puppets) e.alive = false;
+  for (const e of enemies.all) e.alive = false;
   enemies.dirty = true;
   camRig.pitch = 0.3;
   step(60);
@@ -245,7 +245,7 @@ const result = await p.evaluate(() => {
   press('Digit5'); step(40);
 
   // --- railgun line: 6 targets in a row all hit by one slug; a wall in between stops it ---
-  const targets = enemies.puppets.filter((x) => x.kind === 'static' && x.debris.length === 0).slice(0, 6);
+  const targets = enemies.all.filter((x) => x.kind === 'static' && x.debris.length === 0).slice(0, 6);
   const V3 = player.pos.constructor;
   const chestOf = (e) => e.rig.bones.Spine2.getWorldPosition(new V3());
   const trackPoint = (at) => {

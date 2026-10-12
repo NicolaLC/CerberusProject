@@ -50,7 +50,7 @@ export class RangeTool {
     const [w, h, d] = wall.params.size;
     this.wall = { minX: wall.pos[0] - w / 2, maxX: wall.pos[0] + w / 2, maxY: wall.pos[1] + h, face: wall.pos[2] + d / 2 };
 
-    this.dummies = game.enemies.puppets.filter((p) => p.kind === 'static');
+    this.dummies = game.enemies.all.filter((p) => p.kind === 'static');
     for (const p of this.dummies) this.#immortal(p);
 
     this.#buildStrips();

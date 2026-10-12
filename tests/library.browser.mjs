@@ -42,7 +42,7 @@ await p.evaluate(() => {
       if (!o.visible && o.geometry) { hidden.push(o); o.visible = true; }
     });
     for (const far of [true, false]) {
-      for (const e of g.enemies.puppets) e.skin?.setFar(far);
+      for (const e of g.enemies.all) e.skin?.setFar(far);
       engine.renderer.render(engine.scene, engine.camera);
     }
     for (const o of culled) o.frustumCulled = true;
@@ -125,21 +125,21 @@ expect('one prop.gun per gun', JSON.stringify([...lib.guns].sort()) === JSON.str
 const wake = await p.evaluate(() => {
   const { game: g, T } = window;
   const { player, enemies, tool } = g;
-  const tr = enemies.puppets.find((e) => e.kind === 'trooper');
+  const tr = enemies.all.find((e) => e.kind === 'trooper');
   player.pos.set(tr.pos.x, 0, tr.pos.z + 6);
   T.step(3);
   const calmBolts = T.bolts;
-  const calm = !tr.alerted && enemies.puppets.every((e) => !e.awake);
+  const calm = !tr.alerted && enemies.all.every((e) => !e.awake);
   T.key('KeyV');
   const ex = tool.exhibits.find((e) => e.actor === tr);
   const flagged = tr.hostile === true && ex.awake;
   T.step(6);
   const fought = tr.alerted || T.bolts > calmBolts;
-  const others = enemies.puppets.filter((e) => e !== tr && (e.awake || e.alerted)).length;
+  const others = enemies.all.filter((e) => e !== tr && (e.awake || e.alerted)).length;
   T.key('KeyV');
-  const fresh = ex.actor !== tr && !ex.actor.hostile && !ex.awake && enemies.puppets.includes(ex.actor) && !enemies.puppets.includes(tr);
+  const fresh = ex.actor !== tr && !ex.actor.hostile && !ex.awake && enemies.all.includes(ex.actor) && !enemies.all.includes(tr);
   T.step(2);
-  return { calm, calmBolts, flagged, fought, others, fresh, freshCalm: !ex.actor.alerted, count: enemies.puppets.length, pieces: g.registry.piecesOf(g.level, 'enemies').length + tool.spawned.enemies };
+  return { calm, calmBolts, flagged, fought, others, fresh, freshCalm: !ex.actor.alerted, count: enemies.all.length, pieces: g.registry.piecesOf(g.level, 'enemies').length + tool.spawned.enemies };
 });
 expect('before V: 3 s next to a trooper, nothing wakes, no bolts', wake.calm && wake.calmBolts === 0, JSON.stringify(wake));
 expect('V wakes the nearest enemy exhibit and it fights', wake.flagged && wake.fought, JSON.stringify(wake));

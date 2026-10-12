@@ -53,7 +53,7 @@ export class LibraryTool {
     this.panelT = 0;
 
     // exhibits of the file: enemy actors were built in file order by Enemies.load
-    const actors = enemies.puppets.slice();
+    const actors = enemies.all.slice();
     let n = 0;
     for (const data of level.pieces) {
       const owner = registry.owner(data.id);

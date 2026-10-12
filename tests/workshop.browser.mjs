@@ -48,7 +48,7 @@ await p.evaluate(() => {
     const culled = [];
     engine.scene.traverse((o) => { if (o.frustumCulled) culled.push(o); o.frustumCulled = false; });
     for (const far of [true, false]) {
-      for (const e of g.enemies.puppets) e.skin?.setFar(far);
+      for (const e of g.enemies.all) e.skin?.setFar(far);
       engine.renderer.render(engine.scene, engine.camera);
     }
     for (const o of culled) o.frustumCulled = true;
@@ -99,12 +99,12 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
     const out = [];
     const base0 = JSON.parse(T.doc());
     for (const [id, pos] of [['kit.wall', [3, 0, 3]], ['env.box', [-3, 0, 3]], ['enemy.trooper', [6, 0, 6]], ['pickup.heavy', [-6, 0, 6]]]) {
-      const c0 = world.colliders.length, e0 = enemies.puppets.length, k0 = pickups.items.length, n0 = t.count;
+      const c0 = world.colliders.length, e0 = enemies.all.length, k0 = pickups.items.length, n0 = t.count;
       const i = t.place(id, pos);
       T.step(1);
-      const actor = enemies.puppets[enemies.puppets.length - 1];
+      const actor = enemies.all[enemies.all.length - 1];
       out.push({
-        id, i, n: t.count - n0, colliders: world.colliders.length - c0, enemies: enemies.puppets.length - e0, pickups: pickups.items.length - k0,
+        id, i, n: t.count - n0, colliders: world.colliders.length - c0, enemies: enemies.all.length - e0, pickups: pickups.items.length - k0,
         pos: t.doc.pieces[i].pos, verify: T.ok(),
         actorAt: id.startsWith('enemy') ? [actor.group.position.x, actor.group.position.z] : null,
       });
@@ -235,7 +235,7 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
     t.move(bs, [51, 0, 50]);
     out.arena = t.doc.pieces[bs].params.arena;
     T.step(1);
-    out.mover = [enemies.puppets.find((a) => a.kind === 'mover').group.position.x];
+    out.mover = [enemies.all.find((a) => a.kind === 'mover').group.position.x];
     // duplicate: after the original, +1 m, no name
     const c0 = colliders(); const n0 = t.count;
     const d = t.duplicate(i);
@@ -245,12 +245,12 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
     const before = T.mem();
     const kinds = {};
     for (const id of ['kit.stairs', 'env.box', 'enemy.trooper', 'pickup.light', 'env.label', 'prop.gun', 'light.point']) {
-      const c = colliders(); const e = enemies.puppets.length; const k = pickups.items.length;
+      const c = colliders(); const e = enemies.all.length; const k = pickups.items.length;
       const idx = t.place(id, [0, 0, 40]);
-      const added = { colliders: colliders() - c, enemies: enemies.puppets.length - e, pickups: pickups.items.length - k };
+      const added = { colliders: colliders() - c, enemies: enemies.all.length - e, pickups: pickups.items.length - k };
       const objs = id === 'enemy.trooper' || id === 'pickup.light' ? [] : t.items[idx].thing.objects.slice();
       t.remove(idx);
-      kinds[id] = { added, freed: colliders() === c && enemies.puppets.length === e && pickups.items.length === k, detached: objs.every((o) => !o.parent), verify: T.ok().ok };
+      kinds[id] = { added, freed: colliders() === c && enemies.all.length === e && pickups.items.length === k, detached: objs.every((o) => !o.parent), verify: T.ok().ok };
     }
     out.kinds = kinds;
     T.step(1);
@@ -506,7 +506,7 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
     const lvl = { name: 'x', spawn: { pos: [0, 0, 0] }, interiorZones: [], pieces: [{ id: 'env.box', pos: [0, -1, 0], params: { size: [10, 1, 10], mat: 'floor' } }, { id: 'enemy.static', pos: [2, 0, 2] }, { id: 'pickup.heavy', pos: [-2, 0, 2] }] };
     t.load(lvl);
     T.step(1);
-    const loaded = { n: t.count, ok: T.ok(), enemies: g.enemies.puppets.length, pickups: g.pickups.items.length, history: t.undoStack.length };
+    const loaded = { n: t.count, ok: T.ok(), enemies: g.enemies.all.length, pickups: g.pickups.items.length, history: t.undoStack.length };
     const before = T.doc();
     let msg = null;
     try { t.place('kit.cover.low', [0, 0, 0], { length: 0.1 }); } catch (err) { msg = err.message; }
@@ -539,7 +539,7 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
     g.engine.camera.position.set(0, 6, 4);
     t.cam.yaw = 0.5; t.cam.pitch = -0.4;
     T.step(1);
-    return { hist: [t.undoStack.length, t.redoStack.length], counts: { colliders: g.world.colliders.length, puppets: g.enemies.puppets.length, pickups: g.pickups.items.length } };
+    return { hist: [t.undoStack.length, t.redoStack.length], counts: { colliders: g.world.colliders.length, puppets: g.enemies.all.length, pickups: g.pickups.items.length } };
   });
   const before = await ev(() => ({ doc: T.doc(), cam: window.game.engine.camera.position.toArray(), fov: window.game.engine.camera.fov }));
 
@@ -551,12 +551,12 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
     g.engine.input.pressed.clear();
     T.tap('KeyP');
     T.step(1);
-    const tr = g.enemies.puppets.find((e) => e.kind === 'trooper');
+    const tr = g.enemies.all.find((e) => e.kind === 'trooper');
     const out = {
       playing: t.playing, toolEditing: t.editing, gameEditing: g.editing, frozen: g.enemies.frozen,
       hud: document.getElementById('hud').style.display, palette: document.getElementById('workshop-palette').style.display,
       player: g.player.pos.toArray().map((v) => Math.round(v * 100) / 100), spawnYaw: t.playLevel.spawn.yaw, visible: g.player.root.visible,
-      puppets: g.enemies.puppets.length, pickups: g.pickups.items.length, cover: !!g.enemies.cover, batches: g.world.batches.length,
+      puppets: g.enemies.all.length, pickups: g.pickups.items.length, cover: !!g.enemies.cover, batches: g.world.batches.length,
       statics: g.world.staticMeshes.length, trooperState: tr.state,
     };
     return out;
@@ -567,7 +567,7 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   const woke = await ev(() => {
     const g = window.game;
     T.step(4);
-    const tr = g.enemies.puppets.find((e) => e.kind === 'trooper');
+    const tr = g.enemies.all.find((e) => e.kind === 'trooper');
     return { state: tr.state, time: g.enemies.time };
   });
   expect('  enemies are awake: the trooper reacts to the player', woke.state !== 'idle', JSON.stringify(woke));
@@ -575,7 +575,7 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   // hurt the game: kill an enemy, take the pickup, move a lot
   const hurt = await ev(() => {
     const g = window.game;
-    const st = g.enemies.puppets.find((e) => e.kind !== 'trooper');
+    const st = g.enemies.all.find((e) => e.kind !== 'trooper');
     for (let i = 0; i < 40 && st.alive; i++) st.damage(50, st.pos.clone().setY(1), new st.pos.constructor(0, 0, -1), 'body');
     g.player.pos.set(-4, 0, 6);
     T.step(1);
@@ -592,7 +592,7 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
     const t = T.tool();
     T.tap('KeyT');
     T.step(1);
-    return { playing: t.playing, kills: g.enemies.kills, alive: g.enemies.puppets.every((e) => e.alive), n: g.enemies.puppets.length, pickups: g.pickups.items.every((i) => i.active), player: g.player.pos.toArray().map((v) => Math.round(v * 100) / 100), health: g.player.health, shields: g.player.shields };
+    return { playing: t.playing, kills: g.enemies.kills, alive: g.enemies.all.every((e) => e.alive), n: g.enemies.all.length, pickups: g.pickups.items.every((i) => i.active), player: g.player.pos.toArray().map((v) => Math.round(v * 100) / 100), health: g.player.health, shields: g.player.shields };
   });
   expect('T restarts the encounter: enemies alive again, pickups back, player at the spawn with full health', rs.playing && rs.kills === 0 && rs.alive && rs.n === 2 && rs.pickups && Math.abs(rs.player[2] - 4) < 0.01 && rs.health >= 100, JSON.stringify(rs));
 
@@ -600,7 +600,7 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   const back = await ev(() => {
     const g = window.game;
     const t = T.tool();
-    const st = g.enemies.puppets.find((e) => e.kind !== 'trooper');
+    const st = g.enemies.all.find((e) => e.kind !== 'trooper');
     for (let i = 0; i < 40 && st.alive; i++) st.damage(50, st.pos.clone().setY(1), new st.pos.constructor(0, 0, -1), 'body');
     T.step(1);
     T.tap('KeyT', { ctrlKey: true }); // not a restart key chord: nothing happens
@@ -610,7 +610,7 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
       playing: t.playing, editing: t.editing, gameEditing: g.editing, doc: T.doc(), verify: t.verify(), frozen: g.enemies.frozen,
       hud: document.getElementById('hud').style.display, palette: document.getElementById('workshop-palette').style.display,
       cam: g.engine.camera.position.toArray(), fov: g.engine.camera.fov, hist: [t.undoStack.length, t.redoStack.length], sel: t.sel,
-      counts: { colliders: g.world.colliders.length, puppets: g.enemies.puppets.length, pickups: g.pickups.items.length, alive: g.enemies.puppets.every((e) => e.alive), kills: g.enemies.kills },
+      counts: { colliders: g.world.colliders.length, puppets: g.enemies.all.length, pickups: g.pickups.items.length, alive: g.enemies.all.every((e) => e.alive), kills: g.enemies.kills },
       batches: g.world.batches.length, playerVisible: g.player.root.visible,
     };
   });
@@ -668,7 +668,7 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
     const cycle = (kill) => {
       T.tap('KeyP');
       T.step(1);
-      if (kill) for (const e of g.enemies.puppets) for (let i = 0; i < 80 && e.alive; i++) e.damage(100, e.pos.clone().setY(1), new e.pos.constructor(0, 0, -1), 'body');
+      if (kill) for (const e of g.enemies.all) for (let i = 0; i < 80 && e.alive; i++) e.damage(100, e.pos.clone().setY(1), new e.pos.constructor(0, 0, -1), 'body');
       T.step(1);
       T.tap('KeyT');
       T.step(1);
@@ -842,12 +842,12 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
     T.log.length = 0;
     T.play(lvl({ group: 'a' }));
     T.step(4);
-    const ts = g.enemies.puppets.filter((e) => e.kind === 'trooper');
-    const dr = g.enemies.puppets.find((e) => e.kind === 'drone');
+    const ts = g.enemies.all.filter((e) => e.kind === 'trooper');
+    const dr = g.enemies.all.find((e) => e.kind === 'drone');
     const withGroup = { a: ts[0].alerted, b: ts[1].alerted, free: ts[2].alerted, drone: dr.awake, wakes: T.logOf('wake').length };
     T.play(lvl({}));
     T.step(4);
-    const ts2 = g.enemies.puppets.filter((e) => e.kind === 'trooper');
+    const ts2 = g.enemies.all.filter((e) => e.kind === 'trooper');
     const without = { a: ts2[0].alerted, b: ts2[1].alerted };
     t.edit();
     return { withGroup, without };
@@ -869,7 +869,7 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
     // the camera spawn is inside the volume: it fires on the first frame
     T.step(1);
     const first = T.logOf('trigger').map((x) => x.slice(1).join(':'));
-    const woke = g.enemies.puppets[0].alerted;
+    const woke = g.enemies.all[0].alerted;
     // leave and enter again: once = no second event
     g.player.pos.set(0, 0, 30); T.step(0.3);
     g.player.pos.set(0, 0, 4); T.step(0.3);
@@ -910,24 +910,24 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
       return 1;
     })();
     T.step(1);
-    const made = g.enemies.puppets.filter((e) => e.squad === 'r');
+    const made = g.enemies.all.filter((e) => e.squad === 'r');
     const first = {
-      total: g.enemies.puppets.length, made: made.length, awake: made.every((e) => e.alerted),
+      total: g.enemies.all.length, made: made.length, awake: made.every((e) => e.alerted),
       near: made.every((e) => Math.hypot(e.pos.x - 0, e.pos.z + 30) < 2), apart: made.length === 2 && Math.abs(made[0].pos.x - made[1].pos.x) > 1,
-      log: T.logOf('spawn'), other: g.enemies.puppets.some((e) => e.squad === 'other'),
+      log: T.logOf('spawn'), other: g.enemies.all.some((e) => e.squad === 'other'),
     };
     // by event
     g.engine.events.emit('encounter:spawn', 'r');
     T.step(0.2);
-    const byEvent = g.enemies.puppets.filter((e) => e.squad === 'r').length;
+    const byEvent = g.enemies.all.filter((e) => e.squad === 'r').length;
     // restart: back to the initial enemies
     T.tap('KeyT');
     T.step(0.5);
-    const afterRestart = g.enemies.puppets.filter((e) => e.squad === 'r').length;
+    const afterRestart = g.enemies.all.filter((e) => e.squad === 'r').length;
     t.edit();
     // in edit mode the entry is inert
     const inert = g.encounter.spawnGroup('r');
-    return { first, byEvent, afterRestart, inert, editTotal: g.enemies.puppets.length };
+    return { first, byEvent, afterRestart, inert, editTotal: g.enemies.all.length };
   });
   expect('reinforcements: the trigger builds the entry marker\'s listed enemies there, awake, in its group; other groups stay out', rf.first.total === 3 && rf.first.made === 2 && rf.first.awake && rf.first.near && rf.first.apart && !rf.first.other && JSON.stringify(rf.first.log) === JSON.stringify([['spawn', 'r', 2]]), JSON.stringify(rf.first));
   expect('  `encounter:spawn` does the same; restart reloads the level (the trigger fires again: 2, not 4); nothing spawns in edit mode', rf.byEvent === 4 && rf.afterRestart === 2 && rf.inert === 0 && rf.editTotal === 1, JSON.stringify(rf));

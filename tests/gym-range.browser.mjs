@@ -34,7 +34,7 @@ const result = await p.evaluate(async () => {
   const zoneMult = (t, zone) => (zone === 'weak' ? t.weakMult : zone === 'head' ? t.headMult : zone === 'limb' ? t.limbMult : 1);
 
   // --- the room ---
-  const dummies = enemies.puppets.filter((e) => e.kind === 'static').sort((a, c) => c.pos.z - a.pos.z);
+  const dummies = enemies.all.filter((e) => e.kind === 'static').sort((a, c) => c.pos.z - a.pos.z);
   out.dummyDistances = dummies.map((d) => -d.pos.z);
   out.labels = world.labels.length;
   out.tool = tool?.constructor.name;
@@ -176,7 +176,7 @@ const result = await p.evaluate(async () => {
   // A trooper at `pos`, the player at `from`: does it notice, does it fire, from how far? `seconds` of game time.
   const trooperRun = (name, pos, from, seconds = 12) => {
     const tr = g.registry.build('enemies', enemies, { id: 'enemy.trooper', pos, yaw: 0 });
-    enemies.puppets.push(tr);
+    enemies.all.push(tr);
     enemies.dirty = true;
     player.pos.set(from[0], 0, from[1]);
     const dist0 = Math.hypot(pos[0] - from[0], pos[2] - from[1]);
@@ -191,7 +191,7 @@ const result = await p.evaluate(async () => {
     offB();
     const r = { name, dist: +dist0.toFixed(1), alerted: alertAt !== null, bolts: shots.length, firstShot: shots.length ? +shots[0].toFixed(1) : null, maxShot: shots.length ? +Math.max(...shots).toFixed(1) : null, endDist: +Math.hypot(tr.pos.x - from[0], tr.pos.z - from[1]).toFixed(1), state: tr.state };
     tr.dispose();
-    enemies.puppets.splice(enemies.puppets.indexOf(tr), 1);
+    enemies.all.splice(enemies.all.indexOf(tr), 1);
     enemies.dirty = true;
     step(2);
     return r;

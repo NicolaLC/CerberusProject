@@ -172,7 +172,7 @@ export class Game {
       phase: 'present',
       update: () => {
         const cam = camera.position;
-        for (const p of enemies.puppets) {
+        for (const p of enemies.all) {
           const s = p.skin;
           const d2 = p.pos.distanceToSquared(cam);
           const far = beyond(d2, s.far, LOD.detail);
@@ -250,7 +250,7 @@ export class Game {
       if (!o.visible) hidden.push(o);
     });
     for (const o of hidden) o.visible = true;
-    const skins = enemies.puppets.map((e) => e.skin).filter(Boolean);
+    const skins = enemies.all.map((e) => e.skin).filter(Boolean);
     const far = skins.map((k) => k.far);
     for (const k of skins) k.setFar(true);
     engine.renderer.compile(engine.scene, engine.camera);
@@ -274,7 +274,7 @@ export class Game {
   // Skeleton debug helpers of the enemies that exist now (H shows them); dropHelpers frees them (before the enemies go).
   rebuildHelpers() {
     this.dropHelpers();
-    this.helpers = this.enemies.puppets.filter((p) => p.rig).map((p) => this.#helper(p.rig));
+    this.helpers = this.enemies.all.filter((p) => p.rig).map((p) => this.#helper(p.rig));
   }
 
   dropHelpers() {
