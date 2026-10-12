@@ -4,6 +4,7 @@ import { Registry } from './registry.js';
 import { World, WORLD_PIECES } from './world/world.js';
 import { Pickups, PICKUP_PIECES } from './world/pickups.js';
 import { Mission } from './world/mission.js';
+import { RunStats } from './run-stats.js';
 import { Encounter, ENCOUNTER_PIECES, levelSpawn } from './world/encounter.js';
 import { Player } from './actors/player.js';
 import { Enemies, ENEMY_PIECES } from './actors/enemies.js';
@@ -73,6 +74,7 @@ export class Game {
     const boot = new Boot({ controls, post }).listen(events);
     applyQuality(settings.quality, { engine, post, world });
     const juice = new Juice({ camRig, post, fx }).listen(events);
+    const stats = new RunStats().listen(events);
     events.on('puppet:down', (p) => {
       pickups.drop(p.pos);
       if (p.dropGun) pickups.dropGun(p.pos, p.dropGun, weapon.owned); // enemy params dropGun / dropAmmo / dropOnce
@@ -103,7 +105,7 @@ export class Game {
       if (near > 0) input.rumble(near * 0.35, 0, 70);
     });
     addEventListener('pointerdown', () => audio.init()); // resumes audio started from a controller
-    Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, mission, weapon, fx, hud, log, boot, audio, post, juice, settings });
+    Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, mission, weapon, fx, hud, log, boot, audio, post, juice, stats, settings });
 
     // skeleton debug overlay (H): the player's helper is permanent, the enemies' come and go with the level
     this.skeletons = false;
@@ -154,6 +156,7 @@ export class Game {
       },
     });
     engine.add({ name: 'weapon', group: 'play', update: (dt) => weapon.update(dt, controls) });
+    engine.add({ name: 'runStats', group: 'play', update: (dt) => !boot.active && stats.update(dt) }); // the boot intro is not play time
     engine.add({ name: 'enemies', update: (dt) => enemies.update(dt, player) });
     engine.add({ name: 'playerPose', phase: 'late', group: 'play', update: () => player.view.pose() });
     engine.add({ name: 'enemyAnim', phase: 'late', update: (dt) => enemies.animate(dt, camera) });
@@ -285,7 +288,7 @@ export class Game {
   // the level the systems were just loaded with (loadScene, and the Workshop's play in place).
   // `spawn` defaults to the level's own (levelSpawn: a `marker.spawn` piece, else `level.spawn`).
   resetRun(level, spawn = levelSpawn(level)) {
-    const { player, camRig, weapon, fx, hud, log, boot, juice } = this;
+    const { player, camRig, weapon, fx, hud, log, boot, juice, stats } = this;
     player.place(spawn);
     camRig.reset(player.facing);
     weapon.reset(level.loadout);
@@ -294,6 +297,7 @@ export class Game {
     log.reset();
     boot.reset();
     juice.reset();
+    stats.reset();
   }
 
   // Skeleton debug helpers of the enemies that exist now (H shows them); dropHelpers frees them (before the enemies go).
