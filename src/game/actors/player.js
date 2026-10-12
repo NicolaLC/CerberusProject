@@ -1,15 +1,12 @@
 import * as THREE from 'three';
-import { Rig, Animator } from './rig.js';
-import { GUNS, gunMaterials } from '../combat/guns.js';
-import { buildSoldier, CORE } from './soldier.js';
+import { GUNS } from '../combat/guns.js';
+import { PlayerView } from './player-view.js';
 import { damp, lerpAngle, wrapAngle } from '../../engine/math.js';
-import { RigidSkin, mergeGroup } from '../../engine/batch.js';
 
-const STEP = { run: false, raised: false }; // player:step payload (reused)
-
-// The player character: movement, collision, cover state machine, health; drives its rig animator.
+// The player character, the motor: movement, collision, cover state machine, jetpack, vault, health.
 // Reads intents from Controls; reports what happened through events ('player:coverSlam', 'player:land',
-// 'player:jet', 'player:vault', 'player:coverRun').
+// 'player:jet', 'player:vault', 'player:coverRun'). Never touches a mesh: `this.view` (PlayerView) owns the model,
+// the rig and the animation and reads this state; the getters below forward what tests and tools read from it.
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _f = new THREE.Vector3();
@@ -73,7 +70,7 @@ const TUNING = {
 // twists toward the camera yaw by at most `twist` rad (the gun can't follow further), `tail` s after the slide the
 // twist is still passed on so it unwinds in step with the body turning to the camera. `fovEase` (1/s) smooths
 // `player.sliding` (0..1, read by the camera for the wider FOV).
-const VAULT = { hopDepth: 1.2, hopTime: 0.5, slideTime: 0.3, slideSpeed: 5.5, runIn: 3.5, runInReach: 2.2, twist: 1.2, tail: 0.25, fovEase: 20 };
+const VAULT = { hopDepth: 1.2, hopTime: 0.5, slideTime: 0.3, slideSpeed: 5.5, runIn: 3.5, runInReach: 2.2, twist: 1.2, tail: 0.25, fovEase: 20 }; // twist / tail: used by PlayerView
 
 // Jump = a short jetpack burst, not a real jump. Thrust lifts vy linearly to `lift` over `thrust` s (gravity is
 // ignored meanwhile), then `gravity` x normal pulls back (floaty). Peak ~1.46 m: enough to land on low cover.
@@ -87,7 +84,6 @@ const PEEK = { shift: 0.2, lean: 0.6 };
 export class Player {
   // spawn: { pos: [x, y, z], yaw } from the level file
   constructor({ scene, world, events, spawn }) {
-    this.scene = scene;
     this.world = world;
     this.events = events;
     this.t = TUNING;
@@ -101,7 +97,6 @@ export class Player {
     this.crouched = false;
     this.aiming = false;
     this.sprinting = false;
-    this.recoil = 0;
     this.lastShot = 99;
     this.cover = null; // { normal, tangent, type, edgeL, edgeR }
     this.snap = null; // smooth move into cover / vault
@@ -121,7 +116,29 @@ export class Player {
     this.dead = false;
     this.deadTime = 0;
     this.hitCapsule = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: TUNING.radius };
-    this.#buildModel();
+    this.view = new PlayerView({ scene, world, events, player: this, tune: { vault: VAULT, peek: PEEK } });
+  }
+
+  // what tests, the editor and the debug overlay read from the view
+  get root() { return this.view.root; }
+  get rigModel() { return this.view.rigModel; }
+  get skin() { return this.view.skin; }
+  get animator() { return this.view.animator; }
+  get muzzle() { return this.view.muzzle; }
+  get gunModels() { return this.view.gunModels; }
+  get soldierMats() { return this.view.soldierMats; }
+  setCore(level) { this.view.setCore(level); }
+  pose() { this.view.pose(); }
+
+  // Show the gun and move the hand / muzzle sockets to it.
+  setGun(id) {
+    this.gun = GUNS[id];
+    this.view.setGun(id);
+  }
+
+  // The weapon fired or charges: shouldered for a moment (no sprint, combat stance, camera recoil timing).
+  notifyShot() {
+    this.lastShot = 0;
   }
 
   eyeHeight() {
@@ -201,7 +218,7 @@ export class Player {
     this.health = this.t.maxHealth;
     this.dead = false;
     this.facing = at ? at.yaw : this.spawnYaw;
-    this.root.rotation.set(0, this.facing, 0);
+    this.view.root.rotation.set(0, this.facing, 0);
   }
 
   // Puts the player at another level's spawn ({ pos, yaw }) with a clean slate (no cover, full health).
@@ -213,7 +230,7 @@ export class Player {
     this.crouchBlend = 0;
     this.aiming = false;
     this.sprinting = false;
-    this.recoil = 0;
+    this.view.reset();
     this.lastShot = 99;
     this.sinceHit = 99;
     this.coverTimer = 0;
@@ -224,8 +241,7 @@ export class Player {
 
   // Visual gun kick on the model (per-gun back / climb); camera recoil is separate.
   kick(def) {
-    this.recoil = 1;
-    this.kickDef = def;
+    this.view.kick(def);
   }
 
   update(dt, controls, rig, weapon) {
@@ -246,10 +262,38 @@ export class Player {
       this.airborne = false;
       this.jetting = 0;
       this.deadTime += dt;
-      this.#animate(dt, rig, 0);
+      this.#present(dt, rig, 0);
       return;
     }
 
+    const ax = this.#readIntent(controls, rig, weapon, slide);
+    const combat = this.aiming || this.lastShot < 0.6;
+    if (this.snap) {
+      this.#snapStep(dt, rig);
+      this.#present(dt, rig, 1, weapon.lowered());
+      return;
+    }
+
+    const grounded = !this.airborne && this.vy === 0;
+    this.#jump(controls, grounded);
+    this.#autoCover(grounded);
+    if (this.snap) {
+      this.#present(dt, rig, 1, weapon.lowered());
+      return;
+    }
+    if (this.cover) this.#updateCover(dt, _w, rig, ax);
+    else {
+      this.keep.on = false;
+      this.#updateFree(dt, _w);
+    }
+    this.#face(dt, rig, combat);
+    this.#peek(dt, rig, combat);
+    this.#present(dt, rig, 1, weapon.lowered());
+  }
+
+  // Controls -> the wish direction (_w, camera relative) and the aim / sprint state. Returns the move axes.
+  #readIntent(controls, rig, weapon, slide) {
+    const t = this.t;
     const ax = controls.move(_move);
     rig.flatForward(_f);
     rig.flatRight(_r);
@@ -262,7 +306,6 @@ export class Player {
     if (weapon.firing) this.lastShot = 0;
     // sprint: forward only, not while aiming, shooting or in cover; pulling the trigger ends it
     this.sprinting = controls.running && ax.y > 0 && !this.aiming && !this.airborne && !this.cover && !this.snap && !controls.firing && this.lastShot > t.sprintCooldown;
-    const combat = this.aiming || this.lastShot < 0.6;
 
     // jump cancels a cover run / corner move (not the entry snap or a vault): drop it and its pending cover, keep the
     // velocity; the jump below does the burst (or just free movement while the jet is on cooldown)
@@ -271,71 +314,76 @@ export class Player {
       this.keep.on = false;
       this.coverTimer = t.autoCoverCooldown;
     }
+    return ax;
+  }
 
-    // ----- smooth snap (enter cover / vault) -----
-    if (this.snap) {
-      const s = this.snap;
-      s.t = Math.min(1, s.t + dt / s.dur);
-      // a slide keeps its momentum (linear); cover entry and the hop ease in and out
-      const e = s.vault === 'slide' || s.run ? s.t : s.t * s.t * (3 - 2 * s.t);
-      if (s.ctrl) {
-        // corner move: quadratic curve through the control point; velocity and heading follow it
-        const w = 1 - e;
-        this.pos.x = w * w * s.from.x + 2 * w * e * s.ctrl.x + e * e * s.to.x;
-        this.pos.z = w * w * s.from.z + 2 * w * e * s.ctrl.z + e * e * s.to.z;
-        s.vx = (2 * w * (s.ctrl.x - s.from.x) + 2 * e * (s.to.x - s.ctrl.x)) / s.dur;
-        s.vz = (2 * w * (s.ctrl.z - s.from.z) + 2 * e * (s.to.z - s.ctrl.z)) / s.dur;
-        s.yaw = Math.atan2(s.vx, s.vz);
-      } else {
-        this.pos.x = THREE.MathUtils.lerp(s.from.x, s.to.x, e);
-        this.pos.z = THREE.MathUtils.lerp(s.from.z, s.to.z, e);
-      }
-      const ground = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.stepHeight);
-      // slide: up onto the top, across it on the hip, down the far side; hop: one arc
-      const lift = s.vault === 'slide' ? (s.t < 0.2 ? Math.sin((s.t / 0.2) * Math.PI * 0.5) : s.t > 0.8 ? Math.cos(((s.t - 0.8) / 0.2) * Math.PI * 0.5) : 1) : Math.sin(Math.PI * s.t);
-      // vault height from the take-off and landing floors (not the floor underneath: that's the block's top)
-      this.pos.y = s.hop ? THREE.MathUtils.lerp(s.from.y, s.toY ?? s.from.y, e) + lift * s.hop : ground;
-      if (s.vault || s.run) {
-        this.facing = lerpAngle(this.facing, s.yaw, damp(20, dt)); // turn into the vault / the run
-      }
-      if (s.run) {
-        this.vel.x += (s.vx - this.vel.x) * damp(30, dt);
-        this.vel.z += (s.vz - this.vel.z) * damp(30, dt);
-      }
-      if (s.t >= 1) {
-        this.snap = null;
-        if (s.run) this.cover = s.next; // settled on the new face; the cover slide eases the velocity out
-        if (s.corner) {
-          this.keep.on = true;
-          this.keep.yaw = rig.yaw;
-          this.cornerGrace = t.coverCornerGrace;
-        }
-        if (s.hop) this.events.emit('player:land', 'vault');
-        else this.events.emit('player:coverSlam');
-        this.pos.y = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.stepHeight);
-      }
-      this.#animate(dt, rig, 1, weapon.lowered());
-      return;
+  // Smooth snap (enter cover / vault / cover run / corner move): advances it along its path.
+  #snapStep(dt, rig) {
+    const t = this.t;
+    const s = this.snap;
+    s.t = Math.min(1, s.t + dt / s.dur);
+    // a slide keeps its momentum (linear); cover entry and the hop ease in and out
+    const e = s.vault === 'slide' || s.run ? s.t : s.t * s.t * (3 - 2 * s.t);
+    if (s.ctrl) {
+      // corner move: quadratic curve through the control point; velocity and heading follow it
+      const w = 1 - e;
+      this.pos.x = w * w * s.from.x + 2 * w * e * s.ctrl.x + e * e * s.to.x;
+      this.pos.z = w * w * s.from.z + 2 * w * e * s.ctrl.z + e * e * s.to.z;
+      s.vx = (2 * w * (s.ctrl.x - s.from.x) + 2 * e * (s.to.x - s.ctrl.x)) / s.dur;
+      s.vz = (2 * w * (s.ctrl.z - s.from.z) + 2 * e * (s.to.z - s.ctrl.z)) / s.dur;
+      s.yaw = Math.atan2(s.vx, s.vz);
+    } else {
+      this.pos.x = THREE.MathUtils.lerp(s.from.x, s.to.x, e);
+      this.pos.z = THREE.MathUtils.lerp(s.from.z, s.to.z, e);
     }
-
-    // ----- cover -----
-
-    const grounded = !this.airborne && this.vy === 0;
-    if (controls.jumpPressed) {
-      let done = false;
-      if (this.cover) {
-        const into = -wish.dot(this.cover.normal);
-        done = this.cover.type === 'low' && into > 0.5 && this.#tryVault(this.cover.normal, this.cover.collider, this.t.radius + 0.05);
-      } else if (grounded && this.vel.x * this.vel.x + this.vel.z * this.vel.z > VAULT.runIn * VAULT.runIn && wish.lengthSq() > 0.1) {
-        // running straight at low cover: vault it in one go instead of stopping behind it
-        const c = this.#castCover(_n.copy(wish).normalize(), t.coverReach);
-        const dist = c ? _v.subVectors(this.pos, c.point).dot(c.normal) : 0;
-        done = !!c && c.type === 'low' && -wish.dot(c.normal) > 0.7 && dist < VAULT.runInReach && this.#tryVault(c.normal, c.collider, dist);
-      }
-      if (!done && grounded && this.jetTimer <= 0) this.#jetBurst(wish);
+    const ground = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.stepHeight);
+    // slide: up onto the top, across it on the hip, down the far side; hop: one arc
+    const lift = s.vault === 'slide' ? (s.t < 0.2 ? Math.sin((s.t / 0.2) * Math.PI * 0.5) : s.t > 0.8 ? Math.cos(((s.t - 0.8) / 0.2) * Math.PI * 0.5) : 1) : Math.sin(Math.PI * s.t);
+    // vault height from the take-off and landing floors (not the floor underneath: that's the block's top)
+    this.pos.y = s.hop ? THREE.MathUtils.lerp(s.from.y, s.toY ?? s.from.y, e) + lift * s.hop : ground;
+    if (s.vault || s.run) {
+      this.facing = lerpAngle(this.facing, s.yaw, damp(20, dt)); // turn into the vault / the run
     }
+    if (s.run) {
+      this.vel.x += (s.vx - this.vel.x) * damp(30, dt);
+      this.vel.z += (s.vz - this.vel.z) * damp(30, dt);
+    }
+    if (s.t >= 1) {
+      this.snap = null;
+      if (s.run) this.cover = s.next; // settled on the new face; the cover slide eases the velocity out
+      if (s.corner) {
+        this.keep.on = true;
+        this.keep.yaw = rig.yaw;
+        this.cornerGrace = t.coverCornerGrace;
+      }
+      if (s.hop) this.events.emit('player:land', 'vault');
+      else this.events.emit('player:coverSlam');
+      this.pos.y = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.stepHeight);
+    }
+  }
 
-    // auto cover: pushing into a cover face from free, grounded movement snaps to it
+  // Jump (Space): vault low cover (from behind it, or run in at it), else a jetpack burst when grounded and ready.
+  #jump(controls, grounded) {
+    if (!controls.jumpPressed) return;
+    const t = this.t;
+    const wish = _w;
+    let done = false;
+    if (this.cover) {
+      const into = -wish.dot(this.cover.normal);
+      done = this.cover.type === 'low' && into > 0.5 && this.#tryVault(this.cover.normal, this.cover.collider, this.t.radius + 0.05);
+    } else if (grounded && this.vel.x * this.vel.x + this.vel.z * this.vel.z > VAULT.runIn * VAULT.runIn && wish.lengthSq() > 0.1) {
+      // running straight at low cover: vault it in one go instead of stopping behind it
+      const c = this.#castCover(_n.copy(wish).normalize(), t.coverReach);
+      const dist = c ? _v.subVectors(this.pos, c.point).dot(c.normal) : 0;
+      done = !!c && c.type === 'low' && -wish.dot(c.normal) > 0.7 && dist < VAULT.runInReach && this.#tryVault(c.normal, c.collider, dist);
+    }
+    if (!done && grounded && this.jetTimer <= 0) this.#jetBurst(wish);
+  }
+
+  // Auto cover: pushing into a cover face from free, grounded movement snaps to it.
+  #autoCover(grounded) {
+    const t = this.t;
+    const wish = _w;
     if (!this.snap && !this.cover && grounded && this.coverTimer <= 0 && wish.lengthSq() > 0.09) {
       const c = this.#castCover(_n.copy(wish).normalize(), t.radius + t.autoCoverReach);
       if (c && -_n.dot(c.normal) > 0.6) {
@@ -344,18 +392,10 @@ export class Player {
         if (!(c.type === 'low' && fast && _v.subVectors(this.pos, c.point).dot(c.normal) > t.radius + 0.1)) this.#enterCover(c);
       }
     }
+  }
 
-    if (this.snap) {
-      this.#animate(dt, rig, 1, weapon.lowered());
-      return;
-    }
-    if (this.cover) this.#updateCover(dt, wish, rig, ax);
-    else {
-      this.keep.on = false;
-      this.#updateFree(dt, wish);
-    }
-
-    // facing
+  // Body turns toward the aim, the move or the cover wall; crouch behind low cover when not shooting.
+  #face(dt, rig, combat) {
     let targetFacing = this.facing;
     if (combat) targetFacing = rig.yaw + Math.PI;
     else if (this.coverMoving()) targetFacing = Math.atan2(this.vel.x, this.vel.z); // moving along cover: turn into the move
@@ -365,8 +405,10 @@ export class Player {
 
     // crouch: only behind low cover when not shooting
     this.crouched = !!this.cover && this.cover.type === 'low' && !combat;
+  }
 
-    // peek: high cover edge lean when aiming
+  // High cover edge lean when aiming (the feet shift behind the cover, the view leans the torso).
+  #peek(dt, rig, combat) {
     // the camera swaps shoulder only for the peek; the player's chosen shoulder comes back afterwards
     const peekTarget = _v.set(0, 0, 0);
     rig.peekSide = 0;
@@ -382,8 +424,15 @@ export class Player {
       }
     }
     this.peek.lerp(peekTarget, damp(14, dt));
+  }
 
-    this.#animate(dt, rig, 1, weapon.lowered());
+  // End of every substep: ease the crouch, then hand the state to the view (pose input, root placement).
+  #present(dt, camRig, alive, weaponLower = 0) {
+    const moving = this.coverMoving();
+    // behind low cover the hips come half up while moving along it (crouch-run), full kneel when still
+    const target = this.crouched ? (moving ? 0.45 : 1) : this.snap?.run ? (this.snap.low ? 0.45 : 0) : this.snap && !this.snap.hop ? 1 : 0;
+    this.crouchBlend += (target - this.crouchBlend) * damp(12, dt);
+    this.view.sample(dt, camRig, alive, weaponLower);
   }
 
   #updateFree(dt, wish) {
@@ -770,107 +819,6 @@ export class Player {
 
   #collide() {
     this.world.collideCircle(this.pos, this.t.radius, this.t.standHeight, this.t.stepHeight);
-  }
-
-  // ---------------- model (skeleton + soldier parts + guns) ----------------
-
-  #buildModel() {
-    const rig = new Rig({ dummy: false });
-    const M = buildSoldier(rig);
-    this.soldierMats = M;
-
-    // every gun model hangs on the Weapon bone; only the equipped one is visible. Furniture: STEM-00's olive (guns.js)
-    const gunMats = gunMaterials({ plate: M.armor, glow: M.glow });
-    this.gunModels = {};
-    for (const [id, def] of Object.entries(GUNS)) {
-      const g = mergeGroup(def.build(gunMats)); // one draw per material per gun
-      g.visible = false;
-      g.userData.gun = true;
-      rig.attach('Weapon', g);
-      this.gunModels[id] = g;
-    }
-    // ~100 soldier parts -> one skinned draw per material; guns stay separate (visibility per gun)
-    this.skin = new RigidSkin(rig.root, rig.skeleton, { exclude: (o) => o.userData.gun });
-
-    this.scene.add(rig.root);
-    this.rigModel = rig;
-    this.root = rig.root;
-    this.animator = new Animator(rig, { armed: true, ground: (x, z, maxY) => this.world.groundAt(x, z, maxY) });
-    this.animator.onStep = () => {
-      if (this.airborne || this.dead) return;
-      STEP.run = this.sprinting;
-      STEP.raised = this.pos.y > 0.1; // on the platform, its stairs or a block (the floor is at 0)
-      this.events.emit('player:step', STEP);
-    };
-  }
-
-  // STEM-00's amber core (art-style.md): 0 = a faint ember, 1 = full will. Story progress drives it (#49).
-  setCore(level) {
-    const t = THREE.MathUtils.clamp(level, 0, 1);
-    this.soldierMats.core.emissiveIntensity = CORE.min + (CORE.max - CORE.min) * t;
-  }
-
-  // Show the gun and move hand/muzzle sockets to it.
-  setGun(id) {
-    const def = GUNS[id];
-    this.gun = def;
-    for (const [k, g] of Object.entries(this.gunModels)) g.visible = k === id;
-    const s = def.sockets;
-    this.rigModel.socket('Weapon', 'gripR', ...s.gripR);
-    this.rigModel.socket('Weapon', 'gripL', ...s.gripL);
-    this.muzzle = this.rigModel.socket('Weapon', 'muzzle', ...s.muzzle);
-  }
-
-  #animate(dt, camRig, alive, weaponLower = 0) {
-    const k = damp(12, dt);
-    const moving = this.coverMoving();
-    // behind low cover the hips come half up while moving along it (crouch-run), full kneel when still
-    const target = this.crouched ? (moving ? 0.45 : 1) : this.snap?.run ? (this.snap.low ? 0.45 : 0) : this.snap && !this.snap.hop ? 1 : 0;
-    this.crouchBlend += (target - this.crouchBlend) * k;
-    const combat = this.aiming || this.lastShot < 0.6;
-    this.recoil = Math.max(0, this.recoil - dt * 11);
-    // in cover with the back to the wall, the head turns to the camera
-    let lookYaw = 0;
-    if (this.cover && !combat && !moving && alive) {
-      const c = camRig.camera.position;
-      const a = Math.atan2(c.x - this.pos.x, c.z - this.pos.z) - this.facing;
-      lookYaw = THREE.MathUtils.clamp(wrapAngle(a), -1.2, 1.2);
-    }
-    // sliding over cover and shooting: hips stay on the slide yaw, the chest turns toward where the camera aims
-    const slideAim = combat && alive && (this.isSliding() || this.slideTail < VAULT.tail);
-    const aimTwist = slideAim ? THREE.MathUtils.clamp(wrapAngle(camRig.yaw + Math.PI - this.facing), -VAULT.twist, VAULT.twist) : 0;
-    const speed = alive ? Math.hypot(this.vel.x, this.vel.z) : 0;
-    this.animator.update(dt, {
-      speed,
-      run: this.sprinting && alive, // sprint plays the anime run
-      crouch: this.crouchBlend,
-      aimPitch: camRig.pitch,
-      combat: combat && alive,
-      recoil: this.recoil * this.recoil, // eased: sharp snap back, quick settle
-      kickBack: this.kickDef?.back,
-      kickClimb: this.kickDef?.climb,
-      lean: (camRig.peekSide || camRig.shoulder) * PEEK.lean * Math.min(1, this.peek.length() / PEEK.shift),
-      leftHanded: camRig.peekSide < 0 && alive, // peeking a left corner: the gun comes around on the left
-      lookYaw,
-      hunch: moving && alive ? 1 : 0, // head ahead, shoulders down, gun low
-      air: this.airborne && alive ? 1 : 0,
-      vault: this.snap?.vault ?? null,
-      vaultT: this.snap?.t ?? 0,
-      lower: weaponLower,
-      slideAim: slideAim ? 1 : 0,
-      aimTwist,
-      vel: this.vel,
-      yaw: this.facing,
-    });
-
-    this.root.position.copy(this.visualPos());
-    if (alive) {
-      this.root.rotation.set(0, this.facing, 0);
-    } else {
-      this.root.rotation.z = THREE.MathUtils.lerp(this.root.rotation.z, Math.PI / 2, k * 0.5);
-      this.root.position.y += 0.25;
-    }
-    this.root.updateMatrixWorld(true);
   }
 }
 

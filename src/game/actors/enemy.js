@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { Rig, Animator, HIT_ZONE } from './rig.js';
 import { RigidSkin } from '../../engine/batch.js';
-import { debrisCopy, disposeDebris } from './parts.js';
 import { disposeTree } from '../../engine/dispose.js';
 
 // Shared body of every enemy (training puppets, troopers): rig + animator, hit zones, glowing weak spots,
@@ -10,6 +9,9 @@ import { disposeTree } from '../../engine/dispose.js';
 // think(dt, player) for behavior. Destroyed enemies stay destroyed (debris fades away).
 // Gameplay hitboxes are the rig's dummy boxes, kept invisible: the look never changes hit zones or weak spots.
 //
+// Actors get a narrow `ctx` from the Enemies system (world, scene, events, debris bank, cover, player, time, all,
+// spawnBolt, hurtPlayer, alertNear, separate, reportKill, markDirty, takeStand, setStand): they never touch the system.
+//
 // Interface used by the Enemies system and the rest of the game:
 //   kind, alive, pos, lift, rig, skin, hitMeshes, damage(), update(dt, player)
 
@@ -17,16 +19,32 @@ export const VISOR_REST = 1.2; // sensor emissiveIntensity at rest (shot telegra
 export const VISOR = 0x8c3cff; // HiveMind sensor violet (#C04BFF family, bluer so it never reads as the magenta weak spots), dimmer
 export const PROJECTILE = { core: 0xe6dcff, glow: 0x8a46ff, ring: 0xa060ff }; // HiveMind shots: violet-white, never amber
 const WEAK_BONES = ['Spine2', 'Spine1', 'Hips', 'LeftArm', 'RightArm', 'LeftForeArm', 'RightForeArm', 'LeftUpLeg', 'RightUpLeg', 'LeftLeg', 'RightLeg'];
-const DEBRIS_LIFE = 5; // s
+const DEBRIS_DIR = new THREE.Vector3();
+const DEBRIS_OPT = { dir: DEBRIS_DIR, push: [5, 5], spread: 3, up: [2, 3], spin: 12, life: 5 }; // see DebrisBank.burst
 const HITBOX_MAT = new THREE.MeshBasicMaterial(); // never drawn
 const _v = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
+const _sRay = new THREE.Raycaster();
+const _sHits = [];
+const _sDir = new THREE.Vector3();
+
+// Line of sight shared by every enemy type: true if nothing in `meshes` (the world) blocks the straight line from
+// `from` to `to`, ignoring the last `slack` m (so the target's own cover box does not count). Throttling and eye
+// heights stay with the caller.
+export function sightRay(from, to, meshes, slack = 0.5) {
+  const d = _sDir.subVectors(to, from);
+  const len = d.length();
+  _sRay.set(from, d.divideScalar(len));
+  _sRay.far = Math.max(0.01, len - slack);
+  _sHits.length = 0;
+  return _sRay.intersectObjects(meshes, false, _sHits).length === 0;
+}
 
 export class EnemyBody {
   // mats: the look's materials (all flash on a hit); visor: color of the glowing sensors (telegraphs shots). Sensors are
   // violet and the magenta weak spots stay the brightest thing on the body (art-style.md: if it glows violet, shoot it).
-  constructor(sys, { kind, pos, yaw = 0, health, mats, visor = VISOR, armed = false, weakSpots = 2 }) {
-    this.sys = sys;
+  constructor(ctx, { kind, pos, yaw = 0, health, mats, visor = VISOR, armed = false, weakSpots = 2 }) {
+    this.ctx = ctx;
     this.kind = kind;
     this.pos = new THREE.Vector3(...pos);
     this.yaw = yaw;
@@ -34,7 +52,6 @@ export class EnemyBody {
     this.alive = true;
     this.lift = 0; // vertical offset of the rig (puppets retract behind cover)
     this.flash = 0;
-    this.deadTime = 0;
     this.debris = [];
     this.weakCount = weakSpots;
 
@@ -47,10 +64,13 @@ export class EnemyBody {
     this.group = new THREE.Group();
     this.rig = new Rig({ materials: { body: HITBOX_MAT } });
     for (const p of Object.values(this.rig.parts)) p.visible = false; // hitboxes only: not baked, still raycast
-    this.animator = new Animator(this.rig, { armed, ground: armed ? (x, z, maxY) => sys.world.groundAt(x, z, maxY) : null });
-    this.animator.onStep = () => this.alive && sys.events.emit('enemy:step', this.pos);
+    this.animator = new Animator(this.rig, { armed, ground: armed ? (x, z, maxY) => ctx.world.groundAt(x, z, maxY) : null });
+    // pose state for the animator, filled by think() every substep; Enemies.animate poses the rig once per frame
+    this.animState = { speed: 0, run: false, crouch: 0, aimPitch: 0, combat: false, recoil: 0, vel: null, yaw: 0 };
+    this.animDt = 0; // time since the last pose (rigs far away or off screen pose every few frames)
+    this.animator.onStep = () => this.alive && ctx.events.emit('enemy:step', this.pos);
     this.group.add(this.rig.root);
-    sys.scene.add(this.group);
+    ctx.scene.add(this.group);
   }
 
   // After the subclass attached its parts: hit zones, weak spots, render batch.
@@ -70,6 +90,8 @@ export class EnemyBody {
     this.#placeWeakSpots();
     // all parts -> one skinned draw per material; far away one draw with baked colors (see game.js LOD)
     this.skin = new RigidSkin(this.rig.root, this.rig.skeleton, { lod: true });
+    this.group.updateMatrixWorld(true);
+    this.ctx.debris.prime(this.kind, this.skin); // death debris of this type is baked now, not during the hitstop
   }
 
   // Glowing weak spots on random body parts (front face). Hits there deal weakMult damage.
@@ -94,7 +116,7 @@ export class EnemyBody {
       this.weakSpots.push(spot);
       this.hitMeshes.push(spot);
     }
-    this.sys.dirty = true;
+    this.ctx.markDirty();
   }
 
   // Returns true if this hit destroyed it.
@@ -115,35 +137,18 @@ export class EnemyBody {
 
   #die(dir) {
     this.alive = false;
-    this.deadTime = 0;
-    this.sys.kills++;
-    this.sys.dirty = true;
     this.onDeath?.();
-    this.sys.events.emit('puppet:down', this);
-    if (this.sys.kills === this.sys.puppets.length) this.sys.events.emit('arena:clear');
+    this.ctx.reportKill(this);
     this.group.updateMatrixWorld(true);
-    // break apart: every piece on a bone (look, weak spot, gun) becomes a debris chunk
-    for (const bone of this.rig.skeleton.bones) {
-      for (const piece of bone.children) {
-        if (piece.isBone) continue;
-        const d = debrisCopy(piece);
-        if (!d) continue;
-        this.sys.scene.add(d);
-        const v = dir.clone().multiplyScalar(5 + Math.random() * 5);
-        v.x += (Math.random() - 0.5) * 3;
-        v.y += 2 + Math.random() * 3;
-        v.z += (Math.random() - 0.5) * 3;
-        const av = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(12);
-        this.debris.push({ obj: d, v, av });
-      }
-    }
+    // break apart: every piece on a bone (look, weak spot, gun) becomes a debris chunk (baked once per type)
+    DEBRIS_DIR.copy(dir);
+    this.ctx.debris.burst(this.kind, this.skin, this.ctx.scene, this.debris, DEBRIS_OPT);
     this.rig.root.visible = false;
   }
 
   // Removes the enemy from the scene and frees everything it owns (rig, baked skin + LOD, own materials, debris).
   dispose() {
-    for (const d of this.debris) disposeDebris(d.obj);
-    this.debris.length = 0;
+    this.ctx.debris.releaseAll(this.debris);
     disposeTree(this.group);
     for (const m of [...Object.values(this.mats), this.visor, this.weakMat, this.haloMat, this.skin?.lodMaterial]) m?.dispose();
   }
@@ -159,34 +164,13 @@ export class EnemyBody {
     const e = this.flash > 0 ? 0.9 : 0;
     for (const k in this.mats) this.mats[k].emissive.setScalar(e);
     this.skin.lodMaterial.emissive.setScalar(e);
-    this.weakMat.emissiveIntensity = 2.8 + Math.sin(this.sys.time * 8) * 1.0; // never dimmer than a sensor at rest
+    this.weakMat.emissiveIntensity = 2.8 + Math.sin(this.ctx.time * 8) * 1.0; // never dimmer than a sensor at rest
   }
 
   #updateDebris(dt) {
     if (!this.debris.length) return; // destroyed for good
-    this.deadTime += dt;
-    const world = this.sys.world;
-    for (const d of this.debris) {
-      d.v.y -= 18 * dt;
-      d.obj.position.addScaledVector(d.v, dt);
-      d.obj.rotation.x += d.av.x * dt;
-      d.obj.rotation.y += d.av.y * dt;
-      d.obj.rotation.z += d.av.z * dt;
-      const g = world.groundAt(d.obj.position.x, d.obj.position.z, d.obj.position.y + 0.3) + 0.05;
-      if (d.obj.position.y < g) {
-        d.obj.position.y = g;
-        d.v.y *= -0.3;
-        d.v.x *= 0.6;
-        d.v.z *= 0.6;
-        d.av.multiplyScalar(0.6);
-      }
-      if (this.deadTime > DEBRIS_LIFE - 1) d.obj.scale.multiplyScalar(1 - dt * 3);
-    }
-    if (this.deadTime > DEBRIS_LIFE) {
-      for (const d of this.debris) disposeDebris(d.obj);
-      this.debris.length = 0;
-      this.onDebrisCleared?.();
-    }
+    this.ctx.debris.step(this.debris, dt, this.ctx.world);
+    if (!this.debris.length) this.onDebrisCleared?.();
   }
 }
 

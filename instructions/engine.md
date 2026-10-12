@@ -3,14 +3,14 @@
 Goal: hold 60 fps, never freeze on a bug, scale to a much bigger game.
 
 ## Loop and scheduler (`engine.js`)
-- Systems: `{ name, phase, update(dt, engine), whilePaused }` added with `engine.add()`. Phases run in order
+- Systems: `{ name, phase, update(dt, engine), whilePaused, group }` added with `engine.add()`. `group` (default none = always) restricts a system to `engine.mode` (`engine.setMode('edit')`, default `'play'`): `#run` skips the others next to the `disabled` / `paused` checks. Phases run in order
   `pre → simulate → late → present → render`.
 - Frame dt is clamped to 0.1 s. `simulate` is split into equal substeps of ≤ 20 ms (max 4, then the game
   slows down instead of spiralling). Scaled by `engine.timeScale` (hitstop, owned by Juice).
 - Edge presses (`input.wasPressed`) are only visible in the first substep: a press is consumed once.
 - `engine.headless`: simulate without drawing (tests); `scene.updateMatrixWorld()` replaces the render phase.
-- Every system call is wrapped: an exception is logged, the frame continues. 10 failures in a row disable the
-  system and emit `engine:systemFailed` (the HUD shows SYSTEM FAULT). Event listeners are isolated the same way.
+- Every system call is wrapped: an exception is logged, the frame continues. a failure score (+1 per exception, -1 per second of success) reaching 10 disables the
+  system (so one that throws every other frame is caught too; only the first failure of a burst and the disabling are logged) and emit `engine:systemFailed` (the HUD shows SYSTEM FAULT). Event listeners are isolated the same way.
 - `engine.stop()` + `engine.step(dt)` run exact frames without the browser loop (deterministic tests).
 - `random.js`: seedable `Rng` streams; give each gameplay system its own.
 - WebGL context loss pauses rendering until restore. `engine.timings[name]` = smoothed ms per system.
@@ -21,9 +21,13 @@ Goal: hold 60 fps, never freeze on a bug, scale to a much bigger game.
 - Spawned visuals come from `Pool`s and are hidden, not removed (fx particles, tracers, casings, bolts, damage
   numbers). Decals are a fixed ring buffer. Warm pools at load so the first fight doesn't compile shaders.
 - Raycast target lists are cached (`enemies.hitMeshes()` rebuilds only when puppets die / respawn).
+- Spatial queries: static colliders live in a 4 m XZ `Grid` (`world/grid.js`, rebuilt lazily when `box()` / `despawn()` / `clear()` mark it dirty);
+  `groundAt`, `collideCircle`, `segmentClear` go through `world.nearColliders()` (same results and order as a linear scan; checked in
+  `movement.browser.mjs`). Troopers' `separate()` uses a per-substep Grid of troopers. Raycasts pass a reused target array
+  (`intersectObjects(list, false, hits)`, `hits.length = 0` first).
 - DOM HUD writes go through `text()` / `css()`, which skip unchanged values.
-- Dynamic resolution (`perf.js`): average frame time > 1.12× budget for 0.75 s → pixel ratio −0.1 (min 0.5);
-  < 0.8× budget for 4 s → +0.1 (up to `perf.maxScale`). Emits `engine:resize`; post follows.
+- Dynamic resolution (`perf.js`): smoothed CPU work time of the frame (tick, measured in `engine.#frame`) > 1.12× budget for 0.75 s → pixel ratio −0.1 (min 0.5);
+  < 0.8× budget for 4 s → +0.1 (up to `perf.maxScale`). Also "slow": the rAF gap over budget AND >1.25× the best gap seen (GPU-bound frame on a display that can go faster); 30/50 Hz displays never count as slow. After a gap-triggered step down there is no step up for 30 s (`gpuHold`, avoids GPU-bound oscillation); then one probe. `perf.fps` is the real fps from the gap. Emits `engine:resize`; post follows.
 - Graphics presets (`game/view/quality.js`, setting `quality`, panel "Graphics", applied live):
   | preset | max pixel ratio | MSAA | bloom | sun shadow map | anisotropy |
   |---|---|---|---|---|---|
@@ -40,11 +44,17 @@ repeats every caster). Budget: ≤ 140 calls per frame at the spawn view, ≤ 25
 (`tests/render.browser.mjs`; history: ~1200 → 240 batching → 187 shadows → ~108 puppet LOD).
 - Pattern: originals stay in the scene as invisible PROXIES (raycasts, hit zones, colliders, userData keep
   working: three's Raycaster ignores `visible`); merged meshes render and have raycast disabled.
-- `mergeStatic(meshes, parent)`: the level (World.staticMeshes) → one mesh per material + shadow flags.
+- `mergeStatic(meshes, parent)`: the level (World.staticMeshes) → one INDEXED mesh per material + shadow flags per 64 m XZ chunk (CHUNK in batch.js, only when the level spans >= 128 m; smaller levels stay one chunk; a mesh
+  goes to the chunk of its world bbox centre), frustum-culled by three; one shadow-only mesh per chunk
+  (`batches.shadows`). The level cost scales with what is in view, not with level size.
   Changing a level material (e.g. flickering strip) still works: the merged mesh shares the material object.
 - `RigidSkin(root, skeleton, { exclude })`: every mesh on a rig's bones → one SkinnedMesh per material,
   vertices fully weighted to their bone. Bound at the current pose. Adding/removing parts later needs
   `skin.rebuild()` (puppet weak spots do this on respawn). Culling uses one padded sphere per rig.
+- Rig proxies are FROZEN (`matrixAutoUpdate = matrixWorldAutoUpdate = false`, local matrix as of the bake): a rig carries ~100
+  of them and they would be recomputed every frame. Their `matrixWorld` is only valid after `skin.syncProxies()` (all,
+  from the parents' fresh matrices; `EnemyBody.#die` does it before cutting debris) or `skin.syncHit(mesh)` (one raycast
+  target, e.g. a weak spot; `Enemies.animate` does it). Do not move a proxy after the bake; `rebuild()` wakes and re-freezes them.
 - `mergeGroup(group)`: rigid sub-models (guns) → one mesh per material inside the group.
 - Instancing for many copies of one thing: puppet stands, sparks (per-instance HDR color), casings, decals.
 - New per-object visuals: prefer adding to an existing batch/instanced mesh over new Mesh objects.
@@ -59,7 +69,7 @@ repeats every caster). Budget: ≤ 140 calls per frame at the spawn view, ≤ 25
   far puppets are hit exactly like near ones (tested).
 
 ## Shadows
-- Every batch (level, each rig) builds ONE shadow-only mesh: all opaque casters merged, depth only. Color
+- Every batch (each rig; the level: one per chunk) builds ONE shadow-only mesh: all opaque casters merged, depth only. Color
   meshes don't cast. Transparent parts (halos) never cast.
 - Shadow-only meshes stay `visible = false`; `installShadowOnly(renderer)` (done by Engine) shows them only
   while shadow maps render, so the color pass never lists them. Layers can't do this: three's shadow pass
@@ -120,6 +130,16 @@ why low and high do not get 12. `tests/workshop.browser.mjs` section 15 asserts 
 
 **Frame-time budgets must be confirmed by running `?scene=gym-stress` on the target hardware** (press P: the sweep prints avg / p95 ms,
 draws and triangles for 0-64 of each kind); the caps above are draw and triangle derived, not GPU measured.
+
+## Assets (`assets.js`)
+`Assets(renderer)`: glTF cache by URL, reference counted (three's `GLTFLoader`, no Draco/KTX2/meshopt yet; the plug-in
+point is commented in the constructor, their decoder files must ship with the build). `load(url)` shares one in-flight
+promise per URL and takes a reference; `instance(url)` returns a `SkeletonUtils.clone` of the scene that SHARES
+geometry / materials / textures with the cached original (never dispose them, just remove the instance from the scene);
+`release(url)` gives a reference back and at zero disposes geometry, materials, textures and drops the entry;
+`preload(urls)` for loading screens. A failed load rejects naming the URL and can be retried.
+Not wired yet: when the first glTF content lands, create one `Assets` in `game.js` (it owns the renderer) and pass it
+to the systems that spawn the content; load in the level loading step, release on level unload. Test: `tests/assets.browser.mjs`.
 
 ## Input
 - `Input` stores raw codes: `KeyW`, `ShiftLeft`, `Mouse0` (left), `Mouse2` (right), wheel deltas and notches.

@@ -16,23 +16,25 @@ src/
     dispose.js            disposeTree: detach + free geometry / materials / skeletons / instance buffers
     batch.js              draw-call batching: static merge, rigid skinning, group merge
     math.js               damp, lerpAngle, wrapAngle, segSegDist (allocation-free)
+    assets.js             glTF asset manager: cached by URL, ref-counted, SkeletonUtils instances (engine.md)
     storage.js            safe localStorage JSON
     random.js             seedable RNG streams
   game/
-    game.js               COMPOSITION ROOT: builds systems, wires events, declares frame order, start/pause shell
+    game.js               COMPOSITION ROOT: builds systems, wires events, declares frame order, level lifecycle; loads `settings` once and injects it (Controls)
     scenes.js             scene list: name -> level file, ?scene= resolution (level.md)
     registry.js           piece registry: stable string id -> how a piece is built from data (ids: level.md)
     controls.js           BINDINGS table + intents (move, look, aiming, running, firing, slots...)
     settings.js           player settings + start-panel bindings
     world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), textures.js, pickups.js (pickup.* pieces), encounter.js (marker.* / trigger.* / objective.* pieces: spawn, checkpoints, trigger volumes, reinforcements; workshop.md), mission.js (objective sequencing, `game.mission`; ticks inside encounter)
     actors/ rig.js (skeleton, animator, IK), parts.js (model building blocks, debris), soldier.js (player model),
-            looks.js (trooper / puppet models), player.js,
-            enemy.js (shared enemy body: hit zones, weak spots, flash, debris death),
+            looks.js (trooper / puppet models),
+            player.js (motor: intent -> movement, cover, jetpack, vault, health; never touches a mesh), player-view.js (`player.view`: model, rig, skin, animation, root pose; reads the motor's state; the motor forwards `root` / `rigModel` / `skin` / `animator` / `muzzle`),
+            enemy.js (shared enemy body: hit zones, weak spots, flash, debris death; `sightRay` line of sight for every type),
             puppet.js (training puppets), trooper.js (cover-using soldiers), drone.js, spider.js (miniboss),
-            enemies.js (system: builds enemy.* / boss.* pieces, bolts, stands, target cache, squad alerts)
+            enemies.js (system: builds enemy.* / boss.* pieces, bolts, stands, target cache, squad alerts, `all` = every enemy)
     ai/     cover.js (cover spots from cover boxes, protection test, spot choice + detour route)
     combat/ guns.js (gun table), weapon.js (controller, hitscan, aim probe), ballistics.js (pure shot math)
-    view/   camera.js, fx.js, hud.js, audio.js, juice.js, post.js   (presentation only)
+    view/   camera.js, fx.js, hud.js, audio.js, juice.js, post.js, shell.js (DOM shell: start/pause panel, pointer lock, scene buttons, pad navigation)   (presentation only)
 ```
 
 `src/levels/` holds level files (plain JSON, see `level.md`); `scenes.js` lists them, `Game.loadScene(name)` hands one to the systems.
@@ -59,6 +61,12 @@ src/
   level; a new per-level system that must register one has to remove it in `unload()`.
 - A new per-level object that is added to the scene needs its disposal in the owner's `unload()`; the
   `scenes.browser.mjs` leak check (geometries / textures / scene objects over arena→gym→library→workshop cycles) fails otherwise.
+- The weapon tells the player it fired through `player.notifyShot()` (a direct call: the player is the weapon's constructor dependency, `weapon:shot` is for presentation).
+- Enemies: actors (puppet, trooper, drone, boss) get a narrow `ctx` from `Enemies` (world, scene, events, debris bank, cover /
+  player / time / all getters, spawnBolt, hurtPlayer, alertNear, separate, reportKill, markDirty, takeStand, setStand) and never
+  write system fields. Shared helpers instead of inheritance: `sightRay` (enemy.js), `DebrisBank` (parts.js: death chunks are
+  baked once per enemy kind at spawn and shared by every death, pooled chunk objects, geometry freed by `Enemies.unload`).
+  Tool APIs: `freeze(on)`, `setBoss(actor)`, `pose(actor, { viewer })`.
 - Cross-system reactions (puppet dies → pickup drop) are wired in `game.js` with `events.on`.
 
 ## Scenes
@@ -79,8 +87,14 @@ the only thing three.js recompiles shaders for, so they come from a fixed pool o
 
 Paused (start panel): only `whilePaused` systems run (controls, stats, camera, post).
 
+Modes: a system may declare a `group` (`engine.add({ group: 'play' })`); the engine runs it only while `engine.mode` equals it
+(`engine.setMode(name)`, default `'play'`), no group = always. `player`, `weapon`, `playerPose`, `encounter`, `pickups` and `camera`
+are `'play'`; the Workshop editor sets `'edit'` while editing (`game.editing` is `engine.mode === 'edit'`, read-only). A system that does
+something different in edit mode instead of nothing (`world`: sun follows the editor camera) has no group and branches on `game.editing`.
+A new gameplay system gets `group: 'play'`; enemies are the other half (`enemies.freeze(on)`, the editor calls it).
+
 ## Events
-Payload objects marked * are reused: copy what you keep.
+Payload objects marked * are reused: copy what you keep. `src/types.js` holds JSDoc typedefs for these payloads and the engine `System` shape (editor hints only, keep in sync).
 | event | payload | listeners |
 |---|---|---|
 | `weapon:shot` | *{ from, to, dir, right, heavy, gun, flash, mag } | fx (tracer, flash, casing), audio |
@@ -89,19 +103,21 @@ Payload objects marked * are reused: copy what you keep.
 | `weapon:reload` | 'start' \| 'done' \| 'good' \| 'perfect' \| 'jam' | audio, juice |
 | `weapon:switch` / `weapon:dry` | gun id / – | audio |
 | `weapon:armored` | enemy | – (no listener: the HUD shows no hint) |
-| `boss:wake` / `boss:down` | boss | hud toast, audio |
+| `boss:wake` / `boss:down` | boss | hud toast (both), audio (wake) |
 | `blast` / `boss:leg` / `boss:dead` | *{ point, radius, kind } (blast kind: mortar, stomp, drone) | fx, juice, audio |
 | `boss:step` | *{ point, big } | juice, audio |
 | `boss:charge` / `boss:stomp` / `boss:mortar` | boss / boss / position | audio |
 | `player:hurt` | *{ amount, dir } | hud (direction), juice, audio |
 | `player:coverSlam` / `player:land` | – / 'vault' \| 'jet' | juice, audio (land) |
 | `player:jet` | *{ point, dir } (nozzle, exhaust direction) | fx, audio, juice |
-| `player:vault` | 'hop' \| 'slide' | – |
+| `player:vault` | 'hop' \| 'slide' | Gym traversal tool |
 | `player:coverRun` | *{ to, type, collider } (cover-to-cover run starts; ends with `player:coverSlam`) | – |
+| `player:coverCorner` | *{ kind } ('outside' wrap / 'inside' turn; a corner move starts) | no listener yet (tests only) |
 | `player:vaultRefused` | *{ collider, blocker } (landing spot blocked; a jet burst fires instead) | Gym traversal tool |
 | `player:step` | *{ run, raised } (each heel strike; not in the air) | audio |
 | `enemy:step` | position (trooper / moving puppet heel strike) | audio (fades out by 28 m from the camera) |
-| `puppet:down` | puppet | pickups (drop), audio, mission (destroy) |
+| `puppet:down` | actor (any enemy type; emitted by `ctx.reportKill`, which also counts the kill and fires `arena:clear` on the last one) | pickups (drop), audio, mission (destroy) |
+| `arena:clear` | – (emitted by `Enemies.#reportKill` when the kill count reaches `all.length`) | hud toast |
 | `trigger:fired` | { id, event } (a `trigger.volume` was entered) | mission (reach with `trigger`) |
 | `checkpoint:reached` | { id, pos, yaw } | hud toast, mission (reach with `trigger`) |
 | `group:wake` / `group:spawn` | { group } / { group, count } | – / mission (destroy without `count`) |
@@ -114,6 +130,7 @@ Payload objects marked * are reused: copy what you keep.
 | `trooper:flank` | trooper | – (tests; no HUD message) |
 | `engine:resize` | { width, height, pixelRatio } | post |
 | `engine:systemFailed` | { name, error } | hud toast |
+| `engine:contextLost` / `engine:contextRestored` | – / – (WebGL context lost / restored; the engine stops rendering while lost) | no listener yet |
 
 ## Adding things
 - New system: a class with `update(dt, ...)`, registered in `game.js` with a name and phase.

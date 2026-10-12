@@ -3,4 +3,5 @@ dist/
 .DS_Store
 *.log
 release/
+.claude/worktrees/
 shots/

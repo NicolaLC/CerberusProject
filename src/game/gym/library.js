@@ -1,4 +1,5 @@
 import { GUNS } from '../combat/guns.js';
+import { bound } from '../controls.js';
 
 // Library tool (#68, instructions/gym.md "Library"): the showroom's helper. It does three things.
 //  1. Auto aisle: every registered piece id that the level file does not show is spawned at load in the kit aisle
@@ -52,7 +53,7 @@ export class LibraryTool {
     this.panelT = 0;
 
     // exhibits of the file: enemy actors were built in file order by Enemies.load
-    const actors = enemies.puppets.slice();
+    const actors = enemies.all.slice();
     let n = 0;
     for (const data of level.pieces) {
       const owner = registry.owner(data.id);
@@ -94,7 +95,7 @@ export class LibraryTool {
     this.onKey = (e) => {
       if (e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
       if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target?.tagName ?? '')) return;
-      if (e.code === 'KeyV') this.toggleWake();
+      if (bound('wakeToggle', e.code)) this.toggleWake();
     };
     addEventListener('keydown', this.onKey);
     this.#refreshPanel();

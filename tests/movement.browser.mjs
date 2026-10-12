@@ -15,7 +15,7 @@ const r = await p.evaluate(() => {
   const { engine, player, enemies, camRig, world } = g;
   engine.stop();
   engine.headless = true; // simulate only
-  for (const e of enemies.puppets) e.alive = false;
+  for (const e of enemies.all) e.alive = false;
   enemies.dirty = true;
   const keys = engine.input.keys;
   const step = (n = 1) => { for (let i = 0; i < n; i++) engine.step(1 / 60); };
@@ -361,6 +361,27 @@ const r = await p.evaluate(() => {
     if (free) { press('Space'); for (let i = 0; i < 80; i++) { step(); head = Math.max(head, player.pos.y + 1.8); } }
     out.g = { free, roofY: roof.box.min.y, head: +head.toFixed(2), vy: player.vy };
   }
+  // (grid) collider grid hash == linear scan: same outputs for random queries (the linear scan is the same code over the full list)
+  {
+    const grid = world.nearColliders.bind(world);
+    const brute = () => world.colliders;
+    let seed = 12345;
+    const rnd = (lo, hi) => { seed = (seed * 1664525 + 1013904223) >>> 0; return lo + (seed / 4294967296) * (hi - lo); };
+    const P = new player.pos.constructor();
+    const Q = new player.pos.constructor();
+    const both = (fn) => { world.nearColliders = grid; const x = fn(); world.nearColliders = brute; const y = fn(); world.nearColliders = grid; return [x, y]; };
+    let n = 0, bad = 0;
+    for (let i = 0; i < 400; i++) {
+      const x = rnd(-60, 60), z = rnd(-60, 60), y = rnd(0, 4);
+      const [g1, g2] = both(() => world.groundAt(x, z, 5, i % 3 ? 0.4 : 0, i % 5 ? 0 : 1));
+      const qx = x + rnd(-15, 15), qz = z + rnd(-15, 15);
+      const [s1, s2] = both(() => { P.set(x, y, z); Q.set(qx, y, qz); return world.segmentClear(P, Q, 0.4); });
+      const [c1, c2] = both(() => { P.set(x, 0, z); world.collideCircle(P, 0.4 + (i % 4) * 0.3, 1.7, 0.45); return `${P.x},${P.z}`; });
+      n++;
+      if (g1 !== g2 || s1 !== s2 || c1 !== c2) bad++;
+    }
+    out.grid = { n, bad, colliders: world.colliders.length };
+  }
   return out;
 });
 console.log(JSON.stringify(r, null, 1));
@@ -413,6 +434,7 @@ if (r.h2.found) {
   expect('(h2) the gun follows the camera (<0.35 rad) after looking 0.8 rad off to the side, the hips keep the slide yaw', r.h2.gunAngleMax !== null && r.h2.gunAngleMax < 0.35 && r.h2.facingKept);
   expect('(h2) the muzzle stays above the block top (no clipping at level aim)', r.h2.muzzleGap > 0.1);
 } else expect('(h2) found a deep low block to slide over', false);
+expect(`(grid) collider grid matches the linear scan (groundAt, segmentClear, collideCircle) on ${r.grid.n} random queries over ${r.grid.colliders} colliders`, r.grid.bad === 0 && r.grid.colliders > 0, JSON.stringify(r.grid));
 expect('no page errors', errors.length === 0);
 if (errors.length) console.log(errors);
 await b.close();

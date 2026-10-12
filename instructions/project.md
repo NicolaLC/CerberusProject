@@ -29,7 +29,12 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 - Headless stepping: `engine.headless = true` skips the render phase (the scene's world matrices are still
   updated, so raycasts and hitboxes stay correct). Every browser suite except `render` (draw calls, LOD) uses it:
   the whole set runs in ~40 s instead of ~40 min on SwiftShader. Only render where a test checks pixels.
-- `npm test`: pure-math unit tests (`tests/ballistics.test.mjs`).
+- `npm test`: pure-math unit tests (`tests/ballistics.test.mjs`, `tests/levelio.test.mjs`).
+- `npm run test:browser` (`tests/run-browser.mjs`): starts a vite dev server on a free port, sets `URL`, runs every
+  `tests/*.browser.mjs` one after the other and exits non-zero on a non-zero exit or any `FAIL` line. `gym-stress` and `bench`
+  are skipped (slow); `--all` adds them, and names filter: `node tests/run-browser.mjs scenes render`.
+- CI (`.github/workflows/ci.yml`, every push and PR): `npm ci`, Playwright Chromium, `npm test`, `npm run build`,
+  `npm run test:browser`. The release workflow's web job runs the same browser suites before packaging.
 - `tests/gunplay.browser.mjs`: deterministic gunplay checks in Chromium (first-shot accuracy, recoil pattern
   and recovery, crosshair states, hit registration). Needs `npm run dev` and Playwright.
 - `tests/render.browser.mjs`: draw-call budget and batching invariants (same setup).

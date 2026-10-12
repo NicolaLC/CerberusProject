@@ -1,4 +1,5 @@
 {
+  "version": 1,
   "name": "gym-stress",
   "title": "GYM · STRESS",
   "tool": "stress",

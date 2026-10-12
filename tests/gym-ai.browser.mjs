@@ -18,6 +18,11 @@ const p = await b.newPage({ viewport: { width: 320, height: 180 } });
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 p.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+// seeded Math.random (mulberry32): AI dice rolls are repeatable, so the checks below do not flake on them
+await p.addInitScript(() => {
+  let a = 0x9e3779b9;
+  Math.random = () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+});
 await p.goto(URL_ROOM);
 await p.waitForFunction(() => window.game?.engine);
 
@@ -39,7 +44,7 @@ await p.evaluate(() => {
   engine.events.on('player:hurt', () => T.hurts++);
   T.key = (code) => dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
   T.god = () => { player.shields = player.health = 1e6; };
-  T.kind = (k) => enemies.puppets.filter((e) => e.kind === k);
+  T.kind = (k) => enemies.all.filter((e) => e.kind === k);
   // the player stands at (x, z) for s seconds
   T.hold = (x, z, s, yaw = 0) => {
     for (let i = 0; i < Math.round(s * 60); i++) {
@@ -113,7 +118,7 @@ const hub = await p.evaluate(() => {
   const g = window.game;
   const { enemies, player } = g;
   const out = { spawn: player.pos.toArray(), perPoint: [] };
-  const awake = () => enemies.puppets.filter((e) => e.awake || e.alerted || (e.kind === 'shooter' && e.state !== 'hidden')).map((e) => e.kind);
+  const awake = () => enemies.all.filter((e) => e.awake || e.alerted || (e.kind === 'shooter' && e.state !== 'hidden')).map((e) => e.kind);
   T.bolts = 0;
   T.step(6); // at the spawn, player left where the level put it
   out.spawnAwake = awake();
@@ -129,7 +134,7 @@ const hub = await p.evaluate(() => {
     const dz = Math.max(-6 - e.pos.z, 0, e.pos.z - 6);
     return Math.hypot(dx, dz);
   };
-  out.nearest = enemies.puppets.filter((e) => ['trooper', 'drone', 'boss', 'shooter'].includes(e.kind)).map((e) => ({ kind: e.kind, from: +near(e).toFixed(1), wake: e.kind === 'drone' ? e.t.sight : e.kind === 'boss' ? e.t.wakeRange : e.kind === 'trooper' ? e.t.sight : 30 }));
+  out.nearest = enemies.all.filter((e) => ['trooper', 'drone', 'boss', 'shooter'].includes(e.kind)).map((e) => ({ kind: e.kind, from: +near(e).toFixed(1), wake: e.kind === 'drone' ? e.t.sight : e.kind === 'boss' ? e.t.wakeRange : e.kind === 'trooper' ? e.t.sight : 30 }));
   return out;
 });
 expect('hub: spawn is in the hub, facing the rooms', hub.spawn[0] === -3 && hub.spawn[2] === 3);
@@ -143,7 +148,7 @@ expect('hub: every wake range stays clear of the hub (nearest enemy farther than
 const ov = await p.evaluate(() => {
   const g = window.game;
   const t = g.tool;
-  const kinds = g.enemies.puppets.map((e) => e.kind);
+  const kinds = g.enemies.all.map((e) => e.kind);
   return {
     isTool: !!t && t.constructor.name === 'AiTool',
     panel: !!t.panel?.isConnected && /K\s+freeze/.test(t.panel.textContent) && /J\s+respawn/.test(t.panel.textContent),
@@ -214,7 +219,7 @@ expect('troopers: never stand inside geometry', !tr.inside);
 const fz = await p.evaluate(() => {
   const g = window.game;
   const { enemies, player } = g;
-  const snap = () => enemies.puppets.map((e) => [e.pos.x, e.pos.y, e.pos.z, e.timer ?? 0, e.state ?? '', e.yaw].join('|'));
+  const snap = () => enemies.all.map((e) => [e.pos.x, e.pos.y, e.pos.z, e.timer ?? 0, e.state ?? '', e.yaw].join('|'));
   T.key('KeyK');
   const on = enemies.frozen;
   const before = snap();
@@ -257,7 +262,7 @@ const jr = await p.evaluate(() => {
   const g = window.game;
   const { enemies, player } = g;
   const out = {};
-  const old = enemies.puppets.slice();
+  const old = enemies.all.slice();
   T.kind('trooper')[0].damage(999, player.pos.clone(), player.pos.clone().set(0, 0, 1), 'torso');
   T.step(1);
   out.killed = enemies.kills;
@@ -265,15 +270,15 @@ const jr = await p.evaluate(() => {
   T.key('KeyL');
   const before = player.pos.toArray();
   T.key('KeyJ');
-  out.fresh = enemies.puppets.length === old.length && enemies.puppets.every((e) => !old.includes(e)) && enemies.puppets.every((e) => e.alive);
+  out.fresh = enemies.all.length === old.length && enemies.all.every((e) => !old.includes(e)) && enemies.all.every((e) => e.alive);
   out.kills = enemies.kills;
   out.bolts = enemies.bolts.length;
   out.same = player.pos.toArray().every((v, i) => v === before[i]);
   out.togglesKept = enemies.frozen === true && enemies.demo === true;
   out.atSpawn = T.kind('trooper').every((t, i) => t.pos.z === -44 && t.state === 'idle' && !t.spot);
   out.spotsFree = enemies.cover.spots.every((s) => !s.owner);
-  out.tags = g.tool.tags.length === enemies.puppets.length && g.tool.tags.every((t) => enemies.puppets.includes(t.enemy));
-  out.helpers = g.helpers.length === enemies.puppets.filter((e) => e.rig).length;
+  out.tags = g.tool.tags.length === enemies.all.length && g.tool.tags.every((t) => enemies.all.includes(t.enemy));
+  out.helpers = g.helpers.length === enemies.all.filter((e) => e.rig).length;
   T.key('KeyK');
   T.key('KeyL');
   T.hold(0, -9, 6); // thaw: everything works on the fresh squad (player at the corridor mouth)
@@ -293,7 +298,7 @@ const rooms = await p.evaluate(() => {
   const out = {};
   // puppets: shooters pop up and fire from 20 m, and stand down while the player is hidden
   T.reload();
-  for (const e of enemies.puppets) if (e.kind !== 'shooter') e.alive = false;
+  for (const e of enemies.all) if (e.kind !== 'shooter') e.alive = false;
   enemies.dirty = true;
   T.bolts = 0;
   T.hold(-20, 0, 12);
@@ -306,7 +311,7 @@ const rooms = await p.evaluate(() => {
   T.key('KeyL');
   // drone: dormant outside its wake range, awake inside the room (36 m, line of sight)
   T.reload();
-  for (const e of enemies.puppets) if (e.kind !== 'drone') e.alive = false;
+  for (const e of enemies.all) if (e.kind !== 'drone') e.alive = false;
   const drone = T.kind('drone')[0];
   T.hold(0, 6, 4);
   out.droneHub = drone.awake;
@@ -320,7 +325,7 @@ const rooms = await p.evaluate(() => {
   out.droneFire = T.bolts;
   // spider: dormant in the corridor (> 28 m, no line of sight), wakes the moment the player is in the arena
   T.reload();
-  for (const e of enemies.puppets) if (e.kind !== 'boss') e.alive = false;
+  for (const e of enemies.all) if (e.kind !== 'boss') e.alive = false;
   const boss = enemies.boss;
   T.hold(10, 0, 4);
   out.bossCorridor = boss.awake;
@@ -344,7 +349,7 @@ const ovl = await p.evaluate(() => {
   g.camRig.yaw = Math.PI / 2; // looking west into the puppet room: the state texts show for what the camera sees
   T.hold(-20, 0, 1);
   out.tagsText = t.tags.filter((x) => x.text && x.el.style.display !== 'none').length;
-  out.describe = enemies.puppets.every((e) => /^\w+/.test(t.constructor.describe(e)));
+  out.describe = enemies.all.every((e) => /^\w+/.test(t.constructor.describe(e)));
   g.camRig.yaw = 0;
   T.hold(0, -17, 12);
   const reserved = t.spots.filter((s) => s.owner).length;
@@ -609,7 +614,7 @@ const dr = await p.evaluate(() => {
     heights.forEach((h, i) => {
       const xw = -23 + i * 5;
       T.reload();
-      for (const e of enemies.puppets) if (e.kind !== 'drone') e.alive = false;
+      for (const e of enemies.all) if (e.kind !== 'drone') e.alive = false;
       const d = T.kind('drone')[0];
       const dir = xw > -8 ? -1 : 1; // fly toward the open side of the room
       d.alt = alt;
@@ -724,7 +729,7 @@ const sp = await p.evaluate(() => {
   for (const [zc, w] of lanes) {
     const L = laneOf(zc, w);
     T.reload();
-    for (const e of enemies.puppets) if (e.kind !== 'boss') e.alive = false;
+    for (const e of enemies.all) if (e.kind !== 'boss') e.alive = false;
     const boss = enemies.boss;
     const xc = (L.x0 + L.x1) / 2;
     const zs = Math.min(arena.maxZ - 3.6, L.z1 + 5);
@@ -773,7 +778,7 @@ const sp = await p.evaluate(() => {
   const wallW = lane.find((bx) => Math.abs(bx.max.x - 30.3) < 0.1 && Math.abs((bx.min.z + bx.max.z) / 2) < 0.1);
   for (const [name, speed] of [['hiding behind a 3.2 m wall, still', 0], ['running back and forth 4.6 m/s', 4.6], ['sprinting back and forth 7.4 m/s', 7.4]]) {
     T.reload();
-    for (const e of enemies.puppets) if (e.kind !== 'boss') e.alive = false;
+    for (const e of enemies.all) if (e.kind !== 'boss') e.alive = false;
     const boss = enemies.boss;
     boss.pos.set(44, 0, 0);
     for (let f = 0; f < 60 * 2; f++) { player.pos.set(0, 0, 0); T.god(); g.engine.step(1 / 60); }
@@ -820,7 +825,7 @@ const sp = await p.evaluate(() => {
   // stomp: the player 4.6 m from the mech with a 3.2 m lane wall between them (stomp radius 7)
   {
     T.reload();
-    for (const e of enemies.puppets) if (e.kind !== 'boss') e.alive = false;
+    for (const e of enemies.all) if (e.kind !== 'boss') e.alive = false;
     const boss = enemies.boss;
     boss.pos.set(40.6, 0, 0);
     for (let f = 0; f < 60 * 2; f++) { player.pos.set(0, 0, 0); T.god(); g.engine.step(1 / 60); }

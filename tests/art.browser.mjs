@@ -43,7 +43,7 @@ const r = await p.evaluate(() => {
 
   // ---- Library: every enemy kind, demo (never fires). Drone and spider are set awake: their sensors are at the
   // brighter "awake" rest level. Sample a second so the weak-spot pulse goes through its minimum.
-  const enemies = g.enemies.puppets;
+  const enemies = g.enemies.all;
   const kinds = [...new Set(enemies.map((e) => e.kind))].sort();
   ok('library has every enemy kind', ['boss', 'drone', 'mover', 'shooter', 'static', 'trooper'].every((k) => kinds.includes(k)), kinds.join());
   for (const e of enemies) if (e.kind === 'drone' || e.kind === 'boss') e.awake = true;

@@ -15,7 +15,8 @@ import { Audio } from './view/audio.js';
 import { Post } from './view/post.js';
 import { Juice } from './view/juice.js';
 import { Controls } from './controls.js';
-import { settings, bindSettingsUI } from './settings.js';
+import { settings } from './settings.js';
+import { Shell } from './view/shell.js';
 import { applyQuality, QUALITY } from './view/quality.js';
 import { SCENES, resolveScene } from './scenes.js';
 import { TOOLS } from './gym/tools.js';
@@ -53,7 +54,7 @@ export class Game {
     // upload every permanent level texture now (grids and skins): a scene's first visit has no upload hitch, and GPU memory
     // doesn't depend on which scenes were visited (scenes.browser.mjs compares it exactly)
     for (const tex of world.permanentTextures()) renderer.initTexture(tex);
-    const controls = new Controls(input);
+    const controls = new Controls(input, settings);
     const camRig = new CameraRig(camera, world);
     const player = new Player({ scene, world, events, spawn: levelSpawn(registry.check(SCENES[first])) });
     const enemies = new Enemies({ scene, world, events, registry });
@@ -90,7 +91,7 @@ export class Game {
 
     // skeleton debug overlay (H): the player's helper is permanent, the enemies' come and go with the level
     this.skeletons = false;
-    this.playerHelper = this.#helper(player.rigModel);
+    this.playerHelper = this.#helper(player.view.rigModel);
     this.helpers = [];
     this.keyHints = new KeyHints();
     this.loadScene(first);
@@ -104,13 +105,13 @@ export class Game {
       whilePaused: true,
       update: (realDt) => {
         controls.update();
-        this.#padShell();
+        this.shell.update();
         engine.timeScale = juice.update(realDt); // hitstop / slow motion
         if (engine.paused) return;
         // aim assist (friction + gentle pull) while aiming, stronger on a trackpad or a controller
         let friction = 1;
         const assisted = settings.trackpad || controls.pad;
-        if (player.aiming && settings.aimAssist) friction = camRig.assist(realDt * engine.timeScale, enemies.aimPoints(assistTargets), assisted ? 1.6 : 0.8, assisted);
+        if (player.aiming && settings.aimAssist) friction = camRig.assist(realDt * engine.timeScale, assistTargets, enemies.aimPoints(assistTargets), assisted ? 1.6 : 0.8, assisted);
         controls.look(realDt, look);
         const k = settings.sensitivity * friction;
         camRig.look(look.x * k, look.y * k, player.aiming);
@@ -126,27 +127,30 @@ export class Game {
         if (controls.pressed('stats')) engine.stats.visible = !engine.stats.visible;
       },
     });
-    // The Workshop editor (tool.editing) owns input and the camera: the player, weapon, pickups and camera rig stand still.
+    // The Workshop editor owns input and the camera: it switches the engine to mode 'edit', so the 'play' group (player,
+    // weapon, pickups, encounter, camera rig) stands still. Systems that do something else while editing (world) branch inside.
     engine.add({
       name: 'player',
+      group: 'play',
       update: (dt) => {
-        if (this.editing) return;
         player.update(dt, controls, camRig, weapon);
         if (player.dead && player.deadTime > RESPAWN_AFTER) player.respawn(encounter.checkpoint); // the last checkpoint reached, else the spawn
       },
     });
-    engine.add({ name: 'weapon', update: (dt) => !this.editing && weapon.update(dt, controls) });
+    engine.add({ name: 'weapon', group: 'play', update: (dt) => weapon.update(dt, controls) });
     engine.add({ name: 'enemies', update: (dt) => enemies.update(dt, player) });
-    engine.add({ name: 'encounter', update: (dt) => !this.editing && encounter.update(dt, player, controls.pressed('interact')) });
-    engine.add({ name: 'pickups', update: (dt) => !this.editing && pickups.update(dt, player, weapon) });
+    engine.add({ name: 'playerPose', phase: 'late', group: 'play', update: () => player.view.pose() });
+    engine.add({ name: 'enemyAnim', phase: 'late', update: (dt) => enemies.animate(dt, camera) });
+    engine.add({ name: 'encounter', group: 'play', update: (dt) => encounter.update(dt, player, controls.pressed('interact')) });
+    engine.add({ name: 'pickups', group: 'play', update: (dt) => pickups.update(dt, player, weapon) });
     // boss lock-on: an engaged boss within range stays framed (CameraRig.focus)
     const bossFocus = new THREE.Vector3();
     engine.add({
       name: 'camera',
       phase: 'late',
+      group: 'play',
       whilePaused: true,
       update: (dt) => {
-        if (this.editing) return;
         const b = enemies.boss;
         const engaged = b && b.alive && b.awake && !player.dead && b.pos.distanceTo(player.pos) < BOSS_FOCUS_RANGE;
         camRig.focus = engaged ? b.focusPoint(bossFocus) : null;
@@ -164,7 +168,7 @@ export class Game {
         world.update(engine.time);
         world.updateSun(this.editing ? camera.position : player.pos); // the editor's shadow window follows its camera
         // hide the player model when the camera is pushed into it
-        player.root.visible = !this.editing && camera.position.distanceTo(camRig.pivot) > 0.45;
+        player.view.root.visible = !this.editing && camera.position.distanceTo(camRig.pivot) > 0.45;
       },
     });
     engine.add({
@@ -172,7 +176,7 @@ export class Game {
       phase: 'present',
       update: () => {
         const cam = camera.position;
-        for (const p of enemies.puppets) {
+        for (const p of enemies.all) {
           const s = p.skin;
           const d2 = p.pos.distanceToSquared(cam);
           const far = beyond(d2, s.far, LOD.detail);
@@ -203,16 +207,11 @@ export class Game {
     });
     engine.events.on('engine:systemFailed', ({ name }) => hud.toast(`SYSTEM FAULT: ${name.toUpperCase()}`));
 
-    this.#bindShell();
+    this.shell = new Shell({ engine, audio, controls, debug, systems: this, editing: () => this.editing, sceneName: () => this.sceneName, loadScene: (k) => this.loadScene(k) });
     if (debug) engine.stats.visible = true;
   }
 
   // ---- scenes: one level at a time; every per-level system loads from and unloads to its level file ----
-
-  // highlights the current scene's button in the panel
-  #markScene() {
-    for (const b of this.sceneButtons?.children ?? []) b.classList.toggle('on', b.dataset.scene === this.sceneName);
-  }
 
   // Switches to another scene (a key of scenes.js; unknown names warn and open the default). Call it between
   // frames (a test, the console, a menu), never from inside a system update. The old level is freed completely
@@ -221,21 +220,41 @@ export class Game {
   loadScene(name) {
     const key = resolveScene(name);
     const level = this.registry.check(SCENES[key]);
+    if (level.tool && !TOOLS[level.tool]) throw new Error(`level "${key}": unknown tool "${level.tool}"`); // before anything is unloaded
     const { world, enemies, pickups, encounter } = this;
     if (this.sceneName) this.#unloadLevel();
     this.sceneName = key;
     this.level = level;
-    this.#markScene();
+    this.shell?.markScene(); // not built yet during the constructor's first load
     world.load(level, this.registry);
     enemies.load(level);
     pickups.load(level);
     encounter.load(level);
     this.resetRun(level);
-    if (level.tool && !TOOLS[level.tool]) throw new Error(`level "${key}": unknown tool "${level.tool}"`);
     this.tool = level.tool ? new TOOLS[level.tool](this, level) : null;
     this.keyHints.set({ debug: this.debug, tool: this.tool });
     this.rebuildHelpers();
+    this.#warmShaders();
     return this;
+  }
+
+  // Compiles the programs first used mid-fight (pooled fx sit invisible, rigs draw their far LOD only at range) now, at
+  // the load, so they don't hitch the first time: everything hidden is shown, compiled, hidden again; rigs go far and back.
+  // Synchronous. Debris shares the far LOD material (parts.js), so it is covered. Skipped when headless (nothing is drawn).
+  #warmShaders() {
+    const { engine, enemies } = this;
+    if (engine.headless) return;
+    const hidden = [];
+    engine.scene.traverse((o) => {
+      if (!o.visible) hidden.push(o);
+    });
+    for (const o of hidden) o.visible = true;
+    const skins = enemies.all.map((e) => e.skin).filter(Boolean);
+    const far = skins.map((k) => k.far);
+    for (const k of skins) k.setFar(true);
+    engine.renderer.compile(engine.scene, engine.camera);
+    skins.forEach((k, i) => k.setFar(far[i]));
+    for (const o of hidden) o.visible = false;
   }
 
   // Player at the level's spawn with full health, camera / weapon / fx / hud / juice reset: the start of a run on
@@ -254,7 +273,7 @@ export class Game {
   // Skeleton debug helpers of the enemies that exist now (H shows them); dropHelpers frees them (before the enemies go).
   rebuildHelpers() {
     this.dropHelpers();
-    this.helpers = this.enemies.puppets.filter((p) => p.rig).map((p) => this.#helper(p.rig));
+    this.helpers = this.enemies.all.filter((p) => p.rig).map((p) => this.#helper(p.rig));
   }
 
   dropHelpers() {
@@ -262,9 +281,9 @@ export class Game {
     this.helpers.length = 0;
   }
 
-  // True while the Workshop editor runs (gym/tools.js `workshop`): see the systems below.
+  // True while the Workshop editor is editing (it sets engine mode 'edit'; not while it plays in place).
   get editing() {
-    return this.tool?.editing === true;
+    return this.engine.mode === 'edit';
   }
 
   #unloadLevel() {
@@ -290,77 +309,17 @@ export class Game {
     for (const h of [this.playerHelper, ...this.helpers]) h.visible = this.skeletons;
   }
 
-  // Start / pause overlay and pointer lock.
-  #bindShell() {
-    const { engine, audio } = this;
-    const { input, canvas } = engine;
-    const overlay = document.getElementById('overlay');
-    bindSettingsUI({ onQuality: (q) => applyQuality(q, this) });
-    const setRunning = (running) => {
-      engine.paused = !running;
-      overlay.style.display = running ? 'none' : 'flex';
-      canvas.style.cursor = input.free && running ? 'crosshair' : '';
-    };
-    this.setRunning = setRunning;
-    this.padPlay = false; // started from a controller: runs without pointer lock
-    setRunning(this.debug);
-    document.getElementById('start').addEventListener('click', () => {
-      audio.init();
-      if (this.editing) {
-        this.padPlay = true; // the editor needs the cursor: run without pointer lock
-        setRunning(true);
-      } else input.lock();
-    });
-    // scene buttons (top of the start / pause panel): switch at once and keep ?scene= in the URL so a reload stays there
-    this.sceneButtons = document.getElementById('scenes');
-    for (const [key, level] of Object.entries(SCENES)) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.dataset.scene = key;
-      b.textContent = level.title ?? key;
-      b.addEventListener('click', () => {
-        this.loadScene(key);
-        const url = new URL(location.href);
-        url.searchParams.set('scene', this.sceneName);
-        history.replaceState(null, '', url);
-        b.blur(); // keys go back to the game
-      });
-      this.sceneButtons.append(b);
-    }
-    this.#markScene();
-    // desktop build (desktop/preload.cjs): quit button in the panel
-    const desktop = window.cerberusDesktop;
-    const quit = document.getElementById('quit');
-    quit.hidden = !desktop;
-    quit.addEventListener('click', () => desktop?.quit());
-    document.addEventListener('pointerlockchange', () => setRunning(input.locked || input.free || this.padPlay || this.debug));
-    addEventListener('keydown', (e) => {
-      // Esc pauses in free-mouse mode (pointer lock handles it otherwise)
-      if (e.code === 'Escape' && input.free && !engine.paused) {
-        input.free = false;
-        setRunning(false);
-      }
-    });
+  // the shell owns the pad-play flag and the run / pause switch; the Workshop editor drives them through the game
+  get padPlay() {
+    return this.shell.padPlay;
   }
 
-  // Controller: A / Menu deploys from the start panel, Menu pauses; the panel shows the connected pad.
-  #padShell() {
-    const { engine, controls, audio } = this;
-    const input = engine.input;
-    if (engine.paused) {
-      const status = input.pad.connected ? `Controller: ${input.pad.id.replace(/\s*\(.*$/, '').slice(0, 40)} ✓` : 'Controller: press any button to connect.';
-      if (this.padStatus !== status) document.getElementById('pad-status').textContent = this.padStatus = status;
-      if (controls.pressed('pause') || (input.device === 'pad' && input.wasPressed('Pad0'))) {
-        audio.init();
-        this.padPlay = true;
-        this.setRunning(true);
-      }
-    } else if (controls.pressed('pause')) {
-      this.padPlay = false;
-      if (input.locked) document.exitPointerLock();
-      input.free = false;
-      this.setRunning(false);
-    }
+  set padPlay(v) {
+    this.shell.padPlay = v;
+  }
+
+  setRunning(running) {
+    this.shell.setRunning(running);
   }
 
   start() {

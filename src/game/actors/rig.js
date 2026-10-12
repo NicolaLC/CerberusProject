@@ -163,6 +163,8 @@ const _e = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _q3 = new THREE.Quaternion();
+// weights shared by the pose layers of one Animator.update (filled by #locomotion, read by the later layers)
+const F = { r: 0, c: 0, hu: 0, mv: 0, ck: 0, m: 0, g: 0, aw: 0, bob: 0, hipsPitch: 0, sw: 0, amt: 0, twist: 0 };
 const _yAxis = new THREE.Vector3(0, 1, 0);
 const _pw = [0, 0, 0];
 const _pr = [0, 0, 0];
@@ -236,6 +238,7 @@ export class Animator {
     this.hand = 1; // 1 = gun on the right shoulder, -1 = mirrored to the left (peeking a left corner)
     this.hit = new THREE.Vector2(); // spring-driven hit reaction (x: pitch, y: roll)
     this.hitVel = new THREE.Vector2();
+    this.lod = false; // far or off screen: the owner sets it, the terrain IK for the feet is skipped
     this.onStep = null; // (side, gait 0 walk..1 run): called at each heel strike while walking or running
     // thighs: yaw first, then swing (the swing plane turns with the step direction)
     for (const side of SIDES) rig.bones[side + 'UpLeg'].rotation.order = 'YXZ';
@@ -251,17 +254,25 @@ export class Animator {
   // s: { speed, run, crouch, aimPitch, combat, recoil, lean, lookYaw, lower, kickBack, kickClimb,
   //      vel (world velocity, optional), yaw (facing, with vel), leftHanded (mirror the gun hold) }
   update(dt, s) {
-    const rig = this.rig;
-    const B = rig.bones;
-    rig.resetPose();
+    this.rig.resetPose();
+    this.#hitSpring(dt);
+    this.#locomotion(dt, s);
+    this.#torso(dt, s);
+    this.#arms(dt, s);
+    this.#legs(dt);
+    this.#layers(dt, s);
+  }
 
-    // hit spring
+  #hitSpring(dt) {
     this.hitVel.x += (-120 * this.hit.x - 9 * this.hitVel.x) * dt;
     this.hitVel.y += (-120 * this.hit.y - 9 * this.hitVel.y) * dt;
     this.hit.x += this.hitVel.x * dt;
     this.hit.y += this.hitVel.y * dt;
+  }
 
-    // ----- gait: key poses (locomotion.js) -----
+  // Gait: key poses (locomotion.js) -> legs' swing, hips height / twist. Leaves the weights in F for the other layers.
+  #locomotion(dt, s) {
+    const B = this.rig.bones;
     this.run = mix(this.run, s.run ? 1 : 0, 1 - Math.exp(-dt * 7));
     const r = this.run;
     const c = s.crouch;
@@ -365,8 +376,25 @@ export class Animator {
     B.Hips.position.y += this.hipsY;
     const twist = sw * mix(mix(W.twist, R.twist, g), RUN.twist, r) * m;
     B.Hips.rotation.set(hipsPitch + RUN.hipsLean * r * amt, this.hipYaw + twist, -sw * mix(W.roll, R.roll, g) * m);
+    F.r = r;
+    F.c = c;
+    F.hu = hu;
+    F.mv = mv;
+    F.ck = ck;
+    F.m = m;
+    F.g = g;
+    F.aw = aw;
+    F.bob = bob;
+    F.hipsPitch = hipsPitch;
+    F.sw = sw;
+    F.amt = amt;
+    F.twist = twist;
+  }
 
-    // ----- torso -----
+  // Torso: spine pitch / twist, head.
+  #torso(dt, s) {
+    const B = this.rig.bones;
+    const { r, c, hu, g, hipsPitch, amt, twist } = F;
     const kk = 1 - Math.exp(-dt * 14);
     const running = r * amt;
     const aim = s.combat ? s.aimPitch : mix(-0.5, -0.95, Math.max(r, hu));
@@ -383,8 +411,13 @@ export class Animator {
     this.look = mix(this.look, s.lookYaw ?? 0, kk * 0.6);
     B.Neck.rotation.set(-this.spinePitch * 0.55 - RUN.hipsLean * running, this.look * 0.4 + twist * 0.3, 0);
     B.Head.rotation.set(s.combat ? 0 : 0.08, this.look * 0.6, 0);
+  }
 
-    // ----- arms -----
+  // Arms: gun hold + arm IK (armed) or a swing against the legs.
+  #arms(dt, s) {
+    const rig = this.rig;
+    const B = rig.bones;
+    const { r, g, bob, sw, amt } = F;
     if (this.armed) {
       // mirrored hold: the gun crosses to the left shoulder pocket and the hands swap grips
       this.hand = mix(this.hand, s.leftHanded ? -1 : 1, 1 - Math.exp(-dt * 16));
@@ -405,7 +438,7 @@ export class Animator {
       // support shoulder rolls forward so the support hand reaches the handguard
       B.LeftShoulder.rotation.y = hs > 0 ? -0.6 : -0.15;
       B.RightShoulder.rotation.y = hs > 0 ? 0.15 : 0.6;
-      rig.root.updateMatrixWorld(true);
+      this.#refresh();
       const trigger = hs > 0 ? 'Right' : 'Left';
       const support = hs > 0 ? 'Left' : 'Right';
       if (rig.sockets.gripR) this.#armIK(trigger, rig.sockets.gripR, trigger === 'Right' ? -1 : 1);
@@ -427,19 +460,25 @@ export class Animator {
       B.RightArm.rotation.z = -0.12 - Math.abs(this.hit.y) * 0.6;
       setX(B.LeftForeArm, -0.2 - 1.1 * g * amt);
       setX(B.RightForeArm, -0.2 - 1.1 * g * amt);
+      this.#refresh();
     }
-    rig.root.updateMatrixWorld(true);
 
-    // ----- legs: planted feet locked in place (IK), kneel blended over everything -----
-    const rootQ = rig.root.getWorldQuaternion(_q2);
+  }
+
+  // Legs: planted feet locked in place (IK), kneel blended over everything.
+  #legs(dt) {
+    const rig = this.rig;
+    const B = rig.bones;
+    const { c, mv, ck, m } = F;
+    const rootQ = worldQuat(rig.root, _q2);
     const baseQ = _q3.setFromAxisAngle(_yAxis, this.hipYaw + this.legYaw).premultiply(rootQ); // where the legs walk
     const pole = _knee.set(0, 0.15, 1).applyQuaternion(baseQ); // knees forward
-    const rootY = rig.root.getWorldPosition(_a).y;
+    const rootY = rig.root.matrixWorld.elements[13];
     const lift = CROUCH_DROP * c * mv;
     for (const side of SIDES) {
       const L = this.legs[side];
       const foot = B[side + 'Foot'];
-      const fk = foot.getWorldPosition(_b);
+      const fk = _b.setFromMatrixPosition(foot.matrixWorld);
       const floor = this.ground ? this.ground(fk.x, fk.z, rootY + 0.6) : rootY;
       // lowered hips (crouch-walk): the feet follow the gait as if the hips were up, the knees fold to reach
       fk.y = Math.max(fk.y + lift, floor + ANKLE);
@@ -474,6 +513,14 @@ export class Animator {
         setX(B[side + 'ToeBase'], kneel[2] * ck);
       }
     }
+  }
+
+  // Pose layers over the gait: vault, slide aiming, jetpack burst, then the terrain IK for the feet.
+  #layers(dt, s) {
+    const B = this.rig.bones;
+    const { ck, aw } = F;
+    const kk = 1 - Math.exp(-dt * 14);
+    const baseQ = _q3; // set by #legs
     // vault over low cover: a tucked jump, or a slide across the top on the hip (legs forward, leaning back)
     const vw = s.vault ? smoothstep(0, 0.22, s.vaultT) * (1 - smoothstep(0.78, 1, s.vaultT)) : 0;
     // slide aiming (s.slideAim, s.aimTwist): the chest ignores the hips' pose and turns by aimTwist toward the camera
@@ -513,11 +560,20 @@ export class Animator {
       blendTo(B.RightLeg, AIR_POSE.legs[3], 0, 0, aw);
       B.Hips.rotation.x += AIR_POSE.hips * aw;
     }
-    rig.root.updateMatrixWorld(true);
+    this.#refresh();
 
-    if (this.ground && vw < 0.05 && aw < 0.05) this.#feetIK(dt, ck);
+    // `lod` (far or off screen): no terrain IK for the feet, nobody can tell
+    if (this.ground && !this.lod && vw < 0.05 && aw < 0.05) this.#feetIK(dt, ck);
     else this.hipsOffset = mix(this.hipsOffset, 0, 1 - Math.exp(-dt * 18)); // no stale ground offset in a vault / the air
     this.#orientFeet(baseQ, (1 - ck) * (1 - aw));
+  }
+
+  // Root and every bone's world matrix from the local poses (the hierarchy's one full update per layer).
+  #refresh() {
+    const root = this.rig.root;
+    root.updateWorldMatrix(true, false);
+    const c = root.children;
+    for (let i = 0; i < c.length; i++) if (c[i].isBone) updateBones(c[i]);
   }
 
   // Feet keep the pose's pitch relative to the hips' walking direction (flat when planted), not the shin's.
@@ -526,11 +582,11 @@ export class Animator {
     const B = this.rig.bones;
     for (const side of SIDES) {
       const foot = B[side + 'Foot'];
-      _q.copy(foot.parent.getWorldQuaternion(_fq).invert()).multiply(baseQ);
+      _q.copy(worldQuat(foot.parent, _fq).invert()).multiply(baseQ);
       _fq.setFromEuler(_euler.set(this.legs[side].pitch, 0, 0));
       _q.multiply(_fq);
       foot.quaternion.slerp(_q, w);
-      foot.updateMatrixWorld(true);
+      updateBones(foot);
     }
   }
 
@@ -538,11 +594,11 @@ export class Animator {
   #feetIK(dt, crouch) {
     const rig = this.rig;
     const B = rig.bones;
-    const rootY = rig.root.getWorldPosition(_a).y;
+    const rootY = rig.root.matrixWorld.elements[13];
     const targets = (this.feet ??= { Left: { ty: 0, lift: 0 }, Right: { ty: 0, lift: 0 } });
     let lowest = 0;
     for (const side of SIDES) {
-      const p = B[side + 'Foot'].getWorldPosition(_fp);
+      const p = _fp.setFromMatrixPosition(B[side + 'Foot'].matrixWorld);
       const lift = Math.max(0, p.y - rootY - ANKLE); // animated lift above a flat floor
       const g = this.ground(p.x, p.z, rootY + 0.6);
       const ty = g + ANKLE + lift;
@@ -552,21 +608,20 @@ export class Animator {
     }
     this.hipsOffset = mix(this.hipsOffset, Math.max(-0.4, lowest), 1 - Math.exp(-dt * 18));
     B.Hips.position.y += this.hipsOffset;
-    rig.root.updateMatrixWorld(true);
-
     const w = 1 - crouch;
     if (w <= 0.01) return;
-    const rootQ = rig.root.getWorldQuaternion(_q2);
+    this.#refresh();
+    const rootQ = worldQuat(rig.root, _q2);
     for (const side of SIDES) {
       const t = targets[side];
       const foot = B[side + 'Foot'];
-      const now = foot.getWorldPosition(_b);
+      const now = _b.setFromMatrixPosition(foot.matrixWorld);
       const goal = _c.set(now.x, mix(now.y, t.ty, w), now.z);
       // bend in the plane the pose already bends in (a sprint's heel kick has the foot behind and above the knee:
       // forcing "knees forward" there swings the leg out sideways); a nearly straight leg: knees forward
-      const hip = B[side + 'UpLeg'].getWorldPosition(_a);
+      const hip = _a.setFromMatrixPosition(B[side + 'UpLeg'].matrixWorld);
       const axis = _e.copy(now).sub(hip).normalize();
-      const pole = B[side + 'Leg'].getWorldPosition(_knee).sub(hip);
+      const pole = _knee.setFromMatrixPosition(B[side + 'Leg'].matrixWorld).sub(hip);
       pole.addScaledVector(axis, -pole.dot(axis));
       if (pole.lengthSq() < 0.03 * 0.03) pole.set(0, 0.15, 1).applyQuaternion(rootQ);
       twoBone(B[side + 'UpLeg'], B[side + 'Leg'], foot, goal, pole);
@@ -576,7 +631,8 @@ export class Animator {
   #armIK(side, target, out) {
     const pole = _pole.set(out * 0.35, -1, 0.05).transformDirection(this.rig.root.matrixWorld); // elbows down, slightly out
     const B = this.rig.bones;
-    twoBone(B[side + 'Arm'], B[side + 'ForeArm'], B[side + 'Hand'], target.getWorldPosition(_d), pole);
+    target.updateWorldMatrix(false, false); // a socket (not a bone): its parent is fresh
+    twoBone(B[side + 'Arm'], B[side + 'ForeArm'], B[side + 'Hand'], _d.setFromMatrixPosition(target.matrixWorld), pole);
     B[side + 'Hand'].quaternion.identity();
   }
 }
@@ -585,7 +641,7 @@ export class Animator {
 function twoBone(upper, lower, end, target, pole) {
   const l1 = lower.position.length();
   const l2 = end.position.length();
-  const a = upper.getWorldPosition(_a);
+  const a = _a.setFromMatrixPosition(upper.matrixWorld);
   const dir = _e.copy(target).sub(a);
   const dist = THREE.MathUtils.clamp(dir.length(), 0.05, l1 + l2 - 1e-3);
   dir.normalize();
@@ -602,11 +658,28 @@ function twoBone(upper, lower, end, target, pole) {
 function aimBone(bone, worldTarget) {
   const ud = bone.userData;
   if (!ud.aimAxis) ud.aimAxis = bone.children.find((o) => o.isBone).position.clone().normalize();
-  const parentQ = bone.parent.getWorldQuaternion(_bq);
-  const p = bone.getWorldPosition(_bp);
+  const parentQ = worldQuat(bone.parent, _bq);
+  const p = _bp.setFromMatrixPosition(bone.matrixWorld);
   const dir = _bdir.copy(worldTarget).sub(p).normalize().applyQuaternion(parentQ.invert());
   bone.quaternion.setFromUnitVectors(ud.aimAxis, dir);
-  bone.updateMatrixWorld(true);
+  updateBones(bone);
+}
+
+const _ws = new THREE.Vector3();
+const _wp = new THREE.Vector3();
+function worldQuat(o, out) {
+  o.matrixWorld.decompose(_wp, out, _ws);
+  return out;
+}
+
+// World matrices of a bone and the bones below it only (the rig's meshes, proxies and sockets are not worth walking:
+// the renderer's scene update refreshes them, sockets are read through updateWorldMatrix(false, false)).
+// Needs the parent's matrixWorld fresh.
+function updateBones(bone) {
+  bone.updateMatrix();
+  bone.matrixWorld.multiplyMatrices(bone.parent.matrixWorld, bone.matrix);
+  const c = bone.children;
+  for (let i = 0; i < c.length; i++) if (c[i].isBone) updateBones(c[i]);
 }
 
 // Blend a bone from its current (IK) rotation toward an FK euler pose.

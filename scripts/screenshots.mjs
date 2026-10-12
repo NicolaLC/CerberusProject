@@ -70,7 +70,7 @@ for (const s of SHOTS) {
     let view = s.cam;
     if (s.focus) {
       const f = s.focus;
-      const all = g.enemies.puppets.filter((e) => e.kind === f.kind && e.alive);
+      const all = g.enemies.all.filter((e) => e.kind === f.kind && e.alive);
       const d = (e) => Math.hypot(e.pos.x - f.near[0], e.pos.z - f.near[2]);
       const e = all.sort((a, b) => d(a) - d(b))[0];
       const o = (e.root ?? e.group ?? e.rig.root).getWorldPosition(cam.position.clone());

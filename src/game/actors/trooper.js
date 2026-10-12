@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { EnemyBody, VISOR_REST } from './enemy.js';
+import { EnemyBody, sightRay, VISOR_REST } from './enemy.js';
 import { buildTrooper, trooperMaterials } from './looks.js';
 import { GUNS, gunMaterials } from '../combat/guns.js';
 import { damp, lerpAngle } from '../../engine/math.js';
@@ -48,13 +48,12 @@ const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _chest = new THREE.Vector3();
-const _ray = new THREE.Raycaster();
 const rand = ([a, b]) => a + Math.random() * (b - a);
 const randInt = ([a, b]) => a + Math.floor(Math.random() * (b - a + 1));
 
 export class Trooper extends EnemyBody {
-  constructor(sys, def) {
-    super(sys, {
+  constructor(ctx, def) {
+    super(ctx, {
       kind: 'trooper',
       pos: def.pos,
       yaw: def.yaw ?? 0,
@@ -118,19 +117,14 @@ export class Trooper extends EnemyBody {
   }
 
   #canSee(from, target, slack = 0.4) {
-    const d = _d.subVectors(target, from);
-    const len = d.length();
-    _ray.set(from, d.divideScalar(len));
-    _ray.near = 0;
-    _ray.far = Math.max(0.01, len - slack);
-    return _ray.intersectObjects(this.sys.world.meshes, false).length === 0;
+    return sightRay(from, target, this.ctx.world.meshes, slack);
   }
 
   alert() {
     if (this.alerted || !this.alive) return;
     this.state = 'cover'; // decide immediately
     this.timer = 0.2 + Math.random() * 0.4; // reaction time
-    this.sys.alertNear(this, this.t.alertRadius);
+    this.ctx.alertNear(this, this.t.alertRadius);
   }
 
   onHit(amount, dir) {
@@ -146,7 +140,7 @@ export class Trooper extends EnemyBody {
   }
 
   onDeath() {
-    this.sys.cover.release(this.spot, this);
+    this.ctx.cover.release(this.spot, this);
     this.spot = null;
   }
 
@@ -176,7 +170,7 @@ export class Trooper extends EnemyBody {
         this.recheck = (this.recheck ?? 0) - dt;
         if (this.recheck <= 0) {
           this.recheck = 0.5;
-          if (live && !this.sys.cover.protects(this.spot, player.pos)) {
+          if (live && !this.ctx.cover.protects(this.spot, player.pos)) {
             this.#relocate();
             break;
           }
@@ -216,7 +210,7 @@ export class Trooper extends EnemyBody {
 
       case 'cover':
         // flanked while hiding: move at once rather than wait out the cover time
-        if (live && this.spot && this.timer > 0 && !this.sys.cover.protects(this.spot, player.pos)) {
+        if (live && this.spot && this.timer > 0 && !this.ctx.cover.protects(this.spot, player.pos)) {
           this.#relocate();
           break;
         }
@@ -229,7 +223,7 @@ export class Trooper extends EnemyBody {
           this.#relocate();
           break;
         }
-        if (!this.sys.cover.protects(this.spot, target) || dist < t.tooClose || this.bursts >= this.burstLimit) {
+        if (!this.ctx.cover.protects(this.spot, target) || dist < t.tooClose || this.bursts >= this.burstLimit) {
           this.#relocate();
           break;
         }
@@ -248,7 +242,7 @@ export class Trooper extends EnemyBody {
         } else {
           // can't see the player from here: give it one more try, then move
           if (++this.noSight >= 2) {
-            if (this.spot) this.spot.badUntil = this.sys.time + 6;
+            if (this.spot) this.spot.badUntil = this.ctx.time + 6;
             this.#relocate();
           } else this.#enterCover(rand(t.coverTime));
         }
@@ -283,12 +277,12 @@ export class Trooper extends EnemyBody {
     if (moving) {
       this.pos.x += this.vel.x * dt;
       this.pos.z += this.vel.z * dt;
-      this.sys.separate(this, 0.9);
-      this.sys.world.collideCircle(this.pos, t.radius, t.height, t.step);
+      this.ctx.separate(this, 0.9);
+      this.ctx.world.collideCircle(this.pos, t.radius, t.height, t.step);
     } else {
       this.vel.multiplyScalar(Math.max(0, 1 - dt * 12));
     }
-    this.pos.y = this.sys.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.step);
+    this.pos.y = this.ctx.world.groundAt(this.pos.x, this.pos.z, this.pos.y + t.step);
 
     // stance: crouched behind low cover except while popping up to shoot
     const exposed = this.state === 'peek' || this.state === 'aim' || this.state === 'fire';
@@ -296,7 +290,7 @@ export class Trooper extends EnemyBody {
     this.crouch += ((crouched ? 1 : 0) - this.crouch) * damp(10, dt);
     // high cover: step sideways to the edge while exposed
     if (this.spot && this.spot.type === 'high' && exposed && !moving) {
-      this.sys.cover.firingPos(this.spot, this.offsetTarget).sub(this.pos).setY(0);
+      this.ctx.cover.firingPos(this.spot, this.offsetTarget).sub(this.pos).setY(0);
     } else this.offsetTarget.set(0, 0, 0);
     this.offset.lerp(this.offsetTarget, damp(12, dt));
 
@@ -312,16 +306,16 @@ export class Trooper extends EnemyBody {
     const flat = Math.hypot(target.x - this.pos.x, target.z - this.pos.z);
     this.aimPitch += (Math.atan2(target.y - eyeY, flat) - this.aimPitch) * damp(10, dt);
 
-    this.animator.update(dt, {
-      speed,
-      run: speed > 2.5,
-      crouch: this.crouch,
-      aimPitch: this.aimPitch,
-      combat: combat || (this.alerted && !moving),
-      recoil: this.recoil,
-      vel: this.vel,
-      yaw: this.yaw,
-    });
+    // posed once per frame by Enemies.animate (late phase), from the state of the last substep
+    const as = this.animState;
+    as.speed = speed;
+    as.run = speed > 2.5;
+    as.crouch = this.crouch;
+    as.aimPitch = this.aimPitch;
+    as.combat = combat || (this.alerted && !moving);
+    as.recoil = this.recoil;
+    as.vel = this.vel;
+    as.yaw = this.yaw;
     this.group.position.copy(this.pos).add(this.offset);
     this.rig.root.position.y = 0;
     this.rig.root.rotation.y = this.yaw;
@@ -336,7 +330,7 @@ export class Trooper extends EnemyBody {
   #squad() {
     const out = (this._squad ??= []);
     out.length = 0;
-    for (const e of this.sys.puppets) if (e !== this && e.alive && e.kind === 'trooper' && e.alerted) out.push(e.spot ? e.spot.pos : e.pos);
+    for (const e of this.ctx.all) if (e !== this && e.alive && e.kind === 'trooper' && e.alerted) out.push(e.spot ? e.spot.pos : e.pos);
     return out;
   }
 
@@ -344,7 +338,7 @@ export class Trooper extends EnemyBody {
   // the player is in sight. Returns false if there is no such spot; the trooper then carries on as before.
   flank(front, eye) {
     if (!this.alive || !this.alerted || this.flanking) return false;
-    const found = this.sys.cover.find(this, this.pos, this.sys.player.pos, this.sys.time, {
+    const found = this.ctx.cover.find(this, this.pos, this.ctx.player.pos, this.ctx.time, {
       avoid: this.spot,
       flank: { front },
       needSight: { eye },
@@ -359,21 +353,21 @@ export class Trooper extends EnemyBody {
 
   // Pick a (new) cover spot and run there; none reachable: fight from here.
   #relocate(retreat = false) {
-    const cover = this.sys.cover;
+    const cover = this.ctx.cover;
     const opts = { avoid: this.spot, retreat, spread: this.#squad() };
-    let found = cover.find(this, this.pos, this.sys.player.pos, this.sys.time, opts);
+    let found = cover.find(this, this.pos, this.ctx.player.pos, this.ctx.time, opts);
     // nothing in range (e.g. the player went deep into the building): take cover a bit farther out rather than
     // stand in the open; later relocations work it closer
     if (!found) {
       opts.maxRange = cover.t.maxRange + 6; // the retreat limit: never out of the fight
-      found = cover.find(this, this.pos, this.sys.player.pos, this.sys.time, opts);
+      found = cover.find(this, this.pos, this.ctx.player.pos, this.ctx.time, opts);
     }
     this.flanking = false;
     this.#take(found);
   }
 
   #take(found) {
-    const cover = this.sys.cover;
+    const cover = this.ctx.cover;
     const next = found?.spot ?? null;
     cover.release(this.spot, this);
     this.spot = next;
@@ -400,14 +394,14 @@ export class Trooper extends EnemyBody {
     dir.x += (Math.random() - 0.5) * spread;
     dir.y += (Math.random() - 0.5) * spread;
     dir.z += (Math.random() - 0.5) * spread;
-    this.sys.spawnBolt(from, dir.sub(from).normalize());
+    this.ctx.spawnBolt(from, dir.sub(from).normalize());
     this.recoil = 1;
   }
 
   // Spawn placement: settle on the ground, out of geometry.
   #place() {
-    this.sys.world.collideCircle(this.pos, this.t.radius, this.t.height, this.t.step);
-    this.pos.y = this.sys.world.groundAt(this.pos.x, this.pos.z, this.pos.y + this.t.step);
+    this.ctx.world.collideCircle(this.pos, this.t.radius, this.t.height, this.t.step);
+    this.pos.y = this.ctx.world.groundAt(this.pos.x, this.pos.z, this.pos.y + this.t.step);
     this.group.position.copy(this.pos);
     this.rig.root.rotation.y = this.yaw;
   }

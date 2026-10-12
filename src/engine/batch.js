@@ -70,7 +70,7 @@ export function makeLodMaterial() {
 // A textured material may set userData.lodColor (its average look) since the texture is dropped;
 // userData.lodGlow overrides emissiveIntensity (e.g. brighter, to stand in for a dropped transparent halo).
 function lodBucket(buckets, material) {
-  const out = { material, pos: [], nor: [], uv: [], skin: [], col: [], emi: [] };
+  const out = { material, pos: [], nor: [], uv: [], skin: [], idx: [], col: [], emi: [] };
   const c = new THREE.Color();
   const e = new THREE.Color();
   for (const b of buckets.values()) {
@@ -79,7 +79,7 @@ function lodBucket(buckets, material) {
     c.copy(mat.userData.lodColor ?? mat.color ?? c.setScalar(1));
     if (mat.emissive) e.copy(mat.emissive).multiplyScalar(mat.userData.lodGlow ?? mat.emissiveIntensity ?? 1);
     else e.setScalar(0);
-    for (const k of ['pos', 'nor', 'uv', 'skin']) for (let i = 0; i < b[k].length; i++) out[k].push(b[k][i]);
+    append(out, b);
     const n = b.pos.length / 3;
     for (let i = 0; i < n; i++) {
       out.col.push(c.r, c.g, c.b);
@@ -89,12 +89,19 @@ function lodBucket(buckets, material) {
   return out.pos.length ? out : null;
 }
 
+// Appends bucket `b` to `out`, offsetting its indices.
+function append(out, b) {
+  const base = out.pos.length / 3;
+  for (const k of ['pos', 'nor', 'uv', 'skin']) for (let i = 0; i < b[k].length; i++) out[k].push(b[k][i]);
+  for (let i = 0; i < b.idx.length; i++) out.idx.push(b.idx[i] + base);
+}
+
 // Concatenates every opaque casting bucket into one bucket for the shadow-only mesh (null if none).
 function shadowBucket(buckets) {
-  const out = { material: SHADOW_MAT, pos: [], nor: [], uv: [], skin: [] };
+  const out = { material: SHADOW_MAT, pos: [], nor: [], uv: [], skin: [], idx: [] };
   for (const b of buckets.values()) {
     if (!b.castShadow || b.material.transparent) continue;
-    for (const k of ['pos', 'nor', 'uv', 'skin']) for (let i = 0; i < b[k].length; i++) out[k].push(b[k][i]);
+    append(out, b);
   }
   return out.pos.length ? out : null;
 }
@@ -126,10 +133,20 @@ function collect(buckets, mesh, matrix, boneIndex = -1) {
     if (!mat || !mat.visible) continue;
     const key = `${mat.uuid}|${mesh.castShadow ? 1 : 0}${mesh.receiveShadow ? 1 : 0}`;
     let b = buckets.get(key);
-    if (!b) buckets.set(key, (b = { material: mat, castShadow: mesh.castShadow, receiveShadow: mesh.receiveShadow, pos: [], nor: [], uv: [], skin: [] }));
+    if (!b) buckets.set(key, (b = { material: mat, castShadow: mesh.castShadow, receiveShadow: mesh.receiveShadow, pos: [], nor: [], uv: [], skin: [], idx: [] }));
     const end = Math.min(g.start + g.count, index ? index.count : pos.count);
+    // indexed output: each source vertex used by this group is emitted once (remap: source vertex -> bucket vertex)
+    const remap = new Map();
     for (let i = g.start; i < end; i++) {
       const v = index ? index.getX(i) : i;
+      const seen = remap.get(v);
+      if (seen !== undefined) {
+        b.idx.push(seen);
+        continue;
+      }
+      const nv = b.pos.length / 3;
+      remap.set(v, nv);
+      b.idx.push(nv);
       _p.fromBufferAttribute(pos, v).applyMatrix4(matrix);
       b.pos.push(_p.x, _p.y, _p.z);
       if (nor) {
@@ -161,6 +178,7 @@ function toGeometry(b) {
     geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));
     geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(w, 4));
   }
+  if (b.idx.length) geo.setIndex(b.idx.length > 65535 || b.pos.length / 3 > 65535 ? new THREE.Uint32BufferAttribute(b.idx, 1) : new THREE.Uint16BufferAttribute(b.idx, 1));
   geo.computeBoundingSphere();
   geo.computeBoundingBox();
   return geo;
@@ -171,31 +189,64 @@ function hideAsProxy(mesh) {
   mesh.userData.proxy = true;
 }
 
-// Merges static meshes (world space) into one mesh per material under `parent`. Sources become proxies.
+// A rig's proxies are never drawn and mostly never raycast (hit boxes are the rig's own dummy parts): keep them out of
+// the per-frame matrix updates. Their world matrix is only refreshed by syncProxies() (death debris) or by hand
+// (RigidSkin.syncHit, the weak spots). Their local matrix is frozen as of the bake.
+function freezeProxy(mesh) {
+  mesh.updateMatrix();
+  mesh.matrixAutoUpdate = false;
+  mesh.matrixWorldAutoUpdate = false;
+}
+
+// Static meshes are merged per material AND per XZ chunk so three can frustum-cull the level piece by piece
+// (one mesh for the whole level is never culled and every pass draws all of it). A mesh belongs to the chunk
+// holding its world bounding-box centre; a mesh sticking out of its chunk just widens that chunk's bounds.
+const CHUNK = 64; // metres
+// Chunking only pays on big levels (small ones are draw-call bound: every chunk repeats the per-material draws),
+// so a level whose centres span less than this on both axes stays one chunk.
+const CHUNK_MIN_EXTENT = 2 * CHUNK;
+
+const _box = new THREE.Box3();
+const _c = new THREE.Vector3();
+
+// Merges static meshes (world space) into one mesh per material per chunk under `parent`. Sources become proxies.
+// Returns the colour meshes; `.shadows` holds the shadow-only mesh of each chunk.
 export function mergeStatic(meshes, parent) {
-  const buckets = new Map();
-  for (const m of meshes) {
+  const chunks = new Map();
+  const centres = meshes.map((m) => {
     m.updateWorldMatrix(true, false);
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    return _box.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld).getCenter(new THREE.Vector3());
+  });
+  _box.makeEmpty().setFromPoints(centres).getSize(_c);
+  const single = Math.max(_c.x, _c.z) < CHUNK_MIN_EXTENT;
+  for (const [i, m] of meshes.entries()) {
+    const key = single ? '' : `${Math.floor(centres[i].x / CHUNK)}|${Math.floor(centres[i].z / CHUNK)}`;
+    let buckets = chunks.get(key);
+    if (!buckets) chunks.set(key, (buckets = new Map()));
     collect(buckets, m, m.matrixWorld);
     hideAsProxy(m);
   }
   const out = [];
-  for (const b of buckets.values()) {
-    const mesh = new THREE.Mesh(toGeometry(b), b.material);
-    mesh.castShadow = false; // the shadow-only mesh below casts for all of them
-    mesh.receiveShadow = b.receiveShadow;
-    mesh.matrixAutoUpdate = false;
-    mesh.raycast = noRaycast;
-    mesh.userData.batch = true;
-    parent.add(mesh);
-    out.push(mesh);
-  }
-  const sb = shadowBucket(buckets);
-  if (sb) {
-    const shadow = shadowOnly(new THREE.Mesh(toGeometry(sb), SHADOW_MAT));
-    shadow.matrixAutoUpdate = false;
-    parent.add(shadow);
-    out.shadow = shadow;
+  out.shadows = [];
+  for (const buckets of chunks.values()) {
+    for (const b of buckets.values()) {
+      const mesh = new THREE.Mesh(toGeometry(b), b.material);
+      mesh.castShadow = false; // the shadow-only mesh below casts for all of them
+      mesh.receiveShadow = b.receiveShadow;
+      mesh.matrixAutoUpdate = false;
+      mesh.raycast = noRaycast;
+      mesh.userData.batch = true;
+      parent.add(mesh);
+      out.push(mesh);
+    }
+    const sb = shadowBucket(buckets);
+    if (sb) {
+      const shadow = shadowOnly(new THREE.Mesh(toGeometry(sb), SHADOW_MAT));
+      shadow.matrixAutoUpdate = false;
+      parent.add(shadow);
+      out.shadows.push(shadow);
+    }
   }
   return out;
 }
@@ -255,6 +306,7 @@ export class RigidSkin {
     this.exclude = exclude;
     this.cullMargin = cullMargin;
     this.meshes = [];
+    this.proxies = []; // the baked sources, parents before children (see syncProxies)
     this.shadow = null; // shadow-only SkinnedMesh (see installShadowOnly)
     this.castShadow = true;
     this.boneIndex = new Map(skeleton.bones.map((b, i) => [b, i]));
@@ -287,6 +339,11 @@ export class RigidSkin {
       for (const c of o.children) walk(c, b);
     };
     walk(this.root, null);
+    // proxies from an earlier bake are frozen: wake them for the world matrices read below
+    for (const [m] of sources) {
+      m.matrixAutoUpdate = m.matrixWorldAutoUpdate = true;
+    }
+    this.proxies.length = 0;
 
     // bind at the current pose: vertices in root space, bone inverses from the same pose
     this.root.updateWorldMatrix(true, true);
@@ -296,6 +353,8 @@ export class RigidSkin {
     for (const [m, bi] of sources) {
       collect(buckets, m, _m.multiplyMatrices(_inv, m.matrixWorld), bi);
       hideAsProxy(m);
+      freezeProxy(m);
+      this.proxies.push(m);
     }
     for (const b of buckets.values()) {
       const mesh = new THREE.SkinnedMesh(toGeometry(b), b.material);
@@ -336,6 +395,17 @@ export class RigidSkin {
     if (this.shadow) this.shadow.boundingSphere = sphere;
     if (this.lodMesh) this.lodMesh.boundingSphere = sphere;
     this.setFar(this.far);
+  }
+
+  // World matrices of all proxies from their parents' (fresh) ones: death debris is cut from them.
+  syncProxies() {
+    for (const m of this.proxies) m.matrixWorld.multiplyMatrices(m.parent.matrixWorld, m.matrix);
+  }
+
+  // Same for one proxy that is raycast (weak spots): refreshes its parent chain first.
+  syncHit(m) {
+    m.parent.updateWorldMatrix(true, false);
+    m.matrixWorld.multiplyMatrices(m.parent.matrixWorld, m.matrix);
   }
 
   // Detail switch: full (one draw per material) or far (one draw, baked colors). Hitboxes are unaffected.

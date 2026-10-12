@@ -33,7 +33,7 @@ const probe = (frames) => {
     o.frustumCulled = false;
   });
   for (const far of [true, false]) {
-    for (const e of g.enemies.puppets) e.skin?.setFar(far);
+    for (const e of g.enemies.all) e.skin?.setFar(far);
     engine.renderer.render(engine.scene, engine.camera);
   }
   for (const o of culled) o.frustumCulled = true;
@@ -47,7 +47,7 @@ const probe = (frames) => {
     spawn: g.level.spawn.pos,
     pos: [g.player.pos.x, g.player.pos.y, g.player.pos.z],
     facing: g.player.facing,
-    enemies: g.enemies.puppets.length,
+    enemies: g.enemies.all.length,
     enemyPieces: pieces('enemies'),
     pickups: g.pickups.items.length,
     pickupPieces: pieces('pickups'),
@@ -99,6 +99,23 @@ for (const name of SCENES) {
     return g.sceneName;
   });
   expect('loadScene with an unknown name also falls back to the arena', bad === 'arena');
+  // a level that fails after the old one would have been unloaded (unknown tool): the current scene must survive intact
+  const kept = await p.evaluate(async () => {
+    const g = window.game;
+    const { SCENES } = await import('/src/game/scenes.js');
+    SCENES.broken = { ...SCENES.gym, tool: 'no-such-tool' };
+    const before = g.world.meshes.length;
+    let threw = false;
+    try {
+      g.loadScene('broken');
+    } catch {
+      threw = true;
+    }
+    delete SCENES.broken;
+    g.loadScene('arena'); // still a working game: switching on works
+    return { threw, scene: g.sceneName, intact: g.world.meshes.length === before };
+  });
+  expect('loadScene with an unknown tool throws before unloading, the scene stays loaded and usable', kept.threw && kept.scene === 'arena' && kept.intact, JSON.stringify(kept));
   expect('  no errors', errors.length === 0, errors.join(' | '));
   await p.close();
 }
@@ -158,7 +175,7 @@ for (const name of SCENES) {
     const out = {};
     // wake the boss (the player walks into its arena), hurt the player, kill a puppet, change gun
     player.pos.set((boss.arena.minX + boss.arena.maxX) / 2, 0, (boss.arena.minZ + boss.arena.maxZ) / 2);
-    const pup = enemies.puppets.find((x) => x.kind === 'static');
+    const pup = enemies.all.find((x) => x.kind === 'static');
     pup.damage(999, pup.pos.clone(), pup.pos.clone().set(0, 0, 1), 'torso');
     player.damage(40);
     g.weapon.current = 'sniper';
@@ -222,9 +239,9 @@ for (const name of SCENES) {
     out.demo = enemies.demo;
     out.maxBolts = maxBolts;
     out.unhurt = player.health === 100 && player.shields === player.t.maxShields && !player.dead;
-    out.awake = enemies.puppets.filter((x) => x.awake).map((x) => x.kind);
+    out.awake = enemies.all.filter((x) => x.awake).map((x) => x.kind);
     // exhibits still take hits
-    const pup = enemies.puppets.find((x) => x.kind === 'static');
+    const pup = enemies.all.find((x) => x.kind === 'static');
     pup.damage(999, pup.pos.clone(), pup.pos.clone().set(0, 0, 1), 'torso');
     step(2);
     out.hitWorks = enemies.kills === 1;
@@ -267,6 +284,30 @@ for (const name of SCENES) {
   expect('  the current one is lit, follows loadScene, a click switches the scene and updates ?scene=', r.pickerFollows && r.pickedScene === 'gym' && r.url === 'gym', JSON.stringify(r));
   expect('arena is not a demo level', r.arenaHostile);
   expect('  no page or console errors', errors.length === 0, errors.join(' | '));
+  await p.close();
+}
+
+// fault isolation: a system throwing every frame, and one throwing every OTHER frame, both get disabled; a good one lives
+{
+  const p = await b.newPage({ viewport: { width: 320, height: 180 } });
+  await p.goto(withScene(null));
+  await p.waitForFunction(() => window.game?.engine);
+  const r = await p.evaluate(() => {
+    const { engine } = window.game;
+    engine.stop();
+    const err = console.error;
+    console.error = () => {};
+    let n = 0;
+    const bad = engine.add({ name: 'bad', update() { throw 1; } });
+    const flaky = engine.add({ name: 'flaky', update() { if (n++ % 2) throw 1; } });
+    const good = engine.add({ name: 'good', update() {} });
+    for (let i = 0; i < 60; i++) engine.step(1 / 60);
+    console.error = err;
+    const out = { bad: bad.disabled, flaky: flaky.disabled, good: good.disabled };
+    for (const s of [bad, flaky, good]) engine.remove(s);
+    return out;
+  });
+  expect('fault isolation: a system that throws every frame, or every other frame, is disabled; a good one is not', r.bad && r.flaky && !r.good, JSON.stringify(r));
   await p.close();
 }
 

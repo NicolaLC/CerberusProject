@@ -212,3 +212,6 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
     direction their cover box faces (away from it) if in cover, else where they face. The trooper already
     most to the side goes first. Flankers sprint (5.4 m/s, up to 30 m) and open fire on arrival; the rest
     keep the player pinned.
+
+## Tool keys (Gym and Workshop)
+- Gym tool keys and Workshop editor keys are `BINDINGS` actions too (`range*`, `ai*`, `trav*`, `stress*`, `wakeToggle`, `ed*`), keyboard only (no gamepad). Their keydown listeners call `bound(action, e.code)` / `boundIn(action, heldCodes)` from `controls.js`; same default keys as before. Text fields keep their own keys (the existing INPUT/SELECT/TEXTAREA guards stay).

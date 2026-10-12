@@ -2,11 +2,11 @@
 
 `?scene=workshop` is a level editor: `src/levels/workshop.json` has `"tool": "workshop"`, the tool is
 `src/game/workshop/editor.js` (`WorkshopEditor`, registered in `gym/tools.js`), suite `tests/workshop.browser.mjs`.
-Save / load files are `workshop/io.js` (#72). The editor only runs in the scene named `workshop`; the same tool in any
+The document and its undo / redo are `workshop/doc.js` (`WorkshopDoc`: pure data, no three.js / DOM; `tests/workshop-doc.test.mjs`). Save / load files are `workshop/io.js` (#72). The editor only runs in the scene named `workshop`; the same tool in any
 other level is inert (`tool.editing === false`).
 
 ## Doc model
-- `tool.doc` is a plain level object (format: level.md), a deep copy of the loaded level. `doc.pieces` is the only state.
+- `tool.doc` is a plain level object (format: level.md), a deep copy of the loaded level, held by `tool.model` (a `WorkshopDoc`: commands `add / move / rotate / setParams / setName / remove / duplicate`, `undo / redo` stacks, `sel`, `dirty`, `toJSON / fromJSON`). The editor's methods of those names delegate to it. The model calls the editor's `#sync(cmd, reverse)` before changing `doc.pieces` (the hook builds / frees the live handle and may throw, leaving the doc untouched) and `changed()` after. `doc.pieces` is the only state.
 - `tool.items[i]` is the live handle of `doc.pieces[i]`: `{ owner, thing }` (a `world.spawn` handle, an enemy actor, a
   pickup item). **The scene always equals the doc**: every edit rebuilds only the affected piece, despawn the old handle,
   spawn the new one, through the owner's runtime path (`world.spawn`, `enemies.spawn`, `registry.build('pickups', ...)`).
@@ -31,11 +31,11 @@ other level is inert (`tool.editing === false`).
   - `env.label`: 15 degree steps on `params.yaw`. `light.point`: does not turn.
   - enemies, pickups, `prop.gun`: 15 degree steps on `yaw`.
 - A mover's rail (`params.to`) and a boss arena (`params.arena`) move with the piece.
-- Editor enemies are frozen (`enemies.frozen`) and posed once after spawning (`actor.update(1e-3, stillView)`).
+- Editor enemies are frozen (`enemies.freeze(true)`, the previous state is restored on dispose), posed once after spawning (`enemies.pose(actor, { viewer })`, the viewer is a dead `Absent` stand-in so nothing wakes) and the boss is set with `enemies.setBoss`.
 
 ## Edit mode
-Free-fly camera; the player, weapon, pickup and camera-rig systems are inert (`game.editing`, one guard line each in
-`game.js`), the HUD (`#hud`) is hidden, and the player model is hidden. The sun's shadow window follows the editor camera
+Free-fly camera; the editor sets engine mode `'edit'` (`engine.setMode`), so the `'play'` group systems (player, weapon, pickups,
+encounter, camera rig) do not run (`game.editing` reads the mode), the HUD (`#hud`) is hidden, and the player model is hidden. The sun's shadow window follows the editor camera
 (`world.updateSun`, one line in `game.js`); the player stays at the spawn. The start button runs without pointer lock (the editor needs the cursor).
 
 Keys (the key bar shows them; `static KEYS` is the source and the suite checks it against every key literal in
@@ -60,7 +60,7 @@ Keys (the key bar shows them; `static KEYS` is the source and the suite checks i
 
 ## Play in place (#71)
 `P` toggles edit and play (`play()`, `edit()`, `togglePlay()`, `restart()`, `playing`); `editing` is false while playing, so
-`game.editing` is false and the player, weapon, pickups and camera systems run as in the normal game.
+the mode is `'play'` (`game.editing` false) and the player, weapon, pickups and camera systems run as in the normal game.
 - **Play**: the doc is deep-copied to `snapshot`; a copy of it is loaded as a normal level (`world.load` with every piece so boxes are
   merged, `enemies.load` with a real `CoverMap`, `pickups.load`), enemies unfrozen, HUD back, palette / status panel hidden,
   pointer lock requested (`input.lock()`; Esc then pauses like the game, the start button resumes). The editor's own piece handles are

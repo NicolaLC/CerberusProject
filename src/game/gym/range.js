@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GUNS } from '../combat/guns.js';
 import { falloff } from '../combat/ballistics.js';
 import { disposeTree } from '../../engine/dispose.js';
+import { bound } from '../controls.js';
 
 // Gym tool: Weapon range room (#65), see instructions/gym.md. Readouts for gunplay tuning:
 //   - a panel (top left): the gun's falloff and spread numbers, the last hit against what guns.js says it should be;
@@ -49,7 +50,7 @@ export class RangeTool {
     const [w, h, d] = wall.params.size;
     this.wall = { minX: wall.pos[0] - w / 2, maxX: wall.pos[0] + w / 2, maxY: wall.pos[1] + h, face: wall.pos[2] + d / 2 };
 
-    this.dummies = game.enemies.puppets.filter((p) => p.kind === 'static');
+    this.dummies = game.enemies.all.filter((p) => p.kind === 'static');
     for (const p of this.dummies) this.#immortal(p);
 
     this.#buildStrips();
@@ -63,9 +64,9 @@ export class RangeTool {
     ];
     this.onKey = (e) => {
       if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.code === 'KeyB') this.clearDots();
-      else if (e.code === 'KeyN') this.toggle();
-      else if (e.code === 'KeyM') this.resetDummies();
+      if (bound('rangeClear', e.code)) this.clearDots();
+      else if (bound('rangeToggle', e.code)) this.toggle();
+      else if (bound('rangeReset', e.code)) this.resetDummies();
     };
     addEventListener('keydown', this.onKey);
     this.#showGun();

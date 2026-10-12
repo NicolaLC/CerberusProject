@@ -22,8 +22,8 @@ const r = await p.evaluate(() => {
   const shadowCalls = calls - info.calls;
   g.world.sun.castShadow = true;
   g.engine.step(1 / 60);
-  const far = g.enemies.puppets.filter((pp) => pp.pos.distanceTo(g.engine.camera.position) > 40);
-  const lodFar = g.enemies.puppets.filter((pp) => pp.pos.distanceTo(g.engine.camera.position) > 34);
+  const far = g.enemies.all.filter((pp) => pp.pos.distanceTo(g.engine.camera.position) > 40);
+  const lodFar = g.enemies.all.filter((pp) => pp.pos.distanceTo(g.engine.camera.position) > 34);
   const lodOk = lodFar.every((pp) => pp.skin.far && pp.skin.lodMesh.visible && pp.skin.meshes.every((m) => !m.visible));
   // a far (LOD) puppet must still be hittable: its hitboxes are untouched proxies.
   // Many far puppets are legitimately behind walls from the spawn, so any one in sight must read as an enemy.
@@ -42,7 +42,7 @@ const r = await p.evaluate(() => {
       break;
     }
   }
-  const skins = [g.player.skin, ...g.enemies.puppets.map((pp) => pp.skin)];
+  const skins = [g.player.skin, ...g.enemies.all.map((pp) => pp.skin)];
   return {
     calls,
     lodOk,
@@ -53,7 +53,8 @@ const r = await p.evaluate(() => {
     shadowOnlyHidden: skins.every((s) => !s.shadow || !s.shadow.visible),
     minCullRadius: Math.min(...skins.flatMap((s) => s.meshes.map((m) => m.boundingSphere.radius))),
     proxiesHidden: g.world.meshes.every((m) => !m.visible),
-    hitMeshesHidden: g.enemies.puppets.every((pp) => pp.hitMeshes.every((m) => !m.visible)),
+    proxiesFrozen: skins.every((s) => s.proxies.length > 20 && s.proxies.every((m) => !m.matrixWorldAutoUpdate && !m.matrixAutoUpdate)),
+    hitMeshesHidden: g.enemies.all.every((pp) => pp.hitMeshes.every((m) => !m.visible)),
   };
 });
 console.log(r);
@@ -66,8 +67,8 @@ const q = await p.evaluate(async () => {
     applyQuality(name, g);
     g.engine.step(1 / 60);
     g.engine.step(1 / 60);
-    const rt = g.post.composer.renderTarget1;
-    out[name] = { samples: rt.samples, bloom: g.post.bloom.enabled, shadow: g.world.sun.shadow.map?.width, maxScale: g.engine.perf.maxScale, calls: g.engine.renderer.info.render.calls };
+    const rt = g.post.composer.readBuffer; // the scene target (RenderPass draws there)
+    out[name] = { samples: rt.samples, other: g.post.composer.writeBuffer.samples, bloom: g.post.bloom.enabled, shadow: g.world.sun.shadow.map?.width, maxScale: g.engine.perf.maxScale, calls: g.engine.renderer.info.render.calls };
   }
   return out;
 });
@@ -82,8 +83,10 @@ expect('a far LOD puppet is still hittable', r.hittable);
 expect('shadow-only meshes never drawn in the color pass', r.shadowOnlyHidden);
 expect('skinned meshes have a real culling sphere', r.minCullRadius > 0.5);
 expect('world and hitbox proxies are not drawn', r.proxiesHidden && r.hitMeshesHidden);
+expect('rig proxies stay out of the per-frame matrix updates', r.proxiesFrozen);
 expect('low preset: no MSAA, no bloom, 2048 shadows, 1x', q.low.samples === 0 && !q.low.bloom && q.low.shadow === 2048 && q.low.maxScale <= 1 && q.low.calls > 0);
 expect('ultra preset: supersampled, MSAA >= high (capped by the GPU), 4096 shadows', q.ultra.maxScale > q.high.maxScale && q.ultra.samples >= q.high.samples && q.ultra.shadow === 4096);
+expect('only the scene target is multisampled', Object.values(q).every((v) => v.other === 0));
 expect('high preset restores the defaults', q.high.samples === 4 && q.high.bloom && q.high.shadow === 4096 && q.high.calls > 0);
 expect('no page errors', errors.length === 0);
 await b.close();

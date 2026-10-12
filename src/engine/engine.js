@@ -6,12 +6,13 @@ import { installShadowOnly } from './batch.js';
 
 // Game-agnostic runtime: renderer, scene, main camera, input, event bus, frame loop and system scheduler.
 //
-// Systems are plain objects { name, phase, update(dt, engine), whilePaused? } run in phase order:
+// Systems are plain objects { name, phase, update(dt, engine), whilePaused?, group? } run in phase order:
 //   pre      once per frame, real dt          (time scale, look input)
 //   simulate fixed substeps of <= MAX_STEP     (gameplay: movement, weapons, AI, projectiles)
 //   late     once per frame, scaled dt         (camera follows the simulated state)
 //   present  once per frame, scaled dt         (fx, HUD, animated lights)
 //   render   once per frame, real dt           (post stack, exposure)
+// A system with a `group` only runs while engine.mode is that group (engine.setMode); no group = always.
 // Each call is isolated: an exception is logged and the frame continues; a system that keeps
 // failing is disabled and reported through the 'engine:systemFailed' event instead of freezing the game.
 export const PHASES = ['pre', 'simulate', 'late', 'present', 'render'];
@@ -20,7 +21,8 @@ const TUNING = {
   maxFrame: 0.1, // s; longer gaps (tab switch, breakpoint, hitch) are clamped to this
   maxStep: 1 / 50, // s; simulate substep cap: no tunneling, stable springs on slow frames
   maxSubsteps: 4, // beyond this the game slows down instead of spiralling
-  failLimit: 10, // consecutive exceptions before a system is disabled
+  failLimit: 10, // failure score before a system is disabled: +1 per exception, decays failDecay per second of success
+  failDecay: 1, // a system failing less than once a second recovers, a flaky one (every other frame) is still disabled
 };
 
 export class Engine {
@@ -47,6 +49,7 @@ export class Engine {
     this.time = 0; // scaled seconds since start
     this.realDt = 0; // unscaled seconds of the current frame
     this.paused = false;
+    this.mode = 'play'; // active system group (setMode): systems of another group are skipped
     this.headless = false; // tests: step the simulation without rendering (see #tick)
     this.contextLost = false;
     this.last = 0;
@@ -74,10 +77,15 @@ export class Engine {
   }
 
   add(system) {
-    const s = Object.assign({ phase: 'simulate', whilePaused: false, fails: 0, disabled: false }, system);
+    const s = Object.assign({ phase: 'simulate', whilePaused: false, group: null, fails: 0, disabled: false }, system);
     if (!this.systems[s.phase]) throw new Error(`unknown phase "${s.phase}" for system ${s.name}`);
     this.systems[s.phase].push(s);
     return s;
+  }
+
+  // Switches the active group: systems with another `group` stop running until the mode changes back (e.g. 'play' / 'edit').
+  setMode(name) {
+    this.mode = name;
   }
 
   remove(system) {
@@ -122,8 +130,10 @@ export class Engine {
     this.last = now;
     const realDt = ms / 1000;
     if (realDt <= 0) return;
-    this.perf.sample(Math.min(ms, 100), Math.min(realDt, this.t.maxFrame));
+    const t0 = performance.now();
     this.#tick(realDt);
+    // fps comes from the rAF gap, the resolution scaler judges the CPU work of the frame (see Perf.sample)
+    this.perf.sample(Math.min(ms, 100), performance.now() - t0, Math.min(realDt, this.t.maxFrame));
   }
 
   #tick(realDt) {
@@ -163,15 +173,16 @@ export class Engine {
     const list = this.systems[phase];
     for (let i = 0; i < list.length; i++) {
       const s = list[i];
-      if (s.disabled || (this.paused && !s.whilePaused)) continue;
+      if (s.disabled || (s.group !== null && s.group !== this.mode) || (this.paused && !s.whilePaused)) continue;
       const t0 = performance.now();
       try {
         s.update(dt, this);
-        s.fails = 0;
+        if (s.fails > 0) s.fails = Math.max(0, s.fails - dt * this.t.failDecay);
       } catch (err) {
+        if (s.fails < 1) console.error(`[engine] system "${s.name}" failed`, err); // first of a burst only
         s.fails++;
-        console.error(`[engine] system "${s.name}" failed (${s.fails}/${this.t.failLimit})`, err);
         if (s.fails >= this.t.failLimit) {
+          console.error(`[engine] system "${s.name}" disabled after repeated failures`, err);
           s.disabled = true;
           this.events.emit('engine:systemFailed', { name: s.name, error: err });
         }

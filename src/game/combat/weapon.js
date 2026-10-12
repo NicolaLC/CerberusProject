@@ -19,6 +19,8 @@ const _aim = new THREE.Vector3();
 const _toAim = new THREE.Vector3();
 const _back = new THREE.Vector3();
 const _targets = [];
+const _hits = [];
+const _hits2 = []; // second probe ray: `hit` (above) must stay valid
 const _kick = [0, 0];
 const _probeDir = new THREE.Vector3();
 const _passed = [];
@@ -115,7 +117,8 @@ export class Weapon {
     _ray.set(camPos, _probeDir);
     _ray.near = camPos.distanceTo(this.rig.pivot);
     _ray.far = this.t.range;
-    const hit = _ray.intersectObjects(_targets, false)[0];
+    _hits.length = 0;
+    const hit = _ray.intersectObjects(_targets, false, _hits)[0];
     if (hit) _aim.copy(hit.point);
     else _aim.copy(camPos).addScaledVector(_probeDir, this.t.range);
     a.distance = hit ? hit.distance : this.t.range;
@@ -125,7 +128,8 @@ export class Weapon {
     _ray.set(_muz, d.normalize());
     _ray.near = 0;
     _ray.far = Math.max(0.01, dist - 0.05);
-    const block = _ray.intersectObjects(_targets, false)[0];
+    _hits2.length = 0;
+    const block = _ray.intersectObjects(_targets, false, _hits2)[0];
     const final = block ?? hit;
     // only an obstruction well short of the aim point counts (grazing the target's own surroundings doesn't)
     if (block && block.point.distanceTo(_aim) > Math.max(0.4, dist * 0.04)) {
@@ -286,7 +290,7 @@ export class Weapon {
         this.events.emit('weapon:charge', false);
         return;
       }
-      p.lastShot = 0; // shouldered while it charges
+      p.notifyShot(); // shouldered while it charges
       this.charging -= dt;
       if (this.charging <= 0) {
         this.charging = 0;
@@ -309,7 +313,7 @@ export class Weapon {
     }
     // in cover the character needs a moment to pop up before the first round leaves
     if (p.cover && p.cover.type === 'low' && p.crouchBlend > 0.45) {
-      p.lastShot = 0;
+      p.notifyShot();
       return;
     }
     if (this.ammo <= 0) {
@@ -322,7 +326,7 @@ export class Weapon {
       if (this.cooldown <= 0) {
         this.charging = t.charge;
         this.queued = 0;
-        p.lastShot = 0;
+        p.notifyShot();
         this.events.emit('weapon:charge', true);
       }
       return;
@@ -369,7 +373,7 @@ export class Weapon {
     const t = this.t;
     this.ammo--;
     this.firing = true;
-    this.player.lastShot = 0;
+    this.player.notifyShot();
 
     // camera aim ray, uniformly inside the spread cone (spread is measured before this round adds bloom)
     coneDir(_dir, this.rig.forward, this.rig.right, this.spread(), this.rng.next(), this.rng.next());

@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { RigidSkin } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
 import { damp, wrapAngle, lerpAngle } from '../../engine/math.js';
-import { rbox, rb, cyl, look, debrisCopy, disposeDebris } from './parts.js';
-import { VISOR, PROJECTILE } from './enemy.js';
+import { rbox, rb, cyl, look } from './parts.js';
+import { sightRay, VISOR, PROJECTILE } from './enemy.js';
 import { wornMaterial } from '../world/textures.js';
 
 // Miniboss: a six-legged walker (saucer hull, twin gun pods) guarding the north-east arena.
@@ -46,14 +46,15 @@ const _k = new THREE.Vector3();
 const _f = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _yAxis = new THREE.Vector3(0, 1, 0);
-const _ray = new THREE.Raycaster();
+const DEBRIS_DIR = new THREE.Vector3();
+const DEBRIS = { dir: DEBRIS_DIR, push: [3, 3], spread: 3, up: [3, 3], spin: 8, life: 6 }; // see DebrisBank.burst
 const BLAST = { point: new THREE.Vector3(), radius: 0, kind: '' };
 const STEP = { point: new THREE.Vector3(), big: false };
 const HITBOX_MAT = new THREE.MeshBasicMaterial(); // never drawn
 
 export class SpiderMech {
-  constructor(sys, def) {
-    this.sys = sys;
+  constructor(ctx, def) {
+    this.ctx = ctx;
     this.t = TUNING;
     this.kind = 'boss';
     this.name = TUNING.name;
@@ -75,7 +76,6 @@ export class SpiderMech {
     this.mortarTimer = 4;
     this.stomp = { state: 'idle', timer: 0 };
     this.debris = [];
-    this.deadTime = 0;
     this.orbs = [];
 
     const M = {
@@ -265,7 +265,7 @@ export class SpiderMech {
       const hip = new THREE.Vector3(side * HIPS[row][0], -0.1, HIPS[row][1]);
       const rest = new THREE.Vector3(side * REST[row][0], 0, REST[row][1]);
       const foot = this.root.localToWorld(rest.clone());
-      foot.y = sys.world.groundAt(foot.x, foot.z, foot.y + 2);
+      foot.y = ctx.world.groundAt(foot.x, foot.z, foot.y + 2);
       this.legs.push({
         side, row, femur, tibia, knee, hip, rest, foot,
         group: (row + (side > 0 ? 0 : 1)) % 2, // tripod gait: two alternating groups of three
@@ -274,16 +274,16 @@ export class SpiderMech {
       });
     }
     this.skeleton = new THREE.Skeleton(bones);
-    sys.scene.add(this.root);
+    ctx.scene.add(this.root);
     this.#pose(0);
     this.skin = new RigidSkin(this.root, this.skeleton, { cullMargin: 1.6, lod: true });
-    sys.dirty = true;
+    ctx.debris.prime(this.kind, this.skin);
+    ctx.markDirty();
   }
 
   // Removes the mech from the scene and frees everything it owns (rig, skin, debris, mortar orbs and rings).
   dispose() {
-    for (const d of this.debris) disposeDebris(d.obj);
-    this.debris.length = 0;
+    this.ctx.debris.releaseAll(this.debris);
     for (const o of this.orbs) {
       disposeTree(o.obj);
       disposeTree(o.ring);
@@ -359,7 +359,7 @@ export class SpiderMech {
   #wake() {
     if (this.awake) return;
     this.awake = true;
-    this.sys.events.emit('boss:wake', this);
+    this.ctx.events.emit('boss:wake', this);
   }
 
   #breakLeg(leg, dir) {
@@ -368,13 +368,11 @@ export class SpiderMech {
     leg.knee.getWorldPosition(BLAST.point);
     BLAST.radius = 2;
     BLAST.kind = 'leg';
-    this.sys.events.emit('boss:leg', BLAST);
-    for (const b of [leg.femur, leg.tibia]) {
-      for (const m of b.children) this.#debris(m, dir);
-      b.scale.setScalar(1e-4); // hides its skinned parts
-    }
+    this.ctx.events.emit('boss:leg', BLAST);
+    this.#debris([leg.femur, leg.tibia], dir);
+    for (const b of [leg.femur, leg.tibia]) b.scale.setScalar(1e-4); // hides its skinned parts
     this.hitMeshes = this.hitMeshes.filter((m) => m.userData.part !== this.legs.indexOf(leg));
-    this.sys.dirty = true;
+    this.ctx.markDirty();
     // every second leg lost brings it down (a mech with no legs left stays down)
     const lost = this.legsLost;
     if (lost % 2 === 0 || lost >= 5) {
@@ -382,37 +380,26 @@ export class SpiderMech {
       this.gun.state = 'idle';
       this.gun.timer = 1.5;
       this.stomp.state = 'idle';
-      this.sys.events.emit('boss:down', this);
+      this.ctx.events.emit('boss:down', this);
     }
   }
 
-  // A piece on a bone (its look, a weak part) flies off as a debris chunk.
-  #debris(piece, dir) {
-    if (piece.isBone) return;
-    const d = debrisCopy(piece);
-    if (!d) return;
-    this.sys.scene.add(d);
-    const v = dir.clone().multiplyScalar(3 + Math.random() * 3);
-    v.y += 3 + Math.random() * 3;
-    v.x += (Math.random() - 0.5) * 3;
-    v.z += (Math.random() - 0.5) * 3;
-    const av = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(8);
-    this.debris.push({ obj: d, v, av, life: 6 });
+  // The pieces on these bones (look, weak part) fly off as debris chunks.
+  #debris(bones, dir) {
+    DEBRIS_DIR.copy(dir);
+    this.ctx.debris.burst(this.kind, this.skin, this.ctx.scene, this.debris, DEBRIS, bones);
   }
 
   #die(dir) {
     this.alive = false;
     this.health = 0;
-    this.sys.kills++;
-    this.sys.dirty = true;
     this.root.updateMatrixWorld(true);
     this.core.getWorldPosition(BLAST.point);
     BLAST.radius = 6;
     BLAST.kind = 'death';
-    this.sys.events.emit('boss:dead', BLAST);
-    this.sys.events.emit('puppet:down', this);
-    if (this.sys.kills === this.sys.puppets.length) this.sys.events.emit('arena:clear');
-    for (const b of this.skeleton.bones) if (b.scale.x > 0.01) for (const m of b.children) this.#debris(m, dir); // broken legs already burst
+    this.ctx.events.emit('boss:dead', BLAST);
+    this.ctx.reportKill(this);
+    this.#debris(this.skeleton.bones.filter((b) => b.scale.x > 0.01), dir); // broken legs already burst
     this.root.visible = false;
     for (const o of this.orbs) o.obj.visible = o.ring.visible = false;
   }
@@ -500,7 +487,7 @@ export class SpiderMech {
     this.vel.z += (_w.z * speed - this.vel.z) * k;
     const before = _v.copy(this.pos);
     this.pos.addScaledVector(this.vel, dt);
-    this.sys.world.collideCircle(this.pos, this.t.radius, 2.4, 1.3); // walks over low cover, not through walls
+    this.ctx.world.collideCircle(this.pos, this.t.radius, 2.4, 1.3); // walks over low cover, not through walls
     const A = this.arena;
     this.pos.x = THREE.MathUtils.clamp(this.pos.x, A.minX + this.t.radius, A.maxX - this.t.radius);
     this.pos.z = THREE.MathUtils.clamp(this.pos.z, A.minZ + this.t.radius, A.maxZ - this.t.radius);
@@ -512,12 +499,7 @@ export class SpiderMech {
   }
 
   #sees(player) {
-    this.muzzle.getWorldPosition(_h);
-    const to = player.chest(_k).sub(_h);
-    const len = to.length();
-    _ray.set(_h, to.divideScalar(len));
-    _ray.far = Math.max(0.01, len - 0.5);
-    return _ray.intersectObjects(this.sys.world.meshes, false).length === 0;
+    return sightRay(this.muzzle.getWorldPosition(_h), player.chest(_k), this.ctx.world.meshes);
   }
 
   #cannon(dt, player) {
@@ -529,7 +511,7 @@ export class SpiderMech {
         if (this.#sees(player)) {
           g.state = 'charge';
           g.timer = b.charge;
-          this.sys.events.emit('boss:charge', this);
+          this.ctx.events.emit('boss:charge', this);
         } else g.timer = 0.5;
       }
     } else if (g.state === 'charge') {
@@ -548,7 +530,7 @@ export class SpiderMech {
       _f.z += (Math.random() - 0.5) * spread * 2;
       // alternate gun pods
       _h.addScaledVector(_w.set(Math.cos(this.yaw + this.turret.rotation.y), 0, -Math.sin(this.yaw + this.turret.rotation.y)), g.shots % 2 ? GUN_SIDE : -GUN_SIDE);
-      this.sys.spawnBolt(_h, _f.normalize(), b.damage);
+      this.ctx.spawnBolt(_h, _f.normalize(), b.damage);
       g.timer = b.gap;
       if (--g.shots <= 0) {
         g.state = 'idle';
@@ -570,14 +552,14 @@ export class SpiderMech {
     o.obj.position.set(this.pos.x, this.pos.y + this.height + 1.2, this.pos.z);
     // lead a moving player a little
     o.target.copy(player.pos).addScaledVector(player.vel, 0.5);
-    o.target.y = this.sys.world.groundAt(o.target.x, o.target.z, player.pos.y + 0.5);
+    o.target.y = this.ctx.world.groundAt(o.target.x, o.target.z, player.pos.y + 0.5);
     o.t = 0;
     o.flight = m.flight;
     o.vel.subVectors(o.target, o.obj.position).divideScalar(m.flight);
     o.vel.y += 0.5 * GRAVITY * m.flight;
     o.ring.position.set(o.target.x, o.target.y + 0.03, o.target.z);
     o.obj.visible = o.ring.visible = true;
-    this.sys.events.emit('boss:mortar', o.obj.position);
+    this.ctx.events.emit('boss:mortar', o.obj.position);
   }
 
   #orb() {
@@ -588,7 +570,7 @@ export class SpiderMech {
     const ring = new THREE.Mesh(RING_GEO, RING_MAT.clone());
     ring.rotation.x = -Math.PI / 2;
     ring.scale.setScalar(this.t.mortar.radius);
-    this.sys.scene.add(obj, ring);
+    this.ctx.scene.add(obj, ring);
     o = { obj, ring, vel: new THREE.Vector3(), target: new THREE.Vector3(), t: 0, flight: 1 };
     this.orbs.push(o);
     return o;
@@ -618,7 +600,7 @@ export class SpiderMech {
       if (near && s.timer <= 0) {
         s.state = 'rear';
         s.timer = st.telegraph;
-        this.sys.events.emit('boss:stomp', this);
+        this.ctx.events.emit('boss:stomp', this);
       }
     } else if (s.state === 'rear') {
       if (s.timer <= 0) {
@@ -639,11 +621,11 @@ export class SpiderMech {
     BLAST.point.copy(point);
     BLAST.radius = radius;
     BLAST.kind = kind;
-    this.sys.events.emit('blast', BLAST);
+    this.ctx.events.emit('blast', BLAST);
     if (player.dead) return;
     const d = Math.hypot(player.pos.x - point.x, player.pos.z - point.z);
     if (d > radius || Math.abs(player.pos.y - point.y) > 2) return;
-    this.sys.hurtPlayer(damage * (1 - 0.5 * (d / radius)), point);
+    this.ctx.hurtPlayer(damage * (1 - 0.5 * (d / radius)), point);
   }
 
   // ----- body + legs -----
@@ -665,7 +647,7 @@ export class SpiderMech {
     root.updateMatrixWorld(true);
 
     // gait: a foot steps when it trails too far from its rest spot and the other tripod is planted
-    const world = this.sys.world;
+    const world = this.ctx.world;
     let stepping = -1;
     for (const l of this.legs) if (l.alive && l.stepT >= 0) stepping = l.group;
     for (const l of this.legs) {
@@ -694,7 +676,7 @@ export class SpiderMech {
           l.stepT = -1;
           STEP.point.copy(l.foot);
           STEP.big = this.stomp.state === 'slam';
-          this.sys.events.emit('boss:step', STEP);
+          this.ctx.events.emit('boss:step', STEP);
         }
       }
       // IK: hip -> knee (bends up and out) -> foot
@@ -718,31 +700,7 @@ export class SpiderMech {
   }
 
   #updateDebris(dt) {
-    if (!this.debris.length) return;
-    const world = this.sys.world;
-    for (let i = this.debris.length - 1; i >= 0; i--) {
-      const d = this.debris[i];
-      d.life -= dt;
-      d.v.y -= 18 * dt;
-      d.obj.position.addScaledVector(d.v, dt);
-      d.obj.rotation.x += d.av.x * dt;
-      d.obj.rotation.y += d.av.y * dt;
-      d.obj.rotation.z += d.av.z * dt;
-      const g = world.groundAt(d.obj.position.x, d.obj.position.z, d.obj.position.y + 0.3) + 0.1;
-      if (d.obj.position.y < g) {
-        d.obj.position.y = g;
-        d.v.y *= -0.3;
-        d.v.x *= 0.6;
-        d.v.z *= 0.6;
-        d.av.multiplyScalar(0.6);
-      }
-      if (d.life < 1) d.obj.scale.multiplyScalar(1 - dt * 3);
-      if (d.life <= 0) {
-        disposeDebris(d.obj);
-        this.debris[i] = this.debris[this.debris.length - 1];
-        this.debris.pop();
-      }
-    }
+    if (this.debris.length) this.ctx.debris.step(this.debris, dt, this.ctx.world);
   }
 }
 
