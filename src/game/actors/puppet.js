@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { EnemyBody, box } from './enemy.js';
+import { EnemyBody, box, sightRay } from './enemy.js';
 import { buildPuppet, puppetMaterials } from './looks.js';
 import { damp, wrapAngle } from '../../engine/math.js';
 
@@ -14,11 +14,10 @@ const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _u = new THREE.Vector3();
 const _step = new THREE.Vector3();
-const _ray = new THREE.Raycaster();
 
 export class Puppet extends EnemyBody {
-  constructor(sys, def) {
-    super(sys, {
+  constructor(ctx, def) {
+    super(ctx, {
       kind: def.kind,
       pos: def.pos,
       yaw: def.yaw ?? 0,
@@ -39,13 +38,13 @@ export class Puppet extends EnemyBody {
     this.rig.attach('Spine2', box(0.22, 0.22, 0.02, targetMat(), 0, 0.12, 0.155)); // bullseye
     this.emitter = this.rig.socket('Spine2', 'emitter', 0, 0.15, 0.3);
     // post + base: instanced across all puppets (Enemies.stands), slot = this.index
-    this.index = sys.standCount++;
+    this.index = ctx.takeStand();
     this.finishBody();
   }
 
   // the empty post sinks into its base once the debris is gone
   onDebrisCleared() {
-    this.sys.setStand(this.index, this.pos, 0.02);
+    this.ctx.setStand(this.index, this.pos, 0.02);
   }
 
   think(dt, player) {
@@ -70,7 +69,7 @@ export class Puppet extends EnemyBody {
     this.group.position.copy(this.pos);
     this.rig.root.position.y = this.lift;
     this.rig.root.rotation.y = this.yaw;
-    this.sys.setStand(this.index, this.pos, Math.max(0.05, 0.95 + this.lift - 0.08));
+    this.ctx.setStand(this.index, this.pos, Math.max(0.05, 0.95 + this.lift - 0.08));
   }
 
   #shooterAI(dt, player) {
@@ -134,12 +133,7 @@ export class Puppet extends EnemyBody {
   }
 
   #hasLOS(target) {
-    const from = this.emitter.getWorldPosition(_u);
-    const dir = _step.subVectors(target, from);
-    const len = dir.length();
-    _ray.set(from, dir.normalize());
-    _ray.far = len - 0.5;
-    return _ray.intersectObjects(this.sys.world.meshes, false).length === 0;
+    return sightRay(this.emitter.getWorldPosition(_u), target, this.ctx.world.meshes);
   }
 
   #fire(target) {
@@ -149,7 +143,7 @@ export class Puppet extends EnemyBody {
     dir.x += (Math.random() - 0.5) * spread;
     dir.y += (Math.random() - 0.5) * spread;
     dir.z += (Math.random() - 0.5) * spread;
-    this.sys.spawnBolt(from, dir.sub(from).normalize());
+    this.ctx.spawnBolt(from, dir.sub(from).normalize());
   }
 }
 
