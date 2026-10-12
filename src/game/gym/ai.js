@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { disposeTree } from '../../engine/dispose.js';
 import { ENGAGE_RANGE } from '../actors/puppet.js';
+import { bound } from '../controls.js';
 
 // Gym tool: Enemy behaviour rooms (#66, instructions/gym.md).
 // Keys (this scene only, own listener):  J respawn the enemies  K freeze the AI  L player invisible  O overlays.
@@ -59,10 +60,10 @@ export class AiTool {
     this.onKey = (e) => {
       if (e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
       if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target?.tagName ?? '')) return;
-      if (e.code === 'KeyJ') this.respawn();
-      else if (e.code === 'KeyK') this.toggleFreeze();
-      else if (e.code === 'KeyL') this.toggleInvisible();
-      else if (e.code === 'KeyO') this.toggleOverlays();
+      if (bound('aiRespawn', e.code)) this.respawn();
+      else if (bound('aiFreeze', e.code)) this.toggleFreeze();
+      else if (bound('aiInvisible', e.code)) this.toggleInvisible();
+      else if (bound('aiOverlays', e.code)) this.toggleOverlays();
     };
     addEventListener('keydown', this.onKey);
 
