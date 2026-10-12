@@ -80,7 +80,7 @@ export class Hud {
     events.on('player:hurt', (h) => this.damage(h.dir, camRig));
     events.on('pickup:collected', (msg) => this.toast(msg));
     events.on('pickup:full', () => this.toast('AMMO FULL'));
-    events.on('weapon:discovered', ({ gun }) => this.toast(`${GUNS[gun].name} ACQUIRED`, 3)); // ponytail: no STEM-00 log line until #40 builds one
+    events.on('weapon:discovered', ({ gun }) => this.toast(`${GUNS[gun].name} ACQUIRED`, 3)); // the log line is level data (log.line on: discovered:<gun>)
     events.on('arena:clear', () => this.toast('ARENA CLEAR', 6));
     events.on('boss:wake', (b) => this.toast(`⚠ ${b.name}`, 3));
     events.on('boss:down', () => this.toast('CORE EXPOSED', 2));

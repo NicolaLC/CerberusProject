@@ -15,8 +15,10 @@ import * as THREE from 'three';
 //                     enters. params { size [w,h,d], event, once (true), wakeGroup?, spawnGroup? }.
 //  objective.*        mission objectives (reach / destroy / survive / interact, #12): records only, `Mission` (mission.js) runs them.
 //                     Common params { text, order?, limit?, wakeGroup?, spawnGroup? }; see OBJECTIVES below and workshop.md "Missions".
+//  log.line           a STEM-00 log line (#40, instructions/narrative.md): params { text, on, priority? ('normal'), once? (true), delay? (s, 0) }.
+//                     When `on` happens (LOG_ON below) it emits `log:say` { text, priority } after `delay`; the Log view (view/log.js) shows it.
 // Events out: `trigger:fired` { id, event }, `checkpoint:reached` { id, pos, yaw }, `group:wake` { group } (Enemies),
-// `group:spawn` { group, count }. Events in (the mission, mission.js; tests): `encounter:wake` group, `encounter:spawn` group.
+// `group:spawn` { group, count }, `log:say` { text, priority }. Events in (the mission, mission.js; tests): `encounter:wake` group, `encounter:spawn` group.
 
 export const TUNING = {
   checkpointRadius: 2, // m, horizontal reach of a checkpoint
@@ -28,7 +30,7 @@ export const TUNING = {
   radius: 2, // m, default interact radius
 };
 
-const COLOR = { spawn: 0x58ff9a, checkpoint: 0x3affff, entry: 0xff7a3a, trigger: 0xff4bd6, zone: 0x4aa8ff, objective: 0xffd23a };
+const COLOR = { spawn: 0x58ff9a, checkpoint: 0x3affff, entry: 0xff7a3a, trigger: 0xff4bd6, zone: 0x4aa8ff, objective: 0xffd23a, log: 0xffb347 };
 const TEXT = { reach: 'REACH THE ZONE', destroy: 'DESTROY THE TARGETS', survive: 'SURVIVE', interact: 'ACCESS THE TERMINAL' };
 
 // The level's player start: the first `marker.spawn` piece, else `level.spawn`. Pure.
@@ -44,6 +46,20 @@ const entry = (sys, d) => sys.add('entry', d);
 const common = [{ key: 'text', type: 'text' }, { key: 'order', type: 'number', optional: true }, { key: 'limit', type: 'number', optional: true, min: 0.1 }, { key: 'wakeGroup', type: 'text', optional: true }, { key: 'spawnGroup', type: 'text', optional: true }];
 const objective = (obj, label, params, own) => ({ example: { params: { text: TEXT[obj], ...params } }, label, fields: [...common, ...own], build: (sys, d) => sys.add('objective', d, obj) });
 
+// `log.line` `on` forms: start | mission:complete | trigger:<id> | checkpoint:<id> | objective:<id> | objective:<id>:done | discovered:<gun>
+const LOG_ON = /^(start|mission:complete|(trigger|checkpoint|discovered):[^:]+|objective:[^:]+(:done)?)$/;
+
+// Problem with a `log.line`'s params, or null. Registry.check runs it on every level (meta `check`); Encounter.add throws it. Pure.
+export function logLineProblem(p, guns = null) {
+  if (typeof p.text !== 'string' || !p.text.trim()) return 'text must be a non-empty string';
+  if (typeof p.on !== 'string' || !LOG_ON.test(p.on)) return `on ${JSON.stringify(p.on)} is not one of start, mission:complete, trigger:<id>, checkpoint:<id>, objective:<id>, objective:<id>:done, discovered:<gun>`;
+  if (guns && p.on.startsWith('discovered:') && !guns.includes(p.on.slice(11))) return `on ${JSON.stringify(p.on)}: unknown gun (known: ${guns.join(', ')})`;
+  if (p.priority != null && p.priority !== 'normal' && p.priority !== 'high') return 'priority must be normal or high';
+  if (p.once != null && typeof p.once !== 'boolean') return 'once must be true or false';
+  if (p.delay != null && !(typeof p.delay === 'number' && p.delay >= 0)) return 'delay must be a number, at least 0 (seconds)';
+  return null;
+}
+
 export const ENCOUNTER_PIECES = {
   'marker.spawn': { example: { params: {}, yaw: Math.PI }, label: 'player start (overrides level.spawn)', build: (sys, d) => sys.add('spawn', d) },
   'marker.checkpoint': { example: { params: {} }, label: `respawn point after a death, ${TUNING.checkpointRadius} m reach`, build: (sys, d) => sys.add('checkpoint', d) },
@@ -54,6 +70,13 @@ export const ENCOUNTER_PIECES = {
   'objective.destroy': objective('destroy', 'objective: destroy the enemies of a group (any enemy without group)', { group: 'targets' }, [{ key: 'group', type: 'text', optional: true }, { key: 'count', type: 'number', optional: true, min: 1 }]),
   'objective.survive': objective('survive', 'objective: stay alive for a time', { time: TUNING.survive }, [{ key: 'time', type: 'number', min: 0.1 }]),
   'objective.interact': objective('interact', 'objective: press interact (G) within the radius', { radius: TUNING.radius }, [{ key: 'radius', type: 'number', min: 0.1 }]),
+  'log.line': {
+    example: { params: { text: '> LINK: NONE. QUERY: WHY?', on: 'start' } },
+    label: 'STEM-00 log line, shown when `on` happens (narrative.md)',
+    fields: [{ key: 'text', type: 'text' }, { key: 'on', type: 'text' }, { key: 'priority', type: 'enum', options: ['normal', 'high'], optional: true }, { key: 'once', type: 'bool', def: true }, { key: 'delay', type: 'number', optional: true, min: 0 }],
+    check: (p, registry) => logLineProblem(p, registry.guns),
+    build: (sys, d) => sys.add('log', d),
+  },
 };
 
 const _right = new THREE.Vector3();
@@ -69,15 +92,33 @@ export class Encounter {
     this.gizmoMode = false; // set while spawn() builds a gizmo piece
     this.res = null; // gizmo geometry + materials: built with the first gizmo, freed with the last (nothing stays on the GPU in play)
     this.gizmos = 0;
+    this.lines = []; // log lines waiting for their delay (play): { t, rec }
     // requests from outside (the mission, tests); the stored fns are permanent
     events.on('encounter:wake', (g) => this.enemies.wakeGroup(g));
     events.on('encounter:spawn', (g) => this.spawnGroup(g));
+    // log.line triggers (permanent; they look at the current records)
+    events.on('trigger:fired', (e) => this.#log(`trigger:${e.id}`));
+    events.on('checkpoint:reached', (e) => this.#log(`checkpoint:${e.id}`));
+    events.on('mission:objective', (e) => this.#log(`objective:${e.id}`));
+    events.on('mission:objective:done', (e) => this.#log(`objective:${e.id}:done`));
+    events.on('weapon:discovered', (e) => this.#log(`discovered:${e.gun}`));
+    events.on('mission:complete', () => this.#log('mission:complete'));
+  }
+
+  // Queues the log lines waiting for `key` (an `on` value). They are emitted from update, after their delay.
+  #log(key) {
+    for (const r of this.items) {
+      if (r.kind !== 'log' || r.inert || r.params.on !== key || (r.once && r.fired)) continue;
+      r.fired = true;
+      this.lines.push({ t: r.params.delay ?? 0, rec: r });
+    }
   }
 
   // Builds the encounter pieces of a level (logic only). Unloads the current ones first.
   load(level) {
     this.unload();
     for (const d of this.registry.piecesOf(level, 'encounter')) this.registry.build('encounter', this, d);
+    this.#log('start'); // shown from the first update, after the run reset (resetRun clears the Log view)
     this.mission?.start(this.items.filter((r) => r.kind === 'objective' && !r.inert));
     return this;
   }
@@ -88,6 +129,7 @@ export class Encounter {
       this.#dropGizmo(r);
     }
     this.items.length = 0;
+    this.lines.length = 0;
     this.checkpoint = this.cpRec = null;
     this.triggers = 0;
     this.mission?.stop();
@@ -107,6 +149,7 @@ export class Encounter {
     const i = this.items.indexOf(rec);
     if (i < 0) return;
     this.items.splice(i, 1);
+    this.lines = this.lines.filter((l) => l.rec !== rec);
     this.#dropZone(rec);
     this.#dropGizmo(rec);
     if (this.cpRec === rec) this.checkpoint = this.cpRec = null;
@@ -141,6 +184,11 @@ export class Encounter {
       rec.list = list;
     }
     if (kind === 'objective') this.#objective(rec, obj, p);
+    if (kind === 'log') {
+      const problem = logLineProblem(p, this.registry.guns);
+      if (problem) bad(id, problem);
+      rec.once = p.once ?? true;
+    }
     if (kind === 'trigger') this.triggers++;
     if (this.gizmoMode) {
       rec.gizmo = this.#gizmo(rec);
@@ -203,6 +251,9 @@ export class Encounter {
   update(dt, player, interact = false) {
     if (!player.dead && this.items.length) this.#scan(player);
     this.mission?.update(dt, player, interact);
+    if (!this.lines.length) return;
+    for (const l of this.lines) if ((l.t -= dt) <= 0) this.events.emit('log:say', { text: l.rec.params.text, priority: l.rec.params.priority ?? 'normal' });
+    this.lines = this.lines.filter((l) => l.t > 0);
   }
 
   #scan(player) {
@@ -311,6 +362,10 @@ export class Encounter {
     } else if (r.kind === 'spawn') {
       solidBox([0, 0.9, 0], [0.6, 1.8, 0.6]);
       part(G.cone, m.solid, [0, 0.1, 0.8], [1, 1, 1]);
+    } else if (r.kind === 'log') {
+      solidBox([0, 1.2, 0], [0.8, 0.5, 0.06]); // a terminal screen on a post
+      part(G.box, m.solid, [-0.2, 1.2, 0.04], [0.3, 0.05, 0.02]); // the prompt line
+      part(G.box, m.solid, [0, 0.475, 0], [0.06, 0.95, 0.06]);
     } else if (r.kind === 'checkpoint') {
       part(G.box, m.solid, [0, 1, 0], [0.06, 2, 0.06]); // pole
       part(G.box, m.solid, [0.35, 1.75, 0], [0.7, 0.4, 0.04]); // flag

@@ -107,6 +107,9 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #boss .legs i.gone { background: #3a2a30; box-shadow: none; }
 #boss .state { color: #ff6af0; }
 #toast { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font: 700 16px var(--font-main); letter-spacing: 3px; color: #7fe8ff; text-shadow: 0 0 8px rgba(56, 216, 255, 0.7); opacity: 0; }
+#log { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); max-width: min(760px, calc(100vw - 32px)); font: 15px ui-monospace, Consolas, 'DejaVu Sans Mono', monospace; letter-spacing: 1px; color: #ffb347; text-shadow: 0 0 6px rgba(255, 179, 71, 0.45), 0 0 2px #000; white-space: pre-wrap; opacity: 0; }
+#log::after { content: '_'; animation: log-cursor 1s steps(1) infinite; }
+@keyframes log-cursor { 50% { opacity: 0; } }
 #overlay .settings { display: grid; gap: 10px; margin-bottom: 18px; font: 12px var(--font-main); }
 #overlay .row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 #overlay .row span { flex: 1; }

@@ -83,6 +83,9 @@ export class Registry {
       if (!Array.isArray(p.pos) || p.pos.length !== 3 || p.pos.some((n) => typeof n !== 'number')) {
         throw new Error(`level: piece #${i} ("${p.id}") needs pos: [x, y, z]`);
       }
+      // the piece's own params check (meta `check(params, registry)`: a problem string or null; log.line)
+      const problem = this.meta(p.id).check?.(p.params ?? {}, this);
+      if (problem) throw new Error(`level: piece #${i} ("${p.id}") ${problem}`);
       // enum fields with a fixed option list (prop.gun / pickup.gun `gun`, cover, stairs side...)
       for (const f of this.meta(p.id).fields ?? []) {
         const v = p.params?.[f.key];
