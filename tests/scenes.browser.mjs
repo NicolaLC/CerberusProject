@@ -12,7 +12,7 @@ const withScene = (scene) => {
   if (scene != null) u.searchParams.set('scene', scene);
   return u.href;
 };
-const SCENES = ['arena', 'gym', 'gym-range', 'gym-ai', 'gym-stress', 'library', 'workshop'];
+const SCENES = ['arena', 'gym', 'gym-range', 'gym-ai', 'gym-stress', 'library', 'workshop', 'prologue'];
 const CYCLES = 3;
 
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader'] });
@@ -32,10 +32,16 @@ const probe = (frames) => {
     if (o.frustumCulled) culled.push(o);
     o.frustumCulled = false;
   });
+  // The player's six gun models are built at start and only the raised one draws, so a level that raises another gun
+  // (the Prologue's pistol) would upload its meshes later than the arena did: show them all for the draw too.
+  const models = Object.values(g.player.view.gunModels);
+  const shown = models.map((m) => m.visible);
+  for (const m of models) m.visible = true;
   for (const far of [true, false]) {
     for (const e of g.enemies.all) e.skin?.setFar(far);
     engine.renderer.render(engine.scene, engine.camera);
   }
+  models.forEach((m, i) => (m.visible = shown[i]));
   for (const o of culled) o.frustumCulled = true;
   let objects = 0;
   engine.scene.traverse(() => objects++);

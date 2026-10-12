@@ -112,8 +112,10 @@ The editor (#70) calls four functions plus `levelNames()`; the level is the plai
 | `gym-ai` | `gym-ai.json` | Gym: enemy behaviour rooms (#66) |
 | `gym-stress` | `gym-stress.json` | Gym: performance stress room (#67) |
 | `library` | `library.json` | the Library (#68), `demo` + `tool: library`: aisles of enemies, guns, cover / environment, pickups, light presets and the kit aisle (gym.md, Library) |
+| `prologue` | `prologue.json` | PROVING GROUNDS (#2): the arena layout and metrics, `loadout: ["pistol"]`, `marker.spawn` on a calibration rack (`kit.platform` + `env.label` CALIBRATION UNIT 00) facing the yard, `intro.boot`, two `log.line`s, a `trigger.volume` (`bay-exit`) and the first objective LEAVE CALIBRATION BAY. Yard: passive puppets only; shooters, troopers, drones and the spider sit in groups `purge-1`..`purge-6` that no trigger, wave or objective references yet. Edited in the Workshop from now on |
 | `workshop` | `workshop.json` | the level editor (`tool: workshop`, workshop.md): a small starter level, floor, three cover boxes, a static puppet and an ammo crate (Workshop epic #60) |
 
+- `prologue.json` is the Workshop's output (`serializeLevel`, byte-identical: `levelio.test.mjs`): change it in the Workshop and save, never by hand.
 - Players pick a scene in the start / pause panel (Scene list; it also sets `?scene=` so a reload stays there).
 - `?scene=<name>` (works with `?debug`) opens one; unknown → arena + `console.warn`. At runtime: `game.loadScene('gym')`
   (`window.game` exists with `?debug`). Switching frees the old level completely (architecture.md, Scenes).

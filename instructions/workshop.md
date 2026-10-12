@@ -201,5 +201,7 @@ Gizmo: a monitor with text bars on a post; inert in edit mode and the Library. V
 - State for tests: `boot.active`, `boot.t`, `boot.duration`, `boot.inputLocked`, `boot.canSkip`, `boot.seen`, `boot.lines`, `boot.fade`.
 - Suite `tests/intro.browser.mjs`: overlay and lock at start, typed lines and the HIVEMIND span, no movement / fire / look / switch while locked, `intro:done` within the duration and the eased return, `log.line` on `intro:done`, pacing, skip (only once seen; fire / jump / interact / pad A; `skippable: false`; blocked storage), pause, restart / edit / scene load, validation.
 
+- `src/levels/prologue.json` (the Prologue, #2) is authored in the Workshop from now on: open it (`levelNames()`), edit, save over the file. Its `purge-*` enemy groups are dormant on purpose; the purge waves (#14) will wake or spawn them from triggers and objectives. Gap: a `enemy.shooter` has no dormant state (puppets are always on, only `trooper` / `drone` / `boss` have `wake()`), so the `purge-1` / `purge-2` shooters fire as soon as the player is within 30 m with line of sight. A foundation feature (shooters that wait for `wakeGroup`) is needed before the purge, not mission code.
+
 ## Not yet
 Faces / flicker / label colours / boss arena in the inspector.
