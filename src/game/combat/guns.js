@@ -443,8 +443,9 @@ export const GUNS = {
     mag: 12,
     reserve: 72,
     maxReserve: 120,
+    infinite: true, // reserve never runs out (magazine, reload and active reload still apply); ammo pickups skip it
     pickup: { crate: 36, drop: 12 },
-    ammo: 'light', // pickup class: light (AR, MG, BR, PS) or heavy (SR, RG)
+    ammo: 'light', // pickup class: light (AR, MG, BR) or heavy (SR, RG); infinite guns never take ammo
     reloadTime: 1.2,
     activeReload: { good: [0.3, 0.6], perfect: [0.4, 0.5] },
     damage: 32,

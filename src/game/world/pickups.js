@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 // Ammo pickups ("thermal clips"): fixed crates that respawn, plus clips dropped by destroyed puppets.
-// Two ammo classes (guns.js `ammo`): light (cyan: AR, MG, BR, pistol) and heavy (orange: SR, RG). A pickup only
+// Two ammo classes (guns.js `ammo`): light (cyan: AR, MG, BR) and heavy (orange: SR, RG); the pistol is infinite. A pickup only
 // refills its own class. Walk over one to collect it; every gun of the class full = not collected.
 // Emits 'pickup:collected' / 'pickup:full'.
 const TUNING = {
@@ -15,7 +15,7 @@ const TUNING = {
 // Pickup pieces (registry ids, a public contract: instructions/level.md). Data: { id, pos } for a respawning crate
 // of that ammo class. Spots live in the level file (7 light, 3 heavy in the arena).
 export const PICKUP_PIECES = {
-  'pickup.light': { example: { params: {} }, label: `light ammo (AR MG BR PS) | respawns in ${TUNING.respawn} s`, build: (pickups, d) => pickups.addCrate(d.pos, 'light') },
+  'pickup.light': { example: { params: {} }, label: `light ammo (AR MG BR) | respawns in ${TUNING.respawn} s`, build: (pickups, d) => pickups.addCrate(d.pos, 'light') },
   'pickup.heavy': { example: { params: {} }, label: `heavy ammo (SR RG) | respawns in ${TUNING.respawn} s`, build: (pickups, d) => pickups.addCrate(d.pos, 'heavy') },
 };
 

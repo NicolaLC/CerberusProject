@@ -152,12 +152,12 @@ export class Weapon {
   }
 
   // Fills the guns of one ammo class from a pickup (kind: 'crate' | 'drop', type: 'light' | 'heavy').
-  // Returns a short label, or '' if every gun of that class was already full.
+  // Returns a short label, or '' if every gun of that class was already full. Infinite guns are skipped.
   addAmmo(kind, type = 'light') {
     let parts = '';
     for (const id of GUN_ORDER) {
       const g = GUNS[id];
-      if (g.ammo !== type) continue;
+      if (g.ammo !== type || g.infinite) continue;
       const s = this.state[id];
       const got = Math.max(0, Math.min(g.pickup[kind], g.maxReserve - s.reserve));
       s.reserve += got;
@@ -187,7 +187,7 @@ export class Weapon {
   }
 
   reload() {
-    if (this.reloading > 0 || this.switching > 0 || this.ammo === this.t.mag || this.reserve <= 0) return;
+    if (this.reloading > 0 || this.switching > 0 || this.ammo === this.t.mag || (this.reserve <= 0 && !this.t.infinite)) return;
     this.reloading = this.t.reloadTime;
     this.active = { total: this.t.reloadTime, attempted: false, result: null };
     this.state[this.current].boost = false;
@@ -217,9 +217,9 @@ export class Weapon {
   }
 
   #finishReload() {
-    const n = Math.min(this.t.mag - this.ammo, this.reserve);
+    const n = this.t.infinite ? this.t.mag - this.ammo : Math.min(this.t.mag - this.ammo, this.reserve);
     this.ammo += n;
-    this.reserve -= n;
+    if (!this.t.infinite) this.reserve -= n;
     this.reloading = 0;
     this.active = null;
   }
