@@ -16,6 +16,7 @@ src/
     dispose.js            disposeTree: detach + free geometry / materials / skeletons / instance buffers
     batch.js              draw-call batching: static merge, rigid skinning, group merge
     math.js               damp, lerpAngle, wrapAngle, segSegDist (allocation-free)
+    assets.js             glTF asset manager: cached by URL, ref-counted, SkeletonUtils instances (engine.md)
     storage.js            safe localStorage JSON
     random.js             seedable RNG streams
   game/

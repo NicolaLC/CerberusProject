@@ -121,6 +121,16 @@ why low and high do not get 12. `tests/workshop.browser.mjs` section 15 asserts 
 **Frame-time budgets must be confirmed by running `?scene=gym-stress` on the target hardware** (press P: the sweep prints avg / p95 ms,
 draws and triangles for 0-64 of each kind); the caps above are draw and triangle derived, not GPU measured.
 
+## Assets (`assets.js`)
+`Assets(renderer)`: glTF cache by URL, reference counted (three's `GLTFLoader`, no Draco/KTX2/meshopt yet; the plug-in
+point is commented in the constructor, their decoder files must ship with the build). `load(url)` shares one in-flight
+promise per URL and takes a reference; `instance(url)` returns a `SkeletonUtils.clone` of the scene that SHARES
+geometry / materials / textures with the cached original (never dispose them, just remove the instance from the scene);
+`release(url)` gives a reference back and at zero disposes geometry, materials, textures and drops the entry;
+`preload(urls)` for loading screens. A failed load rejects naming the URL and can be retried.
+Not wired yet: when the first glTF content lands, create one `Assets` in `game.js` (it owns the renderer) and pass it
+to the systems that spawn the content; load in the level loading step, release on level unload. Test: `tests/assets.browser.mjs`.
+
 ## Input
 - `Input` stores raw codes: `KeyW`, `ShiftLeft`, `Mouse0` (left), `Mouse2` (right), wheel deltas and notches.
 - `Actions` maps names to codes; the game's table is `BINDINGS` in `game/controls.js`.
