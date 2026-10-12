@@ -1,6 +1,7 @@
 # Builds the web app and the desktop apps (Windows, macOS, Linux) and publishes them as a GitHub release
 # tagged v<package.json version> (the tag is created on the built commit if it doesn't exist).
-# Triggers: a pushed commit whose message contains [release], a pushed tag v<version>, or a manual run.
+# Triggers: a merge (push) to main whose package.json version has no v<version> tag yet (bump the version to release),
+# a pushed commit whose message contains [release], a pushed tag v<version>, or a manual run.
 name: Release
 
 on:
@@ -14,10 +15,11 @@ permissions:
 
 jobs:
   meta:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[release]')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || contains(github.event.head_commit.message, '[release]')
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
+      go: ${{ steps.v.outputs.go }}
     steps:
       - uses: actions/checkout@v4
       - id: v
@@ -25,9 +27,19 @@ jobs:
           V=$(node -p "require('./package.json').version")
           echo "version=$V" >> "$GITHUB_OUTPUT"
           if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$V" ]]; then echo "tag $GITHUB_REF_NAME != v$V"; exit 1; fi
+          GO=true
+          # a plain merge to main releases only a new version: skip when v<version> is already tagged
+          if [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main && "$MSG" != *"[release]"* ]] \
+            && git ls-remote --exit-code --tags origin "refs/tags/v$V" >/dev/null; then
+            echo "v$V already released: bump package.json version to release"; GO=false
+          fi
+          echo "go=$GO" >> "$GITHUB_OUTPUT"
+        env:
+          MSG: ${{ github.event.head_commit.message }}
 
   web:
     needs: meta
+    if: needs.meta.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +61,7 @@ jobs:
 
   desktop:
     needs: meta
+    if: needs.meta.outputs.go == 'true'
     strategy:
       fail-fast: false
       matrix:
