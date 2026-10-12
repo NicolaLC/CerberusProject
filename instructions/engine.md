@@ -44,7 +44,7 @@ repeats every caster). Budget: ≤ 140 calls per frame at the spawn view, ≤ 25
 (`tests/render.browser.mjs`; history: ~1200 → 240 batching → 187 shadows → ~108 puppet LOD).
 - Pattern: originals stay in the scene as invisible PROXIES (raycasts, hit zones, colliders, userData keep
   working: three's Raycaster ignores `visible`); merged meshes render and have raycast disabled.
-- `mergeStatic(meshes, parent)`: the level (World.staticMeshes) → one INDEXED mesh per material + shadow flags per 32 m XZ chunk (CHUNK in batch.js; a mesh
+- `mergeStatic(meshes, parent)`: the level (World.staticMeshes) → one INDEXED mesh per material + shadow flags per 64 m XZ chunk (CHUNK in batch.js, only when the level spans >= 128 m; smaller levels stay one chunk; a mesh
   goes to the chunk of its world bbox centre), frustum-culled by three; one shadow-only mesh per chunk
   (`batches.shadows`). The level cost scales with what is in view, not with level size.
   Changing a level material (e.g. flickering strip) still works: the merged mesh shares the material object.

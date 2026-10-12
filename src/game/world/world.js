@@ -167,7 +167,7 @@ export class World {
     this.unload();
     this.registry = registry;
     this.#buildLevel(level, registry);
-    // ~60 boxes x up to 6 face materials -> one draw per material per 32 m chunk (+ one shadow draw per chunk)
+    // ~60 boxes x up to 6 face materials -> one draw per material per 64 m chunk, one chunk for small levels (+ one shadow draw per chunk)
     this.batches = mergeStatic(this.staticMeshes, this.scene);
     return this;
   }

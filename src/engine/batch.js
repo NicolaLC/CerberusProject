@@ -192,19 +192,27 @@ function hideAsProxy(mesh) {
 // Static meshes are merged per material AND per XZ chunk so three can frustum-cull the level piece by piece
 // (one mesh for the whole level is never culled and every pass draws all of it). A mesh belongs to the chunk
 // holding its world bounding-box centre; a mesh sticking out of its chunk just widens that chunk's bounds.
-const CHUNK = 32; // metres
+const CHUNK = 64; // metres
+// Chunking only pays on big levels (small ones are draw-call bound: every chunk repeats the per-material draws),
+// so a level whose centres span less than this on both axes stays one chunk.
+const CHUNK_MIN_EXTENT = 2 * CHUNK;
 
 const _box = new THREE.Box3();
+const _c = new THREE.Vector3();
 
 // Merges static meshes (world space) into one mesh per material per chunk under `parent`. Sources become proxies.
 // Returns the colour meshes; `.shadows` holds the shadow-only mesh of each chunk.
 export function mergeStatic(meshes, parent) {
   const chunks = new Map();
-  for (const m of meshes) {
+  const centres = meshes.map((m) => {
     m.updateWorldMatrix(true, false);
     if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
-    _box.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld).getCenter(_p);
-    const key = `${Math.floor(_p.x / CHUNK)}|${Math.floor(_p.z / CHUNK)}`;
+    return _box.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld).getCenter(new THREE.Vector3());
+  });
+  _box.makeEmpty().setFromPoints(centres).getSize(_c);
+  const single = Math.max(_c.x, _c.z) < CHUNK_MIN_EXTENT;
+  for (const [i, m] of meshes.entries()) {
+    const key = single ? '' : `${Math.floor(centres[i].x / CHUNK)}|${Math.floor(centres[i].z / CHUNK)}`;
     let buckets = chunks.get(key);
     if (!buckets) chunks.set(key, (buckets = new Map()));
     collect(buckets, m, m.matrixWorld);
