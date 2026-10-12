@@ -6,6 +6,7 @@ import { Trooper, TUNING as TROOPER } from './trooper.js';
 import { SpiderMech, TUNING as SPIDER } from './spider.js';
 import { Drone, TUNING as DRONE } from './drone.js';
 import { CoverMap } from '../ai/cover.js';
+import { Grid } from '../world/grid.js';
 
 // The enemy system: spawns every enemy (training puppets and troopers, one list), owns enemy projectiles,
 // the cover map, the instanced puppet stands and the cached raycast target list.
@@ -40,6 +41,9 @@ const _w = new THREE.Vector3();
 const _step = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _ray = new THREE.Raycaster();
+const _hits = [];
+const SEP_REACH = 3; // separate(): neighbours are looked up within this many minDist (positions move a little during the substep)
+const _sep = new Grid(4); // living troopers, refilled every update (see separate)
 // reused event payloads: listeners must copy what they keep
 const HURT = { amount: 0, dir: new THREE.Vector3() };
 const BOLT_HIT = { point: null, normal: new THREE.Vector3() };
@@ -286,7 +290,11 @@ export class Enemies {
 
   // Keeps moving troopers from walking through each other.
   separate(self, minDist) {
-    for (const e of this.puppets) {
+    // per-substep bucket of troopers (filled in update): only the ones near `self`, in puppets order
+    const reach = minDist * SEP_REACH;
+    const list = this.sepReady ? _sep.query(self.pos.x - reach, self.pos.z - reach, self.pos.x + reach, self.pos.z + reach) : this.puppets;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
       if (e === self || !e.alive || e.kind !== 'trooper') continue;
       const dx = self.pos.x - e.pos.x;
       const dz = self.pos.z - e.pos.z;
@@ -348,8 +356,12 @@ export class Enemies {
     const target = this.demo ? (this.ghost ??= Object.create(player, { dead: { value: true } })) : player;
     if (!this.frozen) {
       this.#flankDirector(dt, target);
+      _sep.clear();
+      for (const e of this.puppets) if (e.alive && e.kind === 'trooper') _sep.insert(e, e.pos.x, e.pos.z, e.pos.x, e.pos.z);
+      this.sepReady = true;
       // `hostile` (Library wake key): this exhibit sees the real player even in a demo level
       for (const p of this.puppets) p.update(dt, p.hostile ? player : target);
+      this.sepReady = false;
       this.#groupWake();
     }
 
@@ -372,7 +384,8 @@ export class Enemies {
       if (!done) {
         _ray.set(from, step.divideScalar(len || 1));
         _ray.far = len;
-        const hit = _ray.intersectObjects(this.world.meshes, false)[0];
+        _hits.length = 0;
+        const hit = _ray.intersectObjects(this.world.meshes, false, _hits)[0];
         if (hit) {
           BOLT_HIT.point = hit.point;
           if (hit.face) BOLT_HIT.normal.copy(hit.face.normal);

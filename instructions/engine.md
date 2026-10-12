@@ -21,6 +21,10 @@ Goal: hold 60 fps, never freeze on a bug, scale to a much bigger game.
 - Spawned visuals come from `Pool`s and are hidden, not removed (fx particles, tracers, casings, bolts, damage
   numbers). Decals are a fixed ring buffer. Warm pools at load so the first fight doesn't compile shaders.
 - Raycast target lists are cached (`enemies.hitMeshes()` rebuilds only when puppets die / respawn).
+- Spatial queries: static colliders live in a 4 m XZ `Grid` (`world/grid.js`, rebuilt lazily when `box()` / `despawn()` / `clear()` mark it dirty);
+  `groundAt`, `collideCircle`, `segmentClear` go through `world.nearColliders()` (same results and order as a linear scan; checked in
+  `movement.browser.mjs`). Troopers' `separate()` uses a per-substep Grid of troopers. Raycasts pass a reused target array
+  (`intersectObjects(list, false, hits)`, `hits.length = 0` first).
 - DOM HUD writes go through `text()` / `css()`, which skip unchanged values.
 - Dynamic resolution (`perf.js`): smoothed CPU work time of the frame (tick, measured in `engine.#frame`) > 1.12× budget for 0.75 s → pixel ratio −0.1 (min 0.5);
   < 0.8× budget for 4 s → +0.1 (up to `perf.maxScale`). Also "slow": the rAF gap over budget AND >1.25× the best gap seen (GPU-bound frame on a display that can go faster); 30/50 Hz displays never count as slow. After a gap-triggered step down there is no step up for 30 s (`gpuHold`, avoids GPU-bound oscillation); then one probe. `perf.fps` is the real fps from the gap. Emits `engine:resize`; post follows.

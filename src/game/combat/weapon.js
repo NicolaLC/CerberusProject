@@ -19,6 +19,8 @@ const _aim = new THREE.Vector3();
 const _toAim = new THREE.Vector3();
 const _back = new THREE.Vector3();
 const _targets = [];
+const _hits = [];
+const _hits2 = []; // second probe ray: `hit` (above) must stay valid
 const _kick = [0, 0];
 const _probeDir = new THREE.Vector3();
 const _passed = [];
@@ -115,7 +117,8 @@ export class Weapon {
     _ray.set(camPos, _probeDir);
     _ray.near = camPos.distanceTo(this.rig.pivot);
     _ray.far = this.t.range;
-    const hit = _ray.intersectObjects(_targets, false)[0];
+    _hits.length = 0;
+    const hit = _ray.intersectObjects(_targets, false, _hits)[0];
     if (hit) _aim.copy(hit.point);
     else _aim.copy(camPos).addScaledVector(_probeDir, this.t.range);
     a.distance = hit ? hit.distance : this.t.range;
@@ -125,7 +128,8 @@ export class Weapon {
     _ray.set(_muz, d.normalize());
     _ray.near = 0;
     _ray.far = Math.max(0.01, dist - 0.05);
-    const block = _ray.intersectObjects(_targets, false)[0];
+    _hits2.length = 0;
+    const block = _ray.intersectObjects(_targets, false, _hits2)[0];
     const final = block ?? hit;
     // only an obstruction well short of the aim point counts (grazing the target's own surroundings doesn't)
     if (block && block.point.distanceTo(_aim) > Math.max(0.4, dist * 0.04)) {
