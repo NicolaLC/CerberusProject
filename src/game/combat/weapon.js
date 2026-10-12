@@ -290,7 +290,7 @@ export class Weapon {
         this.events.emit('weapon:charge', false);
         return;
       }
-      p.lastShot = 0; // shouldered while it charges
+      p.notifyShot(); // shouldered while it charges
       this.charging -= dt;
       if (this.charging <= 0) {
         this.charging = 0;
@@ -313,7 +313,7 @@ export class Weapon {
     }
     // in cover the character needs a moment to pop up before the first round leaves
     if (p.cover && p.cover.type === 'low' && p.crouchBlend > 0.45) {
-      p.lastShot = 0;
+      p.notifyShot();
       return;
     }
     if (this.ammo <= 0) {
@@ -326,7 +326,7 @@ export class Weapon {
       if (this.cooldown <= 0) {
         this.charging = t.charge;
         this.queued = 0;
-        p.lastShot = 0;
+        p.notifyShot();
         this.events.emit('weapon:charge', true);
       }
       return;
@@ -373,7 +373,7 @@ export class Weapon {
     const t = this.t;
     this.ammo--;
     this.firing = true;
-    this.player.lastShot = 0;
+    this.player.notifyShot();
 
     // camera aim ray, uniformly inside the spread cone (spread is measured before this round adds bloom)
     coneDir(_dir, this.rig.forward, this.rig.right, this.spread(), this.rng.next(), this.rng.next());

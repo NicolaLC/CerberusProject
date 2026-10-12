@@ -87,7 +87,7 @@ export class Game {
 
     // skeleton debug overlay (H): the player's helper is permanent, the enemies' come and go with the level
     this.skeletons = false;
-    this.playerHelper = this.#helper(player.rigModel);
+    this.playerHelper = this.#helper(player.view.rigModel);
     this.helpers = [];
     this.keyHints = new KeyHints();
     this.loadScene(first);
@@ -134,7 +134,7 @@ export class Game {
     });
     engine.add({ name: 'weapon', update: (dt) => !this.editing && weapon.update(dt, controls) });
     engine.add({ name: 'enemies', update: (dt) => enemies.update(dt, player) });
-    engine.add({ name: 'playerPose', phase: 'late', update: () => !this.editing && player.pose() });
+    engine.add({ name: 'playerPose', phase: 'late', update: () => !this.editing && player.view.pose() });
     engine.add({ name: 'enemyAnim', phase: 'late', update: (dt) => enemies.animate(dt, camera) });
     engine.add({ name: 'encounter', update: (dt) => !this.editing && encounter.update(dt, player, controls.pressed('interact')) });
     engine.add({ name: 'pickups', update: (dt) => !this.editing && pickups.update(dt, player, weapon) });
@@ -163,7 +163,7 @@ export class Game {
         world.update(engine.time);
         world.updateSun(this.editing ? camera.position : player.pos); // the editor's shadow window follows its camera
         // hide the player model when the camera is pushed into it
-        player.root.visible = !this.editing && camera.position.distanceTo(camRig.pivot) > 0.45;
+        player.view.root.visible = !this.editing && camera.position.distanceTo(camRig.pivot) > 0.45;
       },
     });
     engine.add({

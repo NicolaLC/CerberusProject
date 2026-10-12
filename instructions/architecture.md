@@ -27,7 +27,8 @@ src/
     settings.js           player settings + start-panel bindings
     world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), textures.js, pickups.js (pickup.* pieces), encounter.js (marker.* / trigger.* / objective.* pieces: spawn, checkpoints, trigger volumes, reinforcements; workshop.md), mission.js (objective sequencing, `game.mission`; ticks inside encounter)
     actors/ rig.js (skeleton, animator, IK), parts.js (model building blocks, debris), soldier.js (player model),
-            looks.js (trooper / puppet models), player.js,
+            looks.js (trooper / puppet models),
+            player.js (motor: intent -> movement, cover, jetpack, vault, health; never touches a mesh), player-view.js (`player.view`: model, rig, skin, animation, root pose; reads the motor's state; the motor forwards `root` / `rigModel` / `skin` / `animator` / `muzzle`),
             enemy.js (shared enemy body: hit zones, weak spots, flash, debris death),
             puppet.js (training puppets), trooper.js (cover-using soldiers), drone.js, spider.js (miniboss),
             enemies.js (system: builds enemy.* / boss.* pieces, bolts, stands, target cache, squad alerts)
@@ -60,6 +61,7 @@ src/
   level; a new per-level system that must register one has to remove it in `unload()`.
 - A new per-level object that is added to the scene needs its disposal in the owner's `unload()`; the
   `scenes.browser.mjs` leak check (geometries / textures / scene objects over arena→gym→library→workshop cycles) fails otherwise.
+- The weapon tells the player it fired through `player.notifyShot()` (a direct call: the player is the weapon's constructor dependency, `weapon:shot` is for presentation).
 - Cross-system reactions (puppet dies → pickup drop) are wired in `game.js` with `events.on`.
 
 ## Scenes
