@@ -66,8 +66,8 @@ const q = await p.evaluate(async () => {
     applyQuality(name, g);
     g.engine.step(1 / 60);
     g.engine.step(1 / 60);
-    const rt = g.post.composer.renderTarget1;
-    out[name] = { samples: rt.samples, bloom: g.post.bloom.enabled, shadow: g.world.sun.shadow.map?.width, maxScale: g.engine.perf.maxScale, calls: g.engine.renderer.info.render.calls };
+    const rt = g.post.composer.readBuffer; // the scene target (RenderPass draws there)
+    out[name] = { samples: rt.samples, other: g.post.composer.writeBuffer.samples, bloom: g.post.bloom.enabled, shadow: g.world.sun.shadow.map?.width, maxScale: g.engine.perf.maxScale, calls: g.engine.renderer.info.render.calls };
   }
   return out;
 });
@@ -84,6 +84,7 @@ expect('skinned meshes have a real culling sphere', r.minCullRadius > 0.5);
 expect('world and hitbox proxies are not drawn', r.proxiesHidden && r.hitMeshesHidden);
 expect('low preset: no MSAA, no bloom, 2048 shadows, 1x', q.low.samples === 0 && !q.low.bloom && q.low.shadow === 2048 && q.low.maxScale <= 1 && q.low.calls > 0);
 expect('ultra preset: supersampled, MSAA >= high (capped by the GPU), 4096 shadows', q.ultra.maxScale > q.high.maxScale && q.ultra.samples >= q.high.samples && q.ultra.shadow === 4096);
+expect('only the scene target is multisampled', Object.values(q).every((v) => v.other === 0));
 expect('high preset restores the defaults', q.high.samples === 4 && q.high.bloom && q.high.shadow === 4096 && q.high.calls > 0);
 expect('no page errors', errors.length === 0);
 await b.close();

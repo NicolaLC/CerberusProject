@@ -327,6 +327,7 @@ export class FX {
     n.pos.copy(pos);
     n.life = 0.8;
     n.drift = (Math.random() - 0.5) * 0.8;
+    n.shown = n.tf = n.op = null; // last written style values (the pooled element may differ from the last use)
     this.numbers.push(n);
   }
 
@@ -414,10 +415,13 @@ export class FX {
       n.pos.x += n.drift * dt;
       _v.copy(n.pos).project(this.camera);
       const st = n.el.style;
-      st.display = _v.z < 1 && n.life > 0 ? 'block' : 'none';
+      const shown = _v.z < 1 && n.life > 0 ? 'block' : 'none';
+      if (shown !== n.shown) st.display = n.shown = shown;
       const pop = 1 + Math.max(0, n.life - 0.65) * 6;
-      st.transform = `translate(${((_v.x + 1) / 2) * w}px, ${((1 - _v.y) / 2) * h}px) translate(-50%, -50%) scale(${pop})`;
-      st.opacity = Math.min(1, n.life * 3);
+      const tf = `translate(${((_v.x + 1) / 2) * w}px, ${((1 - _v.y) / 2) * h}px) translate(-50%, -50%) scale(${pop})`;
+      if (tf !== n.tf) st.transform = n.tf = tf;
+      const op = Math.min(1, n.life * 3);
+      if (op !== n.op) st.opacity = n.op = op;
       if (n.life <= 0) {
         this.pools.number.release(n.el);
         this.numberPool.release(n);
