@@ -16,6 +16,7 @@
 - `instructions/animation.md` — skeleton, dummy parts, swapping in modeled parts
 - `instructions/level.md` — arena layout, lighting, grid textures
 - `instructions/desktop.md` — Electron desktop app: shell, packaging, why not Tauri
+- `instructions/art-style.md` — visual style RULE: grim industrial military sci-fi, palette, never-list, prompt kit
 - `instructions/feel.md` — camera juice, hitstop, post-processing
 - `instructions/gym.md` — the four Gym rooms: layout, tools, keys, which tests use them
 - `instructions/workshop.md` — in-game level editor: keys, doc model, save/load, test hooks

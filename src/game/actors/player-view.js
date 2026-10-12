@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Rig, Animator } from './rig.js';
-import { GUNS } from '../combat/guns.js';
-import { buildSoldier } from './soldier.js';
+import { GUNS, gunMaterials } from '../combat/guns.js';
+import { buildSoldier, CORE } from './soldier.js';
 import { damp, wrapAngle } from '../../engine/math.js';
 import { RigidSkin, mergeGroup } from '../../engine/batch.js';
 
@@ -23,20 +23,15 @@ export class PlayerView {
       lookYaw: 0, hunch: 0, air: 0, vault: null, vaultT: 0, lower: 0, slideAim: 0, aimTwist: 0, vel: player.vel, yaw: 0,
     };
 
-    const box = (w, h, d, m, x, y, z) => {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-      mesh.position.set(x, y, z);
-      return mesh;
-    };
     const rig = new Rig({ dummy: false });
     const M = buildSoldier(rig);
-    const gunMat = new THREE.MeshStandardMaterial({ color: 0x1a1c20, metalness: 0.6, roughness: 0.4 });
+    this.soldierMats = M;
 
-    // every gun model hangs on the Weapon bone; only the equipped one is visible
-    const gunMats = { gun: gunMat, plate: M.armor, glow: M.glow, glowHot: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff8a2a, emissiveIntensity: 2.5 }) };
+    // every gun model hangs on the Weapon bone; only the equipped one is visible. Furniture: STEM-00's olive (guns.js)
+    const gunMats = gunMaterials({ plate: M.armor, glow: M.glow });
     this.gunModels = {};
     for (const [id, def] of Object.entries(GUNS)) {
-      const g = mergeGroup(def.build(gunMats, box)); // one draw per material per gun
+      const g = mergeGroup(def.build(gunMats)); // one draw per material per gun
       g.visible = false;
       g.userData.gun = true;
       rig.attach('Weapon', g);
@@ -55,6 +50,12 @@ export class PlayerView {
       STEP.raised = player.pos.y > 0.1; // on the platform, its stairs or a block (the floor is at 0)
       events.emit('player:step', STEP);
     };
+  }
+
+  // STEM-00's amber core (art-style.md): 0 = a faint ember, 1 = full will. Story progress drives it (#49).
+  setCore(level) {
+    const t = THREE.MathUtils.clamp(level, 0, 1);
+    this.soldierMats.core.emissiveIntensity = CORE.min + (CORE.max - CORE.min) * t;
   }
 
   // Show the gun and move hand/muzzle sockets to it.

@@ -3,12 +3,13 @@ import { RigidSkin } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
 import { damp, wrapAngle, lerpAngle } from '../../engine/math.js';
 import { rbox, rb, cyl, look } from './parts.js';
-import { sightRay } from './enemy.js';
+import { sightRay, VISOR, PROJECTILE } from './enemy.js';
+import { wornMaterial } from '../world/textures.js';
 
-// Miniboss: a six-legged spider mech guarding the north-east arena.
+// Miniboss: a six-legged walker (saucer hull, twin gun pods) guarding the north-east arena.
 // The hull is armored (shots bounce). Each leg has a glowing knee joint: break legs to bring it down.
 // Every second destroyed leg collapses it for a few seconds and opens the shutters over its core,
-// the only part that takes real damage. Attacks: cannon bursts from the turret, plasma mortars lobbed
+// the only part that takes real damage. Attacks: cannon bursts from the gun pods, plasma mortars lobbed
 // over cover (worse the longer you hide), and a stomp when you get under it.
 //
 // Same interface as the other enemies (see enemy.js) plus armor(zone, object) and aimPoints(out, n).
@@ -18,13 +19,13 @@ export const TUNING = {
   name: 'SX-6 TARANTULA',
   core: 900, // health of the core (the boss dies with it)
   legHealth: 160,
-  height: 2.6, // body height standing
+  height: 3.4, // body height standing (tall walker stance, art-style.md)
   downHeight: 0.85,
   downTime: 7, // s collapsed per two legs lost
   speed: 2.4, // m/s, minus legSlow per lost leg
   legSlow: 0.12,
   range: [11, 20], // keeps this distance to the player
-  radius: 3.6, // collision: the whole leg span, not just the hull (legs must not reach into walls)
+  radius: 4.2, // collision: the whole leg span, not just the hull (legs must not reach into walls)
   wakeRange: 28,
   burst: { charge: 0.7, shots: 6, gap: 0.11, cooldown: [2.2, 3.4], spread: 0.025, damage: 9 },
   mortar: { every: [6, 8.5], coverBoost: 1.8, flight: 1.5, radius: 3.6, damage: 34, minRange: 8 },
@@ -33,7 +34,10 @@ export const TUNING = {
 
 const LEG = { femur: 2.4, tibia: 3.8, step: 1.3, stepTime: 0.3, stepHeight: 0.7, lead: 0.35 };
 const HIPS = [[1.25, 1.2], [1.45, 0], [1.25, -1.2]]; // [|x|, z] on the hull, front to back
-const REST = [[3.3, 2.9], [4.0, 0], [3.3, -2.9]]; // foot rest offsets in the body's space
+const REST = [[3.8, 3.1], [4.4, 0], [3.8, -3.1]]; // foot rest offsets in the body's space (legs splayed wide)
+// rim sensor clusters: [angle around the rim (0 = front), height on the band, cluster radius, lenses]
+const SENSORS = [[0.08, 0.0, 0.1, 3], [-0.14, -0.01, 0.085, 3], [0.27, 0.01, 0.075, 3], [-0.33, 0.0, 0.065, 2], [0.45, -0.01, 0.055, 2], [-0.55, 0.01, 0.045, 2]];
+const GUN_SIDE = 2.95; // m from the muzzle to each gun pod, sideways
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
@@ -62,7 +66,7 @@ export class SpiderMech {
     this.lift = 0;
     this.awake = false;
     this.down = 0; // > 0: collapsed, core exposed (seconds left)
-    this.height = 1.4; // dormant: crouched
+    this.height = 2.4; // dormant: crouched
     this.vel = new THREE.Vector3();
     this.strafe = 1;
     this.strafeTimer = 4;
@@ -75,10 +79,10 @@ export class SpiderMech {
     this.orbs = [];
 
     const M = {
-      hull: new THREE.MeshStandardMaterial({ color: 0x3a3f47, roughness: 0.45, metalness: 0.6 }),
-      plate: new THREE.MeshStandardMaterial({ color: 0xc8781e, roughness: 0.5, metalness: 0.35 }),
-      trim: new THREE.MeshStandardMaterial({ color: 0x17181b, roughness: 0.45, metalness: 0.65 }), // black frame, rams
-      eye: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff3020, emissiveIntensity: 1 }),
+      hull: wornMaterial(0x3a3d40, { roughness: 0.6, metalness: 0.5, wear: 'metal' }), // dark metal hull
+      plate: wornMaterial(0xc9a23a, { roughness: 0.85, metalness: 0.15 }), // matte ochre livery, chipped
+      trim: wornMaterial(0x17181b, { roughness: 0.5, metalness: 0.65, wear: 'metal' }), // black frame, rams
+      eye: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: VISOR, emissiveIntensity: 1 }), // violet sensor cluster
       weak: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2bd6, emissiveIntensity: 3 }),
     };
     M.weak.userData.lodGlow = 5; // far LOD: knees and core stay readable
@@ -111,66 +115,57 @@ export class SpiderMech {
     };
     const R = Math.PI / 2;
 
+    // Look (art-style.md, the owner's walker concept): a saucer hull in worn ochre over dark metal, a dark sensor band
+    // round the rim with small uneven violet lens clusters, twin-barrel gun pods on side pylons, jointed hydraulic legs
+    // hung from a hub under the hull, the core under a split hatch on top. Hitboxes stay boxes (invisible).
     this.body = bone(this.root, 0, this.height, 0);
-    part(this.body, 2.6, 0.8, 3.2, M.hull, 0, 0, 0, 'torso', 'hull');
-    part(this.body, 2.2, 0.35, 2.6, M.hull, 0, -0.55, 0, 'torso', 'hull'); // belly
-    part(this.body, 2.8, 0.14, 1.2, M.plate, 0, 0.42, 0.9, 'torso', 'hull'); // front armor
-    part(this.body, 0.5, 0.5, 0.6, M.hull, 0, 0.1, -1.85, 'torso', 'hull'); // tail
-    for (const s of [1, -1]) {
-      part(this.body, 0.12, 0.6, 2.9, M.plate, s * 1.33, 0, 0, 'torso', 'hull'); // side skirts
-      for (const [hx, hz] of HIPS) part(this.body, 0.5, 0.5, 0.5, M.hull, s * hx, -0.1, hz, 'torso', 'hull'); // hip mounts
-    }
-    // look, in pieces so it breaks apart: hull and belly, front armor, side skirts with hip mounts, tail
+    part(this.body, 4.6, 1.0, 4.6, M.hull, 0, 0.2, 0, 'torso', 'hull'); // saucer
+    part(this.body, 1.6, 0.6, 1.6, M.hull, 0, -0.5, 0, 'torso', 'hull'); // hub under the hull
+    for (const s of [1, -1]) for (const [hx, hz] of HIPS) part(this.body, 0.5, 0.5, 0.5, M.hull, s * hx, -0.1, hz, 'torso', 'hull'); // hip mounts
+    // hull, in pieces so it breaks apart: lower shell and hub, upper shell and deck, hip mounts per side
+    const D = 22; // saucer segments
     this.body.add(
       look(
-        rb(M.hull, 2.5, 0.72, 3.1, 0.2, 0, 0, 0), // hull
-        rb(M.hull, 2.1, 0.36, 2.5, 0.14, 0, -0.52, 0), // belly
-        rb(M.trim, 1.6, 0.12, 1.8, 0.05, 0, -0.74, 0), // belly frame
-        rb(M.trim, 1.0, 0.1, 0.4, 0.04, 0, 0.37, 0.05), // dorsal vents (between core and turret)
-        rb(M.hull, 0.94, 0.06, 0.06, 0.02, 0, 0.42, 0.0),
-        rb(M.hull, 0.94, 0.06, 0.06, 0.02, 0, 0.42, 0.12),
-        rb(M.trim, 1.3, 0.12, 1.3, 0.05, 0, 0.33, -0.75), // core well
+        cyl(M.plate, 2.5, 1.45, 0.5, 0, -0.17, 0, 0, 0, 0, D), // lower shell
+        cyl(M.trim, 1.47, 1.47, 0.06, 0, -0.43, 0, 0, 0, 0, D), // keel ring
+        cyl(M.hull, 0.75, 0.6, 0.55, 0, -0.62, 0, 0, 0, 0, 14), // hub
+        cyl(M.trim, 0.78, 0.78, 0.08, 0, -0.42, 0, 0, 0, 0, 14),
+        rb(M.trim, 0.5, 0.3, 0.9, 0.06, 0, -0.75, 0.55), // under-hub sensor mast block
+        ...[0, 1, 2, 3, 4, 5].map((k) => rb(M.trim, 0.06, 0.42, 0.8, 0.02, Math.sin((k * Math.PI) / 3) * 2.0, -0.2, Math.cos((k * Math.PI) / 3) * 2.0, 0, (k * Math.PI) / 3, 0)), // shell ribs
       ),
       look(
-        rb(M.plate, 2.8, 0.14, 1.2, 0.05, 0, 0.42, 0.9), // front armor
-        rb(M.trim, 0.42, 0.15, 0.12, 0.03, 0.85, 0.43, 1.25, 0, 0.5, 0), // hazard chevrons
-        rb(M.trim, 0.42, 0.15, 0.12, 0.03, -0.85, 0.43, 1.25, 0, -0.5, 0),
-        rb(M.hull, 2.4, 0.28, 0.3, 0.1, 0, 0.05, 1.5), // nose
-        cyl(M.eye, 0.06, 0.06, 0.04, 0.9, 0.05, 1.66, R, 0, 0, 10), // running lights
-        cyl(M.eye, 0.06, 0.06, 0.04, -0.9, 0.05, 1.66, R, 0, 0, 10),
-      ),
-      look(
-        rb(M.hull, 0.5, 0.5, 0.6, 0.1, 0, 0.1, -1.85), // tail
-        cyl(M.trim, 0.12, 0.1, 0.3, 0.13, 0.15, -2.15, R, 0, 0, 12), // exhausts
-        cyl(M.trim, 0.12, 0.1, 0.3, -0.13, 0.15, -2.15, R, 0, 0, 12),
-        cyl(M.eye, 0.07, 0.07, 0.02, 0.13, 0.15, -2.3, R, 0, 0, 12),
-        cyl(M.eye, 0.07, 0.07, 0.02, -0.13, 0.15, -2.3, R, 0, 0, 12),
-        cyl(M.trim, 0.02, 0.02, 0.9, 0.3, 0.6, -1.7, -0.3, 0, 0, 6), // antenna
+        cyl(M.plate, 1.6, 2.52, 0.36, 0, 0.47, 0, 0, 0, 0, D), // upper shell
+        cyl(M.trim, 2.54, 2.54, 0.05, 0, 0.29, 0, 0, 0, 0, D), // rim lip
+        cyl(M.hull, 1.0, 1.6, 0.1, 0, 0.7, 0, 0, 0, 0, D), // deck
+        cyl(M.trim, 0.7, 0.7, 0.08, 0, 0.74, 0, 0, 0, 0, 16), // hatch ring around the core
+        rb(M.plate, 0.6, 0.03, 0.5, 0.01, 1.3, 0.6, -0.9, -0.15, 0.6, 0), // welded patch plates
+        rb(M.hull, 0.45, 0.03, 0.35, 0.01, -1.5, 0.57, 0.7, 0.12, -0.9, 0.08),
+        cyl(M.trim, 0.025, 0.025, 1.1, 0.55, 1.2, -0.8, 0, 0, 0.1, 6), // antennas
+        cyl(M.trim, 0.015, 0.015, 0.7, 0.75, 1.0, -0.7, 0, 0, -0.15, 5),
+        cyl(M.trim, 0.2, 0.24, 0.55, 0, 0.95, -1.0, -0.4, 0, 0, 12), // mortar tube
+        cyl(M.plate, 0.25, 0.25, 0.08, 0, 0.82, -0.92, -0.4, 0, 0, 12),
       ),
     );
     for (const s of [1, -1]) {
-      const skirt = [
-        rb(M.plate, 0.12, 0.58, 2.9, 0.04, s * 1.33, 0, 0), // side skirt
-        rb(M.trim, 0.13, 0.08, 2.92, 0.02, s * 1.335, 0.25, 0), // top rail
-      ];
-      for (const z of [-0.9, 0.9]) skirt.push(rb(M.trim, 0.13, 0.42, 0.14, 0.03, s * 1.335, -0.02, z, 0.6, 0, 0)); // hazard stripes
+      const hips = [];
       for (const [hx, hz] of HIPS) {
-        skirt.push(
+        hips.push(
           cyl(M.hull, 0.27, 0.27, 0.5, s * hx, -0.1, hz, 0, 0, R, 14), // hip drum
           cyl(M.trim, 0.29, 0.29, 0.08, s * (hx + 0.2), -0.1, hz, 0, 0, R, 14),
           cyl(M.plate, 0.12, 0.12, 0.06, s * (hx + 0.27), -0.1, hz, 0, 0, R, 10), // cap
+          cyl(M.trim, 0.03, 0.03, 0.9, s * (hx - 0.4), -0.35, hz * 0.7, 0.4, 0, s * 0.9, 5), // cable bundle to the hub
         );
       }
-      this.body.add(look(...skirt));
+      this.body.add(look(...hips));
     }
-    // core on the back, under two armored shutters
-    this.core = part(this.body, 0.9, 0.3, 0.9, M.weak, 0, 0.45, -0.75, 'weak', 'core');
+    // core on top, under a split armored hatch
+    this.core = part(this.body, 1.0, 0.35, 1.0, M.weak, 0, 0.86, 0, 'weak', 'core');
     this.shutters = [1, -1].map((s) => {
-      const b = bone(this.body, s * 0.62, 0.62, -0.75);
+      const b = bone(this.body, s * 0.62, 1.05, 0);
       part(b, 0.64, 0.12, 1.15, M.plate, -s * 0.32, 0, 0, 'torso', 'hull');
       b.add(
         look(
-          rb(M.plate, 0.64, 0.12, 1.15, 0.04, -s * 0.32, 0, 0), // shutter
+          rb(M.plate, 0.64, 0.12, 1.15, 0.05, -s * 0.32, 0, 0), // hatch half
           rb(M.trim, 0.58, 0.05, 0.08, 0.02, -s * 0.32, 0.07, -0.3), // ribs
           rb(M.trim, 0.58, 0.05, 0.08, 0.02, -s * 0.32, 0.07, 0),
           rb(M.trim, 0.58, 0.05, 0.08, 0.02, -s * 0.32, 0.07, 0.3),
@@ -180,35 +175,49 @@ export class SpiderMech {
       b.userData.side = s;
       return b;
     });
-    // turret: twin cannons, a cluster of spider eyes, a mortar tube on the back
-    this.turret = bone(this.body, 0, 0.62, 0.95);
-    part(this.turret, 1.4, 0.6, 1.3, M.hull, 0, 0.2, 0, 'torso', 'hull');
-    part(this.turret, 1.0, 0.12, 0.06, M.eye, 0, 0.25, 0.66, 'torso', 'hull');
-    for (const s of [1, -1]) part(this.turret, 0.16, 0.16, 1.4, M.hull, s * 0.38, 0.12, 1.2, 'torso', 'hull');
-    const turret = [
-      rb(M.hull, 1.4, 0.56, 1.3, 0.16, 0, 0.2, 0), // housing
-      rb(M.plate, 1.2, 0.08, 1.0, 0.04, 0, 0.5, -0.05), // roof plate
-      rb(M.trim, 1.0, 0.28, 0.08, 0.04, 0, 0.25, 0.63), // eye visor
-      cyl(M.trim, 0.42, 0.46, 0.12, 0, -0.05, 0, 0, 0, 0, 18), // turret ring
-      cyl(M.trim, 0.18, 0.22, 0.6, 0, 0.6, -0.4, -0.35, 0, 0, 12), // mortar tube
-      cyl(M.plate, 0.2, 0.2, 0.06, 0, 0.82, -0.48, -0.35, 0, 0, 12),
+    // turret: the sensor band turns on the rim toward the target; the gun pods pitch on their own bone
+    this.turret = bone(this.body, 0, 0.17, 0);
+    part(this.turret, 1.8, 0.24, 0.12, M.eye, 0, 0, 2.47, 'torso', 'hull'); // sensor band front
+    const band = [
+      cyl(M.trim, 2.51, 2.51, 0.24, 0, 0, 0, 0, 0, 0, D), // dark sensor band
     ];
-    for (const [x, y, r] of [[0.16, 0.28, 0.08], [-0.16, 0.28, 0.08], [0.36, 0.3, 0.05], [-0.36, 0.3, 0.05], [0.28, 0.18, 0.035], [-0.28, 0.18, 0.035]]) {
-      turret.push(cyl(M.eye, r, r, 0.04, x, y, 0.67, R, 0, 0, 12)); // eyes
+    // small violet lens clusters on the band, uneven in size and spacing (never a row of eyes)
+    for (const [a, y, r, n] of SENSORS) {
+      const cx = Math.sin(a) * 2.52;
+      const cz = Math.cos(a) * 2.52;
+      band.push(cyl(M.trim, r * 1.6, r * 1.6, 0.05, cx, y, cz, R, 0, -a, 10)); // lens housing
+      for (let k = 0; k < n; k++) {
+        const t = (k / n) * Math.PI * 2 + a * 3;
+        const lx = Math.cos(t) * r * 0.6;
+        const ly = Math.sin(t) * r * 0.6;
+        band.push(cyl(M.eye, r * 0.42, r * 0.42, 0.06, cx + Math.cos(a) * lx, y + ly, cz - Math.sin(a) * lx, R, 0, -a, 8));
+      }
     }
+    this.turret.add(look(...band));
+    this.guns = bone(this.turret, 0, 0, 0);
+    for (const s of [1, -1]) part(this.guns, 0.6, 0.55, 1.9, M.hull, s * GUN_SIDE, 0, 0.6, 'torso', 'hull');
+    const pods = [];
     for (const s of [1, -1]) {
-      turret.push(
-        rb(M.hull, 0.3, 0.3, 0.5, 0.06, s * 0.38, 0.12, 0.7), // cannon breech
-        cyl(M.hull, 0.075, 0.085, 1.3, s * 0.38, 0.12, 1.25, R, 0, 0, 12), // barrel
-        cyl(M.trim, 0.1, 0.1, 0.06, s * 0.38, 0.12, 1.1, R, 0, 0, 12), // cooling rings
-        cyl(M.trim, 0.1, 0.1, 0.06, s * 0.38, 0.12, 1.3, R, 0, 0, 12),
-        cyl(M.plate, 0.11, 0.1, 0.18, s * 0.38, 0.12, 1.86, R, 0, 0, 12), // muzzle brake
+      const x = s * GUN_SIDE;
+      pods.push(
+        rb(M.trim, 0.55, 0.16, 0.36, 0.04, s * 2.55, 0, 0.2), // pylon from the rim
+        cyl(M.trim, 0.06, 0.06, 0.6, s * 2.5, -0.15, 0.25, 0, 0, s * 0.9, 6), // pylon ram
+        rb(M.plate, 0.5, 0.52, 0.8, 0.07, x, 0, 0.2), // gun pod (ochre)
+        rb(M.trim, 0.52, 0.08, 0.82, 0.02, x, 0.14, 0.2), // pod band
+        rb(M.plate, 0.4, 0.36, 0.3, 0.05, x, 0, 0.72), // breech
+        cyl(M.hull, 0.065, 0.075, 1.2, x + 0.1, 0.06, 1.35, R, 0, 0, 10), // twin barrels
+        cyl(M.hull, 0.065, 0.075, 1.2, x - 0.1, 0.06, 1.35, R, 0, 0, 10),
+        cyl(M.trim, 0.09, 0.09, 0.1, x + 0.1, 0.06, 1.05, R, 0, 0, 10), // cooling rings
+        cyl(M.trim, 0.09, 0.09, 0.1, x - 0.1, 0.06, 1.05, R, 0, 0, 10),
+        cyl(M.trim, 0.085, 0.085, 0.14, x + 0.1, 0.06, 1.98, R, 0, 0, 10), // scorched muzzles
+        cyl(M.trim, 0.085, 0.085, 0.14, x - 0.1, 0.06, 1.98, R, 0, 0, 10),
+        rb(M.trim, 0.24, 0.14, 0.36, 0.03, x, -0.32, 0.1), // ammo feed
       );
     }
-    this.turret.add(look(...turret));
+    this.guns.add(look(...pods));
     this.muzzle = new THREE.Object3D();
-    this.muzzle.position.set(0, 0.12, 1.95);
-    this.turret.add(this.muzzle);
+    this.muzzle.position.set(0, 0.06, 2.05); // between the pods; shots alternate to each pod (GUN_SIDE)
+    this.guns.add(this.muzzle);
 
     // legs: femur and tibia bones are posed by IK every frame (root space), +Y along the segment; their twist is
     // arbitrary, so the leg looks stay round-ish
@@ -221,31 +230,36 @@ export class SpiderMech {
       const id = i;
       const F = LEG.femur;
       const T = LEG.tibia;
-      part(femur, 0.32, F, 0.36, M.hull, 0, F / 2, 0, 'limb', id);
-      part(femur, 0.36, F * 0.6, 0.12, M.plate, 0, F * 0.5, 0.2, 'limb', id);
+      part(femur, 0.42, F, 0.44, M.hull, 0, F / 2, 0, 'limb', id);
+      part(femur, 0.48, F * 0.6, 0.12, M.plate, 0, F * 0.5, 0.26, 'limb', id);
       femur.add(
         look(
-          rb(M.hull, 0.3, F - 0.2, 0.34, 0.1, 0, F / 2, 0), // femur beam
-          rb(M.plate, 0.36, F * 0.6, 0.1, 0.04, 0, F * 0.5, 0.2), // armor
-          rb(M.trim, 0.37, 0.08, 0.11, 0.03, 0, F * 0.32, 0.21),
-          rb(M.trim, 0.37, 0.08, 0.11, 0.03, 0, F * 0.68, 0.21),
-          cyl(M.trim, 0.06, 0.06, F * 0.7, 0, F * 0.48, -0.24, 0, 0, 0, 8), // hydraulic ram
-          cyl(M.hull, 0.035, 0.035, F * 0.5, 0, F * 0.76, -0.24, 0, 0, 0, 8),
-          cyl(M.plate, 0.075, 0.075, 0.05, 0, F * 0.18, -0.24, 0, 0, 0, 8),
+          rb(M.hull, 0.4, F - 0.2, 0.42, 0.1, 0, F / 2, 0), // femur beam
+          rb(M.plate, 0.48, F * 0.6, 0.1, 0.04, 0, F * 0.5, 0.26), // armor
+          rb(M.trim, 0.49, 0.08, 0.11, 0.03, 0, F * 0.32, 0.27),
+          rb(M.trim, 0.49, 0.08, 0.11, 0.03, 0, F * 0.68, 0.27),
+          rb(M.plate, 0.44, 0.34, 0.5, 0.06, 0, F * 0.08, 0), // collar plate over the hip end
+          cyl(M.trim, 0.085, 0.085, F * 0.7, 0, F * 0.48, -0.3, 0, 0, 0, 10), // hydraulic ram
+          cyl(M.hull, 0.05, 0.05, F * 0.5, 0, F * 0.76, -0.3, 0, 0, 0, 10),
+          cyl(M.plate, 0.1, 0.1, 0.06, 0, F * 0.18, -0.3, 0, 0, 0, 10),
+          cyl(M.trim, 0.02, 0.02, F * 0.8, 0.14, F * 0.5, -0.24, 0, 0, 0, 5), // cable bundle
+          cyl(M.trim, 0.02, 0.02, F * 0.8, -0.14, F * 0.5, -0.24, 0, 0, 0, 5),
         ),
       );
       const knee = part(tibia, 0.42, 0.42, 0.42, M.weak, 0, 0, 0, 'weak', id);
-      part(tibia, 0.24, T, 0.26, M.hull, 0, T / 2, 0, 'limb', id);
-      part(tibia, 0.4, 0.25, 0.4, M.plate, 0, T, 0, 'limb', id); // foot
+      part(tibia, 0.32, T, 0.34, M.hull, 0, T / 2, 0, 'limb', id);
+      part(tibia, 0.54, 0.25, 0.54, M.plate, 0, T, 0, 'limb', id); // foot
       tibia.add(
         look(
-          cyl(M.trim, 0.27, 0.27, 0.12, 0, 0, 0, 0, 0, R, 14), // knee collar
-          rb(M.hull, 0.24, T - 0.5, 0.26, 0.08, 0, T * 0.45, 0), // shin
-          rb(M.plate, 0.3, T * 0.35, 0.3, 0.06, 0, T * 0.3, 0), // shin guard
-          rb(M.trim, 0.31, 0.06, 0.31, 0.02, 0, T * 0.47, 0),
-          cyl(M.hull, 0.1, 0.16, 0.5, 0, T - 0.2, 0, 0, 0, 0, 10), // ankle
-          rb(M.plate, 0.42, 0.18, 0.42, 0.06, 0, T - 0.02, 0), // foot pad
-          cyl(M.trim, 0.1, 0.02, 0.22, 0, T + 0.18, 0, 0, 0, 0, 8), // spike
+          cyl(M.trim, 0.29, 0.29, 0.14, 0, 0, 0, 0, 0, R, 14), // knee collar
+          rb(M.hull, 0.32, T - 0.5, 0.34, 0.08, 0, T * 0.45, 0), // shin
+          rb(M.plate, 0.4, T * 0.35, 0.4, 0.06, 0, T * 0.3, 0), // shin guard
+          rb(M.trim, 0.41, 0.06, 0.41, 0.02, 0, T * 0.47, 0),
+          cyl(M.trim, 0.06, 0.06, T * 0.5, 0, T * 0.62, -0.2, 0, 0, 0, 8), // shin ram
+          cyl(M.hull, 0.15, 0.24, 0.55, 0, T - 0.2, 0, 0, 0, 0, 12), // ankle
+          rb(M.plate, 0.56, 0.2, 0.56, 0.06, 0, T - 0.02, 0), // foot pad
+          rb(M.trim, 0.6, 0.06, 0.6, 0.02, 0, T + 0.08, 0), // sole
+          cyl(M.trim, 0.13, 0.03, 0.22, 0, T + 0.2, 0, 0, 0, 0, 8), // spike
         ),
       );
       const hip = new THREE.Vector3(side * HIPS[row][0], -0.1, HIPS[row][1]);
@@ -417,7 +431,7 @@ export class SpiderMech {
     this.#updateOrbs(dt, player);
 
     // body height: dormant crouch, standing, collapsed; stomp rears up then slams
-    let want = this.awake ? this.t.height - this.legsLost * 0.08 : 1.5;
+    let want = this.awake ? this.t.height - this.legsLost * 0.08 : 2.4;
     if (isDown) want = this.t.downHeight;
     if (this.stomp.state === 'rear') want += 0.7;
     const rate = isDown ? 7 : this.stomp.state === 'slam' ? 30 : 3;
@@ -429,9 +443,9 @@ export class SpiderMech {
     if (active && !isDown) this.yaw = lerpAngle(this.yaw, toYaw, damp(0.9, dt));
     const tYaw = active ? wrapAngle(toYaw - this.yaw) : 0;
     this.turret.rotation.y += (THREE.MathUtils.clamp(tYaw, -1.6, 1.6) - this.turret.rotation.y) * damp(isDown ? 1 : 5, dt);
-    const muzzleY = this.pos.y + this.height + 0.75;
+    const muzzleY = this.pos.y + this.height + 0.23;
     const pitch = Math.atan2(target.y - muzzleY, Math.hypot(target.x - this.pos.x, target.z - this.pos.z));
-    this.turret.rotation.x += (THREE.MathUtils.clamp(-pitch, -0.5, 0.6) - this.turret.rotation.x) * damp(5, dt);
+    this.guns.rotation.x += (THREE.MathUtils.clamp(-pitch, -0.5, 0.6) - this.guns.rotation.x) * damp(5, dt);
     // shutters open while down
     for (const s of this.shutters) {
       const open = isDown ? 1.35 : 0;
@@ -447,8 +461,8 @@ export class SpiderMech {
     this.mats.plate.emissive.setScalar(e);
     this.mats.trim.emissive.setScalar(e);
     const charge = this.gun.state === 'charge' ? 1 - this.gun.timer / this.t.burst.charge : 0;
-    this.mats.eye.emissiveIntensity = this.awake ? 1.5 + charge * 10 : 0.3;
-    this.mats.weak.emissiveIntensity = (isDown ? 4 : 2.4) + Math.sin(this.time * (isDown ? 14 : 8)) * 1.4;
+    this.mats.eye.emissiveIntensity = this.awake ? 1 + charge * 10 : 0.3; // at rest dimmer than the weak spots
+    this.mats.weak.emissiveIntensity = (isDown ? 4 : 2.8) + Math.sin(this.time * (isDown ? 14 : 8)) * 1.0;
   }
 
   // ----- behavior -----
@@ -514,8 +528,8 @@ export class SpiderMech {
       _f.x += (Math.random() - 0.5) * spread * 2;
       _f.y += (Math.random() - 0.5) * spread * 2;
       _f.z += (Math.random() - 0.5) * spread * 2;
-      // alternate barrels
-      _h.addScaledVector(_w.set(Math.cos(this.yaw + this.turret.rotation.y), 0, -Math.sin(this.yaw + this.turret.rotation.y)), g.shots % 2 ? 0.38 : -0.38);
+      // alternate gun pods
+      _h.addScaledVector(_w.set(Math.cos(this.yaw + this.turret.rotation.y), 0, -Math.sin(this.yaw + this.turret.rotation.y)), g.shots % 2 ? GUN_SIDE : -GUN_SIDE);
       this.ctx.spawnBolt(_h, _f.normalize(), b.damage);
       g.timer = b.gap;
       if (--g.shots <= 0) {
@@ -692,11 +706,11 @@ export class SpiderMech {
 
 const GRAVITY = 14;
 const ORB_GEO = new THREE.SphereGeometry(0.28, 12, 8);
-const ORB_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff6a2a).multiplyScalar(5) });
+const ORB_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(PROJECTILE.core).multiplyScalar(5) });
 const ORB_GLOW_GEO = new THREE.SphereGeometry(0.6, 12, 8);
-const ORB_GLOW_MAT = new THREE.MeshBasicMaterial({ color: 0xff5010, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
+const ORB_GLOW_MAT = new THREE.MeshBasicMaterial({ color: PROJECTILE.glow, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
 const RING_GEO = new THREE.RingGeometry(0.86, 1, 40);
-const RING_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff4a20).multiplyScalar(2), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+const RING_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(PROJECTILE.ring).multiplyScalar(2), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
 
 // Puts a segment bone (child of `root`, +Y along the segment) at world `a`, pointing at world `b`.
 // The tibia is authored from the knee (y = 0) down, so it points from the knee to the foot.

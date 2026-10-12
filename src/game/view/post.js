@@ -6,6 +6,8 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 // Post stack: scene (MSAA, HDR) -> bloom -> grade (vignette, CA, grain, damage/kill flashes) -> output (ACES + sRGB).
+// Grade (art-style.md 3): at least 80% of a frame is desaturated. Surfaces lose colour and shadows lean teal; HDR
+// emissives (amber core, violet sensors and weak spots, cyan strips: above 1.0) keep theirs, and only they bloom.
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -13,9 +15,11 @@ const GradeShader = {
     aberration: { value: 0.0015 },
     vignette: { value: 0.35 },
     grain: { value: 0.035 },
-    saturation: { value: 1.08 },
-    contrast: { value: 1.06 },
-    tint: { value: new THREE.Color(1.0, 0.98, 0.95) },
+    saturation: { value: 0.8 }, // lit surfaces
+    glowSaturation: { value: 1.1 }, // emissives (luminance above ~1)
+    contrast: { value: 1.08 },
+    shadowTeal: { value: new THREE.Color(0.86, 1.02, 1.04) }, // split tone: shadows lean teal
+    tint: { value: new THREE.Color(0.97, 1.0, 1.0) },
     damage: { value: 0 },
     lowHealth: { value: 0 },
     flash: { value: 0 },
@@ -26,8 +30,8 @@ const GradeShader = {
     void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
-    uniform float time, aberration, vignette, grain, saturation, contrast, damage, lowHealth, flash, aim;
-    uniform vec3 tint;
+    uniform float time, aberration, vignette, grain, saturation, glowSaturation, contrast, damage, lowHealth, flash, aim;
+    uniform vec3 tint, shadowTeal;
     varying vec2 vUv;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233)) + time * 61.0) * 43758.5453); }
     void main() {
@@ -43,7 +47,9 @@ const GradeShader = {
       // grade
       col *= tint;
       float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
-      col = mix(vec3(l), col, saturation * (1.0 - lowHealth * 0.75));
+      float sat = mix(saturation, glowSaturation, smoothstep(0.7, 1.6, max(col.r, max(col.g, col.b))));
+      col = mix(vec3(l), col, sat * (1.0 - lowHealth * 0.75));
+      col *= mix(shadowTeal, vec3(1.0), smoothstep(0.0, 0.45, l));
       col = (col - 0.18) * contrast + 0.18;
       col = max(col, 0.0);
 
@@ -74,7 +80,7 @@ export class Post {
     this.maxSamples = renderer.capabilities.maxSamples;
     this.composer = new EffectComposer(renderer, rt);
     this.composer.addPass(new RenderPass(scene, camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.45, 0.55, 0.92);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.45, 0.55, 1.0); // threshold: emissives only
     this.composer.addPass(this.bloom);
     this.grade = new ShaderPass(GradeShader);
     this.composer.addPass(this.grade);
@@ -125,8 +131,8 @@ export class Post {
     u.damage.value = this.damage;
     u.lowHealth.value += ((player.shields <= 0 && !player.dead ? 1 - player.health / 100 + 0.3 : player.dead ? 1 : 0) - u.lowHealth.value) * Math.min(1, dt * 4);
     u.aim.value += ((player.aiming ? 1 : 0) - u.aim.value) * Math.min(1, dt * 10);
-    // cooler grade indoors, warm in the sun
-    const t = inside ? [0.92, 0.98, 1.08] : [1.04, 1.0, 0.94];
+    // cold everywhere (the only warm light is STEM-00's core): a touch colder indoors
+    const t = inside ? [0.9, 0.99, 1.06] : [0.97, 1.0, 1.0];
     u.tint.value.r += (t[0] - u.tint.value.r) * dt * 2;
     u.tint.value.g += (t[1] - u.tint.value.g) * dt * 2;
     u.tint.value.b += (t[2] - u.tint.value.b) * dt * 2;

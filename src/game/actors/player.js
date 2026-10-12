@@ -126,6 +126,8 @@ export class Player {
   get animator() { return this.view.animator; }
   get muzzle() { return this.view.muzzle; }
   get gunModels() { return this.view.gunModels; }
+  get soldierMats() { return this.view.soldierMats; }
+  setCore(level) { this.view.setCore(level); }
   pose() { this.view.pose(); }
 
   // Show the gun and move the hand / muzzle sockets to it.

@@ -144,11 +144,12 @@ export class FX {
       this.number(h.point, h.amount, h.crit, h.weak);
     });
     events.on('weapon:impact', (i) => this.impact(i.point, i.normal));
-    events.on('bolt:impact', (i) => this.impact(i.point, i.normal, 0xff6a2a, 10, true));
+    // HiveMind shots hit in violet-white (enemy.js PROJECTILE); fire from explosions stays orange
+    events.on('bolt:impact', (i) => this.impact(i.point, i.normal, 0x9a5cff, 10, true));
     // spider mech: blasts (mortar, stomp, death), a leg breaking off, footfalls
     const up = new THREE.Vector3(0, 1, 0);
     events.on('blast', (b) => {
-      this.impact(b.point, up, 0xff6a2a, b.kind === 'drone' ? 16 : b.kind === 'stomp' ? 26 : 34, b.kind !== 'stomp');
+      this.impact(b.point, up, b.kind === 'drone' || b.kind === 'death' ? 0xff6a2a : 0x9a5cff, b.kind === 'drone' ? 16 : b.kind === 'stomp' ? 26 : 34, b.kind !== 'stomp');
       this.shockwave(b.point);
     });
     events.on('boss:leg', (b) => {

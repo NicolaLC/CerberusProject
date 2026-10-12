@@ -15,6 +15,9 @@ import { disposeTree } from '../../engine/dispose.js';
 // Interface used by the Enemies system and the rest of the game:
 //   kind, alive, pos, lift, rig, skin, hitMeshes, damage(), update(dt, player)
 
+export const VISOR_REST = 1.2; // sensor emissiveIntensity at rest (shot telegraphs flare it above)
+export const VISOR = 0x8c3cff; // HiveMind sensor violet (#C04BFF family, bluer so it never reads as the magenta weak spots), dimmer
+export const PROJECTILE = { core: 0xe6dcff, glow: 0x8a46ff, ring: 0xa060ff }; // HiveMind shots: violet-white, never amber
 const WEAK_BONES = ['Spine2', 'Spine1', 'Hips', 'LeftArm', 'RightArm', 'LeftForeArm', 'RightForeArm', 'LeftUpLeg', 'RightUpLeg', 'LeftLeg', 'RightLeg'];
 const DEBRIS_DIR = new THREE.Vector3();
 const DEBRIS_OPT = { dir: DEBRIS_DIR, push: [5, 5], spread: 3, up: [2, 3], spin: 12, life: 5 }; // see DebrisBank.burst
@@ -38,8 +41,9 @@ export function sightRay(from, to, meshes, slack = 0.5) {
 }
 
 export class EnemyBody {
-  // mats: the look's materials (all flash on a hit); visor: color of the glowing eyes (telegraphs shots)
-  constructor(ctx, { kind, pos, yaw = 0, health, mats, visor = 0xff3020, armed = false, weakSpots = 2 }) {
+  // mats: the look's materials (all flash on a hit); visor: color of the glowing sensors (telegraphs shots). Sensors are
+  // violet and the magenta weak spots stay the brightest thing on the body (art-style.md: if it glows violet, shoot it).
+  constructor(ctx, { kind, pos, yaw = 0, health, mats, visor = VISOR, armed = false, weakSpots = 2 }) {
     this.ctx = ctx;
     this.kind = kind;
     this.pos = new THREE.Vector3(...pos);
@@ -52,7 +56,7 @@ export class EnemyBody {
     this.weakCount = weakSpots;
 
     this.mats = mats;
-    this.visor = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: visor, emissiveIntensity: 1.5 });
+    this.visor = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: visor, emissiveIntensity: VISOR_REST });
     this.weakMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2bd6, emissiveIntensity: 3 });
     this.weakMat.userData.lodGlow = 5; // far LOD drops the halo: a brighter core keeps weak spots readable
     this.haloMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff2bd6).multiplyScalar(1.5), transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -160,7 +164,7 @@ export class EnemyBody {
     const e = this.flash > 0 ? 0.9 : 0;
     for (const k in this.mats) this.mats[k].emissive.setScalar(e);
     this.skin.lodMaterial.emissive.setScalar(e);
-    this.weakMat.emissiveIntensity = 2.4 + Math.sin(this.ctx.time * 8) * 1.4;
+    this.weakMat.emissiveIntensity = 2.8 + Math.sin(this.ctx.time * 8) * 1.0; // never dimmer than a sensor at rest
   }
 
   #updateDebris(dt) {

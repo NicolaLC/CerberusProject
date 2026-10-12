@@ -8,6 +8,7 @@ import { Drone, TUNING as DRONE } from './drone.js';
 import { CoverMap } from '../ai/cover.js';
 import { Grid } from '../world/grid.js';
 import { DebrisBank } from './parts.js';
+import { PROJECTILE } from './enemy.js';
 
 // The enemy system: spawns every enemy (training puppets, troopers, drones, the boss: one list, `all`), owns enemy
 // projectiles, the cover map, the instanced puppet stands, the death-debris bank and the cached raycast target list.
@@ -94,9 +95,10 @@ export class Enemies {
       setStand: (i, pos, postH) => this.setStand(i, pos, postH),
     };
     const geo = new THREE.CapsuleGeometry(0.06, 0.5, 4, 8).rotateX(Math.PI / 2);
-    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff6a2a).multiplyScalar(6) });
+    // HiveMind bolts: a violet-white core in a violet haze (art-style.md 5): never orange or amber, which is STEM-00's
+    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(PROJECTILE.core).multiplyScalar(6) });
     const glowGeo = new THREE.SphereGeometry(0.22, 12, 8);
-    const glowMat = new THREE.MeshBasicMaterial({ color: 0xff4010, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
+    const glowMat = new THREE.MeshBasicMaterial({ color: PROJECTILE.glow, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
     this.boltPool = new Pool(
       () => {
         const m = new THREE.Mesh(geo, mat);

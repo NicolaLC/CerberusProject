@@ -3,7 +3,8 @@ import { RigidSkin } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
 import { damp } from '../../engine/math.js';
 import { rb, cyl, ring, look } from './parts.js';
-import { sightRay } from './enemy.js';
+import { sightRay, VISOR } from './enemy.js';
+import { wornMaterial } from '../world/textures.js';
 
 // Attack drone: a small quad-rotor that hovers 3.5-5 m up, circles the player at range and fires short bolt
 // bursts. Light (dies fast) but hard to hit while it strafes; the glowing core underneath is its weak spot.
@@ -33,6 +34,9 @@ const DEBRIS = { push: [0, 0], spread: 6, up: [2, 4], spin: 12, life: 4 }; // se
 const BLAST = { point: new THREE.Vector3(), radius: 1.5, kind: 'drone' };
 const HITBOX_MAT = new THREE.MeshBasicMaterial(); // never drawn
 
+// front sensor cluster: [x, y, radius] on the sensor housing
+const SENSORS = [[0.03, 0.045, 0.022], [-0.045, 0.03, 0.016], [0.0, -0.02, 0.026], [0.065, -0.01, 0.012], [-0.05, -0.045, 0.014], [0.035, -0.07, 0.012], [-0.015, 0.08, 0.01]];
+
 export class Drone {
   constructor(ctx, def) {
     this.ctx = ctx;
@@ -57,9 +61,9 @@ export class Drone {
     this.debris = [];
 
     const M = {
-      shell: new THREE.MeshStandardMaterial({ color: 0x464c55, roughness: 0.4, metalness: 0.65 }),
-      plate: new THREE.MeshStandardMaterial({ color: 0xc8781e, roughness: 0.5, metalness: 0.35 }),
-      eye: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff3020, emissiveIntensity: 2 }),
+      shell: wornMaterial(0x3a3d40, { roughness: 0.6, metalness: 0.5, wear: 'metal' }), // dark metal pod
+      plate: wornMaterial(0xc9a23a, { roughness: 0.85, metalness: 0.15 }), // matte ochre livery, chipped
+      eye: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: VISOR, emissiveIntensity: 1.2 }), // violet sensors
       weak: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2bd6, emissiveIntensity: 3 }),
     };
     M.weak.userData.lodGlow = 5;
@@ -106,7 +110,7 @@ export class Drone {
       this.rotors.push(r);
     }
 
-    // look: armored pod with an orange spine plate, a lens cluster in front, a slung cannon, the glowing core
+    // look: armored pod with an ochre spine plate, a small violet sensor cluster in front, a slung cannon, the glowing core
     // underneath, four ducted rotors on struts
     this.body.add(
       look(
@@ -121,12 +125,12 @@ export class Drone {
         cyl(M.shell, 0.006, 0.006, 0.2, -0.12, 0.25, -0.38, -0.35, 0, 0, 5),
       ),
       look(
-        cyl(M.shell, 0.13, 0.15, 0.1, 0, 0.02, 0.38, R, 0, 0, 16), // lens housing
-        cyl(M.eye, 0.085, 0.085, 0.02, 0, 0.02, 0.435, R, 0, 0, 16), // main lens
-        cyl(M.eye, 0.028, 0.028, 0.02, 0.19, 0.05, 0.37, R, 0, 0, 10), // side eyes
-        cyl(M.eye, 0.028, 0.028, 0.02, -0.19, 0.05, 0.37, R, 0, 0, 10),
-        cyl(M.eye, 0.018, 0.018, 0.02, 0.19, -0.02, 0.37, R, 0, 0, 8),
-        cyl(M.eye, 0.018, 0.018, 0.02, -0.19, -0.02, 0.37, R, 0, 0, 8),
+        cyl(M.shell, 0.13, 0.15, 0.1, 0, 0.02, 0.38, R, 0, 0, 16), // sensor housing
+        // an asymmetric cluster of small lenses (never one big eye): insect-like, no face
+        ...SENSORS.map(([x, y, r]) => cyl(M.eye, r, r, 0.02, x, 0.02 + y, 0.435, R, 0, 0, 8)),
+        cyl(M.eye, 0.016, 0.016, 0.02, 0.19, 0.05, 0.37, R, 0, 0, 8), // side sensors (one side heavier)
+        cyl(M.eye, 0.011, 0.011, 0.02, 0.19, 0.0, 0.37, R, 0, 0, 8),
+        cyl(M.eye, 0.011, 0.011, 0.02, -0.19, 0.03, 0.37, R, 0, 0, 8),
       ),
       look(
         rb(M.shell, 0.12, 0.08, 0.16, 0.02, 0, -0.17, 0.3), // gun mount
@@ -235,8 +239,8 @@ export class Drone {
     this.mats.plate.emissive.setScalar(e);
     this.skin.lodMaterial.emissive.setScalar(e);
     const charge = this.gun.state === 'aim' ? 1 - this.gun.timer / this.t.burst.aim : 0;
-    this.mats.eye.emissiveIntensity = (this.awake ? 2 : 0.8) + charge * 8;
-    this.mats.weak.emissiveIntensity = 2.4 + Math.sin(this.time * 9) * 1.2;
+    this.mats.eye.emissiveIntensity = (this.awake ? 1.2 : 0.6) + charge * 8; // at rest dimmer than the weak core
+    this.mats.weak.emissiveIntensity = 3 + Math.sin(this.time * 9) * 1.0;
   }
 
   #move(dt, player, active) {
