@@ -63,6 +63,15 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
 ## Animator (procedural)
 `new Animator(rig, { armed, ground })`, then each frame `animator.update(dt, state)` with
 `{ speed, run, crouch 0..1, aimPitch, combat, recoil, lean, lookYaw, lower, vel, yaw }`.
+- Driven once per rendered frame in the `late` phase, not per simulate substep: `think()` / `Player.update` only fill a
+  pose-state object (`animState`) and accumulate `animDt`; `Enemies.animate` (system `enemyAnim`) and `Player.pose()`
+  (`playerPose`) call `animator.update(animDt, animState)`. Bones are therefore up to one frame behind the simulation
+  (`getWorldPosition` on a socket such as the muzzle re-walks its chain, so it never reads stale parents).
+  Enemies beyond the far LOD or outside the camera frustum pose every 3rd frame (staggered, dt accumulated) with
+  `animator.lod = true` (no terrain foot IK).
+- Matrix updates: one full bone-only refresh (`#refresh`, `updateBones`: bones, not meshes / proxies / sockets) after the
+  poses are set, then only the sub-chain an IK step changed (`aimBone` / `#orientFeet` update their own bone subtree);
+  positions are read from `matrixWorld`, not `getWorldPosition`. Sockets: `updateWorldMatrix(false, false)` first.
 - Layers: reset to rest → hit spring → gait key poses (FK legs, hips) → torso → arms → foot locks (IK) + kneel → feet IK (terrain) → foot pitch.
 - Gait = key poses (`locomotion.js`, after David Rosen's GDC 2014 "An Indie Approach to Procedural Animation"):
   per gait (walk, run) 8-9 authored LEFT-leg poses over one cycle (thigh, knee, foot pitch; heel strike at t=0)

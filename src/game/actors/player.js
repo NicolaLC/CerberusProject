@@ -800,6 +800,8 @@ export class Player {
     this.scene.add(rig.root);
     this.rigModel = rig;
     this.root = rig.root;
+    this.animState = null; // pose input of the last substep, see pose()
+    this.animDt = 0;
     this.animator = new Animator(rig, { armed: true, ground: (x, z, maxY) => this.world.groundAt(x, z, maxY) });
     this.animator.onStep = () => {
       if (this.airborne || this.dead) return;
@@ -818,6 +820,13 @@ export class Player {
     this.rigModel.socket('Weapon', 'gripR', ...s.gripR);
     this.rigModel.socket('Weapon', 'gripL', ...s.gripL);
     this.muzzle = this.rigModel.socket('Weapon', 'muzzle', ...s.muzzle);
+  }
+
+  // Poses the rig once per frame (late phase) with the time of all the substeps since the last pose.
+  pose() {
+    if (!this.animState || this.animDt <= 0) return;
+    this.animator.update(this.animDt, this.animState);
+    this.animDt = 0;
   }
 
   #animate(dt, camRig, alive, weaponLower = 0) {
@@ -839,7 +848,8 @@ export class Player {
     const slideAim = combat && alive && (this.isSliding() || this.slideTail < VAULT.tail);
     const aimTwist = slideAim ? THREE.MathUtils.clamp(wrapAngle(camRig.yaw + Math.PI - this.facing), -VAULT.twist, VAULT.twist) : 0;
     const speed = alive ? Math.hypot(this.vel.x, this.vel.z) : 0;
-    this.animator.update(dt, {
+    this.animDt += dt; // posed once per frame by animate() (late phase), from the state of the last substep
+    this.animState = {
       speed,
       run: this.sprinting && alive, // sprint plays the anime run
       crouch: this.crouchBlend,
@@ -860,7 +870,7 @@ export class Player {
       aimTwist,
       vel: this.vel,
       yaw: this.facing,
-    });
+    };
 
     this.root.position.copy(this.visualPos());
     if (alive) {

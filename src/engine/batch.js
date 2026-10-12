@@ -171,6 +171,15 @@ function hideAsProxy(mesh) {
   mesh.userData.proxy = true;
 }
 
+// A rig's proxies are never drawn and mostly never raycast (hit boxes are the rig's own dummy parts): keep them out of
+// the per-frame matrix updates. Their world matrix is only refreshed by syncProxies() (death debris) or by hand
+// (RigidSkin.syncHit, the weak spots). Their local matrix is frozen as of the bake.
+function freezeProxy(mesh) {
+  mesh.updateMatrix();
+  mesh.matrixAutoUpdate = false;
+  mesh.matrixWorldAutoUpdate = false;
+}
+
 // Merges static meshes (world space) into one mesh per material under `parent`. Sources become proxies.
 export function mergeStatic(meshes, parent) {
   const buckets = new Map();
@@ -255,6 +264,7 @@ export class RigidSkin {
     this.exclude = exclude;
     this.cullMargin = cullMargin;
     this.meshes = [];
+    this.proxies = []; // the baked sources, parents before children (see syncProxies)
     this.shadow = null; // shadow-only SkinnedMesh (see installShadowOnly)
     this.castShadow = true;
     this.boneIndex = new Map(skeleton.bones.map((b, i) => [b, i]));
@@ -287,6 +297,11 @@ export class RigidSkin {
       for (const c of o.children) walk(c, b);
     };
     walk(this.root, null);
+    // proxies from an earlier bake are frozen: wake them for the world matrices read below
+    for (const [m] of sources) {
+      m.matrixAutoUpdate = m.matrixWorldAutoUpdate = true;
+    }
+    this.proxies.length = 0;
 
     // bind at the current pose: vertices in root space, bone inverses from the same pose
     this.root.updateWorldMatrix(true, true);
@@ -296,6 +311,8 @@ export class RigidSkin {
     for (const [m, bi] of sources) {
       collect(buckets, m, _m.multiplyMatrices(_inv, m.matrixWorld), bi);
       hideAsProxy(m);
+      freezeProxy(m);
+      this.proxies.push(m);
     }
     for (const b of buckets.values()) {
       const mesh = new THREE.SkinnedMesh(toGeometry(b), b.material);
@@ -336,6 +353,17 @@ export class RigidSkin {
     if (this.shadow) this.shadow.boundingSphere = sphere;
     if (this.lodMesh) this.lodMesh.boundingSphere = sphere;
     this.setFar(this.far);
+  }
+
+  // World matrices of all proxies from their parents' (fresh) ones: death debris is cut from them.
+  syncProxies() {
+    for (const m of this.proxies) m.matrixWorld.multiplyMatrices(m.parent.matrixWorld, m.matrix);
+  }
+
+  // Same for one proxy that is raycast (weak spots): refreshes its parent chain first.
+  syncHit(m) {
+    m.parent.updateWorldMatrix(true, false);
+    m.matrixWorld.multiplyMatrices(m.parent.matrixWorld, m.matrix);
   }
 
   // Detail switch: full (one draw per material) or far (one draw, baked colors). Hitboxes are unaffected.

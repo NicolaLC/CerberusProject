@@ -63,7 +63,10 @@ export class Puppet extends EnemyBody {
     if (this.kind === 'shooter') this.#shooterAI(dt, player);
     else this.lift += (0 - this.lift) * damp(4, dt);
 
-    this.animator.update(dt, { speed, run: false, crouch: 0, aimPitch: 0, combat: false, vel: this.vel, yaw: this.yaw });
+    const as = this.animState; // posed once per frame by Enemies.animate
+    as.speed = speed;
+    as.vel = this.vel;
+    as.yaw = this.yaw;
     this.group.position.copy(this.pos);
     this.rig.root.position.y = this.lift;
     this.rig.root.rotation.y = this.yaw;
