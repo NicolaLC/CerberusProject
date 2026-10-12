@@ -6,6 +6,7 @@ const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
 const _v = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _ray = new THREE.Raycaster();
+const _hits = [];
 const _q = new THREE.Quaternion();
 
 const TUNING = {
@@ -249,7 +250,8 @@ export class CameraRig {
     _dir.divideScalar(len);
     _ray.set(this.pivot, _dir);
     _ray.far = len + 0.25;
-    const hit = _ray.intersectObjects(this.world.meshes, false)[0];
+    _hits.length = 0;
+    const hit = _ray.intersectObjects(this.world.meshes, false, _hits)[0];
     if (hit) desired.copy(this.pivot).addScaledVector(_dir, Math.max(0.2, hit.distance - 0.25));
     this.camera.position.copy(desired);
 

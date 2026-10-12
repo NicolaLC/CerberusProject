@@ -4,6 +4,7 @@ import { mergeStatic, mergeGroup } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
 import { GUNS } from '../combat/guns.js';
 import { KIT_PIECES, MAT } from './kit.js';
+import { Grid } from './grid.js';
 
 // Static level: axis-aligned boxes only (collision, cover and shadows depend on that).
 // Coordinates: x = east, z = south, y = up. Floor is y = 0.
@@ -83,6 +84,24 @@ export const WORLD_PIECES = {
   'prop.gun': { example: { params: { gun: 'rifle' } }, label: 'display model of one gun', fields: [{ key: 'gun', type: 'enum', options: Object.keys(GUNS) }], build: (world, d) => world.gunProp(d) },
 };
 
+const COLLIDER_CELL = 4; // m, grid cell of the collider hash (arena boxes are 1-10 m; bigger spans use several cells)
+let _t0 = 0;
+let _t1 = 1;
+// 1D slab of the segment parameter range [_t0, _t1] against (lo, hi); true while the range is non-empty.
+function slab(p, d, lo, hi) {
+  if (Math.abs(d) < 1e-9) return p > lo && p < hi;
+  let ta = (lo - p) / d;
+  let tb = (hi - p) / d;
+  if (ta > tb) {
+    const t = ta;
+    ta = tb;
+    tb = t;
+  }
+  if (ta > _t0) _t0 = ta;
+  if (tb < _t1) _t1 = tb;
+  return _t0 < _t1;
+}
+
 export class World {
   // Two lifetimes. Permanent (built once): materials + grid textures, sky, fog, hemisphere and sun. Per level
   // (load / unload, mirrored step by step): zones, boxes and strips (+ merged batches), point lights, colliders.
@@ -91,6 +110,8 @@ export class World {
     this.scene = scene;
     this.named = new Map(); // piece name -> mesh (for references between pieces, e.g. a light flickering a strip)
     this.colliders = []; // { box: Box3, mesh, cover: 'low' | 'high' | null }
+    this.grid = new Grid(COLLIDER_CELL);
+    this.gridDirty = true;
     this.meshes = []; // raycast targets for bullets / camera / LOS
     this.coverMeshes = [];
     this.interiorZones = [];
@@ -163,6 +184,7 @@ export class World {
     }
     for (const g of this.props) disposeTree(g, { keep: this.keep });
     this.batches = [];
+    this.gridDirty = true;
     for (const list of [this.props, this.staticMeshes, this.colliders, this.meshes, this.coverMeshes, this.interiorZones, this.flickerLights, this.lights, this.labels]) list.length = 0;
     this.named.clear();
   }
@@ -189,6 +211,7 @@ export class World {
     };
     for (const list of [this.staticMeshes, this.meshes, this.coverMeshes, this.lights, this.labels, this.props]) drop(list);
     drop(this.colliders, (c) => c.mesh);
+    this.gridDirty = true;
     drop(this.flickerLights, (f) => f.light);
     for (const [k, v] of this.named) if (gone.has(v)) this.named.delete(k);
   }
@@ -313,15 +336,31 @@ export class World {
   }
 
   isInterior(p) {
-    return this.interiorZones.some((z) => z.containsPoint(p));
+    const z = this.interiorZones;
+    for (let i = 0; i < z.length; i++) if (z[i].containsPoint(p)) return true;
+    return false;
+  }
+
+  // Static colliders in a Grid, rebuilt lazily when the list changed (box(), despawn(), clear() set `gridDirty`; a
+  // length mismatch catches anyone pushing straight to `colliders`). Returns the colliders near the rectangle, in
+  // `colliders` order (shared array, valid until the next query).
+  nearColliders(x0, z0, x1, z1) {
+    if (this.gridDirty || this.grid.n !== this.colliders.length) {
+      const g = this.grid;
+      g.clear();
+      for (const c of this.colliders) g.insert(c, c.box.min.x, c.box.min.z, c.box.max.x, c.box.max.z);
+      this.gridDirty = false;
+    }
+    return this.grid.query(x0, z0, x1, z1);
   }
 
   // Highest walkable top under (x,z) that is at or below maxY. minSize: ignore boxes narrower than that on either
   // horizontal axis (walls, parapets, posts), for fliers that should keep their height over them.
   groundAt(x, z, maxY, radius = 0, minSize = 0) {
     let g = 0;
-    for (const c of this.colliders) {
-      const b = c.box;
+    const near = this.nearColliders(x - radius, z - radius, x + radius, z + radius);
+    for (let i = 0; i < near.length; i++) {
+      const b = near[i].box;
       if (b.max.y > maxY) continue;
       if (minSize > 0 && (b.max.x - b.min.x < minSize || b.max.z - b.min.z < minSize)) continue;
       if (x < b.min.x - radius || x > b.max.x + radius || z < b.min.z - radius || z > b.max.z + radius) continue;
@@ -336,8 +375,10 @@ export class World {
     const feet = pos.y;
     const top = feet + h;
     for (let iter = 0; iter < 2; iter++) {
-      for (const c of this.colliders) {
-        const b = c.box;
+      // pad: a push moves the body up to r, so colliders just out of reach at the start can come into range
+      const near = this.nearColliders(pos.x - 3 * r, pos.z - 3 * r, pos.x + 3 * r, pos.z + 3 * r);
+      for (let i = 0; i < near.length; i++) {
+        const b = near[i].box;
         if (b.max.y <= feet + step || b.min.y >= top) continue;
         const cx = Math.max(b.min.x, Math.min(pos.x, b.max.x));
         const cz = Math.max(b.min.z, Math.min(pos.z, b.max.z));
@@ -370,20 +411,12 @@ export class World {
   segmentClear(a, b, r, step = 0.45, h = 1.6) {
     const dx = b.x - a.x;
     const dz = b.z - a.z;
-    for (const c of this.colliders) {
-      const bx = c.box;
+    const near = this.nearColliders(Math.min(a.x, b.x) - r, Math.min(a.z, b.z) - r, Math.max(a.x, b.x) + r, Math.max(a.z, b.z) + r);
+    for (let i = 0; i < near.length; i++) {
+      const bx = near[i].box;
       if (bx.max.y <= a.y + step || bx.min.y >= a.y + h) continue;
-      let t0 = 0;
-      let t1 = 1;
-      const slab = (p, d, lo, hi) => {
-        if (Math.abs(d) < 1e-9) return p > lo && p < hi;
-        let ta = (lo - p) / d;
-        let tb = (hi - p) / d;
-        if (ta > tb) [ta, tb] = [tb, ta];
-        t0 = Math.max(t0, ta);
-        t1 = Math.min(t1, tb);
-        return t0 < t1;
-      };
+      _t0 = 0;
+      _t1 = 1;
       if (slab(a.x, dx, bx.min.x - r, bx.max.x + r) && slab(a.z, dz, bx.min.z - r, bx.max.z + r)) return false;
     }
     return true;
@@ -410,6 +443,7 @@ export class World {
       const col = { box, mesh, cover };
       mesh.userData.collider = col;
       this.colliders.push(col);
+      this.gridDirty = true;
       this.meshes.push(mesh);
       if (cover) this.coverMeshes.push(mesh);
     }

@@ -22,6 +22,7 @@ const _a = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _ray = new THREE.Raycaster();
+const _hits = [];
 const MIN_FACE = 0.8; // m: narrower faces get no spots
 const CORNER_PAD = 0.8; // detour corners sit this far outside the cover box
 const FLANK_CONE = 0.35; // flank spots: bearing from the threat at least ~70° away from its front
@@ -176,7 +177,8 @@ export class CoverMap {
     const len = _d.length();
     _ray.set(_c, _d.divideScalar(len));
     _ray.far = Math.max(0.01, len - 0.4);
-    return _ray.intersectObjects(this.world.meshes, false).length === 0;
+    _hits.length = 0;
+    return _ray.intersectObjects(this.world.meshes, false, _hits).length === 0;
   }
 
   claim(spot, ai) {
@@ -192,14 +194,25 @@ export class CoverMap {
 export function segmentHitsBox(a, b, box, pad = 0) {
   let t0 = 0;
   let t1 = 1;
-  const axis = (p, d, lo, hi) => {
-    if (Math.abs(d) < 1e-9) return p > lo && p < hi;
+  for (let k = 0; k < 2; k++) {
+    const p = k ? a.z : a.x;
+    const d = k ? b.z - a.z : b.x - a.x;
+    const lo = (k ? box.min.z : box.min.x) - pad;
+    const hi = (k ? box.max.z : box.max.x) + pad;
+    if (Math.abs(d) < 1e-9) {
+      if (!(p > lo && p < hi)) return false;
+      continue;
+    }
     let ta = (lo - p) / d;
     let tb = (hi - p) / d;
-    if (ta > tb) [ta, tb] = [tb, ta];
-    t0 = Math.max(t0, ta);
-    t1 = Math.min(t1, tb);
-    return t0 < t1;
-  };
-  return axis(a.x, b.x - a.x, box.min.x - pad, box.max.x + pad) && axis(a.z, b.z - a.z, box.min.z - pad, box.max.z + pad);
+    if (ta > tb) {
+      const t = ta;
+      ta = tb;
+      tb = t;
+    }
+    if (ta > t0) t0 = ta;
+    if (tb < t1) t1 = tb;
+    if (!(t0 < t1)) return false;
+  }
+  return true;
 }
