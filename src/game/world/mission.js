@@ -4,7 +4,7 @@
 // Logic only: no scene objects, nothing to dispose. Events out: `mission:objective` / `mission:objective:done` { index, total, id, kind, text },
 // `mission:complete` { total }, `mission:failed` { index, id, reason }. Actions on becoming current: `encounter:wake` / `encounter:spawn`.
 // Optional objectives: `skipOn` (a trigger / checkpoint id) completes the current one when it fires, flagged `skipped`.
-// On done: `grantGun` / `grantAmmo` emit `mission:grant` { gun, ammo } (game.js hands it to the Weapon), never when skipped.
+// On done: `grantGun` / `grantAmmo` emit `mission:grant` { gun, ammo } right after `mission:objective:done` (game.js hands it to the Weapon), never when skipped.
 
 export const TUNING = {
   reach: 2.5, // m, vertical reach of an interact terminal (feet to marker)
@@ -122,8 +122,8 @@ export class Mission {
   // skipped: `skipOn` fired instead of the objective being done (no grantGun then).
   #complete(skipped = false) {
     const r = this.current;
-    if (!skipped && r.params.grantGun != null) this.events.emit('mission:grant', { gun: r.params.grantGun, ammo: r.params.grantAmmo ?? 0 }); // before :done, so discovered:<gun> lines queue first
     this.events.emit('mission:objective:done', this.#info(r, skipped));
+    if (!skipped && r.params.grantGun != null) this.events.emit('mission:grant', { gun: r.params.grantGun, ammo: r.params.grantAmmo ?? 0 }); // after :done, so its toast (OBJECTIVE COMPLETE) gives way to KR-7 WARDEN ACQUIRED
     if (this.index + 1 < this.objectives.length) return this.#begin(this.index + 1);
     this.current = null;
     this.state = 'complete';
