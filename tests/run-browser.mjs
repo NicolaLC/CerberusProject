@@ -1,13 +1,19 @@
 // Runs the browser suites (tests/*.browser.mjs) against a vite dev server started here.
-// Usage: node tests/run-browser.mjs [--all] [name ...]   (--all adds gym-stress and bench; names filter, e.g. `scenes render`)
+// Usage: node tests/run-browser.mjs [--all] [-j N] [name ...]   (--all adds gym-stress and bench; names filter, e.g. `scenes render`)
+// Suites run in parallel, each in its own browser: -j N (or BROWSER_JOBS) sets how many at once, default cores - 1.
+// Output is buffered per suite and printed whole when it ends. The slow suites (gym-stress, bench) always run alone, after the rest.
 import { createServer } from 'vite';
 import { spawn } from 'node:child_process';
 import { readdirSync } from 'node:fs';
+import { availableParallelism } from 'node:os';
 
 const SLOW = ['gym-stress', 'bench'];
+const LONG = ['scenes', 'workshop', 'render', 'gym-ai', 'prologue']; // started first so the pool doesn't end on one long suite
 const args = process.argv.slice(2);
 const all = args.includes('--all');
-const names = args.filter((a) => !a.startsWith('--'));
+const jAt = args.indexOf('-j');
+const jobs = Math.max(1, Number(jAt >= 0 ? args[jAt + 1] : process.env.BROWSER_JOBS) || availableParallelism() - 1);
+const names = args.filter((a, i) => !a.startsWith('-') && (jAt < 0 || i !== jAt + 1));
 const dir = new URL('.', import.meta.url);
 const suites = readdirSync(dir)
   .filter((f) => f.endsWith('.browser.mjs'))
@@ -21,20 +27,27 @@ const port = server.httpServer.address().port;
 const env = { ...process.env, URL: `http://localhost:${port}/?debug`, BASE: `http://localhost:${port}` };
 
 const run = (name) => new Promise((resolve) => {
-  console.log(`\n=== ${name} ===`);
-  const c = spawn(process.execPath, [new URL(`${name}.browser.mjs`, dir).pathname], { env, stdio: ['ignore', 'pipe', 'inherit'] });
-  let failed = false, buf = '';
-  c.stdout.on('data', (d) => {
-    process.stdout.write(d);
-    const lines = (buf + d).split('\n');
-    buf = lines.pop();
-    if (lines.some((l) => l.startsWith('FAIL'))) failed = true;
+  const t0 = Date.now();
+  const c = spawn(process.execPath, [new URL(`${name}.browser.mjs`, dir).pathname], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = '';
+  c.stdout.on('data', (d) => { out += d; });
+  c.stderr.on('data', (d) => { out += d; });
+  c.on('close', (code) => {
+    const failed = code !== 0 || out.split('\n').some((l) => l.startsWith('FAIL'));
+    process.stdout.write(`\n=== ${name} (${((Date.now() - t0) / 1000).toFixed(1)} s) ===\n${out}`);
+    resolve(failed);
   });
-  c.on('close', (code) => resolve(failed || buf.startsWith('FAIL') || code !== 0));
 });
 
 const bad = [];
-for (const n of suites) if (await run(n)) bad.push(n);
+const pool = async (list, n) => {
+  const queue = [...list];
+  const worker = async () => { while (queue.length) { const s = queue.shift(); if (await run(s)) bad.push(s); } };
+  await Promise.all(Array.from({ length: Math.min(n, list.length) }, worker));
+};
+const rank = (s) => (LONG.includes(s) ? LONG.indexOf(s) : LONG.length);
+await pool(suites.filter((s) => !SLOW.includes(s)).sort((a, b) => rank(a) - rank(b)), jobs);
+await pool(suites.filter((s) => SLOW.includes(s)), 1); // timing-sensitive: alone
 await server.close();
 console.log(bad.length ? `\nFAILED: ${bad.join(', ')}` : `\nall ${suites.length} suites passed`);
 process.exit(bad.length ? 1 : 0);

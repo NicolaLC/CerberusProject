@@ -31,8 +31,10 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
   the whole set runs in ~40 s instead of ~40 min on SwiftShader. Only render where a test checks pixels.
 - `npm test`: pure-math unit tests (`tests/ballistics.test.mjs`, `tests/levelio.test.mjs`).
 - `npm run test:browser` (`tests/run-browser.mjs`): starts a vite dev server on a free port, sets `URL`, runs every
-  `tests/*.browser.mjs` one after the other and exits non-zero on a non-zero exit or any `FAIL` line. `gym-stress` and `bench`
-  are skipped (slow); `--all` adds them, and names filter: `node tests/run-browser.mjs scenes render`.
+  `tests/*.browser.mjs` in parallel (one browser each, `-j N` or `BROWSER_JOBS`, default cores - 1; output printed per suite
+  with its time) and exits non-zero on a non-zero exit or any `FAIL` line. `gym-stress` and `bench` are skipped (slow);
+  `--all` adds them, run alone after the rest. Names filter: `node tests/run-browser.mjs scenes render`. Suites must not
+  share state outside their own browser (no files, no fixed ports) so they can run side by side.
 - CI (`.github/workflows/ci.yml`, every push and PR): `npm ci`, Playwright Chromium, `npm test`, `npm run build`,
   `npm run test:browser`. The release workflow's web job runs the same browser suites before packaging.
 - `tests/gunplay.browser.mjs`: deterministic gunplay checks in Chromium (first-shot accuracy, recoil pattern
