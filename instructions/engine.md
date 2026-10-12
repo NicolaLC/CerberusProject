@@ -3,7 +3,7 @@
 Goal: hold 60 fps, never freeze on a bug, scale to a much bigger game.
 
 ## Loop and scheduler (`engine.js`)
-- Systems: `{ name, phase, update(dt, engine), whilePaused }` added with `engine.add()`. Phases run in order
+- Systems: `{ name, phase, update(dt, engine), whilePaused, group }` added with `engine.add()`. `group` (default none = always) restricts a system to `engine.mode` (`engine.setMode('edit')`, default `'play'`): `#run` skips the others next to the `disabled` / `paused` checks. Phases run in order
   `pre → simulate → late → present → render`.
 - Frame dt is clamped to 0.1 s. `simulate` is split into equal substeps of ≤ 20 ms (max 4, then the game
   slows down instead of spiralling). Scaled by `engine.timeScale` (hitstop, owned by Juice).

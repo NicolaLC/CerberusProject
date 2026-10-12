@@ -6,12 +6,13 @@ import { installShadowOnly } from './batch.js';
 
 // Game-agnostic runtime: renderer, scene, main camera, input, event bus, frame loop and system scheduler.
 //
-// Systems are plain objects { name, phase, update(dt, engine), whilePaused? } run in phase order:
+// Systems are plain objects { name, phase, update(dt, engine), whilePaused?, group? } run in phase order:
 //   pre      once per frame, real dt          (time scale, look input)
 //   simulate fixed substeps of <= MAX_STEP     (gameplay: movement, weapons, AI, projectiles)
 //   late     once per frame, scaled dt         (camera follows the simulated state)
 //   present  once per frame, scaled dt         (fx, HUD, animated lights)
 //   render   once per frame, real dt           (post stack, exposure)
+// A system with a `group` only runs while engine.mode is that group (engine.setMode); no group = always.
 // Each call is isolated: an exception is logged and the frame continues; a system that keeps
 // failing is disabled and reported through the 'engine:systemFailed' event instead of freezing the game.
 export const PHASES = ['pre', 'simulate', 'late', 'present', 'render'];
@@ -48,6 +49,7 @@ export class Engine {
     this.time = 0; // scaled seconds since start
     this.realDt = 0; // unscaled seconds of the current frame
     this.paused = false;
+    this.mode = 'play'; // active system group (setMode): systems of another group are skipped
     this.headless = false; // tests: step the simulation without rendering (see #tick)
     this.contextLost = false;
     this.last = 0;
@@ -75,10 +77,15 @@ export class Engine {
   }
 
   add(system) {
-    const s = Object.assign({ phase: 'simulate', whilePaused: false, fails: 0, disabled: false }, system);
+    const s = Object.assign({ phase: 'simulate', whilePaused: false, group: null, fails: 0, disabled: false }, system);
     if (!this.systems[s.phase]) throw new Error(`unknown phase "${s.phase}" for system ${s.name}`);
     this.systems[s.phase].push(s);
     return s;
+  }
+
+  // Switches the active group: systems with another `group` stop running until the mode changes back (e.g. 'play' / 'edit').
+  setMode(name) {
+    this.mode = name;
   }
 
   remove(system) {
@@ -166,7 +173,7 @@ export class Engine {
     const list = this.systems[phase];
     for (let i = 0; i < list.length; i++) {
       const s = list[i];
-      if (s.disabled || (this.paused && !s.whilePaused)) continue;
+      if (s.disabled || (s.group !== null && s.group !== this.mode) || (this.paused && !s.whilePaused)) continue;
       const t0 = performance.now();
       try {
         s.update(dt, this);

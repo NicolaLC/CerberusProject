@@ -123,29 +123,30 @@ export class Game {
         if (controls.pressed('stats')) engine.stats.visible = !engine.stats.visible;
       },
     });
-    // The Workshop editor (tool.editing) owns input and the camera: the player, weapon, pickups and camera rig stand still.
+    // The Workshop editor owns input and the camera: it switches the engine to mode 'edit', so the 'play' group (player,
+    // weapon, pickups, encounter, camera rig) stands still. Systems that do something else while editing (world) branch inside.
     engine.add({
       name: 'player',
+      group: 'play',
       update: (dt) => {
-        if (this.editing) return;
         player.update(dt, controls, camRig, weapon);
         if (player.dead && player.deadTime > RESPAWN_AFTER) player.respawn(encounter.checkpoint); // the last checkpoint reached, else the spawn
       },
     });
-    engine.add({ name: 'weapon', update: (dt) => !this.editing && weapon.update(dt, controls) });
+    engine.add({ name: 'weapon', group: 'play', update: (dt) => weapon.update(dt, controls) });
     engine.add({ name: 'enemies', update: (dt) => enemies.update(dt, player) });
-    engine.add({ name: 'playerPose', phase: 'late', update: () => !this.editing && player.view.pose() });
+    engine.add({ name: 'playerPose', phase: 'late', group: 'play', update: () => player.view.pose() });
     engine.add({ name: 'enemyAnim', phase: 'late', update: (dt) => enemies.animate(dt, camera) });
-    engine.add({ name: 'encounter', update: (dt) => !this.editing && encounter.update(dt, player, controls.pressed('interact')) });
-    engine.add({ name: 'pickups', update: (dt) => !this.editing && pickups.update(dt, player, weapon) });
+    engine.add({ name: 'encounter', group: 'play', update: (dt) => encounter.update(dt, player, controls.pressed('interact')) });
+    engine.add({ name: 'pickups', group: 'play', update: (dt) => pickups.update(dt, player, weapon) });
     // boss lock-on: an engaged boss within range stays framed (CameraRig.focus)
     const bossFocus = new THREE.Vector3();
     engine.add({
       name: 'camera',
       phase: 'late',
+      group: 'play',
       whilePaused: true,
       update: (dt) => {
-        if (this.editing) return;
         const b = enemies.boss;
         const engaged = b && b.alive && b.awake && !player.dead && b.pos.distanceTo(player.pos) < BOSS_FOCUS_RANGE;
         camRig.focus = engaged ? b.focusPoint(bossFocus) : null;
@@ -281,9 +282,9 @@ export class Game {
     this.helpers.length = 0;
   }
 
-  // True while the Workshop editor runs (gym/tools.js `workshop`): see the systems below.
+  // True while the Workshop editor is editing (it sets engine mode 'edit'; not while it plays in place).
   get editing() {
-    return this.tool?.editing === true;
+    return this.engine.mode === 'edit';
   }
 
   #unloadLevel() {

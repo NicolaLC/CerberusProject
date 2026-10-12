@@ -87,6 +87,12 @@ the only thing three.js recompiles shaders for, so they come from a fixed pool o
 
 Paused (start panel): only `whilePaused` systems run (controls, stats, camera, post).
 
+Modes: a system may declare a `group` (`engine.add({ group: 'play' })`); the engine runs it only while `engine.mode` equals it
+(`engine.setMode(name)`, default `'play'`), no group = always. `player`, `weapon`, `playerPose`, `encounter`, `pickups` and `camera`
+are `'play'`; the Workshop editor sets `'edit'` while editing (`game.editing` is `engine.mode === 'edit'`, read-only). A system that does
+something different in edit mode instead of nothing (`world`: sun follows the editor camera) has no group and branches on `game.editing`.
+A new gameplay system gets `group: 'play'`; enemies are the other half (`enemies.freeze(on)`, the editor calls it).
+
 ## Events
 Payload objects marked * are reused: copy what you keep. `src/types.js` holds JSDoc typedefs for these payloads and the engine `System` shape (editor hints only, keep in sync).
 | event | payload | listeners |
