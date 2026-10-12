@@ -6,6 +6,14 @@ entry in `src/game/view/audio.js`. Every recorded sound has its pitch and volume
 generate one clean take, not variations. Keep every sound dry (no room reverb) unless the prompt asks for a tail,
 because the arena mixes many sounds at once. Remove a row once its sound is recorded and listed in `credits.md`.
 
+## Alarm
+
+| File | Event | Length | Prompt |
+|---|---|---|---|
+| `alarm-siren.mp3` | `env.alarm` (the purge), looping | 3.0 s | Seamless loop of an industrial facility alarm siren, a harsh two-tone electronic wail rising and falling every second, dull and metallic as if heard through concrete corridors, sci-fi military, no voice |
+
+Today the siren is synthesized (`Audio.siren`). Wire the recording as a looping `SAMPLES` entry and keep the synth as the fallback.
+
 ## Footsteps (more takes)
 
 Recorded and wired: one take each (`step-walk-1`, `step-run-1`, `step-metal-1`, `step-robot-1`). Steps repeat

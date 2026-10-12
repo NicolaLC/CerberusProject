@@ -75,6 +75,10 @@ export class Game {
     const juice = new Juice({ camRig, post, fx }).listen(events);
     events.on('puppet:down', (p) => pickups.drop(p.pos));
     events.on('checkpoint:reached', () => hud.toast('CHECKPOINT'));
+    // env.alarm: the lighting state (the siren is Audio's)
+    events.on('alarm:on', (a) => world.setAlarm(a.color, a.strength));
+    events.on('alarm:off', (a) => !a.active && world.setAlarm(null));
+    events.on('alarm:clear', () => world.setAlarm(null, undefined, true));
     // controller rumble (only while the pad is the device in use)
     events.on('weapon:shot', (s) => {
       const big = s.gun === 'sniper' || s.beam;

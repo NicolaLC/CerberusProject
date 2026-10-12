@@ -19,6 +19,7 @@ export class Log {
     this.line = null; // { text, t, life } being shown
     this.time = 0;
     this.shown = '';
+    this.voice = 'stem'; // of the line being shown
   }
 
   listen(events) {
@@ -26,7 +27,9 @@ export class Log {
     return this;
   }
 
-  say(text, { priority = 'normal' } = {}) {
+  // voice 'announcer' (the HiveMind PA, `log.line` voice): shown at once, replaces the current line, styled apart (`#log.announcer`).
+  say(text, { priority = 'normal', voice = 'stem' } = {}) {
+    if (voice === 'announcer') return this.#show(text, voice);
     if (priority === 'high' || !this.line) return this.#show(text);
     this.queue.push(text);
     if (this.queue.length > TUNING.queue) this.queue.shift();
@@ -37,13 +40,17 @@ export class Log {
     this.entries.length = this.queue.length = 0;
     this.line = null;
     this.time = 0;
+    this.voice = 'stem';
+    this.el.classList.remove('announcer');
     this.#draw('', 0);
   }
 
-  #show(text) {
+  #show(text, voice = 'stem') {
     const n = text.length;
     this.line = { text, t: 0, life: n / TUNING.cps + Math.max(TUNING.hold, TUNING.holdPerChar * n) + TUNING.fade };
-    this.entries.push({ text, t: this.time });
+    this.entries.push(voice === 'stem' ? { text, t: this.time } : { text, t: this.time, voice });
+    this.voice = voice;
+    this.el.classList.toggle('announcer', voice === 'announcer');
   }
 
   update(dt) {

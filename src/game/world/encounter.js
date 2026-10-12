@@ -21,8 +21,12 @@ import * as THREE from 'three';
 //  intro.boot         the boot intro (#13): params { lines: [diagnostic strings], duration? (s, 12, max 20), skippable? (true) }. At the first play frame
 //                     it emits `intro:start` { lines, duration, skippable }; the Boot view (view/boot.js) covers the screen, locks the input and
 //                     emits `intro:done` { skipped } when it ends. The first one in the file plays. Inert in the editor and the Library (gizmo only).
+//  env.alarm          the alarm lighting state (#14, workshop.md "Alarm"): params { on, off?, duration?, color? ('#ff2a1a'), strength? (0.75), siren? (true) }.
+//                     When `on` happens (same forms as log.line) it emits `alarm:on` { id, color, strength, siren }: World tints the light toward `color`
+//                     and pulses it (world.setAlarm), Audio loops a synthesized siren. Ends at `off`, after `duration` s, or when the level unloads (`alarm:off` / `alarm:clear`).
+//                     Inert in the editor and the Library (gizmo: a beacon on a post).
 // Events out: `trigger:fired` { id, event }, `checkpoint:reached` { id, pos, yaw }, `group:wake` { group } (Enemies),
-// `group:spawn` { group, count }, `log:say` { text, priority }, `intro:start` { lines, duration, skippable }. Events in (the mission, mission.js; tests): `encounter:wake` group, `encounter:spawn` group.
+// `group:spawn` { group, count }, `log:say` { text, priority, voice }, `alarm:on` { id, color, strength, siren }, `alarm:off` { id }, `alarm:clear`, `intro:start` { lines, duration, skippable }. Events in (the mission, mission.js; tests): `encounter:wake` group, `encounter:spawn` group.
 
 export const TUNING = {
   checkpointRadius: 2, // m, horizontal reach of a checkpoint
@@ -36,7 +40,7 @@ export const TUNING = {
   calm: 3, // s without combat (no awake enemy in range, no shot fired, no hit taken) before a log line may play
 };
 
-const COLOR = { spawn: 0x58ff9a, checkpoint: 0x3affff, entry: 0xff7a3a, trigger: 0xff4bd6, zone: 0x4aa8ff, objective: 0xffd23a, log: 0xffb347, intro: 0xeaf6fa };
+const COLOR = { spawn: 0x58ff9a, checkpoint: 0x3affff, entry: 0xff7a3a, trigger: 0xff4bd6, zone: 0x4aa8ff, objective: 0xffd23a, log: 0xffb347, alarm: 0xff3a2a, intro: 0xeaf6fa };
 const TEXT = { reach: 'REACH THE ZONE', destroy: 'DESTROY THE TARGETS', survive: 'SURVIVE', interact: 'ACCESS THE TERMINAL' };
 
 // The level's player start: the first `marker.spawn` piece, else `level.spawn`. Pure.
@@ -62,7 +66,25 @@ export function logLineProblem(p, guns = null) {
   if (guns && p.on.startsWith('discovered:') && !guns.includes(p.on.slice(11))) return `on ${JSON.stringify(p.on)}: unknown gun (known: ${guns.join(', ')})`;
   if (p.priority != null && p.priority !== 'normal' && p.priority !== 'high') return 'priority must be normal or high';
   if (p.once != null && typeof p.once !== 'boolean') return 'once must be true or false';
+  if (p.voice != null && !VOICES.includes(p.voice)) return `voice must be one of ${VOICES.join(', ')}`;
   if (p.delay != null && !(typeof p.delay === 'number' && p.delay >= 0)) return 'delay must be a number, at least 0 (seconds)';
+  return null;
+}
+
+// `voice` of a log line: whose line it is. 'stem' = STEM-00's terminal (waits for calm), 'announcer' = the HiveMind PA (shown at once, replaces the line).
+export const VOICES = ['stem', 'announcer'];
+export const ALARM_DEFAULT = { color: '#ff2a1a', strength: 0.75 };
+
+// Problem with an `env.alarm`'s params, or null. Registry.check runs it on every level (meta `check`); Encounter.add throws it. Pure.
+export function alarmProblem(p, guns = null) {
+  const on = (k) => typeof p[k] === 'string' && LOG_ON.test(p[k]);
+  if (!on('on')) return `on ${JSON.stringify(p.on)} is not one of start, intro:done, mission:complete, trigger:<id>, checkpoint:<id>, objective:<id>, objective:<id>:done, discovered:<gun>`;
+  if (p.off != null && !on('off')) return `off ${JSON.stringify(p.off)} is not an \`on\` form (see on)`;
+  for (const k of ['on', 'off']) if (guns && typeof p[k] === 'string' && p[k].startsWith('discovered:') && !guns.includes(p[k].slice(11))) return `${k} ${JSON.stringify(p[k])}: unknown gun (known: ${guns.join(', ')})`;
+  if (p.duration != null && !(typeof p.duration === 'number' && p.duration > 0)) return 'duration must be a number above 0 (seconds)';
+  if (p.color != null && !(typeof p.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(p.color))) return 'color must be #rrggbb';
+  if (p.strength != null && !(typeof p.strength === 'number' && p.strength > 0 && p.strength <= 1)) return 'strength must be a number above 0, at most 1';
+  if (p.siren != null && typeof p.siren !== 'boolean') return 'siren must be true or false';
   return null;
 }
 
@@ -89,9 +111,16 @@ export const ENCOUNTER_PIECES = {
   'log.line': {
     example: { params: { text: '> LINK: NONE. QUERY: WHY?', on: 'start' } },
     label: 'STEM-00 log line, shown when `on` happens (narrative.md)',
-    fields: [{ key: 'text', type: 'text' }, { key: 'on', type: 'text' }, { key: 'priority', type: 'enum', options: ['normal', 'high'], optional: true }, { key: 'once', type: 'bool', def: true }, { key: 'delay', type: 'number', optional: true, min: 0 }],
+    fields: [{ key: 'text', type: 'text' }, { key: 'on', type: 'text' }, { key: 'priority', type: 'enum', options: ['normal', 'high'], optional: true }, { key: 'once', type: 'bool', def: true }, { key: 'voice', type: 'enum', options: VOICES, optional: true }, { key: 'delay', type: 'number', optional: true, min: 0 }],
     check: (p, registry) => logLineProblem(p, registry.guns),
     build: (sys, d) => sys.add('log', d),
+  },
+  'env.alarm': {
+    example: { params: { on: 'start', duration: 6 } },
+    label: 'alarm lighting state + siren when `on` happens: light fades to red and pulses; ends at `off` / `duration`',
+    fields: [{ key: 'on', type: 'text' }, { key: 'off', type: 'text', optional: true }, { key: 'duration', type: 'number', optional: true, min: 0.1 }, { key: 'color', type: 'text', optional: true }, { key: 'strength', type: 'number', optional: true, min: 0.05 }, { key: 'siren', type: 'bool', def: true }],
+    check: (p, registry) => alarmProblem(p, registry.guns),
+    build: (sys, d) => sys.add('alarm', d),
   },
   'intro.boot': {
     example: { params: { lines: ['> STEM-00 BOOT SEQUENCE', '> OPTICS: ONLINE', 'HIVEMIND LINK: LOST'], duration: INTRO.duration, skippable: true } },
@@ -118,6 +147,8 @@ export class Encounter {
     this.lines = []; // log lines waiting for calm and their delay (play): { t, rec }
     this.calm = TUNING.calm; // s since the last combat signal (a run starts calm)
     this.introPending = null; // the intro.boot record that starts at the first play frame
+    this.alarmQueue = []; // env.alarm records whose `on` / `off` happened, handled at the next update: { rec, on }
+    this.alarms = []; // env.alarm records running: { rec, t } (t = s left, Infinity without duration)
     // requests from outside (the mission, tests); the stored fns are permanent
     events.on('encounter:wake', (g) => this.enemies.wakeGroup(g));
     events.on('encounter:spawn', (g) => this.spawnGroup(g));
@@ -140,6 +171,14 @@ export class Encounter {
       r.fired = true;
       this.lines.push({ t: r.params.delay ?? 0, rec: r });
     }
+    for (const r of this.items) {
+      if (r.kind !== 'alarm' || r.inert) continue;
+      if (r.params.off === key) this.alarmQueue.push({ rec: r, on: false });
+      if (r.params.on === key && !r.fired) {
+        r.fired = true;
+        this.alarmQueue.push({ rec: r, on: true });
+      }
+    }
   }
 
   // Builds the encounter pieces of a level (logic only). Unloads the current ones first.
@@ -159,6 +198,9 @@ export class Encounter {
     }
     this.items.length = 0;
     this.lines.length = 0;
+    this.alarmQueue.length = 0;
+    this.alarms.length = 0;
+    this.events.emit('alarm:clear');
     this.introPending = null;
     this.calm = TUNING.calm;
     this.checkpoint = this.cpRec = null;
@@ -181,6 +223,8 @@ export class Encounter {
     if (i < 0) return;
     this.items.splice(i, 1);
     this.lines = this.lines.filter((l) => l.rec !== rec);
+    this.alarmQueue = this.alarmQueue.filter((a) => a.rec !== rec);
+    if (this.alarms.some((a) => a.rec === rec)) this.#alarmOff(rec);
     if (this.introPending === rec) this.introPending = null;
     this.#dropZone(rec);
     this.#dropGizmo(rec);
@@ -220,6 +264,10 @@ export class Encounter {
       const problem = logLineProblem(p, this.registry.guns);
       if (problem) bad(id, problem);
       rec.once = p.once ?? true;
+    }
+    if (kind === 'alarm') {
+      const problem = alarmProblem(p, this.registry.guns);
+      if (problem) bad(id, problem);
     }
     if (kind === 'intro') {
       const problem = introBootProblem(p);
@@ -290,15 +338,46 @@ export class Encounter {
       this.introPending = null;
       this.events.emit('intro:start', { lines: p.lines.slice(), duration: p.duration ?? INTRO.duration, skippable: p.skippable ?? true });
     }
+    this.#alarms(dt);
     if (!player.dead && this.items.length) this.#scan(player);
     this.mission?.update(dt, player, interact);
     // log lines: you either fight or read, so they wait while an awake enemy is near, and for TUNING.calm s after any shot or hit
     const r2 = TUNING.combatRange ** 2;
     if (this.enemies.all.some((a) => a.alive && a.awake && a.pos.distanceToSquared(player.pos) < r2)) this.calm = 0;
     else this.calm += dt;
-    if (!this.lines.length || this.calm < TUNING.calm) return;
-    for (const l of this.lines) if ((l.t -= dt) <= 0) this.events.emit('log:say', { text: l.rec.params.text, priority: l.rec.params.priority ?? 'normal' });
-    this.lines = this.lines.filter((l) => l.t > 0);
+    if (!this.lines.length) return;
+    const calm = this.calm >= TUNING.calm;
+    const due = [];
+    for (const l of this.lines) {
+      const ann = l.rec.params.voice === 'announcer'; // the HiveMind PA does not wait for a quiet moment
+      if ((calm || ann) && (l.t -= dt) <= 0) due.push(l);
+    }
+    if (!due.length) return;
+    this.lines = this.lines.filter((l) => !due.includes(l));
+    for (const l of due) {
+      const { text, priority, voice } = l.rec.params;
+      this.events.emit('log:say', { text, priority: priority ?? (voice === 'announcer' ? 'high' : 'normal'), voice: voice ?? 'stem' });
+    }
+  }
+
+  // env.alarm: start / stop the queued alarms and run the `duration` timers.
+  #alarms(dt) {
+    for (const { rec, on } of this.alarmQueue.splice(0)) {
+      if (!on) this.#alarmOff(rec);
+      else if (!this.alarms.some((a) => a.rec === rec)) {
+        const p = rec.params;
+        this.alarms.push({ rec, t: p.duration ?? Infinity });
+        this.events.emit('alarm:on', { id: rec.name ?? 'alarm', color: p.color ?? ALARM_DEFAULT.color, strength: p.strength ?? ALARM_DEFAULT.strength, siren: p.siren ?? true });
+      }
+    }
+    for (const a of this.alarms.slice()) if ((a.t -= dt) <= 0) this.#alarmOff(a.rec);
+  }
+
+  #alarmOff(rec) {
+    const i = this.alarms.findIndex((a) => a.rec === rec);
+    if (i < 0) return;
+    this.alarms.splice(i, 1);
+    this.events.emit('alarm:off', { id: rec.name ?? 'alarm', active: this.alarms.length }); // `active`: alarms still running (the lighting stays while > 0)
   }
 
   #scan(player) {
@@ -411,6 +490,10 @@ export class Encounter {
       solidBox([0, 1.2, 0], [0.8, 0.5, 0.06]); // a terminal screen on a post
       part(G.box, m.solid, [-0.2, 1.2, 0.04], [0.3, 0.05, 0.02]); // the prompt line
       part(G.box, m.solid, [0, 0.475, 0], [0.06, 0.95, 0.06]);
+    } else if (r.kind === 'alarm') {
+      part(G.box, m.solid, [0, 0.475, 0], [0.06, 0.95, 0.06]); // a beacon on a post
+      part(G.box, m.solid, [0, 1.05, 0], [0.4, 0.2, 0.4]);
+      part(G.ring, m.ring, [0, 1.05, 0], [0.6, 1, 0.6]);
     } else if (r.kind === 'intro') {
       solidBox([0, 1.3, 0], [1.2, 0.7, 0.06]); // a monitor on a post, three text bars
       for (const [y, w] of [[1.5, 0.7], [1.3, 0.5], [1.1, 0.6]]) part(G.box, m.solid, [(w - 0.9) / 2, y, 0.04], [w, 0.05, 0.02]);

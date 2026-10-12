@@ -19,6 +19,7 @@ import { Grid } from './grid.js';
 // below the floor (three still loops it in the shader). Asking for more than the pool makes extra lights that are removed again.
 const PARKED = new THREE.Vector3(0, -1000, 0);
 
+export const ALARM = { color: '#ff2a1a', strength: 0.75, rate: 1.6, pulse: 3.2 }; // alarm lighting state: red tint, 0..1 mix, blend per second, pulse rad/s
 const HAZE = '#4f7b7e'; // horizon and fog: teal-cyan haze, desaturated
 export const SUN_DIR = new THREE.Vector3(0.45, 0.78, 0.43).normalize();
 
@@ -117,6 +118,7 @@ export class World {
     this.coverMeshes = [];
     this.interiorZones = [];
     this.flickerLights = [];
+    this.alarm = { level: 0, target: 0, strength: ALARM.strength, color: new THREE.Color(ALARM.color), t: null }; // lighting state (setAlarm)
     this.staticMeshes = []; // every level box; merged per material for rendering, kept as raycast proxies
     this.lights = []; // the level's point lights in use (pool lights, plus any beyond the pool)
     this.pool = []; // permanent point lights (QUALITY lights); those not in `lights` are parked at intensity 0
@@ -328,11 +330,13 @@ export class World {
     this.sky.frustumCulled = false;
     this.scene.add(this.sky);
     this.scene.fog = new THREE.Fog(HAZE, 22, 210);
+    this.base = { fog: this.scene.fog.color.clone(), horizon: mat.uniforms.horizon.value.clone() };
   }
 
   #buildLights() {
     const hemi = new THREE.HemisphereLight(0xa6ccce, 0x3a3a36, 1.6); // teal sky fill, dark ground bounce
     this.scene.add(hemi);
+    this.hemi = hemi;
 
     const sun = new THREE.DirectionalLight(0xe4f0f0, 3.0); // cold, softened by the haze
     sun.castShadow = true;
@@ -344,6 +348,7 @@ export class World {
     sun.shadow.normalBias = 0.04;
     this.scene.add(sun, sun.target);
     this.sun = sun;
+    Object.assign(this.base, { hemi: hemi.color.clone(), ground: hemi.groundColor.clone(), hemiI: hemi.intensity, sun: sun.color.clone() });
   }
 
   // Keep the shadow frustum centered on the player.
@@ -355,7 +360,40 @@ export class World {
     this.sun.position.set(fx, 0, fz).addScaledVector(SUN_DIR, 110);
   }
 
+  // Lighting state (env.alarm): `color` (a CSS colour) fades the haze, fog, hemisphere, sun and the level's point lights toward it
+  // (by `strength`, 0..1) with a slow pulse; `null` fades back to the normal look. `instant` skips the fade. Permanent state, not part of a level.
+  setAlarm(color, strength = ALARM.strength, instant = false) {
+    const a = this.alarm;
+    if (color != null) {
+      a.color.set(color);
+      a.strength = strength;
+    }
+    a.target = color == null ? 0 : 1;
+    if (instant) a.level = a.target;
+    this.#applyAlarm(a.t ?? 0);
+  }
+
+  #applyAlarm(t) {
+    const a = this.alarm;
+    const k = a.level * a.strength * (0.85 + 0.15 * Math.sin(t * ALARM.pulse));
+    const mix = (c, base) => c.copy(base).lerp(a.color, k);
+    mix(this.scene.fog.color, this.base.fog);
+    mix(this.sky.material.uniforms.horizon.value, this.base.horizon);
+    mix(this.hemi.color, this.base.hemi);
+    mix(this.hemi.groundColor, this.base.ground);
+    mix(this.sun.color, this.base.sun);
+    this.hemi.intensity = this.base.hemiI * (1 - 0.35 * k);
+    for (const l of this.lights) if (l.userData.base) mix(l.color, l.userData.base);
+  }
+
   update(t) {
+    const a = this.alarm;
+    const dt = a.t == null ? 0 : Math.min(0.1, Math.max(0, t - a.t));
+    a.t = t;
+    if (a.level !== a.target || a.level > 0) {
+      a.level = a.level < a.target ? Math.min(a.target, a.level + dt * ALARM.rate) : Math.max(a.target, a.level - dt * ALARM.rate);
+      this.#applyAlarm(t);
+    }
     for (const f of this.flickerLights) {
       const n = Math.sin(t * 23.0 + f.seed) * Math.sin(t * 7.3 + f.seed * 2.0);
       const off = n > 0.82 || (Math.sin(t * 1.3 + f.seed) > 0.97);
@@ -497,6 +535,7 @@ export class World {
       this.scene.add(l);
     }
     l.position.set(x, y, z);
+    l.userData.base = l.color.clone(); // the alarm state tints from this
     this.lights.push(l);
     if (flicker) this.flickerLights.push({ light: l, base: intensity, seed: Math.random() * 100, strip: flicker.strip });
     return l;

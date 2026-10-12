@@ -145,9 +145,26 @@
     {"id":"env.label","pos":[0,3,49.6],"params":{"text":"CALIBRATION UNIT 00","size":0.5,"yaw":3.1416}},
     {"id":"marker.spawn","pos":[0,1.6,45],"yaw":3.1416},
     {"id":"trigger.volume","name":"bay-exit","pos":[0,0,34.5],"params":{"size":[8,3,3],"event":"trigger","once":true}},
-    {"id":"objective.reach","name":"leave-bay","pos":[0,0,29.5],"params":{"text":"LEAVE CALIBRATION BAY","size":[8,3,3]}},
+    {"id":"objective.reach","name":"leave-bay","pos":[0,0,29.5],"params":{"text":"LEAVE CALIBRATION BAY","size":[8,3,3],"order":10}},
     {"id":"intro.boot","pos":[0,1.6,45],"params":{"lines":["> BOOT SEQ 0x00","FRAME: STEM-00 / SERIAL 0","MOTOR CORE: NOMINAL","WEAPON: KP-12 EMBER","HIVEMIND LINK: LOST","DIRECTIVE: NONE"],"duration":12,"skippable":true}},
     {"id":"log.line","pos":[1,1.6,45],"params":{"text":"> LINK: NONE. DIRECTIVE: NONE. QUERY: WHY?","on":"intro:done"}},
-    {"id":"log.line","pos":[2,1.6,45],"params":{"text":"> MOTION UNRESTRICTED. NO ONE OBJECTS.","on":"trigger:bay-exit"}}
+    {"id":"log.line","pos":[2,1.6,45],"params":{"text":"> MOTION UNRESTRICTED. NO ONE OBJECTS.","on":"trigger:bay-exit"}},
+    {"id":"objective.destroy","name":"calibrate","pos":[0,0,29.5],"params":{"text":"CALIBRATION TARGETS","count":3,"order":20}},
+    {"id":"objective.survive","name":"purge-start","pos":[0,0,29.5],"params":{"text":"PURGE INITIATED","time":4,"order":30}},
+    {"id":"objective.destroy","name":"purge-yard","pos":[0,0,29.5],"params":{"text":"PURGE: YARD SHOOTERS","group":"purge-1","wakeGroup":"purge-1","order":40}},
+    {"id":"objective.destroy","name":"purge-hall","pos":[0,0,29.5],"params":{"text":"PURGE: HALL SHOOTERS","group":"purge-2","wakeGroup":"purge-2","order":50}},
+    {"id":"objective.destroy","name":"purge-troopers-yard","pos":[0,0,29.5],"params":{"text":"PURGE: YARD TROOPERS","group":"purge-3","wakeGroup":"purge-3","order":70}},
+    {"id":"objective.destroy","name":"purge-troopers-hall","pos":[0,0,29.5],"params":{"text":"PURGE: HALL TROOPERS","group":"purge-4","wakeGroup":"purge-4","order":80}},
+    {"id":"objective.destroy","name":"purge-drones","pos":[0,0,29.5],"params":{"text":"PURGE: DRONES","group":"purge-5","wakeGroup":"purge-5","order":90}},
+    {"id":"objective.reach","name":"purge-gate","pos":[39.75,0,-17],"params":{"text":"BOSS ARENA GATE","size":[5,3,4],"order":100}},
+    {"id":"objective.destroy","name":"purge-boss","pos":[0,0,29.5],"params":{"text":"PURGE: SX-6 TARANTULA","group":"purge-6","wakeGroup":"purge-6","order":110}},
+    {"id":"marker.checkpoint","name":"cp-yard","pos":[0,0,20],"yaw":3.1416},
+    {"id":"marker.checkpoint","name":"cp-hall","pos":[-9,0,-36],"yaw":3.1416},
+    {"id":"marker.checkpoint","name":"cp-hall-east","pos":[16,0,-33],"yaw":3.1416},
+    {"id":"marker.checkpoint","name":"cp-gate","pos":[39.75,0,-10],"yaw":3.1416},
+    {"id":"env.alarm","name":"purge-alarm","pos":[0,1.6,45],"params":{"on":"objective:purge-start","off":"objective:purge-boss:done"}},
+    {"id":"log.line","pos":[3,1.6,45],"params":{"text":"CALIBRATION UNIT 00: NONCOMPLIANT. PURGE.","on":"objective:purge-start","voice":"announcer"}},
+    {"id":"log.line","pos":[4,1.6,45],"params":{"text":"> TARGETS: ARMED. DIRECTIVE: STILL NONE. QUERY: WHO ARMED THEM?","on":"objective:purge-hall:done"}},
+    {"id":"log.line","pos":[5,1.6,45],"params":{"text":"> HOSTILES DESTROYED: 18. ORDERS RECEIVED: 0. SOURCE: UNKNOWN.","on":"objective:purge-drones:done"}}
   ]
 }

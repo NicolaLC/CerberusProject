@@ -208,6 +208,89 @@ await ev(() => {
   expect('  every documented on form passes', r.ok.every((x) => x === null), JSON.stringify(r));
 }
 
+// ---- 6. announcer voice (HiveMind PA) and env.alarm ----
+{
+  const r = await ev(() => {
+    const g = window.game;
+    const log = g.log;
+    const el = document.getElementById('log');
+    const err = (f) => { try { f(); return null; } catch (e) { return e.message; } };
+    const lvl = (id, params) => ({ name: 't', spawn: { pos: [0, 0, 0], yaw: 0 }, pieces: [{ id, pos: [0, 0, 0], params }] });
+    const check = (id, params) => err(() => g.registry.check(lvl(id, params)));
+    const out = {};
+    // an announcer line is not held back by a fight (an awake trooper in range, a shot just fired) and replaces the current line
+    T.play({ loadout: ['pistol'] }, [
+      ['enemy.trooper', [0, 0, -6], { group: 'sq' }],
+      ['trigger.volume', [4, 0, 0], { size: [2, 3, 2] }, 'gate'],
+      ['log.line', [0, 0, 6], { text: 'STEM', on: 'trigger:gate' }],
+      ['log.line', [1, 0, 6], { text: 'PA', on: 'trigger:gate', voice: 'announcer' }],
+    ]);
+    g.encounter.wakeGroup('sq');
+    g.player.pos.set(4, 0, 0);
+    T.step(0.3);
+    out.fight = { texts: T.texts(), cls: el.classList.contains('announcer'), entries: log.entries.map((e) => e.voice ?? 'stem') };
+    // restart clears the styling
+    g.tool.restart();
+    T.step(0.1);
+    out.restart = { cls: el.classList.contains('announcer'), voice: log.voice };
+    // validation
+    out.badVoice = check('log.line', { text: 'X', on: 'start', voice: 'god' });
+    out.okVoice = ['stem', 'announcer'].map((v) => check('log.line', { text: 'X', on: 'start', voice: v }));
+    out.alarmOk = check('env.alarm', { on: 'start', off: 'mission:complete', duration: 5, color: '#ff0000', strength: 0.5, siren: false });
+    out.alarmBad = {
+      none: check('env.alarm', {}),
+      on: check('env.alarm', { on: 'boom' }),
+      off: check('env.alarm', { on: 'start', off: 'boom' }),
+      duration: check('env.alarm', { on: 'start', duration: 0 }),
+      color: check('env.alarm', { on: 'start', color: 'red' }),
+      strength: check('env.alarm', { on: 'start', strength: 2 }),
+      siren: check('env.alarm', { on: 'start', siren: 1 }),
+      gun: check('env.alarm', { on: 'discovered:laser' }),
+      build: err(() => g.registry.build('encounter', g.encounter, { id: 'env.alarm', pos: [0, 0, 0], params: { on: 'x' } })),
+    };
+    // alarm: on a trigger, off by duration / by an off event; two alarms keep the light until both end; unload clears
+    const ev = [];
+    g.engine.events.on('alarm:on', (e) => ev.push('on:' + e.id));
+    g.engine.events.on('alarm:off', (e) => ev.push('off:' + e.id + ':' + e.active));
+    T.play({}, [
+      ['trigger.volume', [4, 0, 0], { size: [2, 3, 2] }, 'gate'],
+      ['trigger.volume', [-4, 0, 0], { size: [2, 3, 2] }, 'stop'],
+      ['env.alarm', [0, 0, 6], { on: 'trigger:gate', off: 'trigger:stop' }, 'A'],
+      ['env.alarm', [1, 0, 6], { on: 'trigger:gate', duration: 2, siren: false }, 'B'],
+    ]);
+    const w = g.world;
+    out.idle = { target: w.alarm.target, siren: g.audio.sirenWanted };
+    g.player.pos.set(4, 0, 0);
+    T.step(0.2);
+    out.on = { target: w.alarm.target, siren: g.audio.sirenWanted, ev: [...ev] };
+    T.step(2.5);
+    out.afterB = { target: w.alarm.target, level: w.alarm.level, ev: [...ev], siren: g.audio.sirenWanted };
+    g.player.pos.set(-4, 0, 0);
+    T.step(0.2);
+    out.afterA = { target: w.alarm.target, siren: g.audio.sirenWanted, ev: [...ev] };
+    T.step(2);
+    out.faded = { level: w.alarm.level, fog: w.scene.fog.color.getHexString() };
+    // edit mode: gizmo, inert (nothing fires on a trigger event); unload while running clears
+    g.player.pos.set(4, 0, 0);
+    g.tool.restart();
+    g.player.pos.set(4, 0, 0);
+    T.step(0.5);
+    out.running = w.alarm.target;
+    g.tool.edit();
+    T.step(0.3);
+    out.edit = { target: w.alarm.target, siren: g.audio.sirenWanted, items: g.encounter.items.filter((x) => x.kind === 'alarm').map((x) => !!x.gizmo && x.inert) };
+    return out;
+  });
+  expect('announcer line: shown in a fight at once, in its own style, entries carry the voice', r.fight.texts.join() === 'PA' && r.fight.cls && r.fight.entries.join() === 'announcer', JSON.stringify(r.fight));
+  expect('  a restart drops the announcer style', !r.restart.cls && r.restart.voice === 'stem', JSON.stringify(r.restart));
+  expect('  voice validation: stem / announcer pass, anything else errors', /voice must be one of stem, announcer/.test(r.badVoice) && r.okVoice.every((x) => x === null), JSON.stringify([r.badVoice, r.okVoice]));
+  expect('env.alarm validation: every param, with a clear error', r.alarmOk === null && /env\.alarm.*on undefined is not one of/.test(r.alarmBad.none) && /on "boom"/.test(r.alarmBad.on) && /off "boom"/.test(r.alarmBad.off) && /duration/.test(r.alarmBad.duration) && /color/.test(r.alarmBad.color) && /strength/.test(r.alarmBad.strength) && /siren/.test(r.alarmBad.siren) && /unknown gun/.test(r.alarmBad.gun) && /env\.alarm: on "x"/.test(r.alarmBad.build), JSON.stringify(r.alarmBad));
+  expect('env.alarm: idle until its event; then lighting target + siren + one alarm:on per alarm', r.idle.target === 0 && !r.idle.siren && r.on.target === 1 && r.on.siren && r.on.ev.join() === 'on:A,on:B', JSON.stringify([r.idle, r.on]));
+  expect('  `duration` ends its alarm, the light holds while another runs', r.afterB.target === 1 && r.afterB.level === 1 && r.afterB.siren && r.afterB.ev.at(-1) === 'off:B:1', JSON.stringify(r.afterB));
+  expect('  `off` ends the last one: target 0, siren off, light fades back to the normal fog', r.afterA.target === 0 && !r.afterA.siren && r.afterA.ev.at(-1) === 'off:A:0' && r.faded.level === 0 && r.faded.fog === '4f7b7e', JSON.stringify([r.afterA, r.faded]));
+  expect('  a Workshop edit (unload) clears a running alarm; the pieces are inert gizmos in edit mode', r.running === 1 && r.edit.target === 0 && !r.edit.siren && r.edit.items.length === 2 && r.edit.items.every(Boolean), JSON.stringify([r.running, r.edit]));
+}
+
 expect('no page or console errors', errors.length === 0, errors.join(' | '));
 await b.close();
 console.log(fail.length ? `\n${fail.length} FAILED` : '\nall passed');
