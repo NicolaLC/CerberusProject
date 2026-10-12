@@ -111,12 +111,13 @@ export class CameraRig {
 
   // Aim assist: slows the look near a target (friction) and, if `magnetism`, eases toward it.
   // Mouse players get friction only (the aim never moves on its own); trackpad players also get the pull.
-  // targets: world points (puppet chests). Returns the friction multiplier for this frame's look.
-  assist(dt, targets, strength, magnetism = true) {
+  // targets: world points (puppet chests), the first `count` are valid. Returns the friction multiplier for this frame's look.
+  assist(dt, targets, count, strength, magnetism = true) {
     const camPos = this.camera.position;
     let best = null;
     let bestAng = 0.09 * strength;
-    for (const p of targets) {
+    for (let i = 0; i < count; i++) {
+      const p = targets[i];
       const d = _dir.copy(p).sub(camPos);
       const dist = d.length();
       if (dist > 70) continue;

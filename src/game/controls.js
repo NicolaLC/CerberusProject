@@ -1,5 +1,4 @@
 import { Actions } from '../engine/actions.js';
-import { settings } from './settings.js';
 
 // Every binding in the game lives here. Gameplay reads intents from Controls, never device codes.
 // Gamepad buttons use the W3C standard layout (Xbox names): Pad0 A, Pad1 B, Pad2 X, Pad3 Y, Pad4 LB, Pad5 RB,
@@ -79,8 +78,9 @@ const KEY_LOOK = { x: 900, y: 500 }; // px/s equivalent for arrow-key look
 const PAD_LOOK = { x: 1150, y: 650, curve: 2.2, boostAfter: 0.25, boost: 1.7, boostIn: 0.3 };
 
 export class Controls {
-  constructor(input) {
+  constructor(input, settings) {
     this.input = input;
+    this.settings = settings;
     this.actions = new Actions(input, BINDINGS);
     this.aimLatched = false; // trackpad aim toggle
     this.sprintLatched = false; // gamepad: L3 starts a sprint that lasts while the stick is pushed
@@ -94,7 +94,7 @@ export class Controls {
   // Once per frame, before gameplay (pre phase).
   update() {
     const a = this.actions;
-    if (!settings.trackpad || !(this.input.locked || this.input.free)) {
+    if (!this.settings.trackpad || !(this.input.locked || this.input.free)) {
       this.aimLatched = false;
     } else if (a.pressed('aim')) {
       this.aimLatched = false; // a held aim takes over
@@ -124,7 +124,7 @@ export class Controls {
     const i = this.input;
     out.x = i.dx + this.actions.axis('lookLeft', 'lookRight') * KEY_LOOK.x * realDt;
     out.y = i.dy + this.actions.axis('lookUp', 'lookDown') * KEY_LOOK.y * realDt;
-    if (settings.trackpad) {
+    if (this.settings.trackpad) {
       out.x += i.wheelX;
       out.y += i.wheelY;
     }
@@ -135,13 +135,13 @@ export class Controls {
       const boost = 1 + (PAD_LOOK.boost - 1) * Math.min(1, Math.max(0, this.rim - PAD_LOOK.boostAfter) / PAD_LOOK.boostIn);
       const k = (Math.pow(m, PAD_LOOK.curve) / m) * boost * realDt;
       out.x += p.rx * PAD_LOOK.x * k;
-      out.y += p.ry * PAD_LOOK.y * k * (settings.padInvertY ? -1 : 1);
+      out.y += p.ry * PAD_LOOK.y * k * (this.settings.padInvertY ? -1 : 1);
     } else this.rim = 0;
     return out;
   }
 
   get aiming() {
-    return this.actions.held('aim') || (settings.trackpad && this.aimLatched);
+    return this.actions.held('aim') || (this.settings.trackpad && this.aimLatched);
   }
 
   get running() {
@@ -182,7 +182,7 @@ export class Controls {
   // Mouse wheel cycles weapons (+1 / -1) except in trackpad mode, where the wheel looks around; Y / RB: next.
   get cycle() {
     if (this.actions.pressed('nextGun')) return 1;
-    if (settings.trackpad || !this.input.edges) return 0;
+    if (this.settings.trackpad || !this.input.edges) return 0;
     return Math.sign(this.input.wheelSteps);
   }
 }

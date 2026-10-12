@@ -298,7 +298,8 @@ export class Enemies {
     return this.targets;
   }
 
-  // Chest points of exposed puppets for aim assist. Fills and returns `out` (array of reusable vectors).
+  // Chest points of exposed puppets for aim assist. Fills `out` (a high-water array of reusable vectors, never
+  // truncated so nothing is reallocated) and returns how many entries are valid.
   aimPoints(out) {
     let n = 0;
     for (const p of this.all) {
@@ -310,8 +311,7 @@ export class Enemies {
       if (!out[n]) out[n] = new THREE.Vector3();
       p.rig.bones.Spine2.getWorldPosition(out[n++]);
     }
-    out.length = n;
-    return out;
+    return n;
   }
 
   // Damages the player from a point (direction for the HUD indicator) and announces it.

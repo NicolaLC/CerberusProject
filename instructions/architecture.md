@@ -20,7 +20,7 @@ src/
     storage.js            safe localStorage JSON
     random.js             seedable RNG streams
   game/
-    game.js               COMPOSITION ROOT: builds systems, wires events, declares frame order, start/pause shell
+    game.js               COMPOSITION ROOT: builds systems, wires events, declares frame order, level lifecycle; loads `settings` once and injects it (Controls)
     scenes.js             scene list: name -> level file, ?scene= resolution (level.md)
     registry.js           piece registry: stable string id -> how a piece is built from data (ids: level.md)
     controls.js           BINDINGS table + intents (move, look, aiming, running, firing, slots...)
@@ -34,7 +34,7 @@ src/
             enemies.js (system: builds enemy.* / boss.* pieces, bolts, stands, target cache, squad alerts, `all` = every enemy)
     ai/     cover.js (cover spots from cover boxes, protection test, spot choice + detour route)
     combat/ guns.js (gun table), weapon.js (controller, hitscan, aim probe), ballistics.js (pure shot math)
-    view/   camera.js, fx.js, hud.js, audio.js, juice.js, post.js   (presentation only)
+    view/   camera.js, fx.js, hud.js, audio.js, juice.js, post.js, shell.js (DOM shell: start/pause panel, pointer lock, scene buttons, pad navigation)   (presentation only)
 ```
 
 `src/levels/` holds level files (plain JSON, see `level.md`); `scenes.js` lists them, `Game.loadScene(name)` hands one to the systems.
