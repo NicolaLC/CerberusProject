@@ -35,12 +35,13 @@ renderer, gamepad, pointer lock and audio behave exactly as in the Chromium the 
   `node_modules` is excluded (~0.7 MB archive; installer ~125 MB, mostly Chromium).
 
 ## Releases (GitHub)
-- `.github/workflows/release.yml` runs on a pushed commit whose message contains `[release]`, a pushed tag
-  `v<version>` (must equal package.json `version`) or a manual run; it tags the commit `v<version>`:
+- `.github/workflows/release.yml` runs on a merge (push) to `main` whose package.json `version` isn't tagged yet, a pushed
+  commit whose message contains `[release]`, a pushed tag `v<version>` (must equal package.json `version`) or a manual
+  run; it tags the commit `v<version>`. A merge to `main` with an already released version builds nothing:
   web job (tests, `dist/` zip + single-file page), desktop matrix (ubuntu → AppImage + deb + tar.gz, windows → NSIS exe,
   macos → universal dmg), then a GitHub prerelease with `RELEASE_NOTES.md` as the body.
-- To cut one: bump `version` in package.json, rewrite RELEASE_NOTES.md, commit with `[release]` in the message,
-  push. (Claude cloud sessions can't push tags: the git proxy refuses them, so use `[release]`.)
+- To cut one: bump `version` in package.json and rewrite RELEASE_NOTES.md in the PR, then merge it to `main`
+  (or, from any branch, commit with `[release]` in the message and push). (Claude cloud sessions can't push tags: the git proxy refuses them, so use `[release]`.)
 - File names: `Cerberus-<version>-<os>-<arch>.<ext>` (electron-builder `artifactName`).
 - Linux: the AppImage needs FUSE 2 (missing by default on Ubuntu 22.04+), and portable builds (AppImage, tar.gz)
   can't ship a SUID sandbox helper, so Ubuntu 24.04+ (AppArmor blocks unprivileged user namespaces) needs
