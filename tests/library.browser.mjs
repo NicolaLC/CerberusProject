@@ -32,15 +32,21 @@ await p.evaluate(() => {
   T.bolts = 0;
   engine.events.on('bolt:fired', () => T.bolts++);
   T.key = (code) => dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
-  // renders everything once (no culling) and reports what the GPU holds
+  // renders everything once (no culling, pooled hidden meshes such as idle bolt tracers shown) and reports what the GPU
+  // holds: three uploads lazily, so a tracer in flight at one reading and not the other would move the count
   T.mem = () => {
-    const culled = [];
-    engine.scene.traverse((o) => { if (o.frustumCulled) culled.push(o); o.frustumCulled = false; });
+    const culled = [], hidden = [];
+    engine.scene.traverse((o) => {
+      if (o.frustumCulled) culled.push(o);
+      o.frustumCulled = false;
+      if (!o.visible && o.geometry) { hidden.push(o); o.visible = true; }
+    });
     for (const far of [true, false]) {
       for (const e of g.enemies.puppets) e.skin?.setFar(far);
       engine.renderer.render(engine.scene, engine.camera);
     }
     for (const o of culled) o.frustumCulled = true;
+    for (const o of hidden) o.visible = false;
     let objects = 0;
     engine.scene.traverse(() => objects++);
     const m = engine.renderer.info.memory;
