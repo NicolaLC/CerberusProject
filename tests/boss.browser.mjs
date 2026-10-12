@@ -19,7 +19,7 @@ const r = await p.evaluate(() => {
   const boss = enemies.boss;
   const V = boss.pos.constructor;
   const out = {};
-  for (const e of enemies.puppets) if (e !== boss) e.alive = false; // the boss alone
+  for (const e of enemies.all) if (e !== boss) e.alive = false; // the boss alone
   enemies.dirty = true;
   player.shields = player.health = 1e6;
   const hold = (x, z, s) => { for (let i = 0; i < s * 60; i++) { player.pos.set(x, 0, z); player.health = 1e6; engine.step(1 / 60); } };

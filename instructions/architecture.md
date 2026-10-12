@@ -28,9 +28,9 @@ src/
     world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), textures.js, pickups.js (pickup.* pieces), encounter.js (marker.* / trigger.* / objective.* pieces: spawn, checkpoints, trigger volumes, reinforcements; workshop.md), mission.js (objective sequencing, `game.mission`; ticks inside encounter)
     actors/ rig.js (skeleton, animator, IK), parts.js (model building blocks, debris), soldier.js (player model),
             looks.js (trooper / puppet models), player.js,
-            enemy.js (shared enemy body: hit zones, weak spots, flash, debris death),
+            enemy.js (shared enemy body: hit zones, weak spots, flash, debris death; `sightRay` line of sight for every type),
             puppet.js (training puppets), trooper.js (cover-using soldiers), drone.js, spider.js (miniboss),
-            enemies.js (system: builds enemy.* / boss.* pieces, bolts, stands, target cache, squad alerts)
+            enemies.js (system: builds enemy.* / boss.* pieces, bolts, stands, target cache, squad alerts, `all` = every enemy)
     ai/     cover.js (cover spots from cover boxes, protection test, spot choice + detour route)
     combat/ guns.js (gun table), weapon.js (controller, hitscan, aim probe), ballistics.js (pure shot math)
     view/   camera.js, fx.js, hud.js, audio.js, juice.js, post.js   (presentation only)
@@ -60,6 +60,11 @@ src/
   level; a new per-level system that must register one has to remove it in `unload()`.
 - A new per-level object that is added to the scene needs its disposal in the owner's `unload()`; the
   `scenes.browser.mjs` leak check (geometries / textures / scene objects over arena→gym→library→workshop cycles) fails otherwise.
+- Enemies: actors (puppet, trooper, drone, boss) get a narrow `ctx` from `Enemies` (world, scene, events, debris bank, cover /
+  player / time / all getters, spawnBolt, hurtPlayer, alertNear, separate, reportKill, markDirty, takeStand, setStand) and never
+  write system fields. Shared helpers instead of inheritance: `sightRay` (enemy.js), `DebrisBank` (parts.js: death chunks are
+  baked once per enemy kind at spawn and shared by every death, pooled chunk objects, geometry freed by `Enemies.unload`).
+  Tool APIs: `freeze(on)`, `setBoss(actor)`, `pose(actor, { viewer })`. `puppets` is a deprecated alias of `all`.
 - Cross-system reactions (puppet dies → pickup drop) are wired in `game.js` with `events.on`.
 
 ## Scenes
@@ -102,7 +107,7 @@ Payload objects marked * are reused: copy what you keep. `src/types.js` holds JS
 | `player:vaultRefused` | *{ collider, blocker } (landing spot blocked; a jet burst fires instead) | Gym traversal tool |
 | `player:step` | *{ run, raised } (each heel strike; not in the air) | audio |
 | `enemy:step` | position (trooper / moving puppet heel strike) | audio (fades out by 28 m from the camera) |
-| `puppet:down` | puppet | pickups (drop), audio, mission (destroy) |
+| `puppet:down` | actor (any enemy type; emitted by `ctx.reportKill`, which also counts the kill and fires `arena:clear` on the last one) | pickups (drop), audio, mission (destroy) |
 | `trigger:fired` | { id, event } (a `trigger.volume` was entered) | mission (reach with `trigger`) |
 | `checkpoint:reached` | { id, pos, yaw } | hud toast, mission (reach with `trigger`) |
 | `group:wake` / `group:spawn` | { group } / { group, count } | – / mission (destroy without `count`) |

@@ -43,31 +43,135 @@ export const look = (...children) => {
   return g;
 };
 
-// Debris chunk for a baked piece: the RigidSkin proxies under `obj` (its look; invisible hitboxes are left out),
-// baked to one mesh with vertex colors, no shadow: one draw per chunk whatever the materials (a destroyed trooper
-// was ~119 draws with one shadow-casting mesh per material) and placed where `obj` is in the world. null if nothing under
-// it is drawn. The geometry is the chunk's own: free it with disposeDebris; the material is shared by all debris.
+// ----- death debris -----
+// Every enemy type breaks into the same kind of chunks: each non-bone piece on a bone (look group, weak spot, gun) becomes
+// one baked mesh with vertex colors, no shadow (one draw per chunk whatever its materials; a destroyed trooper was ~119
+// draws), placed where the piece is in the world. A chunk's geometry only depends on the piece's own local frame, so it is
+// baked once per enemy TYPE (`kind`, keyed by bone index + child index; lazily on first use or up front with prime()) and
+// shared by every death of that type. A death only copies transforms and velocities into pooled chunk objects: no
+// bake, no GPU upload, no allocation. One bank per Enemies system; dispose() frees the geometry once (level unload).
+// The material is shared by all debris (never disposed).
 const DEBRIS_MAT = makeLodMaterial();
 DEBRIS_MAT.userData.shared = true;
 const _inv = new THREE.Matrix4();
-export function debrisCopy(obj) {
+const _rel = new THREE.Matrix4();
+const rand = () => Math.random();
+
+// The piece's drawn proxies baked to one geometry in the piece's local space; null if nothing under it is drawn.
+function bakeChunk(piece) {
   const out = new THREE.Group();
-  _inv.copy(obj.matrixWorld).invert();
-  obj.traverse((o) => {
+  _inv.copy(piece.matrixWorld).invert();
+  piece.traverse((o) => {
     if (!o.isMesh || !o.userData.proxy) return;
     const m = new THREE.Mesh(o.geometry, o.material);
-    m.castShadow = false; // small, fast and gone in seconds: not worth a shadow draw per chunk
-    m.applyMatrix4(new THREE.Matrix4().multiplyMatrices(_inv, o.matrixWorld));
+    m.applyMatrix4(_rel.multiplyMatrices(_inv, o.matrixWorld));
     out.add(m);
   });
   if (!out.children.length) return null;
   bakeGroup(out, DEBRIS_MAT);
-  if (!out.children.length) return null; // only transparent parts
-  obj.matrixWorld.decompose(out.position, out.quaternion, out.scale);
-  return out;
+  return out.children[0]?.geometry ?? null; // none: only transparent parts
 }
 
-export function disposeDebris(obj) {
-  obj.removeFromParent();
-  for (const c of obj.children) c.geometry?.dispose();
+export class DebrisBank {
+  constructor() {
+    this.geos = new Map(); // `${kind}|${boneIndex}|${childIndex}` -> BufferGeometry | null (nothing to draw)
+    this.free = []; // pooled chunks { obj, v, av, life }
+  }
+
+  #geo(kind, skin, bone, i, piece) {
+    const key = `${kind}|${skin.boneIndex.get(bone)}|${i}`;
+    let g = this.geos.get(key);
+    if (g === undefined) {
+      g = bakeChunk(piece);
+      this.geos.set(key, g);
+    }
+    return g;
+  }
+
+  // Bakes every chunk of a freshly built actor (call once its skin exists and its matrices are updated). A type's
+  // second spawn finds everything cached.
+  prime(kind, skin) {
+    skin.syncProxies();
+    for (const bone of skin.skeleton.bones) {
+      for (let i = 0; i < bone.children.length; i++) if (!bone.children[i].isBone) this.#geo(kind, skin, bone, i, bone.children[i]);
+    }
+  }
+
+  // Breaks the pieces on `bones` (default: the whole skeleton) into chunks pushed to `out`, added to `scene`.
+  // The caller updated the world matrices; proxies are re-synced here (frozen rig proxies, see batch.js).
+  // o: { dir?, push: [base, range] along dir, spread (x/z jitter), up: [base, range], spin, life }
+  burst(kind, skin, scene, out, o, bones = skin.skeleton.bones) {
+    skin.syncProxies();
+    for (const bone of bones) {
+      for (let i = 0; i < bone.children.length; i++) {
+        const piece = bone.children[i];
+        if (piece.isBone) continue;
+        const geo = this.#geo(kind, skin, bone, i, piece);
+        if (!geo) continue;
+        const c = this.free.pop() ?? this.#chunk();
+        c.obj.geometry = geo;
+        piece.matrixWorld.decompose(c.obj.position, c.obj.quaternion, c.obj.scale);
+        scene.add(c.obj);
+        if (o.dir) c.v.copy(o.dir).multiplyScalar(o.push[0] + rand() * o.push[1]);
+        else c.v.set(0, 0, 0);
+        c.v.x += (rand() - 0.5) * o.spread;
+        c.v.y += o.up[0] + rand() * o.up[1];
+        c.v.z += (rand() - 0.5) * o.spread;
+        c.av.set(rand() - 0.5, rand() - 0.5, rand() - 0.5).multiplyScalar(o.spin);
+        c.life = o.life;
+        out.push(c);
+      }
+    }
+  }
+
+  #chunk() {
+    const obj = new THREE.Mesh(undefined, DEBRIS_MAT);
+    obj.castShadow = false; // small, fast and gone in seconds: not worth a shadow draw per chunk
+    return { obj, v: new THREE.Vector3(), av: new THREE.Vector3(), life: 0 };
+  }
+
+  // Tumbles the chunks of one actor (gravity, bounce, shrink in the last second) and frees the expired ones.
+  step(list, dt, world) {
+    for (let i = list.length - 1; i >= 0; i--) {
+      const d = list[i];
+      d.life -= dt;
+      d.v.y -= 18 * dt;
+      d.obj.position.addScaledVector(d.v, dt);
+      d.obj.rotation.x += d.av.x * dt;
+      d.obj.rotation.y += d.av.y * dt;
+      d.obj.rotation.z += d.av.z * dt;
+      const g = world.groundAt(d.obj.position.x, d.obj.position.z, d.obj.position.y + 0.3) + 0.05;
+      if (d.obj.position.y < g) {
+        d.obj.position.y = g;
+        d.v.y *= -0.3;
+        d.v.x *= 0.6;
+        d.v.z *= 0.6;
+        d.av.multiplyScalar(0.6);
+      }
+      if (d.life < 1) d.obj.scale.multiplyScalar(1 - dt * 3);
+      if (d.life <= 0) {
+        this.#release(d);
+        list[i] = list[list.length - 1];
+        list.pop();
+      }
+    }
+  }
+
+  #release(d) {
+    d.obj.removeFromParent();
+    this.free.push(d);
+  }
+
+  // Hands an actor's chunks back (the actor is removed).
+  releaseAll(list) {
+    for (const d of list) this.#release(d);
+    list.length = 0;
+  }
+
+  // Frees the baked geometry (the pooled chunks own nothing else). Chunks still out must be released first.
+  dispose() {
+    for (const g of this.geos.values()) g?.dispose();
+    this.geos.clear();
+    this.free.length = 0;
+  }
 }

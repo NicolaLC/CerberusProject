@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { RigidSkin } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
 import { damp } from '../../engine/math.js';
-import { rb, cyl, ring, look, debrisCopy, disposeDebris } from './parts.js';
+import { rb, cyl, ring, look } from './parts.js';
+import { sightRay } from './enemy.js';
 
 // Attack drone: a small quad-rotor that hovers 3.5-5 m up, circles the player at range and fires short bolt
 // bursts. Light (dies fast) but hard to hit while it strafes; the glowing core underneath is its weak spot.
@@ -28,13 +29,13 @@ const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
-const _ray = new THREE.Raycaster();
+const DEBRIS = { push: [0, 0], spread: 6, up: [2, 4], spin: 12, life: 4 }; // see DebrisBank.burst; no dir: it bursts where it lands
 const BLAST = { point: new THREE.Vector3(), radius: 1.5, kind: 'drone' };
 const HITBOX_MAT = new THREE.MeshBasicMaterial(); // never drawn
 
 export class Drone {
-  constructor(sys, def) {
-    this.sys = sys;
+  constructor(ctx, def) {
+    this.ctx = ctx;
     this.t = TUNING;
     this.kind = 'drone';
     this.pos = new THREE.Vector3(...def.pos);
@@ -160,16 +161,16 @@ export class Drone {
       );
     }
     this.skeleton = new THREE.Skeleton(bones);
-    sys.scene.add(this.root);
+    ctx.scene.add(this.root);
     this.#place();
     this.skin = new RigidSkin(this.root, this.skeleton, { cullMargin: 1.5, lod: true });
-    sys.dirty = true;
+    ctx.debris.prime(this.kind, this.skin);
+    ctx.markDirty();
   }
 
   // Removes the drone from the scene and frees everything it owns.
   dispose() {
-    for (const d of this.debris) disposeDebris(d.obj);
-    this.debris.length = 0;
+    this.ctx.debris.releaseAll(this.debris);
     disposeTree(this.root);
     for (const m of [...Object.values(this.mats), this.skin.lodMaterial]) m.dispose();
   }
@@ -200,11 +201,8 @@ export class Drone {
     if (this.health > 0) return false;
     // shot down: counts now, tumbles, bursts when it lands
     this.alive = false;
-    this.sys.kills++;
-    this.sys.dirty = true;
     this.falling = { vel: this.vel.clone().addScaledVector(dir, 4).setY(1.5), spin: (Math.random() - 0.5) * 16 };
-    this.sys.events.emit('puppet:down', this);
-    if (this.sys.kills === this.sys.puppets.length) this.sys.events.emit('arena:clear');
+    this.ctx.reportKill(this);
     return true;
   }
 
@@ -273,7 +271,7 @@ export class Drone {
     const b = t.bounds;
     this.pos.x = THREE.MathUtils.clamp(this.pos.x, b.minX, b.maxX);
     this.pos.z = THREE.MathUtils.clamp(this.pos.z, b.minZ, b.maxZ);
-    const world = this.sys.world;
+    const world = this.ctx.world;
     const ground = world.groundAt(this.pos.x, this.pos.z, this.pos.y + this.alt, 0, TUNING.floorMin);
     _b.set(this.pos.x, ground + this.alt - 0.3, this.pos.z);
     if (world.isInterior(_b)) {
@@ -296,12 +294,7 @@ export class Drone {
   }
 
   #sees(target) {
-    this.muzzle.getWorldPosition(_b);
-    _w.subVectors(target, _b);
-    const len = _w.length();
-    _ray.set(_b, _w.divideScalar(len));
-    _ray.far = Math.max(0.01, len - 0.5);
-    return _ray.intersectObjects(this.sys.world.meshes, false).length === 0;
+    return sightRay(this.muzzle.getWorldPosition(_b), target, this.ctx.world.meshes);
   }
 
   #shoot(dt, player) {
@@ -326,7 +319,7 @@ export class Drone {
       _w.x += (Math.random() - 0.5) * spread * 2;
       _w.y += (Math.random() - 0.5) * spread * 2;
       _w.z += (Math.random() - 0.5) * spread * 2;
-      this.sys.spawnBolt(_b, _w.normalize(), b.damage);
+      this.ctx.spawnBolt(_b, _w.normalize(), b.damage);
       g.timer = b.gap;
       if (--g.shots <= 0) {
         g.state = 'idle';
@@ -350,50 +343,17 @@ export class Drone {
     this.root.rotation.y += f.spin * dt;
     this.body.rotation.x += f.spin * 0.3 * dt;
     this.root.updateMatrixWorld(true);
-    const g = this.sys.world.groundAt(this.root.position.x, this.root.position.z, this.root.position.y + 0.5);
+    const g = this.ctx.world.groundAt(this.root.position.x, this.root.position.z, this.root.position.y + 0.5);
     if (this.root.position.y > g + 0.3) return;
     // burst on impact
     BLAST.point.copy(this.root.position);
-    this.sys.events.emit('blast', BLAST);
-    for (const bone of this.skeleton.bones) {
-      for (const piece of bone.children) {
-        if (piece.isBone) continue;
-        const d = debrisCopy(piece);
-        if (!d) continue;
-        this.sys.scene.add(d);
-        const v = new THREE.Vector3((Math.random() - 0.5) * 6, 2 + Math.random() * 4, (Math.random() - 0.5) * 6);
-        const av = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(12);
-        this.debris.push({ obj: d, v, av, life: 4 });
-      }
-    }
+    this.ctx.events.emit('blast', BLAST);
+    this.ctx.debris.burst(this.kind, this.skin, this.ctx.scene, this.debris, DEBRIS);
     this.root.visible = false;
     this.falling = null;
   }
 
   #updateDebris(dt) {
-    if (!this.debris.length) return;
-    const world = this.sys.world;
-    for (let i = this.debris.length - 1; i >= 0; i--) {
-      const d = this.debris[i];
-      d.life -= dt;
-      d.v.y -= 18 * dt;
-      d.obj.position.addScaledVector(d.v, dt);
-      d.obj.rotation.x += d.av.x * dt;
-      d.obj.rotation.z += d.av.z * dt;
-      const g = world.groundAt(d.obj.position.x, d.obj.position.z, d.obj.position.y + 0.3) + 0.05;
-      if (d.obj.position.y < g) {
-        d.obj.position.y = g;
-        d.v.y *= -0.3;
-        d.v.x *= 0.6;
-        d.v.z *= 0.6;
-        d.av.multiplyScalar(0.6);
-      }
-      if (d.life < 1) d.obj.scale.multiplyScalar(1 - dt * 3);
-      if (d.life <= 0) {
-        disposeDebris(d.obj);
-        this.debris[i] = this.debris[this.debris.length - 1];
-        this.debris.pop();
-      }
-    }
+    if (this.debris.length) this.ctx.debris.step(this.debris, dt, this.ctx.world);
   }
 }

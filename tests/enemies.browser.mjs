@@ -18,12 +18,14 @@ const r = await p.evaluate(() => {
   const step = (s) => { for (let i = 0; i < s * 60; i++) engine.step(1 / 60); };
   const out = {};
   // drones and the boss have their own tests: keep them out of these counts
-  for (const e of enemies.puppets) if (e.kind === 'drone' || e.kind === 'boss') e.alive = false;
+  for (const e of enemies.all) if (e.kind === 'drone' || e.kind === 'boss') e.alive = false;
   enemies.dirty = true;
 
   // 1. a destroyed puppet stays destroyed
-  const pp = enemies.puppets.find((x) => x.kind === 'static');
+  const pp = enemies.all.find((x) => x.kind === 'static');
   pp.damage(999, pp.pos.clone(), new pp.pos.constructor(0, 0, 1), 'torso');
+  const banked = [...enemies.debris.geos.values()];
+  out.debrisShared = pp.debris.length > 0 && pp.debris.every((d) => banked.includes(d.obj.geometry)); // baked once per type, not per death
   const chunks = pp.debris.map((d) => d.obj); // (a clip may also drop: that's a pickup, not debris)
   step(15);
   out.stillDead = !pp.alive && !pp.rig.root.visible;
@@ -32,8 +34,8 @@ const r = await p.evaluate(() => {
   out.kills = enemies.kills;
 
   // 2. shooters engage only within range: count bolts per shooter
-  const shooter = enemies.puppets.find((x) => x.kind === 'shooter' && x.pos.z === -15.3 && x.pos.x === 2);
-  const others = enemies.puppets.filter((x) => (x.kind === 'shooter' || x.kind === 'trooper') && x !== shooter);
+  const shooter = enemies.all.find((x) => x.kind === 'shooter' && x.pos.z === -15.3 && x.pos.x === 2);
+  const others = enemies.all.filter((x) => (x.kind === 'shooter' || x.kind === 'trooper') && x !== shooter);
   for (const o of others) o.alive = false; // isolate the one under test
   let fired = 0;
   engine.events.on('bolt:fired', () => fired++);
@@ -68,7 +70,7 @@ const r = await p.evaluate(() => {
   out.noneInside = !squad.some(inside);
 
   // 4. flanking: player dug in behind low cover facing the squad -> one trooper goes round the side
-  for (const t of enemies.puppets) if (t.kind === 'trooper' && t.pos.z > -35) t.alive = true;
+  for (const t of enemies.all) if (t.kind === 'trooper' && t.pos.z > -35) t.alive = true;
   player.pos.set(-6, 0, 1.6);
   g.camRig.yaw = 0;
   step(0.3);
@@ -78,7 +80,7 @@ const r = await p.evaluate(() => {
   step(0.3);
   out.playerInCover = !!player.cover;
   const front = player.cover.normal.clone().negate(); // the side the player defends
-  for (const t of enemies.puppets) if (t.kind === 'trooper' && t.alive) t.alert();
+  for (const t of enemies.all) if (t.kind === 'trooper' && t.alive) t.alert();
   let flanker = null;
   engine.events.on('trooper:flank', (t) => (flanker ??= t));
   for (let i = 0; i < 20 && !flanker; i++) step(1);
@@ -93,7 +95,7 @@ const r = await p.evaluate(() => {
     step(6);
     out.flankerFired = fired;
   }
-  out.allInRange = enemies.puppets.filter((t) => t.kind === 'trooper' && t.alive && t.alerted && t.spot).every((t) => t.spot.pos.distanceTo(player.pos) <= 34.5);
+  out.allInRange = enemies.all.filter((t) => t.kind === 'trooper' && t.alive && t.alerted && t.spot).every((t) => t.spot.pos.distanceTo(player.pos) <= 34.5);
   return out;
 });
 console.log(r);
@@ -101,6 +103,7 @@ const fail = [];
 const expect = (name, ok) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`); if (!ok) fail.push(name); };
 expect('destroyed puppet stays destroyed after 15 s', r.stillDead);
 expect('its debris is cleaned up', r.debrisCleared);
+expect('its debris chunks use the type\'s shared baked geometry', r.debrisShared);
 expect('it is no longer a target', r.notTargetable && r.kills === 1);
 expect('no shots from 40 m', r.firedAt40m === 0);
 expect('shoots inside range (20 m)', r.firedAt20m > 0);

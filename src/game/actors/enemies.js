@@ -7,9 +7,13 @@ import { SpiderMech, TUNING as SPIDER } from './spider.js';
 import { Drone, TUNING as DRONE } from './drone.js';
 import { CoverMap } from '../ai/cover.js';
 import { Grid } from '../world/grid.js';
+import { DebrisBank } from './parts.js';
 
-// The enemy system: spawns every enemy (training puppets and troopers, one list), owns enemy projectiles,
-// the cover map, the instanced puppet stands and the cached raycast target list.
+// The enemy system: spawns every enemy (training puppets, troopers, drones, the boss: one list, `all`), owns enemy
+// projectiles, the cover map, the instanced puppet stands, the death-debris bank and the cached raycast target list.
+// Actors do not get the system but `ctx`, a narrow view of it (see EnemyBody): they read cover / player / time / all,
+// call spawnBolt / hurtPlayer / alertNear / separate / reportKill / markDirty / takeStand / setStand, and write nothing.
+// Tool APIs: freeze(on), setBoss(actor), pose(actor, opts) (the Workshop editor uses them).
 
 // Enemy pieces (registry ids, a public contract: instructions/level.md). Data: { id, pos, yaw?, params? }.
 // The spawn list lives in the level file; builders run against this system and return the actor.
@@ -20,15 +24,15 @@ const GROUP = { key: 'group', type: 'text', optional: true };
 const def = (kind, d) => ({ kind, pos: d.pos, yaw: d.yaw, ...d.params });
 // `example` ({ params, yaw? }) is what the Library spawns; `label` is its one-line stat sheet (level.md, meta convention).
 export const ENEMY_PIECES = {
-  'enemy.static': { stand: true, example: { params: {} }, label: `HP ${HEALTH.default} | stands, takes hits`, fields: [GROUP], build: (sys, d) => new Puppet(sys, def('static', d)) },
-  'enemy.mover': { stand: true, example: { params: { speed: 0 } }, label: `HP ${HEALTH.default} | slides on a rail`, fields: [GROUP, { key: 'to', type: 'vec3', optional: true }, { key: 'speed', type: 'number', min: 0 }], build: (sys, d) => new Puppet(sys, def('mover', d)) },
-  'enemy.shooter': { stand: true, example: { params: {} }, label: `HP ${HEALTH.shooter} | pops up and fires within ${ENGAGE_RANGE} m`, fields: [GROUP], build: (sys, d) => new Puppet(sys, def('shooter', d)) },
+  'enemy.static': { stand: true, example: { params: {} }, label: `HP ${HEALTH.default} | stands, takes hits`, fields: [GROUP], build: (sys, d) => new Puppet(sys.ctx, def('static', d)) },
+  'enemy.mover': { stand: true, example: { params: { speed: 0 } }, label: `HP ${HEALTH.default} | slides on a rail`, fields: [GROUP, { key: 'to', type: 'vec3', optional: true }, { key: 'speed', type: 'number', min: 0 }], build: (sys, d) => new Puppet(sys.ctx, def('mover', d)) },
+  'enemy.shooter': { stand: true, example: { params: {} }, label: `HP ${HEALTH.shooter} | pops up and fires within ${ENGAGE_RANGE} m`, fields: [GROUP], build: (sys, d) => new Puppet(sys.ctx, def('shooter', d)) },
   // moves between cover and shoots back
-  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m`, fields: [GROUP], build: (sys, d) => new Trooper(sys, def('trooper', d)) },
+  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m`, fields: [GROUP], build: (sys, d) => new Trooper(sys.ctx, def('trooper', d)) },
   // hovers and strafes, short bursts
-  'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m`, fields: [GROUP], build: (sys, d) => new Drone(sys, def('drone', d)) },
+  'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m`, fields: [GROUP], build: (sys, d) => new Drone(sys.ctx, def('drone', d)) },
   // miniboss
-  'boss.spider': { example: { params: {} }, label: `HP ${SPIDER.core} core | wakes at ${SPIDER.wakeRange} m or in its arena`, fields: [GROUP], build: (sys, d) => new SpiderMech(sys, def('boss', d)) },
+  'boss.spider': { example: { params: {} }, label: `HP ${SPIDER.core} core | wakes at ${SPIDER.wakeRange} m or in its arena`, fields: [GROUP], build: (sys, d) => new SpiderMech(sys.ctx, def('boss', d)) },
 };
 
 // Flank director: with 2+ troopers engaged, every FLANK_EVERY s one of them is sent around the player.
@@ -58,6 +62,7 @@ export class Enemies {
   // Permanent: bolt pool, stand geometry and material. Per level (load / unload): the spawn list, stands, cover map.
   constructor({ scene, world, events, registry }) {
     Object.assign(this, { scene, world, events, registry });
+    const self = this;
     this.cover = null; // CoverMap of the loaded level
     this.flankCooldown = FLANK.firstAfter;
     this._engaged = [];
@@ -69,9 +74,25 @@ export class Enemies {
     this.bolts = [];
     this.dirty = true; // hit-mesh list needs a rebuild
     this.targets = [];
-    this.puppets = [];
+    this.all = []; // every enemy of every type
     this.boss = null;
     this.bases = this.posts = null;
+    this.debris = new DebrisBank();
+    this.ctx = {
+      scene, world, events, debris: this.debris,
+      get cover() { return self.cover; },
+      get player() { return self.player; },
+      get time() { return self.time; },
+      get all() { return self.all; },
+      spawnBolt: (from, dir, damage) => this.spawnBolt(from, dir, damage),
+      hurtPlayer: (amount, from) => this.hurtPlayer(amount, from),
+      alertNear: (from, radius) => this.alertNear(from, radius),
+      separate: (who, minDist) => this.separate(who, minDist),
+      reportKill: (actor) => this.#reportKill(actor),
+      markDirty: () => (this.dirty = true),
+      takeStand: () => this.standCount++,
+      setStand: (i, pos, postH) => this.setStand(i, pos, postH),
+    };
     const geo = new THREE.CapsuleGeometry(0.06, 0.5, 4, 8).rotateX(Math.PI / 2);
     const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff6a2a).multiplyScalar(6) });
     const glowGeo = new THREE.SphereGeometry(0.22, 12, 8);
@@ -114,15 +135,16 @@ export class Enemies {
     this.bases = stand(this.standGeo.base);
     this.posts = stand(this.standGeo.post);
     // every enemy (puppets and troopers) lives in this one list
-    this.puppets = spawns.map((d) => this.#make(d));
-    this.boss = this.puppets.find((p) => p.kind === 'boss') ?? null;
+    this.all = spawns.map((d) => this.#make(d));
+    this.boss = this.all.find((p) => p.kind === 'boss') ?? null;
     return this;
   }
 
   // Frees every enemy of the level: actors (debris, rigs, skins, materials), stands, bolts in flight, squad state.
   unload() {
-    for (const p of this.puppets) p.dispose();
-    this.puppets = [];
+    for (const p of this.all) p.dispose();
+    this.all = [];
+    this.debris.dispose(); // baked chunk geometry of every enemy type (actors released their chunks above)
     this.boss = null;
     for (const b of this.bolts) this.boltPool.release(b); // pool meshes are permanent, just hidden
     this.bolts.length = 0;
@@ -143,6 +165,38 @@ export class Enemies {
     this.dirty = true;
   }
 
+  // Deprecated alias of `all` (the Workshop editor still reads it).
+  get puppets() {
+    return this.all;
+  }
+
+  // Death bookkeeping for every actor type: the kill counts, the hit-mesh list is rebuilt, listeners hear it,
+  // and the last enemy down clears the arena.
+  #reportKill(actor) {
+    this.kills++;
+    this.dirty = true;
+    this.events.emit('puppet:down', actor);
+    if (this.kills === this.all.length) this.events.emit('arena:clear');
+  }
+
+  // Tool APIs (Workshop, Gym): the boss the HUD bar and camera follow, the AI freeze (K in the Gym AI room: enemies stop
+  // thinking, moving and posing; bolts in flight still fly; returns the previous state), and pose(): one tiny update so a
+  // frozen enemy stands at its piece position (a rail mover starts at its home); `viewer` is the player view it sees.
+  setBoss(actor) {
+    this.boss = actor;
+  }
+
+  freeze(on) {
+    const was = this.frozen;
+    this.frozen = on;
+    return was;
+  }
+
+  pose(actor, { viewer, dt = 1e-3 }) {
+    if ('moveT' in actor) actor.moveT = 0;
+    actor.update(dt, viewer);
+  }
+
   // Runtime spawn (tools, tests): builds one piece after load, same registry builders as the level file.
   // Puppets get a stand slot; the instance buffers grow when full (load sizes them for the level's own puppets).
   spawn(data) {
@@ -159,7 +213,7 @@ export class Enemies {
       this.standCount = Math.max(used, slot + 1);
       this.bases.count = this.posts.count = this.standCount;
     }
-    this.puppets.push(actor);
+    this.all.push(actor);
     this.dirty = true;
     return actor;
   }
@@ -177,7 +231,7 @@ export class Enemies {
   wakeGroup(group) {
     if (group == null) return 0;
     let n = 0;
-    for (const e of this.puppets) {
+    for (const e of this.all) {
       if (e.squad === group && e.alive && e.wake && !e.awake) {
         e.wake();
         n++;
@@ -191,16 +245,16 @@ export class Enemies {
   }
 
   #groupWake() {
-    for (const e of this.puppets) {
+    for (const e of this.all) {
       if (e.squad != null && e.alive && e.awake && !this.woken.has(e.squad)) this.wakeGroup(e.squad);
     }
   }
 
   // Removes and frees one enemy built by spawn() (or by load).
   despawn(actor) {
-    const i = this.puppets.indexOf(actor);
+    const i = this.all.indexOf(actor);
     if (i < 0) return;
-    this.puppets.splice(i, 1);
+    this.all.splice(i, 1);
     if (this.bases && actor.index !== undefined) {
       _m.makeScale(0, 0, 0);
       this.bases.setMatrixAt(actor.index, _m);
@@ -241,7 +295,7 @@ export class Enemies {
     if (this.dirty) {
       this.dirty = false;
       this.targets.length = 0;
-      for (const p of this.puppets) if (p.alive) for (const m of p.hitMeshes) this.targets.push(m);
+      for (const p of this.all) if (p.alive) for (const m of p.hitMeshes) this.targets.push(m);
     }
     return this.targets;
   }
@@ -249,7 +303,7 @@ export class Enemies {
   // Chest points of exposed puppets for aim assist. Fills and returns `out` (array of reusable vectors).
   aimPoints(out) {
     let n = 0;
-    for (const p of this.puppets) {
+    for (const p of this.all) {
       if (!p.alive || p.lift <= -0.3) continue;
       if (p.aimPoints) {
         n = p.aimPoints(out, n);
@@ -287,16 +341,16 @@ export class Enemies {
 
   // A trooper spotted the player: squadmates in earshot join in.
   alertNear(from, radius) {
-    for (const e of this.puppets) {
+    for (const e of this.all) {
       if (e !== from && e.alive && e.kind === 'trooper' && !e.alerted && e.pos.distanceTo(from.pos) < radius) e.alert();
     }
   }
 
   // Keeps moving troopers from walking through each other.
   separate(self, minDist) {
-    // per-substep bucket of troopers (filled in update): only the ones near `self`, in puppets order
+    // per-substep bucket of troopers (filled in update): only the ones near `self`, in `all` order
     const reach = minDist * SEP_REACH;
-    const list = this.sepReady ? _sep.query(self.pos.x - reach, self.pos.z - reach, self.pos.x + reach, self.pos.z + reach) : this.puppets;
+    const list = this.sepReady ? _sep.query(self.pos.x - reach, self.pos.z - reach, self.pos.x + reach, self.pos.z + reach) : this.all;
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
       if (e === self || !e.alive || e.kind !== 'trooper') continue;
@@ -329,7 +383,7 @@ export class Enemies {
     this.flankCooldown = FLANK.retry;
     const engaged = this._engaged;
     engaged.length = 0;
-    for (const e of this.puppets) {
+    for (const e of this.all) {
       if (e.kind !== 'trooper' || !e.alive || !e.alerted) continue;
       if (e.flanking) return; // a flank is already under way
       if (e.pos.distanceTo(player.pos) < FLANK.engagedRange) engaged.push(e);
@@ -360,7 +414,7 @@ export class Enemies {
     this.animFrame = (this.animFrame ?? 0) + 1;
     camera.updateMatrixWorld();
     _frustum.setFromProjectionMatrix(_pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
-    const list = this.puppets;
+    const list = this.all;
     for (let i = 0; i < list.length; i++) {
       const p = list[i];
       if (!p.alive || !p.animator) continue;
@@ -386,10 +440,10 @@ export class Enemies {
     if (!this.frozen) {
       this.#flankDirector(dt, target);
       _sep.clear();
-      for (const e of this.puppets) if (e.alive && e.kind === 'trooper') _sep.insert(e, e.pos.x, e.pos.z, e.pos.x, e.pos.z);
+      for (const e of this.all) if (e.alive && e.kind === 'trooper') _sep.insert(e, e.pos.x, e.pos.z, e.pos.x, e.pos.z);
       this.sepReady = true;
       // `hostile` (Library wake key): this exhibit sees the real player even in a demo level
-      for (const p of this.puppets) p.update(dt, p.hostile ? player : target);
+      for (const p of this.all) p.update(dt, p.hostile ? player : target);
       this.sepReady = false;
       this.#groupWake();
     }
