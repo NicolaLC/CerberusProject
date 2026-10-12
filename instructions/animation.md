@@ -125,7 +125,9 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
 - Check pose changes from the side and front (see project.md testing), not only from behind.
 
 ## Spider mech (`src/game/actors/spider.js`)
-- Not the humanoid rig: its own bones (body, turret, two shutters, femur + tibia per leg) baked with `RigidSkin`.
+- Not the humanoid rig: its own bones (body, turret, two shutters, the core's lift, femur + tibia per leg) baked with `RigidSkin`.
+- The glowing parts (core, knees) are baked too, so their meshes are frozen proxies: `#pose` refreshes them with
+  `skin.syncHit` every pose, or their hitboxes would stay where the mech was when it was baked.
 - Leg bones are children of the root, posed in root space each frame by `placeBone` (+Y along the segment);
   a broken leg's bones are scaled to ~0 (hides the skinned parts without a rebake).
 - Stops and starts: the gait weight (`gaitW`) eases in fast and out over ~0.3 s while the cycle keeps the last

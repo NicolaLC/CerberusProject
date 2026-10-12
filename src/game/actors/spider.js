@@ -22,6 +22,7 @@ export const TUNING = {
   height: 3.4, // body height standing (tall walker stance, art-style.md)
   downHeight: 0.85,
   downTime: 7, // s collapsed per two legs lost
+  coreRise: 1.2, // m the core rises out of its hatch while down, clear of the hull rim from the ground
   speed: 2.4, // m/s, minus legSlow per lost leg
   legSlow: 0.12,
   range: [11, 20], // keeps this distance to the player
@@ -51,6 +52,7 @@ const DEBRIS = { dir: DEBRIS_DIR, push: [3, 3], spread: 3, up: [3, 3], spin: 8, 
 const BLAST = { point: new THREE.Vector3(), radius: 0, kind: '' };
 const STEP = { point: new THREE.Vector3(), big: false };
 const HITBOX_MAT = new THREE.MeshBasicMaterial(); // never drawn
+const CORE_Y = 0.86; // core height on the body, hatch closed
 
 export class SpiderMech {
   constructor(ctx, def) {
@@ -158,8 +160,9 @@ export class SpiderMech {
       }
       this.body.add(look(...hips));
     }
-    // core on top, under a split armored hatch
-    this.core = part(this.body, 1.0, 0.35, 1.0, M.weak, 0, 0.86, 0, 'weak', 'core');
+    // core on top, under a split armored hatch; its bone lifts it out while the mech is down
+    this.coreLift = bone(this.body, 0, CORE_Y, 0);
+    this.core = part(this.coreLift, 1.0, 0.35, 1.0, M.weak, 0, 0, 0, 'weak', 'core');
     this.shutters = [1, -1].map((s) => {
       const b = bone(this.body, s * 0.62, 1.05, 0);
       part(b, 0.64, 0.12, 1.15, M.plate, -s * 0.32, 0, 0, 'torso', 'hull');
@@ -446,11 +449,15 @@ export class SpiderMech {
     const muzzleY = this.pos.y + this.height + 0.23;
     const pitch = Math.atan2(target.y - muzzleY, Math.hypot(target.x - this.pos.x, target.z - this.pos.z));
     this.guns.rotation.x += (THREE.MathUtils.clamp(-pitch, -0.5, 0.6) - this.guns.rotation.x) * damp(5, dt);
-    // shutters open while down
+    // shutters open while down and the core rises out of the hatch, bigger, so it can be hit from the ground
     for (const s of this.shutters) {
       const open = isDown ? 1.35 : 0;
       s.rotation.z += (open * s.userData.side - s.rotation.z) * damp(6, dt);
     }
+    const rise = isDown ? 1 : 0;
+    const lift = this.coreLift;
+    lift.position.y += (CORE_Y + rise * this.t.coreRise - lift.position.y) * damp(5, dt);
+    lift.scale.setScalar(1 + (lift.position.y - CORE_Y) / this.t.coreRise * 0.3);
 
     this.#pose(dt);
 
@@ -697,6 +704,9 @@ export class SpiderMech {
       placeBone(l.tibia, root, knee, reach, true);
     }
     root.updateMatrixWorld(true);
+    // the glowing parts (core, knees) were baked into the skin, so their meshes are frozen proxies that the update above
+    // skips: refresh the ones that are shot at, or their hitboxes stay where the mech was at the bake
+    for (const m of this.hitMeshes) if (m.userData.proxy) this.skin.syncHit(m);
   }
 
   #updateDebris(dt) {

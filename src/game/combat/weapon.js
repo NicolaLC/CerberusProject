@@ -28,7 +28,7 @@ const _bestHit = [];
 // payloads are reused: listeners must copy what they keep
 const SHOT = { from: _muz, to: new THREE.Vector3(), dir: _toAim, right: null, heavy: false, beam: false, gun: '', flash: 1, mag: 1 };
 const HIT = { point: null, normal: new THREE.Vector3(), dir: _toAim, zone: '', amount: 0, crit: false, weak: false, killed: false, distance: 0 };
-const IMPACT = { point: null, normal: new THREE.Vector3() };
+const IMPACT = { point: null, normal: new THREE.Vector3(), decal: true }; // decal: false on a moving enemy's armor
 
 export class Weapon {
   constructor({ camera, rig, player, world, enemies, events }) {
@@ -457,6 +457,7 @@ export class Weapon {
       // armor: the round glances off (sparks, no damage) and the HUD hints where to shoot
       IMPACT.point = hit.point;
       IMPACT.normal.copy(toAim).negate();
+      IMPACT.decal = false; // decals live in world space: on a walking boss they'd hang in the air where it was
       this.events.emit('weapon:impact', IMPACT);
       this.events.emit('weapon:armored', enemy);
     } else if (enemy) {
@@ -476,6 +477,7 @@ export class Weapon {
       IMPACT.point = hit.point;
       if (hit.face) IMPACT.normal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
       else IMPACT.normal.copy(_back.copy(toAim).negate());
+      IMPACT.decal = true;
       this.events.emit('weapon:impact', IMPACT);
     }
   }

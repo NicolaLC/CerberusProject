@@ -10,7 +10,8 @@ const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 await p.goto(URL);
 await p.waitForFunction(() => window.game?.engine);
-const r = await p.evaluate(() => {
+const r = await p.evaluate(async () => {
+  const { Raycaster } = await import('/node_modules/three/build/three.module.js');
   const g = window.game;
   const { engine, enemies, player, world } = g;
   engine.stop();
@@ -86,7 +87,20 @@ const r = await p.evaluate(() => {
   out.down = boss.down > 0;
   out.coreOpen = boss.armor('weak', boss.core);
   out.legsNotTargetable = !enemies.hitMeshes().some((m) => m.userData.part === 0 || m.userData.part === 1);
-  step(boss.t.downTime + 1.5);
+  // the risen core is the first thing a shot from a standing player's eye hits from almost every side (the standing legs
+  // can cover it from an angle or two, depending on how it fell); its hitbox follows the mech: the baked glowing parts are frozen proxies that must be
+  // refreshed, or they stay where the mech was baked
+  step(1);
+  const ray = new Raycaster();
+  const core = boss.coreLift.getWorldPosition(new V()); // the core's bone: a frozen hitbox reports its own stale position
+  out.coreShots = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => {
+    const a = (k * Math.PI) / 4 + 0.4;
+    const eye = new V(boss.pos.x + Math.sin(a) * 9, 1.6, boss.pos.z + Math.cos(a) * 9);
+    ray.set(eye, core.clone().sub(eye).normalize());
+    const hit = ray.intersectObjects(enemies.hitMeshes(), false)[0];
+    return hit?.object === boss.core ? true : `${hit ? `part ${hit.object.userData.part} at ${hit.distance.toFixed(1)} m` : 'miss'}`;
+  });
+  step(boss.t.downTime + 0.5);
   out.getsBackUp = boss.down <= 0 && boss.height > 2;
   // 8. kill it through the core
   for (const l of boss.legs.slice(2, 4)) boss.damage(500, l.foot, dir, 'weak', l.knee);
@@ -112,6 +126,7 @@ expect('stays in its arena', r.stayedInArena);
 expect('never inside a wall', r.neverInsideWalls);
 expect('hull is armored', r.hullArmor === 0 && r.hullNoDamage && r.coreClosed === 0);
 expect('two legs down: collapsed, core exposed', r.legsLost === 2 && r.down && r.coreOpen === 1 && r.legsNotTargetable);
+expect('down: the risen core is hittable from the ground (6 of 8 sides at least)', r.coreShots.filter((x) => x === true).length >= 6);
 expect('gets back up after a while', r.getsBackUp);
 expect('dies when the core is destroyed', r.dies);
 expect('no page errors', errors.length === 0);

@@ -143,7 +143,7 @@ export class FX {
       this.impact(h.point, h.normal, h.weak ? 0xff2bd6 : 0x6fe3ff, h.weak ? 14 : 6, false);
       this.number(h.point, h.amount, h.crit, h.weak);
     });
-    events.on('weapon:impact', (i) => this.impact(i.point, i.normal));
+    events.on('weapon:impact', (i) => this.impact(i.point, i.normal, undefined, undefined, i.decal));
     // HiveMind shots hit in violet-white (enemy.js PROJECTILE); fire from explosions stays orange
     events.on('bolt:impact', (i) => this.impact(i.point, i.normal, 0x9a5cff, 10, true));
     // spider mech: blasts (mortar, stomp, death), a leg breaking off, footfalls
