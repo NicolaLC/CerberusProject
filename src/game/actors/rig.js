@@ -163,6 +163,8 @@ const _e = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _q3 = new THREE.Quaternion();
+// weights shared by the pose layers of one Animator.update (filled by #locomotion, read by the later layers)
+const F = { r: 0, c: 0, hu: 0, mv: 0, ck: 0, m: 0, g: 0, aw: 0, bob: 0, hipsPitch: 0, sw: 0, amt: 0, twist: 0 };
 const _yAxis = new THREE.Vector3(0, 1, 0);
 const _pw = [0, 0, 0];
 const _pr = [0, 0, 0];
@@ -252,17 +254,25 @@ export class Animator {
   // s: { speed, run, crouch, aimPitch, combat, recoil, lean, lookYaw, lower, kickBack, kickClimb,
   //      vel (world velocity, optional), yaw (facing, with vel), leftHanded (mirror the gun hold) }
   update(dt, s) {
-    const rig = this.rig;
-    const B = rig.bones;
-    rig.resetPose();
+    this.rig.resetPose();
+    this.#hitSpring(dt);
+    this.#locomotion(dt, s);
+    this.#torso(dt, s);
+    this.#arms(dt, s);
+    this.#legs(dt);
+    this.#layers(dt, s);
+  }
 
-    // hit spring
+  #hitSpring(dt) {
     this.hitVel.x += (-120 * this.hit.x - 9 * this.hitVel.x) * dt;
     this.hitVel.y += (-120 * this.hit.y - 9 * this.hitVel.y) * dt;
     this.hit.x += this.hitVel.x * dt;
     this.hit.y += this.hitVel.y * dt;
+  }
 
-    // ----- gait: key poses (locomotion.js) -----
+  // Gait: key poses (locomotion.js) -> legs' swing, hips height / twist. Leaves the weights in F for the other layers.
+  #locomotion(dt, s) {
+    const B = this.rig.bones;
     this.run = mix(this.run, s.run ? 1 : 0, 1 - Math.exp(-dt * 7));
     const r = this.run;
     const c = s.crouch;
@@ -366,8 +376,25 @@ export class Animator {
     B.Hips.position.y += this.hipsY;
     const twist = sw * mix(mix(W.twist, R.twist, g), RUN.twist, r) * m;
     B.Hips.rotation.set(hipsPitch + RUN.hipsLean * r * amt, this.hipYaw + twist, -sw * mix(W.roll, R.roll, g) * m);
+    F.r = r;
+    F.c = c;
+    F.hu = hu;
+    F.mv = mv;
+    F.ck = ck;
+    F.m = m;
+    F.g = g;
+    F.aw = aw;
+    F.bob = bob;
+    F.hipsPitch = hipsPitch;
+    F.sw = sw;
+    F.amt = amt;
+    F.twist = twist;
+  }
 
-    // ----- torso -----
+  // Torso: spine pitch / twist, head.
+  #torso(dt, s) {
+    const B = this.rig.bones;
+    const { r, c, hu, g, hipsPitch, amt, twist } = F;
     const kk = 1 - Math.exp(-dt * 14);
     const running = r * amt;
     const aim = s.combat ? s.aimPitch : mix(-0.5, -0.95, Math.max(r, hu));
@@ -384,8 +411,13 @@ export class Animator {
     this.look = mix(this.look, s.lookYaw ?? 0, kk * 0.6);
     B.Neck.rotation.set(-this.spinePitch * 0.55 - RUN.hipsLean * running, this.look * 0.4 + twist * 0.3, 0);
     B.Head.rotation.set(s.combat ? 0 : 0.08, this.look * 0.6, 0);
+  }
 
-    // ----- arms -----
+  // Arms: gun hold + arm IK (armed) or a swing against the legs.
+  #arms(dt, s) {
+    const rig = this.rig;
+    const B = rig.bones;
+    const { r, g, bob, sw, amt } = F;
     if (this.armed) {
       // mirrored hold: the gun crosses to the left shoulder pocket and the hands swap grips
       this.hand = mix(this.hand, s.leftHanded ? -1 : 1, 1 - Math.exp(-dt * 16));
@@ -431,7 +463,13 @@ export class Animator {
       this.#refresh();
     }
 
-    // ----- legs: planted feet locked in place (IK), kneel blended over everything -----
+  }
+
+  // Legs: planted feet locked in place (IK), kneel blended over everything.
+  #legs(dt) {
+    const rig = this.rig;
+    const B = rig.bones;
+    const { c, mv, ck, m } = F;
     const rootQ = worldQuat(rig.root, _q2);
     const baseQ = _q3.setFromAxisAngle(_yAxis, this.hipYaw + this.legYaw).premultiply(rootQ); // where the legs walk
     const pole = _knee.set(0, 0.15, 1).applyQuaternion(baseQ); // knees forward
@@ -475,6 +513,14 @@ export class Animator {
         setX(B[side + 'ToeBase'], kneel[2] * ck);
       }
     }
+  }
+
+  // Pose layers over the gait: vault, slide aiming, jetpack burst, then the terrain IK for the feet.
+  #layers(dt, s) {
+    const B = this.rig.bones;
+    const { ck, aw } = F;
+    const kk = 1 - Math.exp(-dt * 14);
+    const baseQ = _q3; // set by #legs
     // vault over low cover: a tucked jump, or a slide across the top on the hip (legs forward, leaning back)
     const vw = s.vault ? smoothstep(0, 0.22, s.vaultT) * (1 - smoothstep(0.78, 1, s.vaultT)) : 0;
     // slide aiming (s.slideAim, s.aimTwist): the chest ignores the hips' pose and turns by aimTwist toward the camera
