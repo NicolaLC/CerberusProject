@@ -167,7 +167,7 @@ export class World {
     this.unload();
     this.registry = registry;
     this.#buildLevel(level, registry);
-    // ~60 boxes x up to 6 face materials -> one draw per material (+ shadow pass)
+    // ~60 boxes x up to 6 face materials -> one draw per material per 64 m chunk, one chunk for small levels (+ one shadow draw per chunk)
     this.batches = mergeStatic(this.staticMeshes, this.scene);
     return this;
   }
@@ -175,7 +175,7 @@ export class World {
   // Removes and frees the level: proxies and merged batches (geometry, own material clones), point lights.
   unload() {
     for (const m of this.staticMeshes) disposeTree(m, { keep: this.keep });
-    for (const m of [...this.batches, this.batches.shadow]) if (m) disposeTree(m, { keep: this.keep });
+    for (const m of [...this.batches, ...(this.batches.shadows ?? [])]) disposeTree(m, { keep: this.keep });
     for (const l of this.lights.slice()) this.releaseLight(l);
     // disposeTree leaves textures alone (shared caches); a label's canvas texture is its own
     for (const m of this.labels) {
