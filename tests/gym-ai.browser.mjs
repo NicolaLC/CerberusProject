@@ -18,6 +18,11 @@ const p = await b.newPage({ viewport: { width: 320, height: 180 } });
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 p.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+// seeded Math.random (mulberry32): AI dice rolls are repeatable, so the checks below do not flake on them
+await p.addInitScript(() => {
+  let a = 0x9e3779b9;
+  Math.random = () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+});
 await p.goto(URL_ROOM);
 await p.waitForFunction(() => window.game?.engine);
 
