@@ -314,7 +314,7 @@ export class SpiderMech {
   damage(amount, point, dir, zone, object) {
     if (!this.alive || amount <= 0) return false;
     this.flash = 0.06;
-    if (!this.awake) this.#wake();
+    if (!this.awake && !this.dormant) this.#wake();
     const p = object?.userData.part;
     if (p === 'core') {
       this.health -= amount;
@@ -356,7 +356,9 @@ export class SpiderMech {
 
   // Spawn groups (enemies.js wakeGroup).
   wake() {
-    if (this.alive) this.#wake();
+    if (!this.alive) return;
+    this.dormant = false;
+    this.#wake();
   }
 
   #wake() {
@@ -413,7 +415,7 @@ export class SpiderMech {
     if (!this.alive) return;
 
     // wake when the player comes into the arena (or close with line of sight)
-    if (!this.awake && !player.dead) {
+    if (!this.awake && !this.dormant && !player.dead) {
       const p = player.pos;
       const A = this.arena;
       const inArena = p.x > A.minX && p.x < A.maxX && p.z > A.minZ && p.z < A.maxZ;

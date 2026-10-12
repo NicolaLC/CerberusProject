@@ -58,12 +58,13 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `objective.destroy` | encounter | mission objective: `group?` (enemy squad; absent = any enemy), `count?` (absent = all matching alive when it becomes current, plus reinforcements) |
 | `objective.survive` | encounter | mission objective: `time` (30 s, above 0) |
 | `objective.interact` | encounter | mission objective: `radius` (2 m, above 0): the player alive within it (2.5 m vertical) presses interact (G) |
-| `log.line` | encounter | a STEM-00 log line (#40): `text`, `on` (start, `trigger:<id>`, `checkpoint:<id>`, `objective:<id>`, `objective:<id>:done`, `discovered:<gun>`, `mission:complete`), `priority?` ('normal' / 'high'), `once?` (true), `delay?` (s, 0). Never shown in a fight (waits 3 s out of combat). Logic only in play; the Workshop draws an amber screen gizmo. Writing rules: narrative.md |
+| `log.line` | encounter | a STEM-00 log line (#40): `text`, `on` (start, `intro:done`, `trigger:<id>`, `checkpoint:<id>`, `objective:<id>`, `objective:<id>:done`, `discovered:<gun>`, `mission:complete`), `priority?` ('normal' / 'high'), `once?` (true), `delay?` (s, 0). Never shown in a fight (waits 3 s out of combat). Logic only in play; the Workshop draws an amber screen gizmo. Writing rules: narrative.md |
+| `intro.boot` | encounter | the boot intro (#13): `lines` (list of diagnostic strings, at least one), `duration?` (s, 12, above 0, at most 20), `skippable?` (true). At play start a full-screen overlay (black, static, scanlines, typed lines, `HIVEMIND LINK: LOST` flickers violet-magenta, then a fade-in with an exposure ramp) locks the input and ends with `intro:done`. Skip only after it was seen once. The first one in a file plays. Inert in the editor and the Library (gizmo: a monitor on a post). Rules: workshop.md "Boot intro" |
 
 Every `objective.*` also takes `text` (HUD state line), `order?` (mission order; absent = position among the objectives), `limit?` (s to finish it, else the mission fails), `wakeGroup?`, `spawnGroup?` (run when it becomes current). Rules: workshop.md "Missions".
 
 Encounter pieces are logic only in a played level (no geometry, no collision); the Workshop draws gizmos for them (workshop.md, Encounters).
-Every enemy piece also takes `params.group` (string): enemies of one group wake together.
+Every enemy piece also takes `params.group` (string): enemies of one group wake together. `params.dormant` (bool, default false; needs a `group`): the enemy never wakes itself and a shooter never fires, but it takes hits; only `wakeGroup` wakes it.
 
 **Kit rules** (`world/kit.js`, sizes from `metrics.md`, frozen): boxes only, built through `world.box`. `yaw` must be a
 multiple of 90 degrees (else a clear error), so every piece stays axis-aligned. Bad params throw `kit.x: ...`. One material
@@ -75,8 +76,8 @@ A registry table entry may be `{ build, ...meta }` (read with `registry.meta(id)
 - `example: { params, yaw? }`: what the Library spawns for the id (it must build with just these and `pos`).
 - `label`: one short line of key stats (HP, ranges, respawn...), read from the owner's `TUNING` where there is one.
 - `fields` (Workshop inspector, workshop.md): the editable params, `[{ key, type, label?, options?, min?, optional?, def? }]`. `type`: `number`, `vec2` / `vec3`
-  (typed "a, b, c"), `text`, `bool` (checkbox; `def` = value when absent), `enum` (`options` list, or `'mats'` = keys of `World.mats`; a fixed `options` list is also checked by `Registry.check`), `list` (comma separated strings).
-  `optional: true` = empty removes the key. `check(params, registry)` (optional): returns a problem string or null; `Registry.check` throws it for every piece of that id in a level (`log.line`). `min` is a generic floor (the builder's own checks still win and surface as a toast). `key` is a top-level `params` key.
+  (typed "a, b, c"), `text`, `bool` (checkbox; `def` = value when absent), `enum` (`options` list, or `'mats'` = keys of `World.mats`; a fixed `options` list is also checked by `Registry.check`), `list` (comma separated strings; `sep: '|'` changes the separator, for texts that contain commas: `intro.boot` `lines`).
+  `optional: true` = empty removes the key. `check(params, registry)` (optional): returns a problem string or null; `Registry.check` throws it for every piece of that id in a level (`log.line`, `intro.boot`). `min` is a generic floor (the builder's own checks still win and surface as a toast). `key` is a top-level `params` key.
   Shared fields live next to the owner (`MAT` in `kit.js`, `GROUP` in `enemies.js`). Pieces without `fields` (or whose params are not listed) show only `name`.
 Every entry has `example` and `label` (enemies, pickups, `kit.*`, `env.*`, `light.point`, `prop.gun`); new entries must too. A new id with an `example` shows up in the Library's kit aisle by itself
 (`tool: library`, gym.md); `tests/library.browser.mjs` spawns every id from its example.
@@ -111,8 +112,10 @@ The editor (#70) calls four functions plus `levelNames()`; the level is the plai
 | `gym-ai` | `gym-ai.json` | Gym: enemy behaviour rooms (#66) |
 | `gym-stress` | `gym-stress.json` | Gym: performance stress room (#67) |
 | `library` | `library.json` | the Library (#68), `demo` + `tool: library`: aisles of enemies, guns, cover / environment, pickups, light presets and the kit aisle (gym.md, Library) |
+| `prologue` | `prologue.json` | PROVING GROUNDS (#2): the arena layout and metrics, `loadout: ["pistol"]`, `marker.spawn` on a calibration rack (`kit.platform` + `env.label` CALIBRATION UNIT 00) facing the yard, `intro.boot`, two `log.line`s, a `trigger.volume` (`bay-exit`) and the first objective LEAVE CALIBRATION BAY. Yard: passive puppets only; shooters, troopers, drones and the spider sit in groups `purge-1`..`purge-6` that no trigger, wave or objective references yet. Edited in the Workshop from now on |
 | `workshop` | `workshop.json` | the level editor (`tool: workshop`, workshop.md): a small starter level, floor, three cover boxes, a static puppet and an ammo crate (Workshop epic #60) |
 
+- `prologue.json` is the Workshop's output (`serializeLevel`, byte-identical: `levelio.test.mjs`): change it in the Workshop and save, never by hand.
 - Players pick a scene in the start / pause panel (Scene list; it also sets `?scene=` so a reload stays there).
 - `?scene=<name>` (works with `?debug`) opens one; unknown → arena + `console.warn`. At runtime: `game.loadScene('gym')`
   (`window.game` exists with `?debug`). Switching frees the old level completely (architecture.md, Scenes).

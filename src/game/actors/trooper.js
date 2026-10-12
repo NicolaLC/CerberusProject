@@ -107,6 +107,7 @@ export class Trooper extends EnemyBody {
   }
 
   wake() {
+    this.dormant = false;
     this.alert();
   }
 
@@ -121,7 +122,7 @@ export class Trooper extends EnemyBody {
   }
 
   alert() {
-    if (this.alerted || !this.alive) return;
+    if (this.alerted || !this.alive || this.dormant) return; // dormant: only wake() / wakeGroup
     this.state = 'cover'; // decide immediately
     this.timer = 0.2 + Math.random() * 0.4; // reaction time
     this.ctx.alertNear(this, this.t.alertRadius);

@@ -25,7 +25,7 @@ src/
     registry.js           piece registry: stable string id -> how a piece is built from data (ids: level.md)
     controls.js           BINDINGS table + intents (move, look, aiming, running, firing, slots...)
     settings.js           player settings + start-panel bindings
-    world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), textures.js, pickups.js (pickup.* pieces), encounter.js (marker.* / trigger.* / objective.* / log.line pieces: spawn, checkpoints, trigger volumes, reinforcements; workshop.md), mission.js (objective sequencing, `game.mission`; ticks inside encounter)
+    world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), textures.js, pickups.js (pickup.* pieces), encounter.js (marker.* / trigger.* / objective.* / log.line / intro.boot pieces: spawn, checkpoints, trigger volumes, reinforcements; workshop.md), mission.js (objective sequencing, `game.mission`; ticks inside encounter)
     actors/ rig.js (skeleton, animator, IK), parts.js (model building blocks, debris), soldier.js (player model),
             looks.js (trooper / puppet models),
             player.js (motor: intent -> movement, cover, jetpack, vault, health; never touches a mesh), player-view.js (`player.view`: model, rig, skin, animation, root pose; reads the motor's state; the motor forwards `root` / `rigModel` / `skin` / `animator` / `muzzle`),
@@ -34,7 +34,7 @@ src/
             enemies.js (system: builds enemy.* / boss.* pieces, bolts, stands, target cache, squad alerts, `all` = every enemy)
     ai/     cover.js (cover spots from cover boxes, protection test, spot choice + detour route)
     combat/ guns.js (gun table), weapon.js (controller, hitscan, aim probe), ballistics.js (pure shot math)
-    view/   camera.js, fx.js, hud.js, log.js (STEM-00 log lines, `game.log`), audio.js, juice.js, post.js, shell.js (DOM shell: start/pause panel, pointer lock, scene buttons, pad navigation)   (presentation only)
+    view/   camera.js, fx.js, hud.js, log.js (STEM-00 log lines, `game.log`), boot.js (boot intro overlay + input lock, `game.boot`), audio.js, juice.js, post.js, shell.js (DOM shell: start/pause panel, pointer lock, scene buttons, pad navigation)   (presentation only)
 ```
 
 `src/levels/` holds level files (plain JSON, see `level.md`); `scenes.js` lists them, `Game.loadScene(name)` hands one to the systems.
@@ -82,7 +82,7 @@ the only thing three.js recompiles shaders for, so they come from a fixed pool o
 | pre | controls (+ hitstop time scale, aim assist, look, shoulder, debug keys), stats toggle | real |
 | simulate (substeps ≤ 20 ms) | player → weapon → enemies → encounter (+ mission) → pickups | scaled |
 | late | camera → aimProbe (what the crosshair is on) | scaled (shake uses real) |
-| present | fx → world (lights, sun, player visibility) → hud → log → audio (MG spin) | scaled |
+| present | fx → world (lights, sun, player visibility) → hud → log → boot (intro overlay, input lock; group `play`) → audio (MG spin) | scaled |
 | render | post (exposure, grade, bloom) | real |
 
 Paused (start panel): only `whilePaused` systems run (controls, stats, camera, post).
@@ -125,6 +125,8 @@ Payload objects marked * are reused: copy what you keep. `src/types.js` holds JS
 | `encounter:wake` / `encounter:spawn` | group name (requests, listened by `Encounter`) | emitted by the mission (objective `wakeGroup` / `spawnGroup`) |
 | `mission:objective` / `mission:objective:done` | { index, total, id, kind, text } (fresh object) | hud toast (done) |
 | `log:say` | { text, priority } (a `log.line` piece fired, after its delay; Encounter) | log (`Log.say`) |
+| `intro:start` | { lines, duration, skippable } (a played level's `intro.boot`, first play frame; Encounter) | boot (`Boot.start`) |
+| `intro:done` | { skipped } (the boot intro ended or was skipped; Boot) | encounter (`log.line` `on: intro:done`) |
 | `mission:complete` / `mission:failed` | { total } / { index, id, reason } | hud toast |
 | `bolt:fired` / `bolt:impact` | position / *{ point, normal } | audio / fx |
 | `pickup:collected` / `pickup:full` | label ('LIGHT AMMO +n AR ...') / – (all guns of the class full) | hud toast, audio |

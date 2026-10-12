@@ -18,22 +18,26 @@ import { PROJECTILE } from './enemy.js';
 
 // Enemy pieces (registry ids, a public contract: instructions/level.md). Data: { id, pos, yaw?, params? }.
 // The spawn list lives in the level file; builders run against this system and return the actor.
-// params (all enemies): group (spawn group name, see wakeGroup); mover { to: [x, y, z], speed }, drone: pos = the ground under it, boss.spider { arena: { minX, maxX, minZ, maxZ } }.
+// params (all enemies): group (spawn group name, see wakeGroup), dormant (bool, needs a group: only wakeGroup wakes it); mover { to: [x, y, z], speed }, drone: pos = the ground under it, boss.spider { arena: { minX, maxX, minZ, maxZ } }.
 // `stand`: puppets on a pneumatic stand (one instanced base + post each).
 // Inspector fields (level.md, piece meta): every enemy takes a spawn group.
 const GROUP = { key: 'group', type: 'text', optional: true };
+// `dormant` (every enemy): never wakes itself (no sight, hearing, arena entry or damage wake; a shooter never pops up or
+// fires) but still takes hits and dies; only wakeGroup(its group) wakes it. Needs a group, or it could never wake.
+const DORMANT = { key: 'dormant', type: 'bool', def: false };
+const dormantCheck = (p) => (p.dormant && (typeof p.group !== 'string' || !p.group) ? 'is dormant but has no group: nothing could ever wake it (set "group")' : null);
 const def = (kind, d) => ({ kind, pos: d.pos, yaw: d.yaw, ...d.params });
 // `example` ({ params, yaw? }) is what the Library spawns; `label` is its one-line stat sheet (level.md, meta convention).
 export const ENEMY_PIECES = {
-  'enemy.static': { stand: true, example: { params: {} }, label: `HP ${HEALTH.default} | stands, takes hits`, fields: [GROUP], build: (sys, d) => new Puppet(sys.ctx, def('static', d)) },
-  'enemy.mover': { stand: true, example: { params: { speed: 0 } }, label: `HP ${HEALTH.default} | slides on a rail`, fields: [GROUP, { key: 'to', type: 'vec3', optional: true }, { key: 'speed', type: 'number', min: 0 }], build: (sys, d) => new Puppet(sys.ctx, def('mover', d)) },
-  'enemy.shooter': { stand: true, example: { params: {} }, label: `HP ${HEALTH.shooter} | pops up and fires within ${ENGAGE_RANGE} m`, fields: [GROUP], build: (sys, d) => new Puppet(sys.ctx, def('shooter', d)) },
+  'enemy.static': { stand: true, example: { params: {} }, label: `HP ${HEALTH.default} | stands, takes hits`, check: dormantCheck, fields: [GROUP, DORMANT], build: (sys, d) => new Puppet(sys.ctx, def('static', d)) },
+  'enemy.mover': { stand: true, example: { params: { speed: 0 } }, label: `HP ${HEALTH.default} | slides on a rail`, check: dormantCheck, fields: [GROUP, DORMANT, { key: 'to', type: 'vec3', optional: true }, { key: 'speed', type: 'number', min: 0 }], build: (sys, d) => new Puppet(sys.ctx, def('mover', d)) },
+  'enemy.shooter': { stand: true, example: { params: {} }, label: `HP ${HEALTH.shooter} | pops up and fires within ${ENGAGE_RANGE} m`, check: dormantCheck, fields: [GROUP, DORMANT], build: (sys, d) => new Puppet(sys.ctx, def('shooter', d)) },
   // moves between cover and shoots back
-  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m`, fields: [GROUP], build: (sys, d) => new Trooper(sys.ctx, def('trooper', d)) },
+  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m`, check: dormantCheck, fields: [GROUP, DORMANT], build: (sys, d) => new Trooper(sys.ctx, def('trooper', d)) },
   // hovers and strafes, short bursts
-  'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m`, fields: [GROUP], build: (sys, d) => new Drone(sys.ctx, def('drone', d)) },
+  'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m`, check: dormantCheck, fields: [GROUP, DORMANT], build: (sys, d) => new Drone(sys.ctx, def('drone', d)) },
   // miniboss
-  'boss.spider': { example: { params: {} }, label: `HP ${SPIDER.core} core | wakes at ${SPIDER.wakeRange} m or in its arena`, fields: [GROUP], build: (sys, d) => new SpiderMech(sys.ctx, def('boss', d)) },
+  'boss.spider': { example: { params: {} }, label: `HP ${SPIDER.core} core | wakes at ${SPIDER.wakeRange} m or in its arena`, check: dormantCheck, fields: [GROUP, DORMANT], build: (sys, d) => new SpiderMech(sys.ctx, def('boss', d)) },
 };
 
 // Flank director: with 2+ troopers engaged, every FLANK_EVERY s one of them is sent around the player.
@@ -216,23 +220,25 @@ export class Enemies {
     return actor;
   }
 
-  // Builds one enemy piece; `params.group` (a name) puts it in a spawn group (see wakeGroup).
+  // Builds one enemy piece; `params.group` (a name) puts it in a spawn group (see wakeGroup); `params.dormant` makes
+  // it wait for wakeGroup (actors read `dormant` before every self-wake). Always rebuilt from the level data.
   #make(data) {
     const actor = this.registry.build('enemies', this, data);
     actor.squad = data.params?.group ?? null;
+    actor.dormant = !!data.params?.dormant;
     return actor;
   }
 
   // Spawn groups (#73): enemies with the same `params.group` wake together. When any member is awake (a trooper is
   // alerted, a drone or boss is awake) the rest are woken too, once per group; a trigger or the `encounter:wake` event
-  // can wake a group directly. Only actors with a `wake()` take part (troopers, drones, the boss); puppets are always on.
+  // can wake a group directly. Only actors with a `wake()` take part (troopers, drones, the boss, dormant puppets); other
+  // puppets are always on. A dormant enemy is woken by nothing else.
   wakeGroup(group) {
     if (group == null) return 0;
     let n = 0;
     for (const e of this.all) {
       if (e.squad === group && e.alive && e.wake && !e.awake) {
-        e.wake();
-        n++;
+        if (e.wake() !== false) n++;
       }
     }
     if (!this.woken.has(group)) {

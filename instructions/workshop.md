@@ -92,8 +92,8 @@ the mode is `'play'` (`game.editing` false) and the player, weapon, pickups and 
     the editor's `#active` also ignores events whose target is an input / select. Because a field swallows the keyup of a key held when it got focus, a field's `focus` clears the editor's held keys and `input.releaseAll()` (edge presses stay). Esc in a field reverts its text and blurs it (selection kept);
     a click on the canvas blurs it. Entering play blurs it and hides the whole right column.
   - Fields by piece: `env.box` size, mat, cover, collide, shadow; `env.strip` size, mat; `env.label` text, size, flat; `light.point` color, intensity, distance;
-    `prop.gun` gun; every `kit.*` its size params + mat (`kit.platform`: size, height, stairs, parapets, mat, coverMat); enemies `group` (`enemy.mover` also `to`, `speed`);
-    `marker.entry` group, enemies (comma list); `zone.interior` size; `trigger.volume` size, event, once, wakeGroup, spawnGroup; `objective.*` text, order, limit, wakeGroup, spawnGroup + their own (Missions). `pickup.gun` gun, ammo; `log.line` text, on, priority, once, delay (Log lines). Markers (`marker.spawn`, `marker.checkpoint`), ammo pickups and `boss.spider`'s arena have only `name` / `group`.
+    `prop.gun` gun; every `kit.*` its size params + mat (`kit.platform`: size, height, stairs, parapets, mat, coverMat); enemies `group`, `dormant` (`enemy.mover` also `to`, `speed`);
+    `marker.entry` group, enemies (comma list); `zone.interior` size; `trigger.volume` size, event, once, wakeGroup, spawnGroup; `objective.*` text, order, limit, wakeGroup, spawnGroup + their own (Missions). `pickup.gun` gun, ammo; `log.line` text, on, priority, once, delay (Log lines); `intro.boot` lines (separated by `|`), duration, skippable (Boot intro). Markers (`marker.spawn`, `marker.checkpoint`), ammo pickups and `boss.spider`'s arena have only `name` / `group`.
   - Not in the UI: `faces`, `ownMaterial`, `flicker`, `env.label` colors, `boss.spider` arena, `kit.*` `yaw` (use R).
 - **Selection**: a `Box3Helper` tinted by cover class (wall white, high blue, low orange, none yellow) and the status
   panel (right): count, snap, undo / redo depth, the piece's id, pos, yaw, size and cover flags.
@@ -128,7 +128,8 @@ in the inspector (see Panels and helpers) or with `setParams`.
   when nothing else is under the cursor (it often surrounds other pieces). The Library shows them as gizmo exhibits.
 - **Spawn groups**: an enemy piece takes `params.group` (any string; stored on the actor as `squad`). `Enemies` wakes the whole group once any
   member is awake (trooper alerted, drone / boss awake; `group:wake { group }` once per group), or on `wakeGroup(group)`. Only actors with
-  `wake()` take part (trooper, drone, boss); puppets are always on. The editor's enemies are frozen, so nothing wakes in edit mode.
+  `wake()` take part (trooper, drone, boss, dormant puppets); other puppets are always on and never count as awake.
+  `params.dormant: true` (every enemy, needs a `group`, else `Registry.check` errors): never wakes itself (no sight, hearing, arena entry or damage wake; a shooter never pops up or fires), still takes hits and dies; only `wakeGroup` / `encounter:wake` wakes it, then it behaves normally. Restart and reload rebuild it from the level data. The editor's enemies are frozen, so nothing wakes in edit mode.
 - **Triggers**: fire on the frame the player's feet enter the box (starting inside counts); `once: true` fires one time per run. Fire =
   `events.emit('trigger:fired', { id, event })` with `id` = the piece `name`, else `trigger<n>` (n = order among triggers in the file),
   then `wakeGroup` / `spawnGroup`.
@@ -178,7 +179,7 @@ All: `text` (HUD line, default per kind), `order?`, `limit?`, `wakeGroup?`, `spa
 Gizmo: an amber screen on a post; inert in edit mode and the Library (like objectives). Writing rules: `instructions/narrative.md`.
 - **`on`** (matched against existing events; ids as in those events): `start` (the encounter loads in play: scene load, Workshop play / restart), `trigger:<id>` (`trigger:fired`),
   `checkpoint:<id>` (`checkpoint:reached`), `objective:<id>` (`mission:objective`, it becomes current), `objective:<id>:done` (`mission:objective:done`),
-  `discovered:<gun>` (`weapon:discovered`, gun = a `GUNS` key), `mission:complete`. Anything else, an empty `text`, a bad priority / once / delay: `Registry.check` throws
+  `discovered:<gun>` (`weapon:discovered`, gun = a `GUNS` key), `mission:complete`, `intro:done` (the boot intro ended or was skipped; the line then plays once calm). Anything else, an empty `text`, a bad priority / once / delay: `Registry.check` throws
   `level: piece #i ("log.line") ...` (meta `check`, `logLineProblem`), the builder throws `<id>: ...` (inspector toast).
 - **Never in a fight**: a queued line waits while STEM-00 is in combat: an awake enemy alive within 30 m (`TUNING.combatRange`), or a `weapon:shot` / `player:hurt`. It plays once
   none of that has happened for 3 s (`TUNING.calm`, `encounter.calm`; a run starts calm). `delay` counts from then.
@@ -188,6 +189,20 @@ Gizmo: an amber screen on a post; inert in edit mode and the Library (like objec
   `max(2.5 s, 0.06 s per char)`, faded 0.5 s. `say(text, { priority })`: `high` replaces the current line, `normal` waits (more than 4 waiting: the oldest is dropped).
   Every shown line goes to `log.entries` `{ text, t }` (t = s since the run began) for the pause-menu Log (not built). `Game.resetRun` clears it all (`log.reset()`).
 - Suite `tests/log.browser.mjs`: start / restart / once, trigger, objective done, delay, waiting for calm (shot, awake enemy), `discovered:rifle`, priority queue and entries, validation.
+
+## Boot intro (#13)
+`intro.boot` (encounter.js, owner `encounter`, a reusable piece, not Prologue-only code). Fields: `lines` (typed with `|` between lines), `duration` (s, 12, above 0, at most 20), `skippable` (true).
+Gizmo: a monitor with text bars on a post; inert in edit mode and the Library. Validation: meta `check` (`introBootProblem`): `lines` a non-empty list of non-empty strings, `duration` a number in (0, 20], `skippable` a boolean.
+- **Start**: the first `intro.boot` of a played level emits `intro:start { lines, duration, skippable }` at the first play frame (after `resetRun`), so a scene load, Workshop play and restart all start it. Pending until then; dropped on unload.
+- **View** (`src/game/view/boot.js`, `game.boot`, `#boot`): black, then static and scanlines, then the lines typed in (cold white `#EAF6FA`, monospace, pace set so all of them are typed before the last `fade` (1.6 s, at most 30% of the duration) and a short hold; at least 14 characters/s), a line containing `HIVEMIND LINK: LOST` flickers `#C04BFF` with a `#FF3DCB` glow. The end fades the overlay out while `post.boost` (an exposure factor on the auto exposure, 2.4 down to 1) settles.
+- **Time**: `Boot.update(dt)` runs in the `present` phase (group `play`) on the scaled game dt, so pause freezes it and headless `engine.step` drives it. `duration` is the total, `intro:done` fires when `t >= duration`.
+- **Input lock**: `controls.locked` (move, look, aim, run, fire, jump, reload, interact, shoulder, weapon slots and cycle read idle; `pause`, `stats`, `skeleton` still work). At the end `controls.ease` ramps 0 to 1 over 0.6 s and scales move and look, so control returns smoothly and the camera never snaps. `boot.inputLocked` mirrors `controls.locked`.
+- **Skip**: fire, jump, interact or pad A (the game passes the press), only when `skippable` and the intro was seen once (`localStorage` `cerberus.introSeen` = true, read at every start, every access in try/catch), and not in the first 0.3 s. A small "skip" hint shows then. Completing or skipping sets the flag.
+- **End**: emits `intro:done { skipped }` (also on skip). `Game.resetRun` (`boot.reset()`: scene load, Workshop play / restart / edit) clears the overlay, the lock and `post.boost` without the event.
+- State for tests: `boot.active`, `boot.t`, `boot.duration`, `boot.inputLocked`, `boot.canSkip`, `boot.seen`, `boot.lines`, `boot.fade`.
+- Suite `tests/intro.browser.mjs`: overlay and lock at start, typed lines and the HIVEMIND span, no movement / fire / look / switch while locked, `intro:done` within the duration and the eased return, `log.line` on `intro:done`, pacing, skip (only once seen; fire / jump / interact / pad A; `skippable: false`; blocked storage), pause, restart / edit / scene load, validation.
+
+- `src/levels/prologue.json` (the Prologue, #2) is authored in the Workshop from now on: open it (`levelNames()`), edit, save over the file. Its `purge-*` enemy groups are dormant on purpose; the purge waves (#14) will wake or spawn them from triggers and objectives. Every enemy of a `purge-*` group is `dormant`.
 
 ## Not yet
 Faces / flicker / label colours / boss arena in the inspector.

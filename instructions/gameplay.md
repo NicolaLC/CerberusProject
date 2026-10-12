@@ -11,6 +11,7 @@
   stronger (1.6 vs 0.8). E does nothing outside trackpad mode.
 - Aim assist (`camRig.assist`): within ~4-8° of a visible puppet's chest the look slows (friction) and eases toward it.
 - Look sensitivity multiplier lives in settings.
+- Input lock during the boot intro (`intro.boot`, workshop.md "Boot intro"): `controls.locked` makes move, look, aim, sprint, fire, jump, reload, interact, shoulder and weapon switch read idle; pause and the debug toggles still work. When the intro ends, `controls.ease` brings move and look back over 0.6 s (no camera snap). Skip (fire / jump / interact / pad A) only after the intro was seen once.
 - Controller (standard mapping, Xbox names): L stick move (analog: partial tilt walks slower), R stick look,
   LT aim, RT fire, X reload, A jump / vault, B interact, LB swap shoulder, Y or RB next gun, d-pad ← ↑ → ↓ = AR / MG / SR / pistol,
   L3 click sprints until the stick is released or pulled back, View = stats, Menu = pause (A or Menu deploys from
@@ -168,7 +169,7 @@
 - Shooters only engage a player within `ENGAGE_RANGE` (30 m) with line of sight.
 
 ## Spawn groups (#73)
-Enemies with the same `params.group` wake together: when any troopers / drone / boss member is awake the rest wake too (once). Triggers and reinforcements: workshop.md, Encounters.
+Enemies with the same `params.group` wake together: when any troopers / drone / boss member is awake the rest wake too (once). `dormant: true` enemies (troopers, drones, boss, shooters) ignore sight, sound, arena entry and damage and wait for `wakeGroup`; plain puppets are always on. Triggers and reinforcements: workshop.md, Encounters.
 On death the player respawns after 3 s at the last checkpoint reached, else at the spawn.
 
 ## Drones (`game/actors/drone.js` TUNING)

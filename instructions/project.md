@@ -22,7 +22,7 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 ## Testing
 - `?debug` URL flag: no start panel, stats readout on, `window.game` is the `Game` (`player`, `camRig`, `weapon`,
   `enemies`, `controls`, `engine` with `scene`, `input`, `events`, `timings`, `perf`; `loadScene(name)`, `sceneName`).
-- `?scene=<name>` URL flag: opens `arena` (default) / `gym` / `library` / `workshop` directly; unknown name → arena + console warning (`instructions/level.md`).
+- `?scene=<name>` URL flag: opens `arena` (default) / `gym` / `library` / `workshop` / `prologue` directly; unknown name → arena + console warning (`instructions/level.md`).
 - Headless check: Playwright with Chromium (`--use-angle=swiftshader`); real keyboard/mouse events work once the
   start button is clicked (pointer lock). SwiftShader runs at 3-15 fps and frames are clamped to 0.1 s,
   so count frames, not milliseconds.
@@ -31,8 +31,10 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
   the whole set runs in ~40 s instead of ~40 min on SwiftShader. Only render where a test checks pixels.
 - `npm test`: pure-math unit tests (`tests/ballistics.test.mjs`, `tests/levelio.test.mjs`).
 - `npm run test:browser` (`tests/run-browser.mjs`): starts a vite dev server on a free port, sets `URL`, runs every
-  `tests/*.browser.mjs` one after the other and exits non-zero on a non-zero exit or any `FAIL` line. `gym-stress` and `bench`
-  are skipped (slow); `--all` adds them, and names filter: `node tests/run-browser.mjs scenes render`.
+  `tests/*.browser.mjs` in parallel (one browser each, `-j N` or `BROWSER_JOBS`, default cores - 1; output printed per suite
+  with its time) and exits non-zero on a non-zero exit or any `FAIL` line. `gym-stress` and `bench` are skipped (slow);
+  `--all` adds them, run alone after the rest. Names filter: `node tests/run-browser.mjs scenes render`. Suites must not
+  share state outside their own browser (no files, no fixed ports) so they can run side by side.
 - CI (`.github/workflows/ci.yml`, every push and PR): `npm ci`, Playwright Chromium, `npm test`, `npm run build`,
   `npm run test:browser`. The release workflow's web job runs the same browser suites before packaging.
 - `tests/gunplay.browser.mjs`: deterministic gunplay checks in Chromium (first-shot accuracy, recoil pattern
@@ -44,10 +46,10 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 - `tests/movement.browser.mjs`: automatic cover (enter, along-wall, exits, cooldown), jetpack burst, jump onto low cover, vault, ceiling.
 - `tests/gamepad.browser.mjs`: controller with a simulated standard gamepad (`navigator.getGamepads` replaced
   by an init script; set `window.__pad.axes` / `.buttons`).
-- `tests/scenes.browser.mjs`: every scene opens via `?scene=`; arena → every other scene (the four Gym rooms, library, workshop) → arena for 3 cycles in one page:
+- `tests/scenes.browser.mjs`: every scene opens via `?scene=`; arena → every other scene (the four Gym rooms, library, workshop, prologue) → arena for 3 cycles in one page:
   player at the spawn, enemy / pickup counts match the level file, boss bar / lock-on / kills / weapon reset, HUD zone title per scene, the Library's demo enemies
   never fire or wake (10 s in range), the panel's scene buttons, no console errors, and no leaks
-  (`renderer.info.memory.geometries` / `textures` and scene object count identical after every cycle, exact, no tolerance).
+  (`renderer.info.memory.geometries` / `textures` and scene object count identical after every cycle, exact, no tolerance). The probe also shows all six player gun models for its draw (the raised gun is the only one that uploads otherwise, and the Prologue raises the pistol).
   This suite RENDERS (info.memory counts uploads) and, before each reading, draws once with culling off and both LOD variants,
   because three uploads lazily and the counts would otherwise follow what the camera happens to see.
 - `tests/art.browser.mjs`: art-style readability rules (art-style.md): weak spots brighter than every other enemy glow at rest,
@@ -55,6 +57,8 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 - `scripts/screenshots.mjs <outDir> [names]`: the fixed art-review screenshot set (20 angles, canvas only, no HUD), for before / after.
 - `tests/loadout.browser.mjs`: owned guns (#91): a pistol-only `loadout` (keys, wheel, pad, HUD ∞ and slots), `pickup.gun` discovery (event once, switch, toast, then ammo), no `loadout` = all six, bad ids fail validation; uses `?scene=workshop`.
 - `tests/log.browser.mjs`: STEM-00 log lines (#40): `log.line` on start / trigger / objective done / discovered, once, delay, priority queue, entries, validation; uses `?scene=workshop`.
+- `tests/intro.browser.mjs`: boot intro (#13): `intro.boot` overlay and input lock, `intro:done`, `log.line` on `intro:done`, skip only once seen, pause, restart / edit, validation; uses `?scene=workshop`.
+- `tests/prologue.browser.mjs`: the Prologue level (`?scene=prologue`): boot overlay, input lock, `intro:done` within 12 s, first log line and objective, pistol only (HUD ∞), skip only with the seen flag, passive yard, dormant `purge-*` groups.
 - `tests/mission.browser.mjs`: mission framework (objective pieces, full mission in play, order, reinforcements, trigger reach, limit, restart / edit / scene switch, bad params); uses `?scene=workshop`.
 - `tests/gym-traversal|gym-range|gym-ai|gym-stress.browser.mjs`: the Gym rooms as fixtures (instructions/gym.md); they
   also print the measured metrics (metrics.md 8b). gym-stress takes several minutes under SwiftShader.

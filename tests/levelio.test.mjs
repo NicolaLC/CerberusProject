@@ -69,6 +69,14 @@ for (const f of files) {
   const wanted = ['version', 'name', 'title', 'tool', 'demo', 'spawn', 'interiorZones'].filter((k) => k in level);
   check(`${f}: top-level keys one per line, name/title/tool/demo/spawn/interiorZones first`, wanted.every((k, i) => keyOrder[i] === k) && keyOrder.length === Object.keys(level).length - 1);
 }
+// prologue.json is edited in the Workshop from now on: the file on disk is exactly what the Workshop would save
+{
+  const text = readFileSync(new URL('prologue.json', dir), 'utf8');
+  check('prologue.json is byte-identical to serializeLevel(its own level)', serializeLevel(JSON.parse(text)) === text);
+  const lv = parseLevel(text, registry);
+  const logic = JSON.stringify(lv.pieces.filter((p) => /^(trigger|objective|marker\.entry)/.test(p.id)));
+  check('prologue.json: no trigger / objective / entry references a purge-* group', !logic.includes('purge'));
+}
 check('all bundled level files covered', files.length === Object.keys(SCENES).length && levelNames().join() === Object.keys(SCENES).join(), `${files.length} files`);
 
 // format details on a small level
