@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { gridTexture, applyWorldUVs } from './textures.js';
+import { gridTexture, panelTexture, applyWorldUVs } from './textures.js';
 import { mergeStatic, mergeGroup } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
-import { GUNS } from '../combat/guns.js';
+import { GUNS, gunMaterials } from '../combat/guns.js';
 import { KIT_PIECES, MAT } from './kit.js';
 import { QUALITY } from '../view/quality.js';
 
@@ -19,6 +19,7 @@ import { QUALITY } from '../view/quality.js';
 // below the floor (three still loops it in the shader). Asking for more than the pool makes extra lights that are removed again.
 const PARKED = new THREE.Vector3(0, -1000, 0);
 
+const HAZE = '#4f7b7e'; // horizon and fog: teal-cyan haze, desaturated
 export const SUN_DIR = new THREE.Vector3(0.45, 0.78, 0.43).normalize();
 
 // Per-face material array for BoxGeometry (order: +x, -x, +y, -y, +z, -z).
@@ -105,14 +106,11 @@ export class World {
     this.batches = [];
 
     this.mats = this.#makeMaterials();
-    // gun display models share these (same looks as the player's guns); permanent like the level materials
-    this.propMats = {
-      gun: new THREE.MeshStandardMaterial({ color: 0x1a1c20, metalness: 0.6, roughness: 0.4 }),
-      plate: new THREE.MeshStandardMaterial({ color: 0x5d6849, metalness: 0.2, roughness: 0.6 }),
-      glow: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffa63a, emissiveIntensity: 2.2 }),
-      glowHot: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff8a2a, emissiveIntensity: 2.5 }),
-    };
-    this.keep = new Set([...Object.values(this.mats), ...Object.values(this.propMats)]); // shared across levels: never disposed with a level
+    this.skins = this.#makeSkins();
+    this.skin = null; // the loaded level's `skin` (a key of this.skins), null = the grid prototype materials
+    // gun display models share these (STEM-00's olive furniture, like the player's guns); permanent like the level materials
+    this.propMats = gunMaterials();
+    this.keep = new Set([...Object.values(this.mats), ...Object.values(this.propMats), ...Object.values(this.skins).flatMap((t) => Object.values(t))]); // shared across levels: never disposed with a level
     this.#buildSky();
     this.#buildLights();
     this.setLightPool(lights);
@@ -198,12 +196,7 @@ export class World {
   gunProp({ pos, yaw = 0, params }) {
     const def = GUNS[params?.gun];
     if (!def) throw new Error(`prop.gun: unknown gun "${params?.gun}"`);
-    const box = (w, h, d, m, x, y, z) => {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-      mesh.position.set(x, y, z);
-      return mesh;
-    };
-    const g = mergeGroup(def.build(this.propMats, box));
+    const g = mergeGroup(def.build(this.propMats));
     g.position.set(...pos);
     g.rotation.y = yaw;
     g.traverse((o) => (o.castShadow = o.isMesh));
@@ -212,11 +205,18 @@ export class World {
     return g;
   }
 
-  // Material of a piece: params.mat names an entry of this.mats, params.faces overrides single box sides.
+  // Textures of the permanent materials (grid textures, skins, gun props), for an upfront GPU upload (game.js).
+  permanentTextures() {
+    return [...new Set([...this.keep].map((m) => m.map).filter(Boolean))];
+  }
+
+  // Material of a piece: params.mat names an entry of this.mats, params.faces overrides single box sides. A level with
+  // a `skin` swaps each key for the skin's material of the same role (same keys, so draw calls don't change).
   material({ mat, faces: f }, clone = false) {
-    const base = this.mats[mat];
+    const pick = (key) => this.skins[this.skin]?.[key] ?? this.mats[key];
+    const base = pick(mat);
     if (!base) throw new Error(`level: unknown material "${mat}"`);
-    if (f) return faces(base, Object.fromEntries(Object.entries(f).map(([side, name]) => [side, this.mats[name]])));
+    if (f) return faces(base, Object.fromEntries(Object.entries(f).map(([side, name]) => [side, pick(name)])));
     return clone ? base.clone() : base;
   }
 
@@ -235,11 +235,34 @@ export class World {
       inHigh: std(gridTexture({ base: '#34587f', major: 'rgba(255,255,255,0.15)', label: 'HIGH', labelColor: 'rgba(255,255,255,0.2)' })),
       roof: std(gridTexture({ base: '#5a5e65' })),
       stripCyan: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x38d8ff, emissiveIntensity: 2.5 }),
-      stripRed: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2a2a, emissiveIntensity: 2.0 }),
-      stripWhite: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xfff2d8, emissiveIntensity: 2.0 }),
+      stripRed: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2a2a, emissiveIntensity: 2.0 }), // story beats only (Rejects, alarms) and Gym markers
+      stripWhite: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xeaf6fa, emissiveIntensity: 2.0 }), // cold white
     };
   }
 
+  // Level skins (level.md `skin`): the grid prototype textures stay where metrics read off them (Gym, Library,
+  // Workshop); a "real" scene (arena, Prologue) wears weathered metal (art-style.md). Cover keeps a value split
+  // (low cover warmer and darker, high cover cooler and lighter) so heights still read at a glance.
+  #makeSkins() {
+    const std = (tex, opts = {}) => new THREE.MeshStandardMaterial({ map: tex, roughness: 0.82, metalness: 0.25, ...opts });
+    return {
+      weathered: {
+        floor: std(panelTexture({ tint: '#5a5f62', grime: 0.8 }), { roughness: 0.7 }),
+        wall: std(panelTexture({ tint: '#787f82', grime: 0.6 })),
+        low: std(panelTexture({ tint: '#6a655c', grime: 0.7, seams: 'rgba(0,0,0,0.55)' })),
+        high: std(panelTexture({ tint: '#76828a', grime: 0.5 })),
+        platform: std(panelTexture({ tint: '#666c70', grime: 0.7 })),
+        inFloor: std(panelTexture({ tint: '#454a4f', grime: 0.9, label: 'B1' }), { roughness: 0.55 }), // wet, darker
+        inWall: std(panelTexture({ tint: '#576066', grime: 0.8 })),
+        inLow: std(panelTexture({ tint: '#5e5850', grime: 0.8, seams: 'rgba(0,0,0,0.55)' })),
+        inHigh: std(panelTexture({ tint: '#58656f', grime: 0.7 })),
+        roof: std(panelTexture({ tint: '#474c52', grime: 0.9 })),
+      },
+    };
+  }
+
+  // Sky: teal-cyan haze over a dark ground, the sun a cold smear through it, heavy fog of the same colour
+  // (art-style.md 3: haze #2E6F78, cold white light). Every scene shares it.
   #buildSky() {
     const geo = new THREE.SphereGeometry(900, 32, 16);
     const mat = new THREE.ShaderMaterial({
@@ -247,9 +270,9 @@ export class World {
       depthWrite: false,
       fog: false,
       uniforms: {
-        top: { value: new THREE.Color('#2f6fd1') },
-        horizon: { value: new THREE.Color('#cfe4f7') },
-        ground: { value: new THREE.Color('#9a8a78') },
+        top: { value: new THREE.Color('#163238') },
+        horizon: { value: new THREE.Color(HAZE) },
+        ground: { value: new THREE.Color('#263033') },
         sunDir: { value: SUN_DIR },
       },
       vertexShader: /* glsl */ `
@@ -267,7 +290,7 @@ export class World {
           float h = d.y;
           vec3 col = h > 0.0 ? mix(horizon, top, pow(h, 0.55)) : mix(horizon, ground, pow(-h, 0.4));
           float s = max(dot(d, sunDir), 0.0);
-          col += vec3(1.0, 0.92, 0.75) * (pow(s, 900.0) * 30.0 + pow(s, 24.0) * 0.45);
+          col += vec3(0.85, 0.95, 0.97) * (pow(s, 400.0) * 5.0 + pow(s, 10.0) * 0.3);
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -276,14 +299,14 @@ export class World {
     this.sky = new THREE.Mesh(geo, mat);
     this.sky.frustumCulled = false;
     this.scene.add(this.sky);
-    this.scene.fog = new THREE.Fog(0xcfe4f7, 70, 320);
+    this.scene.fog = new THREE.Fog(HAZE, 22, 210);
   }
 
   #buildLights() {
-    const hemi = new THREE.HemisphereLight(0xc4dcff, 0x6e5b48, 1.1);
+    const hemi = new THREE.HemisphereLight(0xa6ccce, 0x3a3a36, 1.6); // teal sky fill, dark ground bounce
     this.scene.add(hemi);
 
-    const sun = new THREE.DirectionalLight(0xfff1dc, 3.6);
+    const sun = new THREE.DirectionalLight(0xe4f0f0, 3.0); // cold, softened by the haze
     sun.castShadow = true;
     sun.shadow.mapSize.set(4096, 4096);
     const s = sun.shadow.camera;
@@ -493,6 +516,8 @@ export class World {
 
   #buildLevel(level, registry) {
     registry.check(level);
+    if (level.skin != null && !this.skins[level.skin]) throw new Error(`level: unknown skin "${level.skin}"`);
+    this.skin = level.skin ?? null;
     for (const z of level.interiorZones ?? []) this.interiorZones.push(new THREE.Box3(new THREE.Vector3(...z.min), new THREE.Vector3(...z.max)));
     for (const piece of registry.piecesOf(level, 'world')) registry.build('world', this, piece);
   }

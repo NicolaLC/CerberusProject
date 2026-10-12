@@ -58,14 +58,39 @@ Bright flat or rainbow colours · glossy toy plastic · big heads or chunky toy 
 outlines or cel shading · faces, smiles or expressive eyes on machines · clean new surfaces · chrome bling ·
 comedic poses. PATCH is the only comic element, and even PATCH is built from real broken parts.
 
-## 5. In game (current prototype vs this rule)
-The prototype's procedural models already follow it in part: the drone and spider wear orange plates (`0xc8781e`)
-over dark metal, and their weak spots glow magenta (`0xff2bd6`). Differences to fix in the art pass (not yet done):
-- Enemy eyes and visors are red (`0xff3020` in `enemy.js`, `drone.js`, `spider.js`, `trooper.js`); they become violet.
-- Trooper faction plates are red (`looks.js`); they become ochre livery.
-- Orange plates `0xc8781e` shift toward ochre `#C9A23A`, matte and weathered.
-- Exterior lighting is a clear blue sky (`level.md`); the target is teal haze and heavier fog.
-Change these as one deliberate pass (readability tests: weak spots must stay the brightest thing on an enemy).
+## 5. In game (art pass #87 done: no open differences)
+The procedural models, materials and lighting follow this rule. Open differences go in this section until fixed; it is
+empty now. Decisions taken in the pass (keep them unless the rule changes):
+- **Weathering is a texture, not geometry or extra materials.** Shared wear maps (`wornMaterial` / `wearTexture` in
+  `world/textures.js`: paint chipped at plate edges, scratches, grime streaks; metal; fabric) multiply each material's
+  colour, so draw calls stay the same. STEM-00 also carries welded patch plates and weld beads.
+- **STEM-00:** olive drab `#5D6849`, scratched; the yellow hazard stripes became dark metal bands and stencilled
+  `STEM-00` serial plates; the red antenna light is amber; one amber core on the chest (`Player.setCore(0..1)`,
+  emissive 0.4 to 5) for #49 to drive by story progress. Small amber LEDs stay: they are STEM-00's own light.
+- **Gun furniture: STEM-00 repaints the guns olive as it claims them** (the reference rifle is olive). The K-series
+  bodies stay worn dark metal with scorched muzzles; player models and Library props are olive. In a trooper's hands the
+  same rifle keeps the HiveMind's worn ochre and has no glows (sensors are the only saturated light on an enemy).
+  Gun glows stay amber/orange (STEM-00's power), never violet. Every gun shows a receiver, a magazine and a heat shroud.
+- **Enemies:** ochre livery `#C9A23A`, matte, over dark metal `#3A3D40`; sensors violet (`VISOR` `#8C3CFF`, bluer
+  than the spec's `#C04BFF` end so it never reads as the magenta weak spots). Sensors are small uneven clusters (drone,
+  spider turret, trooper and puppet visors): no eye slits, never two big eyes. At rest a sensor is dimmer than the weak
+  spots; only the shot telegraph flares it brighter, for a moment, on purpose.
+- **Spider miniboss (SX-6):** rebuilt after the owner's walker concept: saucer hull, sensor band with lens clusters
+  (clusters of 2-3 small lenses at uneven spacing, not a row of round eyes), twin-barrel side pods, tall splayed legs.
+  It keeps six legs (the leg-break and tripod-gait gameplay); a four-legged variant is a separate gameplay change.
+- **Puppets:** calibration-frame ochre, matte and scuffed (shooters a darker ochre); the bullseye is bone white on
+  black instead of red.
+- **HiveMind projectiles** (bolts, drone bursts, mortar orbs and rings, their impacts) are violet-white: a near-white
+  core in a violet haze, so they never read as STEM-00's amber. Explosion fire (a drone or the mech dying) stays orange.
+- **World:** teal-cyan haze sky and heavy fog; cold sun and fill; interiors lit cold white and cyan, red only for story
+  beats (a Rejects or alarm room). The arena wears weathered metal (`skin: "weathered"`, level.md); the Gym rooms,
+  Library and Workshop keep the grid textures because metrics read off them.
+- **Grade** (`post.js`): surfaces desaturated, shadows teal, HDR emissives keep their colour; bloom only above 1.0.
+- **HUD:** the crosshair's weak-spot state stays magenta, the kill shockwave stays cyan. The enemy state and damage
+  feedback **stay red, as UI-only colours**: red appears nowhere in the world, so it can't be confused with a sensor,
+  and a violet enemy state would blur into the magenta weak-spot state.
+- Screenshots: `node scripts/screenshots.mjs <dir>` (dev server running) saves the same 20 angles every time
+  (book/screenshots angles plus close-ups of every unit and gun) for before/after comparisons.
 
 ## 6. Prompt kit (concept art, the book, marketing)
 Style suffix, pasted unchanged:

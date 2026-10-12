@@ -167,7 +167,9 @@ amber core light".
 
 ### Reference screenshots (from the current prototype, `screenshots/`)
 These come from the real game build. Use them for **silhouette, proportion, camera and scale**, not for surface
-style (the prototype uses grid textures and red enemy visors; the book follows `instructions/art-style.md`).
+style (they predate the art pass: grid textures, blue sky and red enemy visors; the book follows `instructions/art-style.md`).
+`screenshots/art-pass/` holds before / after pairs of the art pass (#87): teal haze, worn ochre livery, violet sensors,
+STEM-00's amber core. Those "after" frames are closer to the book's look.
 
 | File | What it shows | Use it for |
 |---|---|---|
@@ -179,8 +181,8 @@ style (the prototype uses grid textures and red enemy visors; the book follows `
 | `03-interior-hall.jpg` | A dark interior with a door to the bright arena and low cover | Light contrast between interior and exterior |
 | `05-library-units.jpg` | The full unit lineup in the Library | Bestiary and appendix page |
 
-Regenerate or add shots: run `npm run dev`, then run Playwright against `?debug&scene=library` (or `arena`). Set
-`game.player.pos` and `game.camRig.yaw`, step the engine, and save the canvas with `toDataURL`.
+Regenerate or add shots: run `npm run dev`, then `node scripts/screenshots.mjs <outDir> [shot names]`: the same 20
+angles every time (these plus close-ups of each unit, each gun and the Gym AI room). Add an angle to `SHOTS` in the script.
 
 ### Illustration list (one per chapter, suggested)
 1. **Prologue:** STEM-00 between rows of puppets whose magenta weak spots turn toward it. Its amber is a faint ember.

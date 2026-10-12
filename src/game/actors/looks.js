@@ -1,22 +1,22 @@
 import * as THREE from 'three';
 import { rb, cyl, cap, look } from './parts.js';
+import { wornMaterial } from '../world/textures.js';
 
 // Humanoid enemy looks, in the player soldier's style (soldier.js): rounded plates, cylinders and capsules per
 // bone over a mechanical frame, a few HDR glows. Visual only (`look`): hits use the rig's invisible dummy boxes.
 // Bone-local axes: +Z forward, +X the character's left, limbs hang along -Y. Weak spots sit on the dummy boxes'
 // front faces, so keep limb fronts roughly within them (see EnemyBody).
 
-const std = (color, roughness, metalness) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 const R = Math.PI / 2;
 const SIDES = [['Left', 1], ['Right', -1]];
 
-// ---------------- trooper: hostile assault robot (gunmetal frame, slate armor, red faction plates) ----------------
+// ---------------- trooper: HiveMind assault robot (gunmetal frame, dark metal armor, worn ochre livery) ----------------
 
 export function trooperMaterials() {
   return {
-    frame: std(0x24272d, 0.5, 0.55), // dark gunmetal frame, joints, pistons
-    armor: std(0x4a5260, 0.5, 0.35), // slate armor plates
-    plate: std(0x8f2a24, 0.5, 0.3), // red faction plates and stripes (also the rifle's furniture)
+    frame: wornMaterial(0x24272d, { roughness: 0.55, metalness: 0.55, wear: 'metal' }), // dark gunmetal frame, joints, pistons
+    armor: wornMaterial(0x3a3d40, { roughness: 0.6, metalness: 0.45, wear: 'metal' }), // dark metal armor plates
+    plate: wornMaterial(0xc9a23a, { roughness: 0.85, metalness: 0.15 }), // matte ochre livery, chipped (also the rifle's furniture)
   };
 }
 
@@ -53,7 +53,7 @@ export function buildTrooper(rig, M, visor) {
     'Spine2',
     rb(M.frame, 0.4, 0.28, 0.24, 0.07, 0, 0.11, -0.01), // torso frame
     rb(M.armor, 0.42, 0.27, 0.08, 0.035, 0, 0.13, 0.11, -0.08), // breastplate
-    rb(M.plate, 0.05, 0.16, 0.012, 0.005, 0.07, 0.13, 0.155, -0.08, 0, 0.45), // red chevron
+    rb(M.plate, 0.05, 0.16, 0.012, 0.005, 0.07, 0.13, 0.155, -0.08, 0, 0.45), // ochre chevron
     rb(M.plate, 0.05, 0.16, 0.012, 0.005, -0.07, 0.13, 0.155, -0.08, 0, -0.45),
     rb(M.frame, 0.12, 0.05, 0.02, 0.01, 0, 0.03, 0.153), // chest vent
     rb(visor, 0.08, 0.012, 0.006, 0.003, 0, 0.03, 0.165),
@@ -79,12 +79,16 @@ export function buildTrooper(rig, M, visor) {
     cyl(M.armor, 0.055, 0.055, 0.02, 0, 0.0, 0),
     cyl(M.frame, 0.07, 0.075, 0.04, 0, -0.06, 0), // neck ring
   );
-  // head: an angular helmet with a red visor slit, brow ridge and a crest
+  // head: an angular helmet with a violet sensor cluster, brow ridge and a crest
   L(
     'Head',
     rb(M.armor, 0.21, 0.19, 0.23, 0.05, 0, 0.13, 0), // dome
     rb(M.frame, 0.2, 0.06, 0.06, 0.015, 0, 0.13, 0.1), // visor recess
-    rb(visor, 0.18, 0.026, 0.012, 0.006, 0, 0.135, 0.128), // visor slit
+    // sensor cluster in the visor recess: small, uneven lenses, never an eye slit that reads as a face
+    rb(visor, 0.034, 0.024, 0.012, 0.005, 0.05, 0.14, 0.128),
+    rb(visor, 0.02, 0.016, 0.012, 0.004, 0.012, 0.128, 0.128),
+    rb(visor, 0.018, 0.018, 0.012, 0.004, -0.028, 0.146, 0.128),
+    rb(visor, 0.012, 0.012, 0.012, 0.003, -0.062, 0.13, 0.128),
     rb(M.plate, 0.22, 0.035, 0.07, 0.012, 0, 0.175, 0.09, 0.25), // brow ridge
     rb(M.armor, 0.15, 0.07, 0.08, 0.02, 0, 0.055, 0.09, -0.3), // jaw guard
     rb(M.frame, 0.1, 0.012, 0.01, 0.004, 0, 0.05, 0.135, -0.3), // grille
@@ -100,7 +104,7 @@ export function buildTrooper(rig, M, visor) {
       side + 'Arm',
       cap(M.frame, 0.052, 0.18, 0, -0.15, 0),
       rb(M.armor, 0.19, 0.13, 0.24, 0.05, 0.05 * s, 0.01, 0, 0, 0, 0.35 * s), // pauldron
-      rb(M.plate, 0.2, 0.025, 0.25, 0.01, 0.055 * s, 0.07, 0, 0, 0, 0.35 * s), // red rim
+      rb(M.plate, 0.2, 0.025, 0.25, 0.01, 0.055 * s, 0.07, 0, 0, 0, 0.35 * s), // ochre rim
       rb(M.armor, 0.11, 0.1, 0.12, 0.03, 0.02 * s, -0.17, 0), // bicep plate
       cyl(M.frame, 0.045, 0.045, 0.1, 0, -0.29, 0, 0, 0, R), // elbow joint
     );
@@ -108,7 +112,7 @@ export function buildTrooper(rig, M, visor) {
       side + 'ForeArm',
       cap(M.frame, 0.046, 0.16, 0, -0.14, 0),
       rb(M.armor, 0.105, 0.18, 0.105, 0.03, 0, -0.13, 0), // vambrace
-      rb(M.plate, 0.112, 0.025, 0.112, 0.008, 0, -0.06, 0), // red cuff
+      rb(M.plate, 0.112, 0.025, 0.112, 0.008, 0, -0.06, 0), // ochre cuff
       rb(M.frame, 0.11, 0.02, 0.11, 0.006, 0, -0.21, 0),
     );
     L(
@@ -150,11 +154,11 @@ export function buildTrooper(rig, M, visor) {
 
 // ---------------- training puppet: crash-test mannequin robot on a pneumatic post ----------------
 
-// color: the kind's shell color (yellow targets, red-orange shooters).
+// color: the kind's shell color (calibration-frame ochre targets, darker ochre shooters): matte, scuffed paint.
 export function puppetMaterials(color) {
   return {
-    shell: std(color, 0.55, 0.1), // painted shell
-    frame: std(0x2a2c31, 0.5, 0.5), // black joints and frame
+    shell: wornMaterial(color, { roughness: 0.88, metalness: 0.08 }), // painted shell
+    frame: wornMaterial(0x2a2c31, { roughness: 0.55, metalness: 0.5, wear: 'metal' }), // black joints and frame
   };
 }
 
@@ -182,12 +186,14 @@ export function buildPuppet(rig, M, visor) {
     rb(visor, 0.04, 0.012, 0.006, 0.003, 0.15, 0.03, 0.136), // status LED
   );
   L('Neck', cyl(M.frame, 0.035, 0.04, 0.12, 0, 0.03, 0, 0, 0, 0, 10));
-  // head: a smooth helmet with a dark visor band and hinge discs at the sides
+  // head: a smooth helmet with a dark visor band, a few small sensors and hinge discs at the sides
   L(
     'Head',
     rb(M.shell, 0.21, 0.25, 0.23, 0.09, 0, 0.13, 0),
     rb(M.frame, 0.2, 0.075, 0.1, 0.03, 0, 0.14, 0.07), // visor band
-    rb(visor, 0.16, 0.022, 0.01, 0.005, 0, 0.14, 0.12), // visor glow
+    rb(visor, 0.03, 0.02, 0.01, 0.005, 0.04, 0.142, 0.12), // calibration sensors (small, uneven: no face)
+    rb(visor, 0.018, 0.018, 0.01, 0.004, -0.005, 0.135, 0.12),
+    rb(visor, 0.014, 0.014, 0.01, 0.004, -0.045, 0.145, 0.12),
     cyl(M.frame, 0.05, 0.05, 0.02, 0.105, 0.13, 0, 0, 0, R, 14), // hinge discs
     cyl(M.frame, 0.05, 0.05, 0.02, -0.105, 0.13, 0, 0, 0, R, 14),
     cyl(M.shell, 0.025, 0.025, 0.022, 0.106, 0.13, 0, 0, 0, R, 10),

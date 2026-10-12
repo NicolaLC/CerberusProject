@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { EnemyBody } from './enemy.js';
+import { EnemyBody, VISOR_REST } from './enemy.js';
 import { buildTrooper, trooperMaterials } from './looks.js';
-import { GUNS } from '../combat/guns.js';
+import { GUNS, gunMaterials } from '../combat/guns.js';
 import { damp, lerpAngle } from '../../engine/math.js';
 
 // Troopers: armed assault robots (looks.js) that move and use cover.
@@ -60,7 +60,6 @@ export class Trooper extends EnemyBody {
       yaw: def.yaw ?? 0,
       health: TUNING.health,
       mats: trooperMaterials(),
-      visor: 0xff3a20,
       armed: true,
       weakSpots: 1,
     });
@@ -83,9 +82,8 @@ export class Trooper extends EnemyBody {
     this.aimPitch = 0;
 
     // rifle in hand (not a hitbox), arms IK to its grips
-    const gunMat = new THREE.MeshStandardMaterial({ color: 0x1a1c20, metalness: 0.5, roughness: 0.45 });
-    const glow = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff5a2a, emissiveIntensity: 2 });
-    const gun = GUNS.rifle.build({ gun: gunMat, plate: this.mats.plate, glow, glowHot: glow }, boxMesh);
+    // HiveMind rifle: ochre furniture, no glows (guns.js)
+    const gun = GUNS.rifle.build(gunMaterials({ plate: this.mats.plate, unlit: true }));
     gun.userData.noHit = true;
     this.rig.attach('Weapon', gun);
     const s = GUNS.rifle.sockets;
@@ -258,7 +256,7 @@ export class Trooper extends EnemyBody {
 
       case 'aim':
         combat = true;
-        this.visor.emissiveIntensity = 1.5 + (t.aimTime - Math.max(0, this.timer)) * 16; // telegraph
+        this.visor.emissiveIntensity = VISOR_REST + (t.aimTime - Math.max(0, this.timer)) * 16; // telegraph
         if (this.timer <= 0) {
           this.state = 'fire';
           this.shotsLeft = randInt(t.shots);
@@ -272,7 +270,7 @@ export class Trooper extends EnemyBody {
           this.#fire(target, dist);
           this.timer = t.shotGap;
           if (--this.shotsLeft <= 0) {
-            this.visor.emissiveIntensity = 1.5;
+            this.visor.emissiveIntensity = VISOR_REST;
             this.bursts++;
             if (this.spot) this.#enterCover(rand(t.coverTime));
             else this.#relocate(); // fighting in the open: look for cover again
@@ -415,8 +413,4 @@ export class Trooper extends EnemyBody {
   }
 }
 
-function boxMesh(w, h, d, m, x, y, z) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-  mesh.position.set(x, y, z);
-  return mesh;
-}
+

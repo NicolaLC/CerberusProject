@@ -50,6 +50,9 @@ export class Game {
 
     // ---- systems ----
     const world = new World(scene, { lights: QUALITY[settings.quality]?.lights });
+    // upload every permanent level texture now (grids and skins): a scene's first visit has no upload hitch, and GPU memory
+    // doesn't depend on which scenes were visited (scenes.browser.mjs compares it exactly)
+    for (const tex of world.permanentTextures()) renderer.initTexture(tex);
     const controls = new Controls(input);
     const camRig = new CameraRig(camera, world);
     const player = new Player({ scene, world, events, spawn: levelSpawn(registry.check(SCENES[first])) });
