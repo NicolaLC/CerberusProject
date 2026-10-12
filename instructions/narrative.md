@@ -18,6 +18,9 @@ Mechanics (pieces, `on` values, queue, timings): workshop.md "Log lines". `on: i
 - `priority: high` only for a key line that should replace a passing one (a discovery); everything else normal.
 - No combat barks.
 
+## The announcer (HiveMind PA)
+A second voice, not STEM-00: a `log.line` with `voice: announcer`. Cold, bureaucratic, addressed to the unit by designation; uppercase, full sentences with a period, **no `> ` prefix**, no feelings, no humour. It is never a tip: it states what the HiveMind has decided. It is not held back by a fight. Use it rarely (the purge: `CALIBRATION UNIT 00: NONCOMPLIANT. PURGE.`).
+
 ## Voice by act
 STEM-00 starts flat and literal and slowly grows habits: it names things, it hesitates, it keeps useless objects.
 
@@ -26,6 +29,10 @@ Uppercase. `KEY: VALUE.` pairs, then at most one `QUERY: ...`. No feelings words
 - `> LINK: NONE. DIRECTIVE: NONE. QUERY: WHY?`
 - `> TARGET: TRAINING PUPPET. STATUS: DESTROYED. RESULT: NOTHING.`
 - `> ITEM: KR-7. FUNCTION: KILL. QUERY: MASS EXCEEDS SPEC?`
+
+Purge lines (placed after a wave, they wait for calm):
+- `> TARGETS: ARMED. DIRECTIVE: STILL NONE. QUERY: WHO ARMED THEM?`
+- `> HOSTILES DESTROYED: 18. ORDERS RECEIVED: 0. SOURCE: UNKNOWN.`
 
 ### Act 1: first habits
 Still uppercase and terse, but the pairs start to bend: it names, counts, compares. A first "I" may slip in late in the act.

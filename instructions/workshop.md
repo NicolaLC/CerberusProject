@@ -175,20 +175,47 @@ All: `text` (HUD line, default per kind), `order?`, `limit?`, `wakeGroup?`, `spa
 - Suite `tests/mission.browser.mjs`: pieces and gizmos, a full mission (reach, destroy, survive, interact), `order`, reinforcement targets, zero targets, trigger / checkpoint reach, `limit` and a dead player, restart / edit / scene switch, bad params.
 
 ## Log lines (#40)
-`log.line` pieces (encounter.js, owner `encounter`) put STEM-00's log lines in a level as data. Fields: `text`, `on`, `priority` ((none) = normal / high), `once` (true), `delay` (s).
+`log.line` pieces (encounter.js, owner `encounter`) put STEM-00's log lines in a level as data. Fields: `text`, `on`, `priority` ((none) = normal / high), `once` (true), `voice` ((none) = stem / announcer), `delay` (s).
 Gizmo: an amber screen on a post; inert in edit mode and the Library (like objectives). Writing rules: `instructions/narrative.md`.
 - **`on`** (matched against existing events; ids as in those events): `start` (the encounter loads in play: scene load, Workshop play / restart), `trigger:<id>` (`trigger:fired`),
   `checkpoint:<id>` (`checkpoint:reached`), `objective:<id>` (`mission:objective`, it becomes current), `objective:<id>:done` (`mission:objective:done`),
   `discovered:<gun>` (`weapon:discovered`, gun = a `GUNS` key), `mission:complete`, `intro:done` (the boot intro ended or was skipped; the line then plays once calm). Anything else, an empty `text`, a bad priority / once / delay: `Registry.check` throws
   `level: piece #i ("log.line") ...` (meta `check`, `logLineProblem`), the builder throws `<id>: ...` (inspector toast).
-- **Never in a fight**: a queued line waits while STEM-00 is in combat: an awake enemy alive within 30 m (`TUNING.combatRange`), or a `weapon:shot` / `player:hurt`. It plays once
+- **Voice**: `stem` (default) is STEM-00's terminal. `announcer` is the HiveMind PA (the purge's `CALIBRATION UNIT 00: NONCOMPLIANT. PURGE.`): it does not wait for calm, defaults to `priority: high` (replaces the line on screen), and the Log view styles it apart (`#log.announcer`: cold white with a network-cyan glow, wide tracking, upper screen, no cursor; its `log.entries` row carries `voice: 'announcer'`). No `> ` prefix; wording rules in narrative.md.
+- **Never in a fight** (STEM-00 lines): a queued line waits while STEM-00 is in combat: an awake enemy alive within 30 m (`TUNING.combatRange`), or a `weapon:shot` / `player:hurt`. It plays once
   none of that has happened for 3 s (`TUNING.calm`, `encounter.calm`; a run starts calm). `delay` counts from then.
 - **Firing**: `Encounter` queues the matching records (`once` = one time per run), and emits `log:say { text, priority }` from its update once calm and `delay` have passed (the first `start` line shows
   on the first play frame, after `resetRun`). Pending lines are dropped on unload.
 - **Log view** (`src/game/view/log.js`, `game.log`, `#log` in the HUD): one line at a time, bottom centre, amber monospace typed at 40 chars/s with a blinking cursor, held
   `max(2.5 s, 0.06 s per char)`, faded 0.5 s. `say(text, { priority })`: `high` replaces the current line, `normal` waits (more than 4 waiting: the oldest is dropped).
   Every shown line goes to `log.entries` `{ text, t }` (t = s since the run began) for the pause-menu Log (not built). `Game.resetRun` clears it all (`log.reset()`).
-- Suite `tests/log.browser.mjs`: start / restart / once, trigger, objective done, delay, waiting for calm (shot, awake enemy), `discovered:rifle`, priority queue and entries, validation.
+- Suite `tests/log.browser.mjs`: start / restart / once, trigger, objective done, delay, waiting for calm (shot, awake enemy), `discovered:rifle`, priority queue and entries, validation, the announcer voice, `env.alarm` (below).
+
+## Alarm (#14)
+`env.alarm` (encounter.js, owner `encounter`, reusable: any level can raise an alarm). Fields: `on`, `off` (optional), `duration` (s, optional), `color` ('#ff2a1a'), `strength` (0.75), `siren` (true).
+Gizmo: a red beacon on a post; inert in edit mode and the Library. Validation: meta `check` (`alarmProblem`): `on` / `off` one of the `log.line` `on` forms, `duration` above 0, `color` `#rrggbb`, `strength` in (0, 1], `siren` a boolean.
+- **Start / end**: `Encounter` queues the alarm when its `on` happens (same events as log lines, once per run) and starts it at the next update: `alarm:on { id, color, strength, siren }`. It ends on `off`, after `duration` s of play, or when the level unloads: `alarm:off { id, active }` (`active` = alarms still running), `alarm:clear` (unload, scene load, Workshop play / restart / edit).
+- **Light** (`World.setAlarm(color, strength, instant)`, `world.alarm`): `level` fades 0..1 at 1.6 per second toward `target`; the haze (sky horizon and fog), hemisphere, sun and every level point light are mixed toward `color` by `level * strength` with a slow pulse (3.2 rad/s, +-15%), the hemisphere dims up to 35%. Normal colours are kept (`world.base`, a light's `userData.base`), so ending the alarm restores them exactly. Permanent state of the World, not part of a level; the light count never changes (engine.md).
+- **Siren** (`Audio.siren(on)`): synthesized, no asset: a sawtooth swept 460-940 Hz by a 0.9 Hz triangle LFO through a lowpass, 0.4 s fade in, fade out on stop; waits for the first user gesture like all audio. Recorded replacement prompt: sfx-prompts.md.
+- Two alarms keep the light and siren until both ended. Art: red light is for story beats and alarms only (art-style.md).
+- Tests: `tests/log.browser.mjs` section 6 (validation, start / end, duration, off, clear, inert gizmos), `tests/prologue-purge.browser.mjs` (in the Prologue).
+
+## Prologue purge (#14)
+`src/levels/prologue.json` chains ordered objectives (explicit `order`; ids are the piece names). Each stage wakes its dormant group when it becomes current (`wakeGroup`), and a stage whose group is already dead passes at once (destroy counts the living members when it starts), so kills in any order never soft-lock. Pistol ammo is infinite, so every stage can be finished.
+| order | id | kind | wakes | notes |
+|---|---|---|---|---|
+| 10 | `leave-bay` | reach | - | the opening |
+| 20 | `calibrate` | destroy, `count` 3, no group | - | the first three kills of any target |
+| 30 | `purge-start` | survive 4 s | - | alarm (`purge-alarm`, `env.alarm`), red light, announcer line; nothing awake yet |
+| 40 / 50 | `purge-yard` / `purge-hall` | destroy | `purge-1` / `purge-2` | shooters: yard line + platform, then interior |
+| **60** | (free: **armoury slot, #93**) | `objective.interact` | - | the Warden pickup; the troopers follow it |
+| 70 / 80 | `purge-troopers-yard` / `purge-troopers-hall` | destroy | `purge-3` / `purge-4` | |
+| 90 | `purge-drones` | destroy | `purge-5` | |
+| 100 | `purge-gate` | reach (boss arena gate, (39.75, 0, -17)) | - | the spider sleeps until its stage |
+| 110 | `purge-boss` | destroy | `purge-6` | the climax; its end (`objective:purge-boss:done`) ends the alarm |
+Checkpoints: `cp-yard` (0, 0, 20), `cp-hall` (-9, 0, -36), `cp-hall-east` (16, 0, -33), `cp-gate` (39.75, 0, -10). Log lines: the announcer on `objective:purge-start`; STEM-00 on `objective:purge-hall:done` and `objective:purge-drones:done` (they wait for calm).
+Adding #93: place the armoury `objective.interact` with `order: 60` and a `pickup.gun`-style rack; nothing else changes.
+Suite `tests/prologue-purge.browser.mjs`: start (alarm, light, announcer), each stage and only its group awake, spider and completion (alarm ends), checkpoints, out-of-order kills, scene reload clears the alarm.
 
 ## Boot intro (#13)
 `intro.boot` (encounter.js, owner `encounter`, a reusable piece, not Prologue-only code). Fields: `lines` (typed with `|` between lines), `duration` (s, 12, above 0, at most 20), `skippable` (true).
@@ -202,7 +229,7 @@ Gizmo: a monitor with text bars on a post; inert in edit mode and the Library. V
 - State for tests: `boot.active`, `boot.t`, `boot.duration`, `boot.inputLocked`, `boot.canSkip`, `boot.seen`, `boot.lines`, `boot.fade`.
 - Suite `tests/intro.browser.mjs`: overlay and lock at start, typed lines and the HIVEMIND span, no movement / fire / look / switch while locked, `intro:done` within the duration and the eased return, `log.line` on `intro:done`, pacing, skip (only once seen; fire / jump / interact / pad A; `skippable: false`; blocked storage), pause, restart / edit / scene load, validation.
 
-- `src/levels/prologue.json` (the Prologue, #2) is authored in the Workshop from now on: open it (`levelNames()`), edit, save over the file. Its `purge-*` enemy groups are dormant on purpose; the purge waves (#14) will wake or spawn them from triggers and objectives. Every enemy of a `purge-*` group is `dormant`.
+- `src/levels/prologue.json` (the Prologue, #2) is authored in the Workshop from now on: open it (`levelNames()`), edit, save over the file. Its `purge-*` enemy groups are dormant on purpose and are woken only by the purge objective chain ("Prologue purge"). Every enemy of a `purge-*` group is `dormant`.
 
 ## Not yet
 Faces / flicker / label colours / boss arena in the inspector.

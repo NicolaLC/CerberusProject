@@ -74,8 +74,16 @@ for (const f of files) {
   const text = readFileSync(new URL('prologue.json', dir), 'utf8');
   check('prologue.json is byte-identical to serializeLevel(its own level)', serializeLevel(JSON.parse(text)) === text);
   const lv = parseLevel(text, registry);
-  const logic = JSON.stringify(lv.pieces.filter((p) => /^(trigger|objective|marker\.entry)/.test(p.id)));
-  check('prologue.json: no trigger / objective / entry references a purge-* group', !logic.includes('purge'));
+  // the purge (#14): purge-* groups are woken only by the ordered objective chain, never by a trigger or entry marker
+  const logic = JSON.stringify(lv.pieces.filter((p) => /^(trigger|marker\.entry)/.test(p.id)));
+  check('prologue.json: no trigger / entry references a purge-* group', !logic.includes('purge'));
+  const chain = lv.pieces.filter((p) => p.id.startsWith('objective.')).sort((a, b) => a.params.order - b.params.order);
+  check('prologue.json: every objective has an explicit, unique order', chain.every((o) => Number.isFinite(o.params.order)) && new Set(chain.map((o) => o.params.order)).size === chain.length);
+  const wakes = chain.filter((o) => o.params.wakeGroup).map((o) => o.params.wakeGroup);
+  check('prologue.json: purge-1..6 are woken once each, in order', wakes.join() === 'purge-1,purge-2,purge-3,purge-4,purge-5,purge-6', wakes.join());
+  const orders = chain.map((o) => o.params.order);
+  const slot = orders.findIndex((n, i) => i && n - orders[i - 1] > 10);
+  check('prologue.json: a free order slot (60) sits between the shooters (purge-2) and the troopers (purge-3)', chain[slot - 1]?.params.wakeGroup === 'purge-2' && chain[slot]?.params.wakeGroup === 'purge-3' && orders[slot - 1] < 60 && orders[slot] > 60);
 }
 check('all bundled level files covered', files.length === Object.keys(SCENES).length && levelNames().join() === Object.keys(SCENES).join(), `${files.length} files`);
 
