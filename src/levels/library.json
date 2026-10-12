@@ -60,7 +60,7 @@
     {"id": "env.label", "pos": [27, 0, -3], "params": {"text": "env.label\ntext sign, no collision", "size": 0.22, "flat": true}},
     {"id": "env.label", "pos": [-36, 2.4, -20], "params": {"text": "4 PICKUPS", "size": 0.8, "color": "#ffe14a"}},
     {"id": "pickup.light", "pos": [-8, 0, -20], "name": "ex:pickup.light"},
-    {"id": "env.label", "pos": [-8, 0, -17.8], "params": {"text": "pickup.light\nlight ammo (AR MG BR PS) | respawns in 15 s", "size": 0.22, "flat": true}},
+    {"id": "env.label", "pos": [-8, 0, -17.8], "params": {"text": "pickup.light\nlight ammo (AR MG BR) | respawns in 15 s", "size": 0.22, "flat": true}},
     {"id": "pickup.heavy", "pos": [8, 0, -20], "name": "ex:pickup.heavy"},
     {"id": "env.label", "pos": [8, 0, -17.8], "params": {"text": "pickup.heavy\nheavy ammo (SR RG) | respawns in 15 s", "size": 0.22, "flat": true}},
     {"id": "env.label", "pos": [-36, 2.4, -30], "params": {"text": "5 LIGHT PRESETS", "size": 0.8, "color": "#ffe14a"}},

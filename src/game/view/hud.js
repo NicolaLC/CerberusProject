@@ -179,7 +179,7 @@ export class Hud {
     text(e.ammo, weapon.ammo);
     text(e.gunName, weapon.t.name);
     for (const id in e.slots) e.slots[id].classList.toggle('on', id === (weapon.pending ?? weapon.current));
-    text(e.reserve, weapon.reserve);
+    text(e.reserve, weapon.t.infinite ? '∞' : weapon.reserve);
     e.ammo.classList.toggle('low', weapon.ammo <= Math.max(1, Math.floor(weapon.t.mag * LOW_AMMO)));
     css(e.reload, 'display', weapon.reloading > 0 ? 'block' : 'none');
     e.ammo.classList.toggle('boost', weapon.boosted);

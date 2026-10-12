@@ -32,7 +32,8 @@
 - Animator `air`: knees bent (0.5 rad), hips pitched forward, no foot locks / feet IK while it shows.
 
 ## Ammo
-- Two classes (`ammo` field per gun in `GUNS`): light = AR, MG, BR, pistol; heavy = SR, RG. A pickup refills only its own
+- Two classes (`ammo` field per gun in `GUNS`): light = AR, MG, BR; heavy = SR, RG. The pistol is `infinite` (data flag
+  in `GUNS`): pickups skip it and it never counts as needing ammo. A pickup refills only its own
   class, each gun by its own `pickup.crate` / `pickup.drop` amounts (AR 96/32, MG 135/45, SR 10/3, RG 8/2...).
   Light is the cyan glow (small case, one band), heavy the orange/amber glow (taller case, two bands, brighter).
 - Cases at fixed `SPOTS` in `game/world/pickups.js` (7 light, 3 heavy: range, interior west, boss arena back) respawn after 15s.
@@ -126,6 +127,9 @@
   core through the shell). The trail is drawn to where it stops. The slug follows the muzzle-to-crosshair line past the aim point. 100 dmg, mag 4, no falloff, light zoom without scope overlay (`zoom.scope` only on the sniper).
   `beam: true` draws a thick lingering trail. Charge cancels on reload/switch/sprint.
 - KP-12 Ember (PS, sidearm): semi, 330 rpm, mag 12, reload 1.2 s, 32 dmg, aim spread 0.002. Held out front.
+  Infinite reserve (`infinite: true`): reloads fill the magazine without spending reserve and are never refused for
+  an empty reserve; the HUD shows `∞` (Space Nova has the glyph; Chakra Petch doesn't). Magazine, reload, active
+  reload and the low-ammo red work as for any gun.
 - Add a gun: new entry in `GUNS` (stats, sockets, `build()` model) and its id in `GUN_ORDER`.
 - Hit = camera ray (starts at player distance), then re-cast from muzzle; muzzle hit wins.
 

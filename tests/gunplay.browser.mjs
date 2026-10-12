@@ -306,9 +306,9 @@ const result = await p.evaluate(() => {
   enemies.dirty = true;
   step(20);
 
-  // --- ammo classes: light pickups refill only light guns, heavy only heavy guns ---
+  // --- ammo classes: light pickups refill only light guns, heavy only heavy guns; the pistol (infinite) never ---
   const { pickups } = g;
-  const light = ['rifle', 'mg', 'burst', 'pistol'];
+  const light = ['rifle', 'mg', 'burst'];
   const heavy = ['sniper', 'rail'];
   const setRes = (ids, v) => { for (const id of ids) weapon.state[id].reserve = v; };
   const res = (ids) => ids.map((id) => weapon.state[id].reserve);
@@ -320,21 +320,22 @@ const result = await p.evaluate(() => {
   const itemAt = (x, z) => pickups.items.find((i) => i.pos.x === x && i.pos.z === z);
   const stand = (x, z, y = 0) => { player.pos.set(x, y, z); step(3); };
   out.ammo = {};
-  setRes([...light, ...heavy], 0);
+  setRes([...light, ...heavy, 'pistol'], 0);
   stand(6, 34); // light crate
   out.ammo.lightType = itemAt(6, 34).type;
-  out.ammo.lightGot = { light: res(light), heavy: res(heavy), active: itemAt(6, 34).active };
+  out.ammo.lightGot = { light: res(light), heavy: res(heavy), pistol: weapon.state.pistol.reserve, active: itemAt(6, 34).active };
   out.ammo.lightToast = toasts.at(-1);
   stand(26, 2.5); // heavy crate
   out.ammo.heavyType = itemAt(26, 2.5).type;
   out.ammo.heavyGot = { light: res(light), heavy: res(heavy), active: itemAt(26, 2.5).active };
   out.ammo.heavyToast = toasts.at(-1);
-  // all light guns full: a light crate stays and says so; the heavy guns are not touched
+  // all light guns full: a light crate stays and says so (an empty pistol doesn't count); the heavy guns are not touched
   setRes(heavy, 0);
   full(light);
+  weapon.state.pistol.reserve = 0;
   stand(-24, 2.5);
   step(3);
-  out.ammo.lightFull = { stays: itemAt(-24, 2.5).active, fulls, heavy: res(heavy) };
+  out.ammo.lightFull = { stays: itemAt(-24, 2.5).active, fulls, heavy: res(heavy), pistol: weapon.state.pistol.reserve };
   // heavy crate with full heavy guns but empty light guns: stays, light guns not touched
   setRes(light, 0);
   full(heavy);
@@ -352,6 +353,22 @@ const result = await p.evaluate(() => {
   const p0 = weapon.ammo;
   press('Mouse0', 60); // held a second: still one round
   out.pistol = { gun: weapon.current, held: p0 - weapon.ammo };
+
+  // infinite reserve: 200 shots with their reloads never touch it, a reload with the reserve at 0 still fills the
+  // magazine, and the HUD shows the reserve as ∞
+  let shots = 0;
+  engine.events.on('weapon:shot', () => shots++);
+  const pr0 = weapon.state.pistol.reserve;
+  for (let i = 0; i < 1000 && shots < 200; i++) { press('Mouse0'); step(11); }
+  out.pistol.shots = shots;
+  out.pistol.reserveAfter = weapon.state.pistol.reserve - pr0;
+  step(90); // let a pending reload finish
+  weapon.state.pistol.reserve = 0;
+  weapon.ammo = 3;
+  press('KeyR');
+  step(90);
+  out.pistol.dryReload = { ammo: weapon.ammo, mag: weapon.t.mag, reserve: weapon.state.pistol.reserve };
+  out.pistol.hud = document.getElementById('reserve').textContent;
   return out;
 });
 
@@ -388,10 +405,13 @@ expect('charge ring: gone when the charge is cancelled', result.ring.cancelMid =
 expect('railgun: one slug hits all 6 targets on the line', result.line.n >= 6 && result.line.hits === 6 && result.line.alive === 0);
 expect('railgun: a wall stops the slug (only targets in front hit, trail ends at the wall)', result.line.wall.hits === 3 && result.line.wall.alive === result.line.n - 3 && Math.abs(result.line.wall.endDist - result.line.wall.wallDist) < 0.5);
 expect('ammo: crate spots are typed (7 light, 3 heavy)', result.ammo.counts.light === 7 && result.ammo.counts.heavy === 3);
-expect('ammo: light pickup refills light guns only', result.ammo.lightType === 'light' && result.ammo.lightGot.light.every((v) => v > 0) && result.ammo.lightGot.heavy.every((v) => v === 0) && !result.ammo.lightGot.active && /^LIGHT AMMO/.test(result.ammo.lightToast));
+expect('ammo: light pickup refills AR, MG and BR only (not the infinite pistol)', result.ammo.lightType === 'light' && result.ammo.lightGot.light.every((v) => v > 0) && result.ammo.lightGot.heavy.every((v) => v === 0) && result.ammo.lightGot.pistol === 0 && !result.ammo.lightGot.active && /^LIGHT AMMO/.test(result.ammo.lightToast) && !/PS/.test(result.ammo.lightToast));
 expect('ammo: heavy pickup refills sniper and railgun only', result.ammo.heavyType === 'heavy' && result.ammo.heavyGot.heavy.every((v) => v > 0) && !result.ammo.heavyGot.active && /^HEAVY AMMO/.test(result.ammo.heavyToast));
-expect('ammo: full class leaves the pickup ("AMMO FULL"), other class untouched', result.ammo.lightFull.stays && result.ammo.lightFull.fulls === 1 && result.ammo.lightFull.heavy.every((v) => v === 0) && result.ammo.heavyFull.stays && result.ammo.heavyFull.fulls === 1 && result.ammo.heavyFull.light.every((v) => v === 0));
+expect('ammo: full class leaves the pickup ("AMMO FULL"), other class untouched', result.ammo.lightFull.stays && result.ammo.lightFull.fulls === 1 && result.ammo.lightFull.heavy.every((v) => v === 0) && result.ammo.lightFull.pistol === 0 && result.ammo.heavyFull.stays && result.ammo.heavyFull.fulls === 1 && result.ammo.heavyFull.light.every((v) => v === 0));
 expect('pistol is semi-auto', result.pistol.gun === 'pistol' && result.pistol.held === 1);
+expect('pistol: 200 shots with reloads leave the reserve unchanged', result.pistol.shots >= 200 && result.pistol.reserveAfter === 0);
+expect('pistol: reload with the reserve at 0 still fills the magazine', result.pistol.dryReload.ammo === result.pistol.dryReload.mag && result.pistol.dryReload.reserve === 0);
+expect('pistol: HUD reserve reads ∞', result.pistol.hud === '∞');
 expect('no page errors', errors.length === 0);
 if (errors.length) console.log(errors);
 await b.close();

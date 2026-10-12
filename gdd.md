@@ -289,7 +289,7 @@ aimed spread, a fixed recoil pattern and its own seeded RNG.
 | KS-5 Farsight | 3 SR | Precision, long range | Semi (click buffered 0.25 s before the bolt is back) | 70 | 5 | 25 / 40 | 2.4 s | Heavy |
 | KB-3 Tribune | 4 BR | Precision mid-range | 3-round burst per pull, 0.3 s between bursts (holding repeats; a started burst always finishes) | 900 in burst | 24 | 144 / 288 | 1.9 s | Light |
 | KX-9 Halberd | 5 RG | Railgun, piercing | Semi, 0.45 s charge | 55 | 4 | 16 / 24 | 2.6 s | Heavy |
-| KP-12 Ember | 6 PS | Sidearm | Semi | 330 | 12 | 72 / 120 | 1.2 s | Light |
+| KP-12 Ember | 6 PS | Sidearm | Semi | 330 | 12 | ∞ | 1.2 s | None (infinite) |
 
 | Gun | Damage | Head | Limb | Weak spot | Falloff (full to start, end, min mult) | Range |
 |---|---|---|---|---|---|---|
@@ -361,14 +361,16 @@ enemy on its line** (no limit: drones, puppets, troopers, spider legs), once eac
 line crosses on that enemy. It stops at the first wall, cover box or armored part (boss hull, turret, closed
 shutters), so the shell protects the core. The trail is drawn to where it stops.
 
-### 6.5 Weapon discovery and the pistol (planned, decided by the owner)
-Not in the code yet (#91): the prototype, Gym and Library keep all six guns with finite ammo.
+### 6.5 Weapon discovery and the pistol (decided by the owner)
+- **The pistol has infinite reserve ammo (implemented).** Its magazine (12) and reload still apply, so active reload
+  still matters, but the reserve never runs out: the player always has a gun that works. The HUD shows `∞` for its
+  reserve and ammo pickups skip it. A data flag (`infinite` in `GUNS`), so any gun can use it.
+
+Planned (#91), not in the code yet: the prototype, Gym and Library keep all six guns.
 - **STEM-00 starts with the KP-12 Ember only.** Every other gun is **discovered** in play: taken from a defeated
   unit or found in the world (armoury rack, crate). Picking a gun up for the first time is a small beat: a toast, a
   STEM-00 log line, and the gun goes into the hideout armoury for good.
-- **The pistol has infinite reserve ammo.** Its magazine (12) and reload still apply, so active reload still
-  matters, but the reserve never runs out: the player always has a gun that works. The HUD shows `∞` for its
-  reserve, light ammo pickups don't count it, and it can never be dropped or swapped out.
+- **The pistol can never be dropped or swapped out.**
 - **Loadout:** pistol plus up to 2 primaries carried; swap a primary by picking another gun up (#34). Discovered
   guns can be chosen at the hideout before a mission.
 - **Discovery order** (proposal, tune per mission; each gun shows up first where its role is needed):
@@ -389,13 +391,14 @@ Not in the code yet (#91): the prototype, Gym and Library keep all six guns with
 
 | | Light (cyan glow, small case, one band) | Heavy (orange glow, tall case, two bands) |
 |---|---|---|
-| Used by | AR, MG, BR, pistol | Sniper, railgun |
-| Crate refill | AR 96, MG 135, BR 72, PS 36 | SR 10, RG 8 |
-| Drop refill | AR 32, MG 45, BR 24, PS 12 | SR 3, RG 2 |
+| Used by | AR, MG, BR | Sniper, railgun |
+| Crate refill | AR 96, MG 135, BR 72 | SR 10, RG 8 |
+| Drop refill | AR 32, MG 45, BR 24 | SR 3, RG 2 |
 | Fixed crates | 7 | 3 (range, interior, boss arena back) |
 
 - A pickup refills only its own class, each gun by its own amount, capped at that gun's max reserve.
-- Planned (6.5): the pistol's reserve is infinite, so pickups skip it, and only guns the player carries are refilled.
+- The pistol's reserve is infinite (6.5), so pickups skip it: an empty pistol never stops "AMMO FULL".
+- Planned (6.5): only guns the player carries are refilled.
 - Crates sit at 10 fixed spots (yard, west platform, range, interior, boss arena gate at (28, -17) and back), respawn
   after 15 s.
 - Destroyed puppets drop a clip 45% of the time; 25% of drops are heavy. A drop vanishes after 25 s and blinks for
