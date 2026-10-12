@@ -437,7 +437,7 @@ export class WorkshopEditor {
     const { registry, world, enemies, pickups, encounter } = this.game;
     const data = clone(piece); // builders may keep what they are given
     const owner = registry.owner(data.id);
-    if (owner === 'world') return { owner, thing: world.spawn(data) };
+    if (owner === 'world') return { owner, thing: world.spawn(data, { gizmo: true }) };
     if (owner === 'enemies') {
       const a = enemies.spawn(data);
       this.#pose(a);

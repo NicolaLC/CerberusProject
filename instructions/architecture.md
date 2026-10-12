@@ -124,6 +124,7 @@ Payload objects marked * are reused: copy what you keep. `src/types.js` holds JS
 | `group:wake` / `group:spawn` | { group } / { group, count } | – / mission (destroy without `count`) |
 | `encounter:wake` / `encounter:spawn` | group name (requests, listened by `Encounter`) | emitted by the mission (objective `wakeGroup` / `spawnGroup`) |
 | `mission:objective` / `mission:objective:done` | { index, total, id, kind, text } (fresh object) | hud toast (done) |
+| `gate:open` | { on } (a `kit.gate` waiting for that `on` key started opening; Encounter, via `world.react`) | – (no listener yet) |
 | `log:say` | { text, priority } (a `log.line` piece fired, after its delay; Encounter) | log (`Log.say`) |
 | `intro:start` | { lines, duration, skippable } (a played level's `intro.boot`, first play frame; Encounter) | boot (`Boot.start`) |
 | `intro:done` | { skipped } (the boot intro ended or was skipped; Boot) | encounter (`log.line` `on: intro:done`) |

@@ -27,7 +27,7 @@ const r = await p.evaluate(() => {
   const near = (a, b, e = 1e-6) => Math.abs(a - b) < e;
   const ids = registry.ids().filter((i) => i.startsWith('kit.'));
   const EXPECT = ['kit.floor', 'kit.wall', 'kit.doorway', 'kit.stairs', 'kit.ramp', 'kit.cover.low', 'kit.cover.high', 'kit.pillar', 'kit.platform'];
-  ok('all nine kit ids registered', EXPECT.every((i) => ids.includes(i)) && ids.length === EXPECT.length, ids.join());
+  ok('all ten kit ids registered (nine in the Gym station, plus the gate)', EXPECT.every((i) => ids.includes(i)) && ids.includes('kit.gate') && ids.length === EXPECT.length + 1, ids.join());
 
   // Builds a piece at a free spot of the KIT floor, returns its new colliders (boxes) and meshes.
   const OX = 50;
@@ -62,9 +62,10 @@ const r = await p.evaluate(() => {
     'kit.cover.low': [{ length: 1.6 }, { length: 12 }],
     'kit.cover.high': [{ length: 1.2 }, { length: 12 }],
     'kit.pillar': [{}],
+    'kit.gate': [{ on: 'start', width: 0.1, height: 0.1 }, { on: 'objective:x:done', width: 8, height: 6, slide: 'down', time: 0.1 }, { on: 'discovered:rifle', thickness: 1 }],
     'kit.platform': [{ size: [4, 4], height: 0.5 }, { size: [12, 6], height: 1.9, stairs: 'e', parapets: ['n', 'w'], stairsWidth: 2 }, { stairs: 'n', parapets: true }, { stairs: 'w' }],
   };
-  for (const id of EXPECT) {
+  for (const id of [...EXPECT, 'kit.gate']) {
     const ex = registry.meta(id).example;
     for (const yaw of [ex.yaw ?? 0, Math.PI / 2, Math.PI, -Math.PI / 2, 3 * Math.PI / 2]) {
       const e = throws(() => { const s = spawn(id, ex.params, yaw); if (!s.cols.length) throw new Error('no colliders'); });
@@ -231,6 +232,61 @@ const r = await p.evaluate(() => {
     put(140, 0, 106, 'N');
     walk(240);
     ok('wall blocks the player', player.pos.z > 100.2, player.pos.z);
+  }
+
+  // ---------- kit.gate and prop.gun hideOn (events: encounter.js `on` forms) ----------
+  {
+    const GX = OX + 100; // clear ground, away from the pieces the sections above left around
+    const GZ = OZ + 100;
+    const gate = (params, yaw = 0, pos = [GX, 0, GZ]) => {
+      const n0 = world.gates.length;
+      registry.build('world', world, { id: 'kit.gate', pos, yaw, params });
+      return world.gates[n0];
+    };
+    const G = gate({ on: 'trigger:t1', time: 1 });
+    const bx = G.col.box;
+    ok('gate: a 4 x 4 x 0.3 slab with a collider, left out of the static batches', near(sz(bx)[0], 4) && near(sz(bx)[1], 4) && near(sz(bx)[2], 0.3) && !world.staticMeshes.includes(G.mesh) && world.meshes.includes(G.mesh), sz(bx));
+    const probe = player.pos.clone().set(GX, 0, GZ + 0.05);
+    world.collideCircle(probe, 0.4, 1.8, 0.45);
+    ok('gate shut: blocks a body (pushed out of the slab)', Math.abs(probe.z - (GZ)) >= 0.4, probe.z);
+    ok('gate shut: blocks the straight walk', !world.segmentClear(probe.clone().set(GX, 0, GZ - 2), probe.clone().set(GX, 0, GZ + 2), 0.3));
+    ok('gate: an unrelated key opens nothing', world.react('trigger:other') === 0 && !G.opening);
+    ok('gate: its key starts it opening, once', world.react('trigger:t1') === 1 && G.opening && world.react('trigger:t1') === 0);
+    let tt = 1000;
+    for (let i = 0; i < 5; i++) world.update((tt += 0.1));
+    ok('gate: half way after half its time (moving, still blocking)', G.open > 0.3 && G.open < 0.7 && G.col.box.max.y > 4 && G.mesh.position.y > G.y0 + 1, G.open);
+    for (let i = 0; i < 8; i++) world.update((tt += 0.1));
+    probe.set(GX, 0, GZ + 0.05);
+    world.collideCircle(probe, 0.4, 1.8, 0.45);
+    ok('gate open: no collision, not drawn, no raycast target, walk is clear', G.open === 1 && Math.abs(probe.z - (GZ + 0.05)) < 1e-9 && !G.mesh.visible && !world.meshes.includes(G.mesh) && world.segmentClear(probe.clone().set(GX, 0, GZ - 2), probe.clone().set(GX, 0, GZ + 2), 0.3), JSON.stringify([G.open, probe.z, G.mesh.visible, world.meshes.includes(G.mesh), world.segmentClear(probe.clone().set(GX, 0, GZ - 2), probe.clone().set(GX, 0, GZ + 2), 0.3)]));
+    ok('gate open: ground under it is still the floor', world.groundAt(GX, GZ, 1, 0) === 0, world.groundAt(GX, GZ, 1, 0));
+    const D = gate({ on: 'start', slide: 'down', time: 0.5 }, 0, [GX + 8, 0, GZ]);
+    world.react('start');
+    for (let i = 0; i < 8; i++) world.update((tt += 0.1));
+    ok('gate sliding down ends below the floor', D.open === 1 && D.mesh.position.y < 0 && D.dir === -1, D.mesh.position.y);
+    // inert in gizmo mode: shut, draws its travel, freed by despawn
+    const n = { gates: world.gates.length, cols: world.colliders.length, kids: world.scene.children.length };
+    const h = world.spawn({ id: 'kit.gate', pos: [GX, 0, GZ + 8], params: { on: 'trigger:t2' } }, { gizmo: true });
+    const I = world.gates.at(-1);
+    ok('gizmo gate: inert, shut, with a ghost of its travel', I.inert && world.react('trigger:t2') === 0 && I.open === 0 && I.mesh.children.length === 1 && I.mesh.children[0].position.y === 4, I.mesh.children.length);
+    world.despawn(h);
+    ok('despawn frees the gate (list, collider, scene)', world.gates.length === n.gates && world.colliders.length === n.cols && world.scene.children.length === n.kids, JSON.stringify([world.gates.length, n.gates, world.colliders.length, n.cols]));
+    const rec = (params) => throws(() => gate(params));
+    ok('gate: on is required', /on/.test(rec({}) ?? ''), rec({}));
+    ok('gate: on must be an `on` form', /not one of/.test(rec({ on: 'nonsense' }) ?? ''), rec({ on: 'nonsense' }));
+    ok('gate: unknown gun in on', /unknown gun/.test(rec({ on: 'discovered:blaster' }) ?? ''), rec({ on: 'discovered:blaster' }));
+    ok('gate: slide up or down', /slide/.test(rec({ on: 'start', slide: 'left' }) ?? ''), rec({ on: 'start', slide: 'left' }));
+    ok('gate: time above 0', /time/.test(rec({ on: 'start', time: 0 }) ?? ''), rec({ on: 'start', time: 0 }));
+    const lv = (piece) => throws(() => registry.check({ spawn: { pos: [0, 0, 0] }, pieces: [piece] }));
+    ok('level check rejects a gate with a bad on (meta check)', /kit\.gate/.test(lv({ id: 'kit.gate', pos: [0, 0, 0], params: { on: 'x' } }) ?? ''));
+    ok('level check accepts a good gate', lv({ id: 'kit.gate', pos: [0, 0, 0], params: { on: 'objective:a:done' } }) === null);
+    // prop.gun hideOn
+    const pg = (params) => { const n0 = world.props.length; registry.build('world', world, { id: 'prop.gun', pos: [GX + 10, 0, GZ], params }); return world.props[n0]; };
+    const keep = pg({ gun: 'rifle' });
+    const hid = pg({ gun: 'rifle', hideOn: 'objective:armoury:done' });
+    world.react('objective:armoury:done');
+    ok('prop.gun hideOn: hides when the event happens, others stay', !hid.visible && keep.visible);
+    ok('prop.gun hideOn must be an `on` form', lv({ id: 'prop.gun', pos: [0, 0, 0], params: { gun: 'rifle', hideOn: 'soon' } }) !== null && lv({ id: 'prop.gun', pos: [0, 0, 0], params: { gun: 'rifle', hideOn: 'discovered:rifle' } }) === null);
   }
 
   // ---------- the KIT station of the Gym ----------

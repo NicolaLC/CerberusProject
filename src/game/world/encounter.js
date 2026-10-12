@@ -27,7 +27,7 @@ import { GUNS } from '../combat/guns.js';
 //                     and pulses it (world.setAlarm), Audio loops a synthesized siren. Ends at `off`, after `duration` s, or when the level unloads (`alarm:off` / `alarm:clear`).
 //                     Inert in the editor and the Library (gizmo: a beacon on a post).
 // Events out: `trigger:fired` { id, event }, `checkpoint:reached` { id, pos, yaw }, `group:wake` { group } (Enemies),
-// `group:spawn` { group, count }, `log:say` { text, priority, voice }, `alarm:on` { id, color, strength, siren }, `alarm:off` { id }, `alarm:clear`, `intro:start` { lines, duration, skippable }. Events in (the mission, mission.js; tests): `encounter:wake` group, `encounter:spawn` group.
+// `group:spawn` { group, count }, `gate:open` { on } (a `kit.gate` starts opening), `log:say` { text, priority, voice }, `alarm:on` { id, color, strength, siren }, `alarm:off` { id }, `alarm:clear`, `intro:start` { lines, duration, skippable }. Events in (the mission, mission.js; tests): `encounter:wake` group, `encounter:spawn` group.
 
 export const TUNING = {
   checkpointRadius: 2, // m, horizontal reach of a checkpoint
@@ -69,6 +69,14 @@ export function objectiveGrantProblem(p, guns = null) {
 
 // `log.line` `on` forms: start | intro:done | mission:complete | trigger:<id> | checkpoint:<id> | objective:<id> | objective:<id>:done | discovered:<gun>
 const LOG_ON = /^(start|intro:done|mission:complete|(trigger|checkpoint|discovered):[^:]+|objective:[^:]+(:done)?)$/;
+
+// Problem with an `on` value (the forms above) of a piece param, or null. `key` names the param in the message. `guns` checks `discovered:<gun>`. Pure.
+// Shared by every piece that reacts to a level event: log.line, env.alarm, kit.gate (`on`), prop.gun (`hideOn`).
+export function onProblem(value, key = 'on', guns = null) {
+  if (typeof value !== 'string' || !LOG_ON.test(value)) return `${key} ${JSON.stringify(value)} is not one of start, intro:done, mission:complete, trigger:<id>, checkpoint:<id>, objective:<id>, objective:<id>:done, discovered:<gun>`;
+  if (guns && value.startsWith('discovered:') && !guns.includes(value.slice(11))) return `${key} ${JSON.stringify(value)}: unknown gun (known: ${guns.join(', ')})`;
+  return null;
+}
 
 // Problem with a `log.line`'s params, or null. Registry.check runs it on every level (meta `check`); Encounter.add throws it. Pure.
 export function logLineProblem(p, guns = null) {
@@ -177,6 +185,7 @@ export class Encounter {
 
   // Queues the log lines waiting for `key` (an `on` value). They are emitted from update, after their delay.
   #log(key) {
+    if (this.world.react(key)) this.events.emit('gate:open', { on: key }); // returns how many gates started opening (world.js); props with `hideOn` hide silently
     for (const r of this.items) {
       if (r.kind !== 'log' || r.inert || r.params.on !== key || (r.once && r.fired)) continue;
       r.fired = true;
