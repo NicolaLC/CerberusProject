@@ -72,6 +72,9 @@ export const BINDINGS = {
 export const bound = (action, code) => BINDINGS[action].includes(code);
 export const boundIn = (action, codes) => BINDINGS[action].some((c) => codes.has(c));
 
+// Actions that still work while the input is locked (the boot intro, view/boot.js): the panel and debug toggles.
+const UNLOCKED = new Set(['pause', 'stats', 'skeleton']);
+
 const KEY_LOOK = { x: 900, y: 500 }; // px/s equivalent for arrow-key look
 // Right stick look, in mouse px/s at full tilt: a curve for fine aim near the center, and a turn boost when the
 // stick is held at the rim (quick 180s without making small corrections twitchy).
@@ -85,6 +88,11 @@ export class Controls {
     this.aimLatched = false; // trackpad aim toggle
     this.sprintLatched = false; // gamepad: L3 starts a sprint that lasts while the stick is pushed
     this.rim = 0; // seconds the right stick has been at the rim
+    // Input lock (the boot intro, view/boot.js): while `locked`, every gameplay intent reads as idle (move, look, aim, fire,
+    // jump, reload, interact, weapon switch). `ease` (0..1) scales move and look once it ends, so control returns smoothly.
+    // `actions` stays raw: the intro reads its skip presses from it.
+    this.locked = false;
+    this.ease = 1;
   }
 
   get pad() {
@@ -109,6 +117,7 @@ export class Controls {
   // Move intent: keys, plus the left stick (analog: partial tilt walks slower). Length <= 1.
   move(out = { x: 0, y: 0 }) {
     const p = this.input.pad;
+    if (this.locked) return ((out.x = 0), (out.y = 0), out);
     out.x = this.actions.axis('left', 'right') + p.lx;
     out.y = this.actions.axis('back', 'forward') - p.ly;
     const m = Math.hypot(out.x, out.y);
@@ -116,11 +125,17 @@ export class Controls {
       out.x /= m;
       out.y /= m;
     }
+    out.x *= this.ease;
+    out.y *= this.ease;
     return out;
   }
 
   // Look delta in mouse pixels for this frame (mouse, trackpad swipe, arrow keys).
   look(realDt, out = { x: 0, y: 0 }) {
+    if (this.locked) {
+      this.rim = 0;
+      return ((out.x = 0), (out.y = 0), out);
+    }
     const i = this.input;
     out.x = i.dx + this.actions.axis('lookLeft', 'lookRight') * KEY_LOOK.x * realDt;
     out.y = i.dy + this.actions.axis('lookUp', 'lookDown') * KEY_LOOK.y * realDt;
@@ -137,39 +152,42 @@ export class Controls {
       out.x += p.rx * PAD_LOOK.x * k;
       out.y += p.ry * PAD_LOOK.y * k * (this.settings.padInvertY ? -1 : 1);
     } else this.rim = 0;
+    out.x *= this.ease;
+    out.y *= this.ease;
     return out;
   }
 
   get aiming() {
-    return this.actions.held('aim') || (this.settings.trackpad && this.aimLatched);
+    return !this.locked && (this.actions.held('aim') || (this.settings.trackpad && this.aimLatched));
   }
 
   get running() {
-    return this.actions.held('run') || this.sprintLatched;
+    return !this.locked && (this.actions.held('run') || this.sprintLatched);
   }
 
   get firing() {
-    return this.actions.held('fire');
+    return !this.locked && this.actions.held('fire');
   }
 
   get firePressed() {
-    return this.actions.pressed('fire');
+    return !this.locked && this.actions.pressed('fire');
   }
 
   get reloadPressed() {
-    return this.actions.pressed('reload');
+    return !this.locked && this.actions.pressed('reload');
   }
 
   get jumpPressed() {
-    return this.actions.pressed('jump');
+    return !this.locked && this.actions.pressed('jump');
   }
 
   pressed(action) {
-    return this.actions.pressed(action);
+    return (!this.locked || UNLOCKED.has(action)) && this.actions.pressed(action);
   }
 
   // Weapon slot index pressed this frame (0-based) or -1.
   get slotPressed() {
+    if (this.locked) return -1;
     if (this.actions.pressed('slot1')) return 0;
     if (this.actions.pressed('slot2')) return 1;
     if (this.actions.pressed('slot3')) return 2;
@@ -181,6 +199,7 @@ export class Controls {
 
   // Mouse wheel cycles weapons (+1 / -1) except in trackpad mode, where the wheel looks around; Y / RB: next.
   get cycle() {
+    if (this.locked) return 0;
     if (this.actions.pressed('nextGun')) return 1;
     if (this.settings.trackpad || !this.input.edges) return 0;
     return Math.sign(this.input.wheelSteps);

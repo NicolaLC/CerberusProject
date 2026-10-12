@@ -52,7 +52,7 @@ const css = (el, style) => Object.assign(el.style, style);
 export function formatField(f, v) {
   if (v == null) return '';
   if (f.type === 'vec2' || f.type === 'vec3') return v.join(', ');
-  if (f.type === 'list') return v.join(', ');
+  if (f.type === 'list') return v.join(f.sep && f.sep !== ',' ? ` ${f.sep} ` : ', ');
   return String(v);
 }
 
@@ -76,7 +76,7 @@ export function parseField(f, text) {
     return v;
   }
   if (f.type === 'list') {
-    const v = t.split(',').map((x) => x.trim()).filter(Boolean);
+    const v = t.split(f.sep ?? ',').map((x) => x.trim()).filter(Boolean);
     return v.length || !f.optional ? v : undefined;
   }
   return t === '' && f.optional ? undefined : t; // text, enum
@@ -672,7 +672,7 @@ export class WorkshopEditor {
         el.spellcheck = false;
         el.autocomplete = 'off';
         if (f.type === 'vec2' || f.type === 'vec3') el.placeholder = f.type === 'vec2' ? 'w, d' : 'w, h, d';
-        if (f.type === 'list') el.placeholder = 'a, b';
+        if (f.type === 'list') el.placeholder = f.sep && f.sep !== ',' ? `a ${f.sep} b` : 'a, b';
       }
       el.dataset.key = f.key;
       if (f.type !== 'bool') css(el, { flex: '1', minWidth: 0, font, color: '#cfe4f7', background: 'rgba(16,32,46,0.9)', border: '1px solid #345a78', padding: '2px 4px' });

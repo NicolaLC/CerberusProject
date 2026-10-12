@@ -33,6 +33,7 @@ All of it reacts to gameplay events (see the events table in architecture.md); g
 | landing after a jet | `player:land` 'jet' is light: trauma 0.06, dip 0.7 (vault landing: 0.2, 1.4); audio soft thud on every `player:land` |
 
 ## Post (`post.js`)
+`post.boost` multiplies the auto exposure (1 normally); the boot intro (`view/boot.js`) ramps it 2.4 to 1 as the screen fades in, then resets it.
 Bloom 0.4 outside / 0.7 inside, threshold 1.0 (only emissives bloom: amber, violet, cyan). Grade (art-style.md): surfaces
 desaturated (`saturation` 0.8) while HDR emissives keep theirs (`glowSaturation`), shadows split-toned teal (`shadowTeal`),
 a slightly cold tint (colder indoors; the only warm light is STEM-00's core); vignette tightens while aiming; desaturates and

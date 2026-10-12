@@ -3,7 +3,7 @@
 STEM-00 speaks only through short terminal lines at the bottom of the screen (`> ...`). They are its inner monologue, the
 record of a machine becoming a person (gdd.md §2.4). They are **narrative, never tutorial**.
 
-Mechanics (pieces, `on` values, queue, timings): workshop.md "Log lines". This file is how to write them.
+Mechanics (pieces, `on` values, queue, timings): workshop.md "Log lines". `on: intro:done` follows the boot intro (`intro.boot`, workshop.md "Boot intro"): the first log line of a level, once the screen is clear. This file is how to write them.
 
 ## Rules
 - **At most about 70 characters** per line. One line per beat; never two lines for one moment.

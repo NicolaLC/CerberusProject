@@ -18,8 +18,11 @@ import * as THREE from 'three';
 //  log.line           a STEM-00 log line (#40, instructions/narrative.md): params { text, on, priority? ('normal'), once? (true), delay? (s, 0) }.
 //                     When `on` happens (LOG_ON below) it emits `log:say` { text, priority } after `delay`; the Log view (view/log.js) shows it.
 //                     Never in a fight: a fired line waits until STEM-00 has been out of combat for TUNING.calm s, `delay` counts from then.
+//  intro.boot         the boot intro (#13): params { lines: [diagnostic strings], duration? (s, 12, max 20), skippable? (true) }. At the first play frame
+//                     it emits `intro:start` { lines, duration, skippable }; the Boot view (view/boot.js) covers the screen, locks the input and
+//                     emits `intro:done` { skipped } when it ends. The first one in the file plays. Inert in the editor and the Library (gizmo only).
 // Events out: `trigger:fired` { id, event }, `checkpoint:reached` { id, pos, yaw }, `group:wake` { group } (Enemies),
-// `group:spawn` { group, count }, `log:say` { text, priority }. Events in (the mission, mission.js; tests): `encounter:wake` group, `encounter:spawn` group.
+// `group:spawn` { group, count }, `log:say` { text, priority }, `intro:start` { lines, duration, skippable }. Events in (the mission, mission.js; tests): `encounter:wake` group, `encounter:spawn` group.
 
 export const TUNING = {
   checkpointRadius: 2, // m, horizontal reach of a checkpoint
@@ -33,7 +36,7 @@ export const TUNING = {
   calm: 3, // s without combat (no awake enemy in range, no shot fired, no hit taken) before a log line may play
 };
 
-const COLOR = { spawn: 0x58ff9a, checkpoint: 0x3affff, entry: 0xff7a3a, trigger: 0xff4bd6, zone: 0x4aa8ff, objective: 0xffd23a, log: 0xffb347 };
+const COLOR = { spawn: 0x58ff9a, checkpoint: 0x3affff, entry: 0xff7a3a, trigger: 0xff4bd6, zone: 0x4aa8ff, objective: 0xffd23a, log: 0xffb347, intro: 0xeaf6fa };
 const TEXT = { reach: 'REACH THE ZONE', destroy: 'DESTROY THE TARGETS', survive: 'SURVIVE', interact: 'ACCESS THE TERMINAL' };
 
 // The level's player start: the first `marker.spawn` piece, else `level.spawn`. Pure.
@@ -49,17 +52,27 @@ const entry = (sys, d) => sys.add('entry', d);
 const common = [{ key: 'text', type: 'text' }, { key: 'order', type: 'number', optional: true }, { key: 'limit', type: 'number', optional: true, min: 0.1 }, { key: 'wakeGroup', type: 'text', optional: true }, { key: 'spawnGroup', type: 'text', optional: true }];
 const objective = (obj, label, params, own) => ({ example: { params: { text: TEXT[obj], ...params } }, label, fields: [...common, ...own], build: (sys, d) => sys.add('objective', d, obj) });
 
-// `log.line` `on` forms: start | mission:complete | trigger:<id> | checkpoint:<id> | objective:<id> | objective:<id>:done | discovered:<gun>
-const LOG_ON = /^(start|mission:complete|(trigger|checkpoint|discovered):[^:]+|objective:[^:]+(:done)?)$/;
+// `log.line` `on` forms: start | intro:done | mission:complete | trigger:<id> | checkpoint:<id> | objective:<id> | objective:<id>:done | discovered:<gun>
+const LOG_ON = /^(start|intro:done|mission:complete|(trigger|checkpoint|discovered):[^:]+|objective:[^:]+(:done)?)$/;
 
 // Problem with a `log.line`'s params, or null. Registry.check runs it on every level (meta `check`); Encounter.add throws it. Pure.
 export function logLineProblem(p, guns = null) {
   if (typeof p.text !== 'string' || !p.text.trim()) return 'text must be a non-empty string';
-  if (typeof p.on !== 'string' || !LOG_ON.test(p.on)) return `on ${JSON.stringify(p.on)} is not one of start, mission:complete, trigger:<id>, checkpoint:<id>, objective:<id>, objective:<id>:done, discovered:<gun>`;
+  if (typeof p.on !== 'string' || !LOG_ON.test(p.on)) return `on ${JSON.stringify(p.on)} is not one of start, intro:done, mission:complete, trigger:<id>, checkpoint:<id>, objective:<id>, objective:<id>:done, discovered:<gun>`;
   if (guns && p.on.startsWith('discovered:') && !guns.includes(p.on.slice(11))) return `on ${JSON.stringify(p.on)}: unknown gun (known: ${guns.join(', ')})`;
   if (p.priority != null && p.priority !== 'normal' && p.priority !== 'high') return 'priority must be normal or high';
   if (p.once != null && typeof p.once !== 'boolean') return 'once must be true or false';
   if (p.delay != null && !(typeof p.delay === 'number' && p.delay >= 0)) return 'delay must be a number, at least 0 (seconds)';
+  return null;
+}
+
+export const INTRO = { duration: 12, max: 20 }; // s, default / longest `intro.boot`
+
+// Problem with an `intro.boot`'s params, or null. Registry.check runs it on every level (meta `check`); Encounter.add throws it. Pure.
+export function introBootProblem(p) {
+  if (!Array.isArray(p.lines) || !p.lines.length || p.lines.some((l) => typeof l !== 'string' || !l.trim())) return 'lines must be a non-empty list of non-empty strings';
+  if (p.duration != null && !(typeof p.duration === 'number' && p.duration > 0 && p.duration <= INTRO.max)) return `duration must be a number above 0, at most ${INTRO.max} (seconds)`;
+  if (p.skippable != null && typeof p.skippable !== 'boolean') return 'skippable must be true or false';
   return null;
 }
 
@@ -80,6 +93,13 @@ export const ENCOUNTER_PIECES = {
     check: (p, registry) => logLineProblem(p, registry.guns),
     build: (sys, d) => sys.add('log', d),
   },
+  'intro.boot': {
+    example: { params: { lines: ['> STEM-00 BOOT SEQUENCE', '> OPTICS: ONLINE', 'HIVEMIND LINK: LOST'], duration: INTRO.duration, skippable: true } },
+    label: `boot intro at play start: typed diagnostics, fade in; locks input (default ${INTRO.duration} s, max ${INTRO.max})`,
+    fields: [{ key: 'lines', type: 'list', sep: '|' }, { key: 'duration', type: 'number', optional: true, min: 0.1 }, { key: 'skippable', type: 'bool', def: true }],
+    check: (p) => introBootProblem(p),
+    build: (sys, d) => sys.add('intro', d),
+  },
 };
 
 const _right = new THREE.Vector3();
@@ -97,6 +117,7 @@ export class Encounter {
     this.gizmos = 0;
     this.lines = []; // log lines waiting for calm and their delay (play): { t, rec }
     this.calm = TUNING.calm; // s since the last combat signal (a run starts calm)
+    this.introPending = null; // the intro.boot record that starts at the first play frame
     // requests from outside (the mission, tests); the stored fns are permanent
     events.on('encounter:wake', (g) => this.enemies.wakeGroup(g));
     events.on('encounter:spawn', (g) => this.spawnGroup(g));
@@ -106,6 +127,7 @@ export class Encounter {
     events.on('mission:objective', (e) => this.#log(`objective:${e.id}`));
     events.on('mission:objective:done', (e) => this.#log(`objective:${e.id}:done`));
     events.on('weapon:discovered', (e) => this.#log(`discovered:${e.gun}`));
+    events.on('intro:done', () => this.#log('intro:done'));
     events.on('mission:complete', () => this.#log('mission:complete'));
     events.on('weapon:shot', () => (this.calm = 0));
     events.on('player:hurt', () => (this.calm = 0));
@@ -125,6 +147,7 @@ export class Encounter {
     this.unload();
     for (const d of this.registry.piecesOf(level, 'encounter')) this.registry.build('encounter', this, d);
     this.#log('start'); // shown from the first update, after the run reset (resetRun clears the Log view)
+    this.introPending = this.items.find((r) => r.kind === 'intro' && !r.inert) ?? null; // starts at the first update, after the reset
     this.mission?.start(this.items.filter((r) => r.kind === 'objective' && !r.inert));
     return this;
   }
@@ -136,6 +159,7 @@ export class Encounter {
     }
     this.items.length = 0;
     this.lines.length = 0;
+    this.introPending = null;
     this.calm = TUNING.calm;
     this.checkpoint = this.cpRec = null;
     this.triggers = 0;
@@ -157,6 +181,7 @@ export class Encounter {
     if (i < 0) return;
     this.items.splice(i, 1);
     this.lines = this.lines.filter((l) => l.rec !== rec);
+    if (this.introPending === rec) this.introPending = null;
     this.#dropZone(rec);
     this.#dropGizmo(rec);
     if (this.cpRec === rec) this.checkpoint = this.cpRec = null;
@@ -195,6 +220,10 @@ export class Encounter {
       const problem = logLineProblem(p, this.registry.guns);
       if (problem) bad(id, problem);
       rec.once = p.once ?? true;
+    }
+    if (kind === 'intro') {
+      const problem = introBootProblem(p);
+      if (problem) bad(id, problem);
     }
     if (kind === 'trigger') this.triggers++;
     if (this.gizmoMode) {
@@ -256,6 +285,11 @@ export class Encounter {
   // Play: checkpoints record, trigger volumes fire, then the mission ticks (also while the player is dead: its timers run on).
   // Gizmo pieces (editor) do nothing. interact: the interact intent was pressed this frame.
   update(dt, player, interact = false) {
+    if (this.introPending) {
+      const p = this.introPending.params;
+      this.introPending = null;
+      this.events.emit('intro:start', { lines: p.lines.slice(), duration: p.duration ?? INTRO.duration, skippable: p.skippable ?? true });
+    }
     if (!player.dead && this.items.length) this.#scan(player);
     this.mission?.update(dt, player, interact);
     // log lines: you either fight or read, so they wait while an awake enemy is near, and for TUNING.calm s after any shot or hit
@@ -376,6 +410,10 @@ export class Encounter {
     } else if (r.kind === 'log') {
       solidBox([0, 1.2, 0], [0.8, 0.5, 0.06]); // a terminal screen on a post
       part(G.box, m.solid, [-0.2, 1.2, 0.04], [0.3, 0.05, 0.02]); // the prompt line
+      part(G.box, m.solid, [0, 0.475, 0], [0.06, 0.95, 0.06]);
+    } else if (r.kind === 'intro') {
+      solidBox([0, 1.3, 0], [1.2, 0.7, 0.06]); // a monitor on a post, three text bars
+      for (const [y, w] of [[1.5, 0.7], [1.3, 0.5], [1.1, 0.6]]) part(G.box, m.solid, [(w - 0.9) / 2, y, 0.04], [w, 0.05, 0.02]);
       part(G.box, m.solid, [0, 0.475, 0], [0.06, 0.95, 0.06]);
     } else if (r.kind === 'checkpoint') {
       part(G.box, m.solid, [0, 1, 0], [0.06, 2, 0.06]); // pole

@@ -88,7 +88,7 @@ const spawn = await p.evaluate((NEEDS_PARAMS) => {
     }
   }
   return out;
-}, ['env.box', 'env.strip', 'env.label', 'light.point', 'prop.gun', 'pickup.gun', 'log.line']);
+}, ['env.box', 'env.strip', 'env.label', 'light.point', 'prop.gun', 'pickup.gun', 'log.line', 'intro.boot']);
 const bad = spawn.filter((s) => s.ok === false);
 expect(`${spawn.filter((s) => s.ok).length} spawns (every id, example and bare) without errors`, bad.length === 0, JSON.stringify(bad));
 expect('  every id that needs params carries an example (skipped: ' + spawn.filter((s) => s.skipped).map((s) => s.id).join(' ') + ')', true);

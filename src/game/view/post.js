@@ -74,6 +74,7 @@ export class Post {
   constructor(renderer, scene, camera, events) {
     this.renderer = renderer;
     this.exposure = EXPOSURE.outside;
+    this.boost = 1; // extra exposure factor on top of the auto exposure (the boot intro's optics ramp, view/boot.js)
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
     // MSAA is set by setQuality (applyQuality runs at boot); the composer clones this target, so it must start at 0
     const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType });
@@ -122,7 +123,7 @@ export class Post {
   render(dt, { player, inside }) {
     // eyes open up indoors, clamp down in the sun
     this.exposure += ((inside ? EXPOSURE.inside : EXPOSURE.outside) - this.exposure) * (1 - Math.exp(-dt * EXPOSURE.rate));
-    this.renderer.toneMappingExposure = this.exposure;
+    this.renderer.toneMappingExposure = this.exposure * this.boost;
     this.flash = Math.max(0, this.flash - dt * 6);
     this.damage = Math.max(0, this.damage - dt * 2.2);
     const u = this.u;

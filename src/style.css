@@ -110,6 +110,17 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #log { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); max-width: min(760px, calc(100vw - 32px)); font: 15px ui-monospace, Consolas, 'DejaVu Sans Mono', monospace; letter-spacing: 1px; color: #ffb347; text-shadow: 0 0 6px rgba(255, 179, 71, 0.45), 0 0 2px #000; white-space: pre-wrap; opacity: 0; }
 #log::after { content: '_'; animation: log-cursor 1s steps(1) infinite; }
 @keyframes log-cursor { 50% { opacity: 0; } }
+/* boot intro (view/boot.js): full-screen black over the live scene, static, scanlines, diagnostic lines */
+#boot { position: fixed; inset: 0; background: #000; pointer-events: none; overflow: hidden; font: 15px ui-monospace, Consolas, 'DejaVu Sans Mono', monospace; letter-spacing: 1px; color: #eaf6fa; }
+#boot[hidden] { display: none; }
+#boot .static { position: absolute; inset: 0; background-size: 192px 192px; image-rendering: pixelated; mix-blend-mode: screen; }
+#boot .scan { position: absolute; inset: 0; background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0) 2px, rgba(0, 0, 0, 0.45) 3px, rgba(0, 0, 0, 0.45) 4px); }
+#boot .lines { position: absolute; left: 6vw; bottom: 8vh; right: 6vw; text-shadow: 0 0 6px rgba(234, 246, 250, 0.45); white-space: pre-wrap; }
+#boot .lines div { min-height: 1.4em; line-height: 1.4; }
+#boot .lines div.cur::after { content: '_'; animation: log-cursor 1s steps(1) infinite; }
+#boot .hive { color: #c04bff; text-shadow: 0 0 8px #ff3dcb, 0 0 2px #ff3dcb; animation: boot-flicker 0.9s steps(1) infinite; }
+@keyframes boot-flicker { 0% { opacity: 1; } 12% { opacity: 0.25; } 24% { opacity: 1; } 51% { opacity: 0.6; } 58% { opacity: 1; } 83% { opacity: 0.2; } 90% { opacity: 1; } }
+#boot .skip { position: absolute; right: 24px; top: 20px; font-size: 12px; letter-spacing: 3px; color: rgba(234, 246, 250, 0.5); text-transform: uppercase; }
 #overlay .settings { display: grid; gap: 10px; margin-bottom: 18px; font: 12px var(--font-main); }
 #overlay .row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 #overlay .row span { flex: 1; }

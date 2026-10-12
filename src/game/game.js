@@ -13,6 +13,7 @@ import { CameraRig } from './view/camera.js';
 import { FX } from './view/fx.js';
 import { Hud } from './view/hud.js';
 import { Log } from './view/log.js';
+import { Boot } from './view/boot.js';
 import { Audio } from './view/audio.js';
 import { Post } from './view/post.js';
 import { Juice } from './view/juice.js';
@@ -69,6 +70,7 @@ export class Game {
     const log = new Log().listen(events);
     const audio = new Audio(weapon, camera).listen(events);
     const post = new Post(renderer, scene, camera, events);
+    const boot = new Boot({ controls, post }).listen(events);
     applyQuality(settings.quality, { engine, post, world });
     const juice = new Juice({ camRig, post, fx }).listen(events);
     events.on('puppet:down', (p) => pickups.drop(p.pos));
@@ -90,7 +92,7 @@ export class Game {
       if (near > 0) input.rumble(near * 0.35, 0, 70);
     });
     addEventListener('pointerdown', () => audio.init()); // resumes audio started from a controller
-    Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, mission, weapon, fx, hud, log, audio, post, juice, settings });
+    Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, mission, weapon, fx, hud, log, boot, audio, post, juice, settings });
 
     // skeleton debug overlay (H): the player's helper is permanent, the enemies' come and go with the level
     this.skeletons = false;
@@ -197,6 +199,13 @@ export class Game {
       },
     });
     engine.add({ name: 'log', phase: 'present', update: (dt) => log.update(dt) });
+    // boot intro: scaled time (pause freezes it); skip = a fire / jump / interact press (pad A is jump)
+    engine.add({
+      name: 'boot',
+      phase: 'present',
+      group: 'play',
+      update: (dt) => boot.update(dt, boot.active && (controls.actions.pressed('fire') || controls.actions.pressed('jump') || controls.actions.pressed('interact'))),
+    });
     engine.add({
       name: 'audio',
       phase: 'present',
@@ -265,13 +274,14 @@ export class Game {
   // the level the systems were just loaded with (loadScene, and the Workshop's play in place).
   // `spawn` defaults to the level's own (levelSpawn: a `marker.spawn` piece, else `level.spawn`).
   resetRun(level, spawn = levelSpawn(level)) {
-    const { player, camRig, weapon, fx, hud, log, juice } = this;
+    const { player, camRig, weapon, fx, hud, log, boot, juice } = this;
     player.place(spawn);
     camRig.reset(player.facing);
     weapon.reset(level.loadout);
     fx.reset();
     hud.reset(level);
     log.reset();
+    boot.reset();
     juice.reset();
   }
 
