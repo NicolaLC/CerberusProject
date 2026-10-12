@@ -69,7 +69,8 @@ export class Post {
     this.renderer = renderer;
     this.exposure = EXPOSURE.outside;
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-    const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+    // MSAA is set by setQuality (applyQuality runs at boot); the composer clones this target, so it must start at 0
+    const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType });
     this.maxSamples = renderer.capabilities.maxSamples;
     this.composer = new EffectComposer(renderer, rt);
     this.composer.addPass(new RenderPass(scene, camera));
@@ -95,9 +96,13 @@ export class Post {
   // Graphics quality: MSAA samples of the HDR scene target (0 = off) and bloom on/off.
   setQuality({ msaa, bloom }) {
     const samples = Math.min(msaa, this.maxSamples);
-    for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) {
-      if (rt.samples === samples) continue;
-      rt.samples = samples;
+    // Only the scene target is multisampled: RenderPass draws into the composer's readBuffer (between frames
+    // that is the scene target); the other ping-pong target only holds full-screen passes.
+    const scene = this.composer.readBuffer;
+    const other = this.composer.writeBuffer;
+    for (const [rt, want] of [[scene, samples], [other, 0]]) {
+      if (rt.samples === want) continue;
+      rt.samples = want;
       rt.dispose(); // reallocated with the new sample count on the next render
     }
     this.bloom.enabled = bloom;

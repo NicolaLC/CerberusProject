@@ -46,6 +46,9 @@ const SAMPLES = {
 const ENEMY_STEP_RANGE = 28; // m from the camera where enemy steps fade out
 const GAIN_SPREAD = 0.12;
 const BOLT_DELAY = 0.22; // s after a sniper shot before the bolt is worked
+// Enemy voices playing at once, per sound id (steps, bolts, blasts). Over the cap a new voice is skipped.
+// The player's own sounds are never capped.
+const VOICE_CAP = 6;
 
 // Sample bytes. The single-file artifact build inlines samples as base64 data: URLs, which its page's content
 // policy won't fetch, so those are decoded here instead.
@@ -68,6 +71,7 @@ export class Audio {
     this.ctx = null;
     this.samples = {}; // id -> decoded AudioBuffers (one per take)
     this.voice = {}; // id -> playing source that may be cut short (reload, rail charge)
+    this.live = new Map(); // id -> enemy voices still playing (VOICE_CAP)
   }
 
   // Sound reactions to gameplay events.
@@ -120,7 +124,7 @@ export class Audio {
     events.on('enemy:step', (pos) => {
       if (!this.listener) return;
       const f = 1 - this.listener.position.distanceTo(pos) / ENEMY_STEP_RANGE;
-      if (f > 0.1) this.sample('stepRobot', 0, f * f);
+      if (f > 0.1) this.sample('stepRobot', 0, f * f, true);
     });
     return this;
   }
@@ -149,11 +153,13 @@ export class Audio {
   }
 
   // Plays the recorded sample for `id` (slightly detuned each time so repeats don't sound like a loop),
-  // `delay` seconds from now, at `volume` times its gain. Returns its source node, or null if there is no
-  // sample (yet): the caller falls back to its synth sound.
-  sample(id, delay = 0, volume = 1) {
+  // `delay` seconds from now, at `volume` times its gain. `enemy` voices count against VOICE_CAP.
+  // Returns its source node, or null if there is no sample (yet) or the cap is full: the caller falls back
+  // to its synth sound.
+  sample(id, delay = 0, volume = 1, enemy = false) {
     const takes = this.ctx && this.samples[id];
     if (!takes) return null;
+    if (enemy && !this.#room(id)) return null;
     const [, gain, spread] = SAMPLES[id];
     const src = this.ctx.createBufferSource();
     src.buffer = takes[(Math.random() * takes.length) | 0];
@@ -162,7 +168,19 @@ export class Audio {
     src.gain.gain.value = gain * volume * (1 + (Math.random() * 2 - 1) * GAIN_SPREAD);
     src.connect(src.gain).connect(this.master);
     src.start(this.ctx.currentTime + delay);
+    if (enemy) this.#hold(id, src);
     return src;
+  }
+
+  // Enemy voice cap: #room says whether another voice of `id` may start, #hold counts `node` until it ends.
+  // 'ended' (not onended) so it doesn't clash with #voice's handler on the same node.
+  #room(id) {
+    return (this.live.get(id) ?? 0) < VOICE_CAP;
+  }
+
+  #hold(id, node) {
+    this.live.set(id, (this.live.get(id) ?? 0) + 1);
+    node.addEventListener('ended', () => this.live.set(id, this.live.get(id) - 1));
   }
 
   // A sample that can be cut short (one per id): the reload clatter, the railgun charge.
@@ -378,7 +396,7 @@ export class Audio {
   }
 
   zap(volume = 0.3) {
-    if (!this.ctx) return;
+    if (!this.ctx || !this.#room('zap')) return;
     const t = this.ctx.currentTime;
     const o = this.ctx.createOscillator();
     o.type = 'sawtooth';
@@ -387,11 +405,12 @@ export class Audio {
     this.#env(o, volume, 0.2);
     o.start(t);
     o.stop(t + 0.2);
+    this.#hold('zap', o);
   }
 
   // Explosion: low noise burst with a long tail plus a sub drop.
   boom(size = 1) {
-    if (!this.ctx) return;
+    if (!this.ctx || !this.#room('boom')) return;
     const t = this.ctx.currentTime;
     const n = this.ctx.createBufferSource();
     n.buffer = this.noise;
@@ -408,6 +427,7 @@ export class Audio {
     this.#env(o, 1.0 * size, 0.6);
     o.start(t);
     o.stop(t + 0.7);
+    this.#hold('boom', o);
   }
 
   // Railgun: capacitor whine up to the shot (weapon charge time), then a hard crack and a falling zap.

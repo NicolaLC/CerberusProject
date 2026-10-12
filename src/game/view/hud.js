@@ -11,6 +11,7 @@ const LAST = new WeakMap();
 const LOW_AMMO = 0.25;
 // circumference of the charge ring's circle (r = 28 in index.html)
 const RING = 2 * Math.PI * 28;
+const AR_LABEL = { perfect: 'PERFECT', good: 'GOOD' };
 function changed(el, key, value) {
   let last = LAST.get(el);
   if (!last) LAST.set(el, (last = {}));
@@ -139,8 +140,9 @@ export class Hud {
     css(e.lock, 'opacity', lockVisible ? 1 : 0);
     // crosshair gap from spread (rad -> px)
     const fovRad = THREE.MathUtils.degToRad(camRig.camera.fov);
-    const gap = 4 + (weapon.spread() / Math.tan(fovRad / 2)) * (innerHeight / 2);
-    e.cross.style.setProperty('--gap', `${gap.toFixed(1)}px`);
+    // rounded to the 0.1 px written, so small spread changes don't dirty the style
+    const gap = Math.round((4 + (weapon.spread() / Math.tan(fovRad / 2)) * (innerHeight / 2)) * 10) / 10;
+    if (changed(e.cross, '--gap', gap)) e.cross.style.setProperty('--gap', `${gap.toFixed(1)}px`);
     e.cross.classList.toggle('aim', player.aiming);
     // what the next round will hit: red over an enemy, magenta over a weak spot, grey when the gun is obstructed
     const a = weapon.aim;
@@ -176,7 +178,7 @@ export class Hud {
 
     text(e.ammo, weapon.ammo);
     text(e.gunName, weapon.t.name);
-    for (const [id, el] of Object.entries(e.slots)) el.classList.toggle('on', id === (weapon.pending ?? weapon.current));
+    for (const id in e.slots) e.slots[id].classList.toggle('on', id === (weapon.pending ?? weapon.current));
     text(e.reserve, weapon.reserve);
     e.ammo.classList.toggle('low', weapon.ammo <= Math.max(1, Math.floor(weapon.t.mag * LOW_AMMO)));
     css(e.reload, 'display', weapon.reloading > 0 ? 'block' : 'none');
@@ -198,8 +200,8 @@ export class Hud {
       css(e.arCursor, 'left', pct(Math.min(1, weapon.reloadProgress())));
     }
     const kind = since < 0.7 ? weapon.result.kind : weapon.active && !jammed ? 'pending' : '';
-    e.ar.dataset.state = kind;
-    text(e.arLabel, { perfect: 'PERFECT', good: 'GOOD' }[kind] ?? '');
+    if (changed(e.ar, 'data-state', kind)) e.ar.dataset.state = kind;
+    text(e.arLabel, AR_LABEL[kind] ?? '');
 
     css(e.shield, 'width', `${player.shields}%`);
     css(e.health, 'width', `${player.health}%`);
