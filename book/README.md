@@ -82,9 +82,12 @@ Ask for, and check, these in order. Edit each by hand before you move on, becaus
 
 ## b. Art direction
 
+The binding rule is `instructions/art-style.md` (grim industrial military sci-fi, never childish). This section
+applies it to the book.
+
 ### The one idea
-**A single warm light in a cold, perfect machine.** Every image is built on that contrast: cyan and white order
-everywhere, and one amber glow (STEM-00) that doesn't belong. Make the amber visibly brighter as the book goes on,
+**A single warm light in a cold, grim machine.** Every image is built on that contrast: teal haze, cold light and
+worn war machines everywhere, and one amber glow (STEM-00) that doesn't belong. Make the amber visibly brighter as the book goes on,
 so a reader flipping through the plates sees the character come alive.
 
 | Part | Amber core light | What it looks like |
@@ -93,27 +96,28 @@ so a reader flipping through the plates sees the character come alive.
 | Act 1 – The Eye | Low | Visible glow; it catches on nearby scratches |
 | Act 2 – The Voice | Medium | Casts its own small pool of warm light on the ground |
 | Act 3 – The Jaw | High | The warmest light in any scene, even beside the giant machines |
-| Finale – The Gate | Full | It lights the whole frame against an all-cyan world |
+| Finale – The Gate | Full | It lights the whole frame against an all-teal world |
 
 ### Palette
 | Role | Colour | Hex (proposal) |
 |---|---|---|
-| HiveMind light, architecture | cold white | `#EAF6FA` |
-| HiveMind glow (eyes, rails, drones) | cyan | `#3FE0FF` |
+| World haze, HiveMind network light | teal-cyan | `#2E6F78` haze, `#3FE0FF` glow |
+| Cold light | white | `#EAF6FA` |
 | Shadows and void | deep blue-black | `#0B1118` |
-| STEM-00 body | gunmetal, scratched | `#4A4F55` |
+| Enemy livery (paint, never glowing) | worn ochre over dark metal | `#C9A23A` / `#3A3D40` |
+| Enemy sensors = weak spots | violet-magenta | `#C04BFF` to `#FF3DCB` |
+| STEM-00 body | olive drab, scratched | `#5D6849` |
 | STEM-00 core light | amber | `#FFB347` |
 | Rejects | rust and sodium orange | `#9C4A26` / `#FF7A1A` |
-| Weak spots (every enemy) | hot magenta (keep the in-game convention) | `#FF3DCB` |
 
-Rule: **cyan means HiveMind, amber means will, orange means broken but alive, magenta means hit here.**
-No other saturated colour appears in the book.
+Rule: **teal means the HiveMind's world, ochre means its war machines, violet means hit here, amber means will,
+orange means broken but alive.** At least 80% of every plate is desaturated.
 
 ### Per head of CERBERUS (proposal)
 - **VIGIL, the Eye:** round lenses, rings, radial symmetry and searchlight cones. Compose around one central
   eye. Emptiness, surveillance, beauty.
 - **LEGION, the Voice:** repetition. Hundreds of identical silhouettes in perfect rows, so the shot reads as a
-  pattern. Its cyan pulses in sync.
+  pattern. Their violet sensors pulse in sync.
 - **COLOSSUS, the Jaw:** mass and age. Frost-covered plate, rivets and crushed cover. It is always cropped by the
   frame, because it never fits.
 
@@ -128,7 +132,7 @@ No other saturated colour appears in the book.
 | The Gate | A geometric void; the HiveMind as pure light | Pure cyan, with STEM-00 the only warm point |
 
 ### Characters
-- **STEM-00:** a humanoid military frame, 1.8 m tall, older than everything else on IO. Gunmetal plates with
+- **STEM-00:** a humanoid military frame, 1.8 m tall, older than everything else on IO. Olive drab plates with
   scratches and repaired seams, a visor slit, one amber core light in the chest, and a short antenna. Its build is
   practical rather than heroic. Over the book it gathers kept objects (a tag, a bolt, PATCH riding on its shoulder).
 - **STEM-01 "Sable":** the same frame, mirrored. Black, polished and pristine, with a cyan core where STEM-00
@@ -136,8 +140,10 @@ No other saturated colour appears in the book.
 - **PATCH:** a palm-sized maintenance drone with one cracked lens, mismatched rotors and sparking cables.
   It should read as fast and anxious.
 - **MOTHER-LOOM:** an old assembly crane, huge and slow, with rust and hanging cables, and orange work lights for eyes.
-- **HiveMind units:** clean, identical white-grey plating and cyan visors, with no individual marks.
-- **Arachne spider mech:** six legs, a low armored hull, sweeping beams, and magenta weak points on the leg joints and core.
+- **HiveMind units:** identical war machines in worn ochre livery over dark metal, stencilled serials, clusters of
+  small violet sensors, no faces and no individual marks. Function-first: pistons, cables, vents, gun mounts.
+- **Arachne spider mech:** six thick armoured legs, a low hull, twin-barrel guns, sweeping beams, and violet weak
+  points on the leg joints and core. Its weight cracks the floor.
 
 ### Composition rules
 1. **Scale contrast:** STEM-00 takes up less than 10% of the frame in every establishing plate.
@@ -148,13 +154,20 @@ No other saturated colour appears in the book.
 4. **Text-free art:** no words, logos or UI in the illustrations. Captions go in the layout.
 
 ### Style suffix (paste it, unchanged, at the end of every image prompt)
-> cinematic hard-surface sci-fi illustration, painterly concept-art finish, cold white and cyan lighting with a single
-> warm amber accent, deep blue-black shadows, volumetric haze, monumental scale, gothic industrial architecture,
-> melancholic and quiet, high detail, no text, no logos, 3:2
+> grim industrial military sci-fi, painterly realistic concept art, heavy weathered war machines, worn matte
+> ochre-yellow paint chipped to dark metal, hydraulic pistons and exposed cable bundles, small cluster of violet
+> sensor lights, teal-cyan volumetric haze, dark industrial interior, cold strip lights, wet reflective floor, low
+> camera, monumental scale, serious oppressive mood, no text, no logos, 3:2
+
+Negative prompt (where the model supports one): cartoon, cute, chibi, toy, plastic, cel shading, outlines, bright
+saturated colours, rainbow, smiling, face, big eyes, clean new surfaces, chrome, comedic.
+
+For STEM-00's plates, swap the enemy-specific words for "olive drab scratched military robot with a single warm
+amber core light".
 
 ### Reference screenshots (from the current prototype, `screenshots/`)
 These come from the real game build. Use them for **silhouette, proportion, camera and scale**, not for surface
-style (the prototype uses grid textures, olive armor and red enemy visors; the book follows the GDD's palette).
+style (the prototype uses grid textures and red enemy visors; the book follows `instructions/art-style.md`).
 
 | File | What it shows | Use it for |
 |---|---|---|
@@ -226,19 +239,24 @@ THE BOOK
   endless light, total silence between machines. Grim and grand in scale; personal at its centre.
 
 ART DIRECTION (for every illustration prompt you write)
-- Core idea: a single warm amber light in a cold, perfect cyan and white machine world.
+- Style: grim industrial military sci-fi, serious and oppressive, never cartoonish, cute or toy-like.
+  Function-first war machines: hydraulic pistons, cable bundles, worn matte ochre paint chipped to dark
+  metal, soot, oil, welded patches. No faces on machines: sensors are small violet clusters.
+- Core idea: a single warm amber light in a cold, grim, teal-hazed machine world.
   STEM-00's amber core grows brighter each part: Prologue a faint ember → Finale lighting the whole frame.
-- Palette: cold white #EAF6FA, HiveMind cyan #3FE0FF, shadow #0B1118, STEM-00 gunmetal #4A4F55,
-  amber #FFB347, Rejects rust #9C4A26 and sodium orange #FF7A1A, enemy weak spots magenta #FF3DCB.
-  No other saturated colours.
+- Palette: teal haze #2E6F78, network glow #3FE0FF, cold white #EAF6FA, shadow #0B1118,
+  enemy livery worn ochre #C9A23A over dark metal #3A3D40 (paint, never glowing), enemy sensors and weak
+  spots violet-magenta #C04BFF–#FF3DCB, STEM-00 olive drab #5D6849 with amber core #FFB347, Rejects rust
+  #9C4A26 and sodium orange #FF7A1A. At least 80% of each frame desaturated.
 - Scale: in establishing plates STEM-00 takes up less than 10% of the frame. Colossal machines are cropped by the frame.
 - Combat plates: over-the-shoulder third-person camera, low, from cover.
 - At least one quiet plate per act: the machine world working, STEM-00 watching.
 - No text, logos or UI inside images.
 - End every image prompt with this exact suffix:
-  "cinematic hard-surface sci-fi illustration, painterly concept-art finish, cold white and cyan lighting
-  with a single warm amber accent, deep blue-black shadows, volumetric haze, monumental scale, gothic
-  industrial architecture, melancholic and quiet, high detail, no text, no logos, 3:2"
+  "grim industrial military sci-fi, painterly realistic concept art, heavy weathered war machines, worn
+  matte ochre-yellow paint chipped to dark metal, hydraulic pistons and exposed cable bundles, small cluster
+  of violet sensor lights, teal-cyan volumetric haze, dark industrial interior, cold strip lights, wet
+  reflective floor, low camera, monumental scale, serious oppressive mood, no text, no logos, 3:2"
 
 DELIVER NOW (then stop and wait for my review; do not write chapters yet)
 1. Logline (one sentence) and back-cover blurb (150 words).
