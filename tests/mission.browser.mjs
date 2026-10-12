@@ -208,6 +208,58 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   expect('reach with trigger: the box is not tested, trigger:fired completes it, checkpoint:reached completes the next', r.inBox === 0 && r.afterTrigger === 1 && r.state === 'complete' && r.hud === 'MISSION COMPLETE', JSON.stringify(r));
 }
 
+// ---- 3d. gun conditions: requiresGun holds an objective until the gun is owned, skipIfOwned drops a "find it" step ----
+{
+  const r = await ev(() => {
+    const g = window.game;
+    const m = g.mission;
+    const out = {};
+    const skips = [];
+    const off = g.engine.events.on('mission:objective:done', (e) => skips.push(`${e.id}${e.skipped ? ':skipped' : ''}`));
+    // a reach that needs the Warden
+    let t = T.setup([['objective.reach', [10, 0, 10], { text: 'EXIT', size: [4, 3, 4], requiresGun: 'rifle' }, 'exit']]);
+    t.play(); T.step(0.2);
+    g.weapon.reset(['pistol']);
+    T.at(10, 0, 10); T.step(0.4);
+    out.reachHeld = { state: m.state, held: m.held, hud: T.hud().text };
+    T.at(30, 0, 30); T.step(0.2);
+    g.weapon.grant('rifle', { ammo: 10 });
+    T.step(0.2);
+    out.reachStillOut = m.state; // the box was reached, the gun arrives later: done, wherever the player stands
+    out.reachDone = { state: m.state, hud: T.hud().text };
+    // a destroy that needs it: the kills are done first
+    t = T.setup([['objective.destroy', [0, 0, 0], { group: 'g', requiresGun: 'rifle' }], ['enemy.static', [0, 0, -10], { group: 'g' }]]);
+    t.play(); T.step(0.2);
+    g.weapon.reset(['pistol']);
+    T.kill(g.enemies.all[0]); T.step(0.3);
+    out.destroyHeld = { state: m.state, held: m.held, index: m.index };
+    g.weapon.grant('rifle', { ammo: 10 }); T.step(0.2);
+    out.destroyDone = m.state;
+    // skipIfOwned: stays current without the gun, drops out (silently, flagged skipped) once it is owned, later or at once
+    skips.length = 0;
+    t = T.setup([['objective.survive', [0, 0, 0], { time: 0.3 }, 'first'], ['objective.interact', [-20, 0, -20], { skipIfOwned: 'rifle', text: 'FIND' }, 'find'], ['objective.survive', [0, 0, 0], { time: 30 }, 'last']]);
+    t.play(); T.step(0.2);
+    g.weapon.reset(['pistol']);
+    T.step(0.4);
+    out.findWaits = { cur: m.current.oid, hud: T.hud().text };
+    g.weapon.grant('rifle', { ammo: 10 }); T.step(0.1);
+    out.findSkipped = { cur: m.current.oid, done: skips.join() };
+    skips.length = 0;
+    t = T.setup([['objective.survive', [0, 0, 0], { time: 0.3 }, 'first'], ['objective.interact', [-20, 0, -20], { skipIfOwned: 'rifle' }, 'find'], ['objective.survive', [0, 0, 0], { time: 30 }, 'last']]);
+    t.play(); T.step(0.2);
+    g.weapon.reset(['pistol']);
+    g.weapon.grant('rifle', { ammo: 10 }); T.step(0.6);
+    out.ownedAtOnce = { cur: m.current.oid, done: skips.join() };
+    out.bad = ['requiresGun', 'skipIfOwned'].map((k) => { try { T.setup([['objective.reach', [0, 0, 0], { [k]: 'blaster' }]]); return null; } catch (e) { return e.message; } });
+    return out;
+  });
+  expect('requiresGun on a reach: standing in the box without the gun waits (HUD names the gun), then completes the moment the gun is owned', r.reachHeld.state === 'active' && r.reachHeld.held && /^EXIT {2}KR-7 WARDEN: NOT FOUND$/.test(r.reachHeld.hud) && r.reachStillOut === 'complete' && r.reachDone.state === 'complete' && r.reachDone.hud === 'MISSION COMPLETE', JSON.stringify(r));
+  expect('  on a destroy: the kills are counted, the objective waits for the gun and completes the moment it is owned', r.destroyHeld.state === 'active' && r.destroyHeld.held && r.destroyDone === 'complete', JSON.stringify([r.destroyHeld, r.destroyDone]));
+  expect('skipIfOwned: the step waits while the gun is missing and is skipped (silently) when it arrives', r.findWaits.cur === 'find' && r.findSkipped.cur === 'last' && r.findSkipped.done === 'first,find:skipped', JSON.stringify([r.findWaits, r.findSkipped]));
+  expect('  already owned when it comes up: skipped at once', r.ownedAtOnce.cur === 'last' && /first.*find:skipped/.test(r.ownedAtOnce.done), JSON.stringify(r.ownedAtOnce));
+  expect('  unknown guns are rejected', r.bad.every((e) => e && /is not a known gun/.test(e)), JSON.stringify(r.bad));
+}
+
 // ---- 4. limit -> failed; timers run while the player is dead ----
 {
   const r = await ev(() => {

@@ -15,7 +15,7 @@ import { GUNS } from '../combat/guns.js';
 //  trigger.volume     box (pos = centre x / bottom y / centre z). Fires `trigger:fired` { id, event } when the player
 //                     enters. params { size [w,h,d], event, once (true), wakeGroup?, spawnGroup? }.
 //  objective.*        mission objectives (reach / destroy / survive / interact, #12): records only, `Mission` (mission.js) runs them.
-//                     Common params { text, order?, limit?, wakeGroup?, spawnGroup?, grantGun?, grantAmmo?, skipOn? }; see workshop.md "Missions".
+//                     Common params { text, order?, limit?, wakeGroup?, spawnGroup?, grantGun?, grantAmmo?, skipOn?, requiresGun?, skipIfOwned? }; see workshop.md "Missions".
 //  log.line           a STEM-00 log line (#40, instructions/narrative.md): params { text, on, priority? ('normal'), once? (true), delay? (s, 0) }.
 //                     When `on` happens (LOG_ON below) it emits `log:say` { text, priority } after `delay`; the Log view (view/log.js) shows it.
 //                     Never in a fight: a fired line waits until STEM-00 has been out of combat for TUNING.calm s, `delay` counts from then.
@@ -55,15 +55,18 @@ const bad = (id, msg) => {
 };
 const entry = (sys, d) => sys.add('entry', d);
 const common = [{ key: 'text', type: 'text' }, { key: 'order', type: 'number', optional: true }, { key: 'limit', type: 'number', optional: true, min: 0.1 }, { key: 'wakeGroup', type: 'text', optional: true }, { key: 'spawnGroup', type: 'text', optional: true },
-  { key: 'grantGun', type: 'enum', options: Object.keys(GUNS), optional: true }, { key: 'grantAmmo', type: 'number', optional: true, min: 0 }, { key: 'skipOn', type: 'text', optional: true }];
+  { key: 'grantGun', type: 'enum', options: Object.keys(GUNS), optional: true }, { key: 'grantAmmo', type: 'number', optional: true, min: 0 }, { key: 'skipOn', type: 'text', optional: true },
+  { key: 'requiresGun', type: 'enum', options: Object.keys(GUNS), optional: true }, { key: 'skipIfOwned', type: 'enum', options: Object.keys(GUNS), optional: true }];
 const objective = (obj, label, params, own) => ({ example: { params: { text: TEXT[obj], ...params } }, label, fields: [...common, ...own], check: (p, registry) => objectiveGrantProblem(p, registry.guns), build: (sys, d) => sys.add('objective', d, obj) });
 
-// Problem with an objective's `grantGun` / `grantAmmo` / `skipOn` (Mission: a gun granted when it completes, a trigger / checkpoint id that skips it), or null. Pure.
+// Problem with an objective's `grantGun` / `grantAmmo` / `skipOn` / `requiresGun` / `skipIfOwned` (Mission: a gun granted when it completes, a trigger / checkpoint id that skips it,
+// a gun it cannot finish without, a gun that makes it unnecessary), or null. Pure.
 export function objectiveGrantProblem(p, guns = null) {
   if (p.grantGun != null && (typeof p.grantGun !== 'string' || !GUNS[p.grantGun] || (guns && !guns.includes(p.grantGun)))) return `grantGun ${JSON.stringify(p.grantGun)} is not a known gun`;
   if (p.grantAmmo != null && !(typeof p.grantAmmo === 'number' && p.grantAmmo >= 0)) return 'grantAmmo must be a number, at least 0 (rounds)';
   if (p.grantAmmo != null && p.grantGun == null) return 'grantAmmo needs grantGun';
   if (p.skipOn != null && (typeof p.skipOn !== 'string' || !p.skipOn)) return 'skipOn must be a trigger or checkpoint id';
+  for (const k of ['requiresGun', 'skipIfOwned']) if (p[k] != null && (typeof p[k] !== 'string' || !GUNS[p[k]] || (guns && !guns.includes(p[k])))) return `${k} ${JSON.stringify(p[k])} is not a known gun`;
   return null;
 }
 

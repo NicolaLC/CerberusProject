@@ -63,7 +63,7 @@ export class Game {
     const player = new Player({ scene, world, events, spawn: levelSpawn(registry.check(SCENES[first])) });
     const enemies = new Enemies({ scene, world, events, registry });
     const pickups = new Pickups({ scene, events, registry, world });
-    const mission = new Mission({ events, enemies });
+    const mission = new Mission({ events, enemies, owns: (gun) => weapon.owned.has(gun) });
     const encounter = new Encounter({ scene, events, registry, enemies, world, mission });
     const weapon = new Weapon({ camera, rig: camRig, player, world, enemies, events });
     const fx = new FX(scene, camera, world).listen(events);
