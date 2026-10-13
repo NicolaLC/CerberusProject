@@ -140,7 +140,13 @@ for (const name of SCENES) {
   for (let c = 0; c < CYCLES; c++) {
     const visits = [];
     for (const name of [...SCENES.slice(1), 'arena']) {
-      await p.evaluate((n) => window.game.loadScene(n), name);
+      // headless load: skips the shader warm-up (halves this suite on SwiftShader); the probe still renders everything
+      await p.evaluate((n) => {
+        const { engine } = window.game;
+        engine.headless = true;
+        window.game.loadScene(n);
+        engine.headless = false;
+      }, name);
       const atLoad = await p.evaluate(() => {
         const g = window.game;
         return [g.player.pos.x, g.player.pos.y, g.player.pos.z];
