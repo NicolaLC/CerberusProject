@@ -6,68 +6,35 @@ entry in `src/game/view/audio.js`. Every recorded sound has its pitch and volume
 generate one clean take, not variations. Keep every sound dry (no room reverb) unless the prompt asks for a tail,
 because the arena mixes many sounds at once. Remove a row once its sound is recorded and listed in `credits.md`.
 
-## Alarm
+Everything listed here before has been generated (flow "Cerberus missing SFX" in the owner's ElevenLabs workspace),
+saved to `src/assets/sfx/`, wired in `audio.js` (synth kept as fallback) and listed in `credits.md`. Generation settings
+used: model `eleven_text_to_sound_v2`, prompt influence 0.3, the length given as `duration_seconds`, `loop` on for
+the looping sounds. Add new rows here for the next missing sounds.
 
-| File | Event | Length | Prompt |
-|---|---|---|---|
-| `alarm-siren.mp3` | `env.alarm` (the purge), looping | 3.0 s | Seamless loop of an industrial facility alarm siren, a harsh two-tone electronic wail rising and falling every second, dull and metallic as if heard through concrete corridors, sci-fi military, no voice |
+## Replaced or added after play-testing
 
-Today the siren is synthesized (`Audio.siren`). Wire the recording as a looping `SAMPLES` entry and keep the synth as the fallback.
+| File | Why | Prompt / settings |
+|---|---|---|
+| `burst-shot.mp3` | the old take held a whole burst; now one round, played per `weapon:shot` (3 per burst) | One single gunshot of a compact sci-fi assault rifle, a tight punchy crack with a short metallic mechanical snap, one round only, no echo, close, dry (0.5 s, influence 0.6) |
+| `boss-mortar.mp3` | the old launch sounded off (whistle) | Heavy mortar shell fired from a war machine's back-mounted launcher, a deep hollow punchy thump with a short burst of pressurized gas, no whistle, close, dry (0.8 s, influence 0.5) |
+| `ambient-loop.mp3` | level ambience, always on, ducks under the music | Seamless loop of a vast cold industrial military facility, low droning ventilation rumble, distant metal creaks and faint machinery hum, ominous and empty, no music, no voices (30 s, loop) |
+| `combat-music.mp3` | combat music (`Audio.mood`, `MUSIC` / `COMBAT_ON` / `COMBAT_OFF` in `audio.js`) | ElevenLabs Music v2.5, 60 s, instrumental: Energetic dark sci-fi drum and bass at 174 BPM, driving rolling breakbeats, heavy distorted reese bass, cold industrial synth stabs and metallic percussion hits, aggressive and relentless, constant high energy from start to end with no intro and no outro so it loops cleanly. It still fades out over its last ~5 s, so the game loops it at 39 bars (`MUSIC.loopEnd`). |
+| `reload-rifle.mp3` | old reloads were not punchy enough | Heavy sci-fi assault rifle reload: a sharp magnetic release clack as the empty magazine drops, a solid metallic slam of a fresh magazine locking in, then a hard charging handle pull and snap forward, punchy and tactile, close, dry (1.8 s, influence 0.5) |
+| `reload-mg.mp3` | same | Heavy sci-fi machine gun reload: a feed cover thrown open with a loud metal clank, a heavy ammo belt box swapped and rattling, the belt laid in, the cover slammed shut, then a hard bolt rack, weighty and mechanical, close, dry (3.0 s, influence 0.5) |
+| `reload-good.mp3` | same | Fast clean weapon reload finish: a firm metallic magazine slam followed immediately by a crisp bolt release snap, tight and punchy, close, dry (0.5 s, influence 0.5) |
+| `reload-perfect.mp3` | same | Perfect weapon reload confirm: an instant hard metallic magazine slam and bolt snap, layered with a bright rising electric charge-up ping, very satisfying and punchy, sci-fi, close, dry (0.6 s, influence 0.5) |
+| `reload-jam.mp3` | same | Weapon reload jamming: a magazine grinding and catching in the receiver with a harsh scraping metal crunch and a dull failed clunk, frustrating, close, dry (0.6 s, influence 0.5) |
+| `boss-music.mp3` | boss fight music, boss:wake to boss:dead (crossfades from the combat track) | ElevenLabs Music v2.5, 75 s, instrumental: Intense dark sci-fi boss battle drum and bass at 174 BPM, pounding breakbeats with huge industrial impacts, a menacing growling distorted bass, ominous low synth brass stabs and urgent pulsing arpeggios, heavier and more threatening than regular combat, relentless full energy from start to end with no intro and no outro so it loops cleanly. Looped at 54 bars. |
 
-## Footsteps (more takes)
+## Recorded, not wired yet
 
-Recorded and wired: one take each (`step-walk-1`, `step-run-1`, `step-metal-1`, `step-robot-1`). Steps repeat
-constantly, so 3 more takes of each (`-2` … `-4`) make them far less repetitive: the game picks one at random per
-step (add each to its `SAMPLES` list). Same prompts, each a single step trimmed tight (sound starts at 0 s).
+| File | Event | Notes |
+|---|---|---|
+| `drone-loop.mp3` | drone hover, looping | needs one looped voice per drone, faded by distance (like enemy steps) |
+| `arm-retract.mp3` | maintenance arm folds up (`prop.arm` `retractOn`) | the prop does not exist yet |
+| `bay-hum-loop.mp3` | calibration bay ambience, inside `bay-zone` | the zone does not exist yet |
+| `console-loop.mp3` | `prop.console`, positional | the prop does not exist yet |
 
-| Files | Event | Length | Prompt |
-|---|---|---|---|
-| `step-walk-2..4.mp3` | player walking | 0.5 s | Single footstep of a soldier in heavy armored combat boots walking on concrete, firm heel-toe thud with a faint rattle of armor plates, close, dry, no reverb |
-| `step-run-2..4.mp3` | player sprinting | 0.5 s | Single fast running footstep of a heavily armored soldier on concrete, hard impact with a sharp scuff and armor plates clanking, close, dry |
-| `step-metal-2..4.mp3` | player on anything raised (platform, stairs, blocks) | 0.5 s | Single heavy armored boot footstep on a metal grating platform, hollow metallic clang, dry |
-| `step-robot-2..4.mp3` | troopers and moving puppets | 0.5 s | Single footstep of a humanoid combat robot on concrete, heavy metallic foot with a small servo whir, slightly distant, dry |
-
-## Hit feedback (UI-like, must cut through gunfire)
-
-| File | Event | Length | Prompt |
-|---|---|---|---|
-| `hit-body.mp3` | bullet hits an enemy body | 0.5 s | Short dry metallic tick of a bullet hitting a robot's armor plate, tight and clicky, sci-fi hit-confirm, no reverb |
-| `hit-head.mp3` | headshot | 0.5 s | Bright high-pitched double metallic ping, a bullet striking a robot helmet, crisp and satisfying sci-fi headshot confirm, short ring-out |
-| `hit-weak.mp3` | weak spot hit | 0.5 s | Sparkling electric crystal ping with a crackle of energy, hitting a glowing power core, bright rising shimmer, short |
-| `kill.mp3` | enemy destroyed (confirm) | 0.7 s | Deep heavy thunk followed by a bright two-note digital chime, sci-fi shooter kill confirm, punchy and clean |
-| `low-mag.mp3` | each of the last rounds in the magazine | 0.5 s | Tiny high mechanical tick of an almost empty magazine spring, light metallic click, very short |
-| `reload-good.mp3` | good (not perfect) active reload | 0.5 s | Quick solid metallic clack of a magazine seating firmly, single clean click, sci-fi rifle |
-
-## Player
-
-| File | Event | Length | Prompt |
-|---|---|---|---|
-| `jet.mp3` | jetpack burst | 0.8 s | Short powerful jetpack thruster burst, hissing rocket whoosh that sweeps down in pitch with a low thump at the start, sci-fi armor |
-| `land.mp3` | landing after a jump or vault | 0.5 s | Heavy armored boots landing on concrete, soft low thud with a light metal rattle of armor plates |
-| `hurt.mp3` | player takes damage | 0.6 s | Energy shield absorbing a hit, low electric buzz-crack with a muffled impact thud, sci-fi personal shield |
-| `pickup.mp3` | ammo collected | 0.6 s | Ammunition case picked up, quick metallic rattle of rounds plus a short rising digital confirmation blip |
-| `pickup-full.mp3` | walked over ammo while full (no sound today) | 0.5 s | Soft low two-tone digital denial beep, sci-fi HUD, short and unobtrusive |
-
-## Enemies
-
-| File | Event | Length | Prompt |
-|---|---|---|---|
-| `enemy-shot.mp3` | trooper / drone fires an energy bolt | 0.6 s | Robot soldier firing a plasma bolt, sharp electric zap that drops in pitch, buzzy sci-fi energy weapon, slightly distant |
-| `bolt-impact.mp3` | enemy bolt hits a wall (no sound today) | 0.5 s | Plasma bolt hitting concrete, short sizzling electric splash with a small crackle |
-| `robot-down.mp3` | puppet / trooper / drone destroyed | 1.0 s | Combat robot destroyed, metal parts breaking apart and clattering on the ground with a short electrical spark |
-| `explosion.mp3` | blasts (drone, mortar); pitched by size | 1.5 s | Mid-sized explosion in an open arena, punchy blast with debris and a short rumbling tail, no music |
-| `drone-loop.mp3` | drone hover, looping (new, optional) | 2.0 s | Seamless loop of a small hovering combat drone, steady whirring of four ducted rotors with a faint electric hum |
-
-## Spider mech miniboss (SX-6 Tarantula)
-
-| File | Event | Length | Prompt |
-|---|---|---|---|
-| `boss-wake.mp3` | wakes up | 2.0 s | Giant spider mech powering on, deep hydraulic groan, servos whining up and a heavy mechanical clunk as it rises |
-| `boss-charge.mp3` | twin cannons charging before a burst | 1.0 s | Heavy energy cannons charging up, rising electric whine that builds tension, sci-fi |
-| `boss-stomp.mp3` | rears up before a stomp | 0.8 s | Huge mech rearing up, strained hydraulics hissing and servos whining upward |
-| `boss-step.mp3` | each foot planted | 0.5 s | Heavy metal mech leg stepping onto concrete, dull deep thud with a short hydraulic hiss, no reverb |
-| `boss-slam.mp3` | stomp lands (shockwave) | 1.2 s | Massive mech leg slamming the ground, huge low impact boom with cracking concrete and a shockwave rumble |
-| `boss-mortar.mp3` | mortar launched | 0.7 s | Mortar tube launch from a mech's back, hollow deep thoomp with a short whistle as the shell leaves |
-| `boss-leg.mp3` | a leg is shot off | 1.2 s | Mechanical leg blown off a giant robot, sharp explosion with metal tearing and parts clanging away |
-| `boss-death.mp3` | destroyed | 3.0 s | Giant spider mech destroyed, big explosion followed by collapsing heavy metal, groaning steel and electrical sparks fading out |
-| `boss-loop.mp3` | idle engine while awake (new, optional) | 3.0 s | Seamless loop of a giant walking mech's engine, low steady rumble with soft rhythmic hydraulic pulses |
+The Prologue wake-up cues (`wake-surge`, `wake-core`, `wake-rise`) play off the boot intro today (`Audio.wake`, `WAKE` in
+`audio.js`: surge 2.4 s after `intro:start`, core 1 s later, rise timed to end with the intro; cut on a skip). Move them
+to the `intro.cinematic` timeline (`wake.at`, `wake.rise`) once it exists.

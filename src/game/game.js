@@ -243,8 +243,11 @@ export class Game {
     engine.add({
       name: 'audio',
       phase: 'present',
-      whilePaused: true, // silences the MG whine on pause
-      update: () => audio.spin(weapon.t.spinUp > 0 && !engine.paused ? weapon.spin : 0),
+      whilePaused: true, // silences the MG whine and fades the combat music on pause
+      update: () => {
+        audio.spin(weapon.t.spinUp > 0 && !engine.paused ? weapon.spin : 0);
+        audio.mood(engine.paused);
+      },
     });
     engine.add({
       name: 'post',

@@ -29,8 +29,8 @@ All of it reacts to gameplay events (see the events table in architecture.md); g
 | hurt | trauma 0.38, red chromatic aberration pulse |
 | reload jam / perfect | trauma 0.15 / FOV punch + white flash |
 | cover / vault landing | trauma + camera dip |
-| jet (`player:jet`) | fx: orange flames + blue core sprites along `dir` for 0.22 s (2/frame, 0.13 s life, speed 7 m/s, follows nozzle via `fx.player.jetting`), smoke puff every 45 ms, tan ground dust ring + 5 puffs; audio: bandpassed noise whoosh (1.4k to 420 Hz, 0.02 s attack, 0.38 s decay) + 120 to 45 Hz thump; juice: trauma 0.05, camera dips -0.35 (springs up); rumble 0.2/0.3 for 90 ms (game.js) |
-| landing after a jet | `player:land` 'jet' is light: trauma 0.06, dip 0.7 (vault landing: 0.2, 1.4); audio soft thud on every `player:land` |
+| jet (`player:jet`) | fx: orange flames + blue core sprites along `dir` for 0.22 s (2/frame, 0.13 s life, speed 7 m/s, follows nozzle via `fx.player.jetting`), smoke puff every 45 ms, tan ground dust ring + 5 puffs; audio: recorded thruster burst (`jet.mp3`; synth fallback: bandpassed noise whoosh 1.4k to 420 Hz + 120 to 45 Hz thump); juice: trauma 0.05, camera dips -0.35 (springs up); rumble 0.2/0.3 for 90 ms (game.js) |
+| landing after a jet | `player:land` 'jet' is light: trauma 0.06, dip 0.7 (vault landing: 0.2, 1.4); audio: recorded boot landing (`land.mp3`, synth thud fallback) on every `player:land` |
 
 ## Post (`post.js`)
 `post.boost` multiplies the auto exposure (1 normally); the boot intro (`view/boot.js`) ramps it 2.4 to 1 as the screen fades in, then resets it.
