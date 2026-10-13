@@ -68,8 +68,13 @@ const r = await p.evaluate(() => {
   out.squadFired = fired;
   const before = squad.map((t) => t.spot);
   player.pos.set(4, 0, -34); // walk around them
-  step(12); // AI timings are randomized: leave room for a full cover cycle before they move
-  out.relocated = squad.map((t, i) => t.spot !== before[i] && !!t.spot && cover.protects(t.spot, player.pos));
+  // AI timings are randomized: each one must take a new spot that protects it at some point within 20 s (a full cover cycle or more)
+  const moved = (t, i) => t.spot !== before[i] && !!t.spot && cover.protects(t.spot, player.pos);
+  out.relocated = squad.map(() => false);
+  for (let i = 0; i < 40 && !out.relocated.every(Boolean); i++) {
+    step(0.5);
+    squad.forEach((t, k) => (out.relocated[k] ||= moved(t, k)));
+  }
   // diagnostics when it fails: where each trooper is and what it is doing
   out.relocDetail = squad.map((t, i) => `${t.state} at ${t.pos.x.toFixed(1)},${t.pos.z.toFixed(1)} spot ${t.spot ? `${t.spot.pos.x.toFixed(1)},${t.spot.pos.z.toFixed(1)} ${t.spot.type}` : 'none'}${t.spot === before[i] ? ' (same)' : ''} protects=${!!t.spot && cover.protects(t.spot, player.pos)} alive=${t.alive}`);
   const inside = (t) => { const v = t.pos.clone(); g.world.collideCircle(v, 0.38, 1.8, 0.45); return v.distanceTo(t.pos) > 0.01; };
