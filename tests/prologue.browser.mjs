@@ -27,6 +27,8 @@ async function open(seen) {
     const { engine } = g;
     engine.stop();
     engine.headless = true;
+    // the real loop may have run the intro for a while before stop() (a slow CI page): start the scene again, stepped from 0
+    g.loadScene('prologue');
     const T = (window.T = { done: [], bolts: 0, hurt: 0, shots: 0 });
     T.step = (s) => {
       for (let i = 0; i < Math.round(s * 60); i++) {
