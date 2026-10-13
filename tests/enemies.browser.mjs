@@ -61,8 +61,10 @@ const r = await p.evaluate(() => {
   // each one is seen behind its cover at some frame: a single snapshot can catch it stepped out to peek or fire (random timings)
   const hid = (t) => !!t.spot && t.state !== 'move' && t.pos.distanceTo(t.spot.pos) < 0.3 && cover.protects(t.spot, player.pos);
   out.inCover = squad.map(() => false);
+  // stops as soon as both were seen: the relocation below needs them close (from 34 m out a trooper finds no spot)
   for (let i = 0; i < 360; i++) {
     squad.forEach((t, k) => (out.inCover[k] ||= hid(t)));
+    if (out.inCover.every(Boolean)) break;
     step(1 / 60);
   }
   out.squadFired = fired;
