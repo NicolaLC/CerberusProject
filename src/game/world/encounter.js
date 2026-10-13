@@ -26,7 +26,7 @@ import { GUNS } from '../combat/guns.js';
 //                     skippable? (false) }. At the first play frame it emits `cinematic:start` { shots, wake, skippable }; the Cinematic view
 //                     (view/cinematic.js) drives the camera and STEM-00's wake, locks the input and emits `cinematic:done` { skipped }. An `intro.boot`
 //                     with `after: 'cinematic:done'` then starts. The first one in the file plays. Inert in the editor and the Library (gizmo: the camera path).
-//  env.alarm          the alarm lighting state (#14, workshop.md "Alarm"): params { on, off?, duration?, color? ('#ff2a1a'), strength? (0.75), siren? (true) }.
+//  env.alarm          the alarm lighting state (#14, workshop.md "Alarm"): params { on, off?, duration?, color? ('#ff9a2a'), strength? (0.4), siren? (true) }.
 //                     When `on` happens (same forms as log.line) it emits `alarm:on` { id, color, strength, siren }: World tints the light toward `color`
 //                     and pulses it (world.setAlarm), Audio loops a synthesized siren. Ends at `off`, after `duration` s, or when the level unloads (`alarm:off` / `alarm:clear`).
 //                     Inert in the editor and the Library (gizmo: a beacon on a post).
@@ -101,7 +101,7 @@ export function logLineProblem(p, guns = null) {
 
 // `voice` of a log line: whose line it is. 'stem' = STEM-00's terminal (waits for calm), 'announcer' = the HiveMind PA (shown at once, replaces the line).
 export const VOICES = ['stem', 'announcer'];
-export const ALARM_DEFAULT = { color: '#ff2a1a', strength: 0.75 };
+export const ALARM_DEFAULT = { color: '#ff9a2a', strength: 0.4 }; // amber, not damage red (art-style.md)
 
 // Problem with an `env.alarm`'s params, or null. Registry.check runs it on every level (meta `check`); Encounter.add throws it. Pure.
 export function alarmProblem(p, guns = null) {
@@ -182,7 +182,7 @@ export const ENCOUNTER_PIECES = {
   },
   'env.alarm': {
     example: { params: { on: 'start', duration: 6 } },
-    label: 'alarm lighting state + siren when `on` happens: light fades to red and pulses; ends at `off` / `duration`',
+    label: 'alarm lighting state + siren when `on` happens: light fades to amber and pulses; ends at `off` / `duration`',
     fields: [{ key: 'on', type: 'text' }, { key: 'off', type: 'text', optional: true }, { key: 'duration', type: 'number', optional: true, min: 0.1 }, { key: 'color', type: 'text', optional: true }, { key: 'strength', type: 'number', optional: true, min: 0.05 }, { key: 'siren', type: 'bool', def: true }],
     check: (p, registry) => alarmProblem(p, registry.guns),
     build: (sys, d) => sys.add('alarm', d),

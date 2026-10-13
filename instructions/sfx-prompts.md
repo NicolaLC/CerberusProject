@@ -25,6 +25,7 @@ the looping sounds. Add new rows here for the next missing sounds.
 | `reload-perfect.mp3` | same | Perfect weapon reload confirm: an instant hard metallic magazine slam and bolt snap, layered with a bright rising electric charge-up ping, very satisfying and punchy, sci-fi, close, dry (0.6 s, influence 0.5) |
 | `reload-jam.mp3` | same | Weapon reload jamming: a magazine grinding and catching in the receiver with a harsh scraping metal crunch and a dull failed clunk, frustrating, close, dry (0.6 s, influence 0.5) |
 | `boss-music.mp3` | boss fight music, boss:wake to boss:dead (crossfades from the combat track) | ElevenLabs Music v2.5, 75 s, instrumental: Intense dark sci-fi boss battle drum and bass at 174 BPM, pounding breakbeats with huge industrial impacts, a menacing growling distorted bass, ominous low synth brass stabs and urgent pulsing arpeggios, heavier and more threatening than regular combat, relentless full energy from start to end with no intro and no outro so it loops cleanly. Looped at 54 bars. |
+| `alarm-siren.mp3` | the old take (a continuous high wail, ~2.7 kHz, no gaps) was too annoying across the long Prologue purge | Seamless loop of a distant low industrial facility alarm: a deep muffled two-tone horn blast, low pitched and soft, followed by a long pause of silence, repeating slowly, heard from far away through thick metal walls, ominous not shrill, no high frequencies, no fast wail, no voices (8 s, influence 0.5, loop; flow `LetqmDVTuXh60AaojYa8`, take 1 of 4) |
 
 ## Recorded, wired outside the event table
 

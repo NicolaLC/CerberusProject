@@ -104,7 +104,7 @@ const SAMPLES = {
   boltImpact: [boltImpact, 0.3, 0.12],
   robotDown: [robotDown, 0.55, 0.1],
   explosion: [explosion, 0.7, 0], // pitched by blast size (blast())
-  siren: [alarmSiren, 0.3, 0], // looped (siren())
+  siren: [alarmSiren, 0.4, 0], // looped (siren()): a low horn blast every ~3 s, gaps between (the old continuous wail grated)
   bossWake: [bossWake, 0.7, 0],
   bossCharge: [bossCharge, 0.55, 0.04],
   bossStomp: [bossStomp, 0.6, 0.05],

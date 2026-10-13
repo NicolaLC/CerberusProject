@@ -27,7 +27,7 @@ const PARKED = new THREE.Vector3(0, -1000, 0);
 // keep: score bonus of a light already live (two equal lights do not trade places every reselect)
 const LIGHT_PICK = { every: 0.2, move: 2, fade: 0.25, keep: 1.2 };
 
-export const ALARM = { color: '#ff2a1a', strength: 0.75, rate: 1.6, pulse: 3.2 }; // alarm lighting state: red tint, 0..1 mix, blend per second, pulse rad/s
+export const ALARM = { color: '#ff9a2a', strength: 0.4, rate: 1.6, pulse: 3.2 }; // alarm lighting state: amber warning tint (not red: that reads as low health), 0..1 mix, blend per second, pulse rad/s
 const HAZE = '#4f7b7e'; // horizon and fog: teal-cyan haze, desaturated
 export const SUN_DIR = new THREE.Vector3(0.45, 0.78, 0.43).normalize();
 

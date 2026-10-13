@@ -86,7 +86,7 @@ empty now. Decisions taken in the pass (keep them unless the rule changes):
 - **HiveMind projectiles** (bolts, drone bursts, mortar orbs and rings, their impacts) are violet-white: a near-white
   core in a violet haze, so they never read as STEM-00's amber. Explosion fire (a drone or the mech dying) stays orange.
 - **World:** teal-cyan haze sky and heavy fog; cold sun and fill; interiors lit cold white and cyan, red only for story
-  beats (a Rejects or alarm room) and the `env.alarm` lighting state (workshop.md "Alarm": the whole scene fades to red and pulses while the alarm runs; the HiveMind announcer line is cold white with a network-cyan glow, never red). The arena wears weathered metal (`skin: "weathered"`, level.md); the Gym rooms,
+  beats (a Rejects or alarm room) and the `env.alarm` lighting state (workshop.md "Alarm": the whole scene fades to amber (`#ff9a2a`, 0.4: never damage red, which made the purge read as low health) and pulses while the alarm runs; the HiveMind announcer line is cold white with a network-cyan glow, never red). The arena wears weathered metal (`skin: "weathered"`, level.md); the Gym rooms,
   Library and Workshop keep the grid textures because metrics read off them.
 - **CERBERUS on the horizon** (main menu backdrop, `view/menu-scene.js`): a colossal quadruped war mech, standing three
   quarters toward the city: low wide hull under rounded armour shells (carapace, pauldrons, haunches) with dark seam bands, a launcher tube on its back, digitigrade legs (rounded
