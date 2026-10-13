@@ -6,17 +6,17 @@ import { GUNS, gunMaterials } from '../combat/guns.js';
 import { RigidSkin, mergeGroup } from '../../engine/batch.js';
 import { panelTexture, applyWorldUVs } from '../world/textures.js';
 import { propMaterials, PROP_PIECES } from '../world/props.js';
-import { cyl, part, group } from '../actors/parts.js';
+import { cyl, part, group, rb, rbox } from '../actors/parts.js';
 import { Rng } from '../../engine/random.js';
 
 // Main menu backdrop (instructions/architecture.md "Main menu and save"): a self-contained set, not a game level. STEM-00
-// sits on the broken corner of a skyscraper roof, legs over the drop, looking over IO's city (gdd 2.1, 2.9) toward the
-// HiveMind: a colossal shape on the horizon, sunk in the haze, sensed more than seen (three faint violet sensor clusters,
-// the heads of CERBERUS, breathing). The skyline is about half in ruin (broken tops, girders, leaning towers, rubble,
+// sits on the edge of a skyscraper roof, legs over the drop, looking over IO's city (gdd 2.1, 2.9) toward the
+// HiveMind's guardian CERBERUS: a colossal three-headed quadruped war mech standing on the horizon, sunk in the haze, sensed more
+// than seen (violet sensor eyes breathing). The skyline is about half in ruin (broken tops, girders, leaning towers, rubble,
 // smoke, a few Rejects fires), with Spire Cathedrals, transit rails and cyan beacons; VIGIL drones patrol with searchlights.
 // Reuses: the player rig, soldier parts and SEATED pose, the rifle, the drone look, the prop builders and materials, the
 // weathered panel texture. Shell renders it with the game's renderer only while the title is up: no game system runs.
-// Budget: about 40 draws and 330k triangles, the skyline and the drones instanced, the roof merged, no shadows.
+// Budget: about 51 draws and 375k triangles, the skyline and the drones instanced, the roof merged, no shadows.
 const ROOF = -0.3; // top of the hero tower's body (the roof slab sits on it, its top at y = 0)
 const GROUND = -420; // city floor
 const FOG = new THREE.Color(0x2e6f78); // art-style haze
@@ -27,9 +27,10 @@ const CYAN = new THREE.Color(0x3fe0ff);
 const VIOLET = new THREE.Color(0x8c3cff); // sensors (art-style 5: VISOR)
 const FIRE = new THREE.Color(0xff7a1a); // Rejects sodium orange
 const TOWER = { x: [-0.8, 27.2], z: [-2, 26] }; // the hero tower's footprint
-const STEM = new THREE.Vector3(TOWER.x[0] + 0.16, 0, TOWER.z[0] + 0.16); // STEM-00's root: hips on the roof's front-left corner
-const HIVE = new THREE.Vector3(560, GROUND, -2900); // the HiveMind's foot, mid screen
-const FACING = -2.45; // STEM-00's body: out over the corner, legs down the left face (a side view from the camera)
+const STEM = new THREE.Vector3(TOWER.x[0] + 0.3, 0, TOWER.z[0] + 1.6); // STEM-00's root: seated on the roof's left edge, knees at the edge
+const HIVE = new THREE.Vector3(620, GROUND, -3400); // CERBERUS's feet, mid screen
+const HIVE_DIST = Math.hypot(HIVE.x, HIVE.z);
+const FACING = -2.17; // STEM-00's body: out over the left edge, turned toward the city ahead (a side view from the camera)
 const GAZE = Math.atan2(HIVE.x - STEM.x, HIVE.z - STEM.z); // where its head turns: the HiveMind
 // the camera floats off the tower's left face, behind STEM-00: STEM-00 on the right third, the drop and the city on the left
 const CAM = { dist: 7.5, height: 1.6, yaw: -0.08, pitch: -0.1, offset: -0.3, fov: 38 };
@@ -45,6 +46,7 @@ const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _down = new THREE.Vector3(0, -1, 0);
+const _yUp = new THREE.Vector3(0, 1, 0);
 const _size = new THREE.Vector2();
 const ZERO = new THREE.Vector2();
 const set3 = (a, i, x, y, z) => {
@@ -203,6 +205,7 @@ function propWorld(scene) {
 
 export class MenuScene {
   static frames = 0; // frames rendered, all instances (menu smoke test)
+  static view = null; // debug / screenshot scripts: { pos: [x, y, z], at: [x, y, z] } replaces the menu camera
 
   constructor(renderer) {
     this.renderer = renderer;
@@ -280,6 +283,9 @@ export class MenuScene {
         const pz = z + (R() - 0.5) * (STEP - d) * 0.8;
         let h = 40 + 320 * R() ** 2.4 + (R() < 0.04 ? 260 : 0);
         if (Math.hypot(px, pz) < 160) h = Math.min(h, 330); // the hero tower stands above its block
+        // a sightline to CERBERUS: towers in its corridor stay below it, so the hound reads whole against the sky
+        const along = (px * HIVE.x + pz * HIVE.z) / HIVE_DIST;
+        if (along > 0 && Math.abs(px * HIVE.z - pz * HIVE.x) / HIVE_DIST < 60 + along * 0.13) h = Math.min(h, Math.max(30, -GROUND - 0.1 * along));
         const tone = 0.32 + R() * 0.14;
         const ruined = ruinAt(px, pz) > 0;
         if (!ruined) {
@@ -349,61 +355,174 @@ export class MenuScene {
     scene.add(strip);
   }
 
-  // The HiveMind: a colossus on the horizon past the spires, sunk in the haze (its own fog blend: never sharp, never lit).
-  // A crowned mass with three heads (CERBERUS) leaning over the city; violet sensor clusters breathe on each head; the
-  // heads turn very slowly. Five draws: the body, the three heads, their lights.
+  // CERBERUS, the HiveMind's guardian (gdd 2.2): a colossal quadruped war mech standing on the horizon past the spires, three
+  // quarters toward the city, sunk in the haze (art-style 5). A low wide pill hull banded by seam rings under rounded armour shells (carapace, pauldrons, haunches), a
+  // launcher tube on its back, four digitigrade legs (rounded thigh and shin shells, joint discs, pistons, splayed claws) and its
+  // three heads: VIGIL, the sensor head with the gun jutting forward, LEGION and COLOSSUS, the sleek gun pods on its shoulders.
+  // Shaded by its own material: a tone darker than the sky (lighter on top), backlit by the sun's rim, faded into the haze
+  // toward its feet. Violet sensor eyes breathe; the heads scan, the hull shifts its weight. Nine draws.
   #hive(scene) {
-    const mat = new THREE.ShaderMaterial({
-      uniforms: { ...SKY_UNIFORMS, dark: { value: new THREE.Color(0x14232a) }, base: { value: GROUND + 200 }, top: { value: GROUND + 1700 } },
-      vertexShader: /* glsl */ `
-        varying vec3 vW;
-        void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-      fragmentShader: /* glsl */ `
-        ${SKY_GLSL}
-        uniform vec3 dark; uniform float base, top;
-        varying vec3 vW;
-        void main() {
-          // a shade of the sky behind it, deeper toward the crown, gone into the haze toward its foot
-          float k = smoothstep(base, top, vW.y);
-          gl_FragColor = vec4(mix(sky(normalize(vW - cameraPosition)), dark, 0.12 + 0.42 * k), 1.0);
-          #include <tonemapping_fragment>
-          #include <colorspace_fragment>
-        }`,
-    });
-    const box = (w, h, d, x, y, z, rx = 0, ry = 0, rz = 0) => part(new THREE.BoxGeometry(w, h, d), mat, x, y, z, rx, ry, rz);
-    const cone = (r, h, x, y, z, rz = 0) => part(new THREE.ConeGeometry(r, h, 6), mat, x, y, z, 0, 0, rz);
-    const body = mergeGroup(group(
-      box(900, 700, 500, 0, 350, 0), // the mass rising out of the city
-      box(1300, 260, 420, 0, 760, 0, 0, 0, 0.04), // shoulders
-      box(500, 420, 360, 0, 1000, -40), // the neck yoke
-      cone(160, 700, -620, 1000, 0, 0.35), // spines off the shoulders
-      cone(140, 560, 640, 960, 0, -0.3),
-      cone(90, 420, -380, 1220, -80, 0.15),
-      cone(90, 380, 380, 1200, -80, -0.12),
-    ));
-    this.heads = [-300, 0, 300].map((x, i) => {
-      const h = mergeGroup(group(box(170, 150, 260, 0, 0, 60), box(120, 70, 200, 0, -70, 130, 0.2), cone(40, 220, 0, 150, 0)));
-      h.position.set(x, 1200 + (i === 1 ? 90 : 0), 40);
-      h.rotation.set(0.25, x * -0.0008, 0);
-      h.userData.yaw = h.rotation.y;
-      body.add(h);
-      return h;
-    });
-    body.position.copy(HIVE);
-    body.rotation.y = Math.atan2(STEM.x - HIVE.x, STEM.z - HIVE.z); // faces STEM-00
-    body.scale.setScalar(0.62);
-    scene.add(body);
-    // sensor clusters on each head (their own light fog: the haze is in the silhouette's colour already)
-    const lights = (this.hiveLights = makePoints(30, true));
-    lights.material.uniforms.fogDensity.value = 0.00028;
-    body.updateMatrixWorld(true);
-    const rnd = new Rng(3);
-    this.hiveSensors = [];
-    this.heads.forEach((h, i) => {
-      for (let k = 0; k < 9; k++) {
-        const local = new THREE.Vector3((rnd.next() - 0.5) * 150, (rnd.next() - 0.4) * 110, 192);
-        this.hiveSensors.push([h, local, lights.put(0, 0, 0, 14 + rnd.next() * 26, VIOLET, 0.8, 4, i * 0.33 + rnd.next() * 0.05)]);
+    const shade = (tone, rim) =>
+      new THREE.ShaderMaterial({
+        uniforms: { ...SKY_UNIFORMS, tone: { value: new THREE.Color(tone) }, rim: { value: rim }, base: { value: GROUND + 60 }, top: { value: GROUND + 520 } },
+        vertexShader: /* glsl */ `
+          varying vec3 vW; varying vec3 vN;
+          void main() {
+            vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal);
+            gl_Position = projectionMatrix * viewMatrix * w;
+          }`,
+        fragmentShader: /* glsl */ `
+          ${SKY_GLSL}
+          uniform vec3 tone; uniform float rim, base, top;
+          varying vec3 vW; varying vec3 vN;
+          void main() {
+            vec3 n = normalize(vN), v = normalize(cameraPosition - vW);
+            vec3 c = tone * (0.6 + 0.55 * (n.y * 0.5 + 0.5) + 0.25 * max(dot(n, vec3(-0.6, 0.2, 0.75)), 0.0)); // sky above, the city's glow on the left
+            float edge = pow(1.0 - max(dot(n, v), 0.0), 2.5);
+            c += vec3(0.75, 0.9, 0.95) * rim * edge * max(dot(n, sun) + 0.45, 0.0); // backlit rim from the sun behind it
+            float k = smoothstep(base, top, vW.y); // the haze swallows it toward its feet
+            gl_FragColor = vec4(mix(sky(-v), c, 0.62 + 0.3 * k), 1.0);
+            #include <tonemapping_fragment>
+            #include <colorspace_fragment>
+          }`,
+      });
+    const P = shade(0x1e2b31, 1.4); // armour plates
+    const D = shade(0x05090b, 0.35); // frame, joints, pistons, barrels
+    // mech space: units (x 76 m), +Z = where it faces, y up from its feet
+    const V = (x, y, z) => new THREE.Vector3(x, y, z);
+    const OCT = new THREE.CylinderGeometry(1, 1, 1, 8).rotateY(Math.PI / 8).scale(1 / Math.cos(Math.PI / 8), 1, 1 / Math.cos(Math.PI / 8));
+    // a chamfered block (an octagonal prism, axis Y): w x h x d
+    const block = (m, w, h, d, x, y, z, rx = 0, ry = 0, rz = 0) => {
+      const o = part(OCT, m, x, y, z, rx, ry, rz);
+      o.scale.set(w / 2, h, d / 2);
+      return o;
+    };
+    // a rod from a to b (radius r, s sides)
+    const rod = (m, a, b, r, s = 8) => {
+      const o = part(new THREE.CylinderGeometry(r, r, 1, s), m);
+      _d.subVectors(b, a);
+      o.scale.y = _d.length();
+      o.position.addVectors(a, b).multiplyScalar(0.5);
+      o.quaternion.setFromUnitVectors(_yUp, _d.normalize());
+      return o;
+    };
+    const disc = (m, r, t, x, y, z, s = 16) => cyl(m, r, r, t, x, y, z, 0, 0, Math.PI / 2, s); // axis X
+    const tube = (m, r, len, x, y, z, s = 12) => cyl(m, r, r, len, x, y, z, Math.PI / 2, 0, 0, s); // axis Z
+    // a claw from the origin along +Z, tapering to its tip, dipping to the ground
+    const claw = (len) => new THREE.CylinderGeometry(0.08, 0.3, len, 4).translate(0, len / 2, 0).rotateX(Math.PI / 2 + 0.12);
+    // a rounded shell: a sphere scaled to (sx, sy, sz) at (x, y, z), tilted rx
+    const SPH = new THREE.SphereGeometry(1, 20, 12);
+    const shell = (m, sx, sy, sz, x, y, z, rx = 0) => {
+      const o = part(SPH, m, x, y, z, rx);
+      o.scale.set(sx, sy, sz);
+      return o;
+    };
+    // a capsule shell from a to b (radius r), flattened across X by f
+    const pod = (m, a, b, r, f = 1) => {
+      const l = a.distanceTo(b);
+      const o = rod(m, a, b, 1);
+      o.geometry = new THREE.CapsuleGeometry(r, Math.max(l - 2 * r, 0.01), 4, 14);
+      o.scale.set(f, 1, 1);
+      return o;
+    };
+    // a rounded slab from a to b: w across X, d across the limb, corner radius r
+    const slab = (m, a, b, w, d, r) => {
+      const o = rod(m, a, b, 1);
+      o.geometry = rbox(w, a.distanceTo(b), d, r);
+      o.scale.set(1, 1, 1);
+      return o;
+    };
+    const legs = [];
+    for (const sx of [1, -1]) {
+      const x = sx * 3.15;
+      // [hip, knee, ankle, foot] in (z, y): the forelegs' knees ahead, the hind legs' hocks behind
+      for (const [H, K, A, F] of [
+        [[2.4, 5.0], [3.1, 2.9], [2.45, 0.95], [2.7, 0.3]],
+        [[-2.5, 5.0], [-1.55, 3.05], [-3.0, 1.05], [-2.75, 0.3]],
+      ]) {
+        const [h, k, an] = [V(x, H[1], H[0]), V(x, K[1], K[0]), V(x, A[1], A[0])];
+        const back = Math.sign(K[0] - A[0]);
+        legs.push(
+          slab(P, h, k, 0.95, 1.9, 0.4), // thigh shell
+          disc(D, 0.72, 1.45, x, K[1], K[0]), // knee
+          disc(P, 0.42, 1.65, x, K[1], K[0], 10),
+          slab(P, k, an, 0.7, 1.0, 0.3), // shin shell
+          rod(D, V(x - sx * 0.05, K[1] + 0.1, K[0] - back * 0.5), V(x - sx * 0.05, A[1] + 0.2, A[0] - back * 0.4), 0.09), // piston
+          disc(D, 0.32, 0.8, x, A[1], A[0], 10), // ankle
+          rod(D, an, V(x, F[1], F[0]), 0.17), // pastern
+          block(D, 0.9, 0.32, 0.9, x, F[1], F[0]), // foot hub
+          rb(P, 0.75, 0.3, 1.1, 0.12, x, F[1] + 0.25, F[0] + 0.1), // its cap
+        );
+        for (const [yaw, len] of [[0.5, 1.2], [0, 1.35], [-0.5, 1.2], [Math.PI, 0.8]]) legs.push(part(claw(len), P, x, F[1] - 0.1, F[0], 0, yaw + sx * 0.12, 0));
       }
+    }
+
+    // the hull: a pill (a lathe around Z, flattened) banded by dark seam rings, under a domed carapace
+    const pill = new THREE.LatheGeometry([[0, -3.9], [1.2, -3.8], [1.9, -3.35], [2.2, -2.5], [2.25, 1.0], [2.1, 2.6], [1.6, 3.5], [0.9, 3.85], [0, 3.95]].map(([r, z]) => new THREE.Vector2(r, z)), 20).rotateX(Math.PI / 2);
+    const body = group(part(pill, P), ...[-1.4, 0.4, 2.2].map((z) => part(new THREE.TorusGeometry(z > 2 ? 2.13 : 2.25, 0.07, 6, 28), D, 0, 0, z)));
+    body.position.y = 5.15;
+    body.scale.y = 0.62;
+    const hull = [
+      body,
+      rb(P, 4.7, 1.3, 6.4, 0.5, 0, 6.2, -0.3), // carapace
+      rb(P, 2.8, 1.8, 1.2, 0.45, 0, 4.9, 3.3, 0.3), // chest
+      ...[1, -1].flatMap((s) => [
+        rb(P, 1.6, 1.9, 2.4, 0.55, s * 2.45, 5.6, 2.3, -0.15, 0, s * 0.12), // shoulder pauldron
+        rb(P, 1.6, 2.0, 2.6, 0.55, s * 2.4, 5.45, -2.45, 0.15, 0, s * 0.12), // haunch
+      ]),
+      ...[-0.9, 0.9].map((x) => tube(D, 0.4, 0.8, x, 5.35, -3.7)), // exhausts
+      // the launcher: a long tube on a cradle, a rounded breech, dark bands, its muzzle forward; an ammunition pod beside it
+      tube(P, 0.8, 4.6, -0.6, 7.55, -0.8, 18),
+      shell(P, 0.8, 0.8, 0.5, -0.6, 7.55, -3.1),
+      ...[1.2, -2.2].map((z) => part(new THREE.TorusGeometry(0.8, 0.13, 6, 20), D, -0.6, 7.55, z)),
+      tube(D, 0.55, 0.4, -0.6, 7.55, 1.6, 14),
+      block(D, 1.0, 1.0, 2.8, -0.6, 6.85, -0.9, Math.PI / 2),
+      pod(P, V(1.25, 7.05, -2.6), V(1.25, 7.05, -0.3), 0.42),
+      rod(D, V(0, 5.4, 3.0), V(0, 6.0, 4.0), 0.4), // VIGIL's neck
+    ];
+
+    // the heads: groups around their pivots, so they can turn. [pivot, eyes [x, y, z, size]...]
+    const vigil = group(
+      rb(P, 1.5, 1.0, 2.0, 0.4, 0, 0.1, 0.7, 0.1), // skull
+      rb(P, 1.0, 0.6, 1.4, 0.25, 0, -0.35, 1.4, 0.1), // muzzle
+      rb(D, 1.2, 0.3, 0.5, 0.12, 0, 0.3, 1.65, -0.5), // visor
+      ...[1, -1].map((s) => rb(D, 0.2, 0.5, 0.8, 0.08, s * 0.78, 0, 0.6)), // cheek vents
+      tube(D, 0.14, 2.2, 0, -0.55, 2.4, 8), // gun barrel
+      tube(D, 0.24, 0.5, 0, -0.55, 3.55, 8), // muzzle brake
+    );
+    // LEGION and COLOSSUS: sleek gun pods on short arms
+    const turret = (s) =>
+      group(
+        block(D, 0.4, 0.7, 0.5, 0, -0.3, 0.3), // arm
+        pod(P, V(0, 0.15, -0.5), V(0, 0.15, 1.55), 0.42, 0.85),
+        tube(D, 0.1, 1.8, 0, 0.05, 2.2, 8), // barrel
+        tube(D, 0.17, 0.35, 0, 0.05, 3.1, 8),
+        shell(D, 0.16, 0.16, 0.16, -s * 0.3, 0.32, 1.2), // sensor
+      );
+    const HEADS = [
+      { g: turret(1), at: V(1.95, 7.0, 1.4), eyes: [[-0.32, 0.36, 1.3, 0.55]] }, // LEGION, the right shoulder
+      { g: vigil, at: V(0, 6.0, 4.0), eyes: [[0.25, 0.32, 1.92, 0.55], [-0.25, 0.32, 1.92, 0.55], [0, 0.38, 1.93, 0.4]] }, // VIGIL, the Eye
+      { g: turret(-1), at: V(-1.95, 7.0, 1.4), eyes: [[0.32, 0.36, 1.3, 0.55]] }, // COLOSSUS, the left shoulder
+    ];
+    const mech = mergeGroup(group(...legs));
+    const torso = mergeGroup(group(...hull)); // shifts its weight over the planted legs
+    mech.add(torso);
+    this.heads = HEADS.map(({ g, at }) => {
+      mergeGroup(g).position.copy(at);
+      torso.add(g);
+      return g;
+    });
+    this.torso = torso;
+    mech.position.copy(HIVE);
+    mech.scale.setScalar(76);
+    mech.rotation.y = Math.atan2(-HIVE.x, -HIVE.z) + 0.7; // three quarters toward the city and STEM-00, its right flank to the camera
+    scene.add(mech);
+    // sensor eyes; their own light fog (the haze is in the shade already)
+    const lights = (this.hiveLights = makePoints(8, true));
+    lights.material.uniforms.fogDensity.value = 0.00028;
+    this.hiveSensors = [];
+    HEADS.forEach(({ g, eyes }, i) => {
+      for (const [x, y, z, size] of eyes) this.hiveSensors.push([g, new THREE.Vector3(x, y, z), lights.put(0, 0, 0, size * 76, VIOLET, 2.6, 4, i * 0.33)]);
     });
     scene.add(lights);
   }
@@ -598,6 +717,7 @@ export class MenuScene {
     this.camera.updateProjectionMatrix();
     this.aspect = aspect;
     this.offset = CAM.offset * Math.min(1, aspect / 1.6); // narrow screens bring STEM-00 toward the centre
+    this.tilt = Math.min(0, aspect - 1.6) * 0.1; // ...and look lower, so CERBERUS rises above the centred logo
     const scale = _size.y / 2 / Math.tan(THREE.MathUtils.degToRad(CAM.fov / 2));
     for (const p of [this.lights, this.smoke, this.hiveLights]) p.material.uniforms.scale.value = scale;
   }
@@ -621,25 +741,39 @@ export class MenuScene {
     const cam = this.camera;
     this.look.lerp(still ? ZERO : this.mouse, 1 - Math.exp(-dt * 2));
     const yaw = CAM.yaw + (still ? 0 : Math.sin(t * 0.05) * 0.02) - this.look.x * 0.02;
-    const pitch = CAM.pitch + (still ? 0 : Math.sin(t * 0.07 + 1) * 0.008) - this.look.y * 0.012;
+    const pitch = CAM.pitch + this.tilt + (still ? 0 : Math.sin(t * 0.07 + 1) * 0.008) - this.look.y * 0.012;
     const dist = CAM.dist + (still ? 0 : Math.sin(t * 0.04) * 0.4);
     const toStem = yaw + this.offset;
     cam.position.set(STEM.x + Math.sin(toStem) * dist + this.look.x * 0.2, CAM.height + (still ? 0 : Math.sin(t * 0.09) * 0.06), STEM.z + Math.cos(toStem) * dist);
     cam.rotation.set(pitch, yaw, 0, 'YXZ');
+    const V = MenuScene.view;
+    if (V) {
+      cam.position.fromArray(V.pos);
+      cam.lookAt(_p.fromArray(V.at));
+    }
 
     // STEM-00: seated, breathing, now and then a slow look along the skyline; the core pulses faintly
     const P = this.pose;
-    P.lookYaw = THREE.MathUtils.clamp(THREE.MathUtils.euclideanModulo(GAZE - FACING + Math.PI, Math.PI * 2) - Math.PI, -0.8, 0.8) + Math.sin(t * 0.11) * 0.12 + Math.sin(t * 0.37) * 0.04;
+    const turn = THREE.MathUtils.euclideanModulo(GAZE - FACING + Math.PI, Math.PI * 2) - Math.PI; // to CERBERUS
+    P.lookYaw = THREE.MathUtils.clamp(turn * 0.75, -0.9, 0.9) + Math.sin(t * 0.11) * 0.1 + Math.sin(t * 0.37) * 0.03;
     this.animator.update(dt, P);
     const B = this.rig.bones;
     const breath = Math.sin(t * 1.5);
     B.Spine1.rotation.x -= breath * 0.014;
     B.Spine2.rotation.x -= breath * 0.02;
+    B.Spine1.rotation.y += turn * 0.12; // the shoulders turn a little with the head
+    B.Spine2.rotation.y += turn * 0.12;
     this.core.emissiveIntensity = 2.6 + Math.sin(t * 0.8) * 0.6;
 
-    // the HiveMind's heads turn, very slowly; their sensors follow
+    // CERBERUS: the heads scan the city, out of step (VIGIL slow and wide, the turrets twitchier); the hull shifts its weight
     const hp = this.hiveLights.geometry.attributes.position;
-    for (let i = 0; i < this.heads.length; i++) this.heads[i].rotation.y = this.heads[i].userData.yaw + Math.sin(t * 0.03 + i * 2.1) * 0.06;
+    const H = this.heads;
+    H[0].rotation.y = Math.sin(t * 0.07) * 0.35 + Math.sin(t * 0.23) * 0.05;
+    H[1].rotation.set(Math.sin(t * 0.05 + 2) * 0.05, Math.sin(t * 0.04) * 0.3, 0, 'YXZ');
+    H[2].rotation.y = Math.sin(t * 0.06 + 1.5) * 0.35 - Math.sin(t * 0.19) * 0.05;
+    const sway = still ? 0 : Math.sin(t * 0.09);
+    this.torso.position.set(sway * 0.06, Math.abs(sway) * -0.04, 0);
+    this.torso.rotation.z = sway * -0.012;
     for (const [h, local, i] of this.hiveSensors) {
       h.updateMatrixWorld(true);
       _p.copy(local).applyMatrix4(h.matrixWorld);

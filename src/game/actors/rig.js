@@ -213,10 +213,12 @@ const LOCK_RELEASE = 0.45; // m: a planted foot this far from its pose (spinning
 // Dormant (powered down: the wake-up cinematic, `s.dormant` 1 slumped .. 0 normal): hips drop (the feet IK bends the knees),
 // spine and head fold forward, arms hang. Radians per bone, added on top of the pose.
 const DORMANT = { drop: 0.09, spine: 0.12, neck: 0.35, head: 0.4, arm: 0.08, armOut: 0.1, fore: -0.15 };
-// Seated (`s.seated` 0..1; the main menu: STEM-00 on a roof edge, menu-scene.js): the root stays at the feet's floor, the hips
-// drop onto a ledge at that floor, thighs forward over the edge, shins hanging, a slight hunch with the head raised, forearms
-// on the thighs. Radians per bone ([thigh, knee] per leg); unarmed (the owner lays the gun down). Applied last, over everything.
-export const SEATED = { drop: 0.84, back: -0.04, spine: 0.13, neck: -0.34, head: -0.12, legs: { Left: [-1.38, 1.2, 0.1], Right: [-1.52, 1.62, -0.06] }, arm: [-0.62, 0.0, 0.16], fore: -1.05 };
+// Seated (`s.seated` 0..1; the main menu: STEM-00 on a roof edge, menu-scene.js), a tired human on a ledge: the root stays at the
+// ledge top, the hips drop until the seat and the thighs' armour rest on it, thighs level, shins hanging (one a little forward, one
+// back), toes down; the back rounds forward, the neck and head lift to look out; forearms forward, hands resting over the
+// knees. Radians per bone ([thigh, knee, splay] per leg; arm [pitch, twist in, out]; forearm [flex, 0, 0]). The owner places the
+// root so the backs of the knees sit at the edge (knees ~0.4 m ahead of the root). Unarmed. Applied last, over everything.
+export const SEATED = { drop: 0.79, spine: 0.2, neck: -0.42, head: -0.22, foot: 0.35, legs: { Left: [-1.5, 1.45, 0.08], Right: [-1.57, 1.76, -0.04] }, arm: [-0.75, -0.15, -0.1], fore: [-1.3, 0, 0] };
 
 export class Animator {
   // ground(x, z, maxY) -> floor height; enables feet IK
@@ -497,7 +499,6 @@ export class Animator {
     const B = this.rig.bones;
     const S = SEATED;
     B.Hips.position.y -= S.drop * w;
-    B.Hips.position.z += S.back * w;
     for (const b of [B.Spine, B.Spine1, B.Spine2]) b.rotation.x += S.spine * w;
     B.Neck.rotation.x += S.neck * w;
     B.Head.rotation.x += S.head * w;
@@ -506,10 +507,10 @@ export class Animator {
       const [thigh, knee, splay] = S.legs[side];
       blendTo(B[side + 'UpLeg'], thigh, 0, splay, w);
       blendTo(B[side + 'Leg'], knee, 0, 0, w);
-      blendTo(B[side + 'Foot'], -0.2, 0, 0, w);
+      blendTo(B[side + 'Foot'], S.foot, 0, 0, w);
       blendTo(B[side + 'Shoulder'], 0, 0, 0, w);
-      blendTo(B[side + 'Arm'], S.arm[0], S.arm[1], S.arm[2] * out, w);
-      blendTo(B[side + 'ForeArm'], S.fore, 0, 0, w);
+      blendTo(B[side + 'Arm'], S.arm[0], S.arm[1] * out, S.arm[2] * out, w);
+      blendTo(B[side + 'ForeArm'], S.fore[0], S.fore[1] * out, S.fore[2] * out, w);
       blendTo(B[side + 'Hand'], 0.2, 0, 0, w);
     }
     this.#refresh();

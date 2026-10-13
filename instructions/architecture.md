@@ -34,7 +34,7 @@ src/
             enemies.js (system: builds enemy.* / boss.* pieces, bolts, stands, target cache, squad alerts, `all` = every enemy)
     ai/     cover.js (cover spots from cover boxes, protection test, spot choice + detour route)
     combat/ guns.js (gun table), weapon.js (controller, hitscan, aim probe), ballistics.js (pure shot math)
-    view/   camera.js, fx.js, hud.js, log.js (STEM-00 log lines, `game.log`), boot.js (boot intro overlay + input lock, `game.boot`), cinematic.js (intro cinematic: scripted camera shots, STEM-00's wake, `game.cinematic`), summary.js (mission complete screen, `game.summary`; stats in `game/run-stats.js`, `game.stats`), audio.js (SFX, music; `Audio.ui(kind)` = menu UI sounds, see `ui:sfx`), juice.js, post.js, shell.js (DOM shell: main menu / pause menu and sub-pages, pointer lock, scene buttons, keyboard / pad navigation, progress save for CONTINUE), menu-scene.js (the title's own 3D set, `MenuScene`)   (presentation only)
+    view/   camera.js, fx.js, hud.js, log.js (STEM-00 log lines, `game.log`), boot.js (boot intro overlay + input lock, `game.boot`), cinematic.js (intro cinematic: scripted camera shots, STEM-00's wake, `game.cinematic`), summary.js (mission complete screen, `game.summary`; stats in `game/run-stats.js`, `game.stats`), audio.js (SFX, music; `Audio.ui(kind)` = menu UI sounds, see `ui:sfx`; `Audio.title(on)` = title music, from Shell), juice.js, post.js, shell.js (DOM shell: main menu / pause menu and sub-pages, pointer lock, scene buttons, keyboard / pad navigation, progress save for CONTINUE), menu-scene.js (the title's own 3D set, `MenuScene`)   (presentation only)
 ```
 
 `src/levels/` holds level files (plain JSON, see `level.md`); `scenes.js` lists them, `Game.loadScene(name)` hands one to the systems.
@@ -102,10 +102,10 @@ DEVELOPMENT pick call `game.loadScene`, QUIT TO MAIN MENU calls `game.unloadScen
 (set in index.html for the first paint, toggled by the shell) hides every game, editor and Gym panel; the editor ignores input
 while paused. Backdrop: `view/menu-scene.js` (`MenuScene`), built on the first title and drawn by `Shell.update` with the game's
 renderer only while idle, so it stops the moment play starts and resumes on QUIT TO MAIN MENU (kept, not disposed). It is a fixed
-set, not a level: STEM-00 (Rig + soldier parts, `SEATED` pose in rig.js) on a roof corner, a procedural instanced skyline (weathered
-`panelTexture`, shader windows, about half ruined), Spire Cathedrals, the HiveMind as a sky-shaded silhouette with breathing violet
-sensors, drones from `droneLook` (drone.js) instanced per material, roof dressing from the prop builders (props.js), haze veils,
-smoke, searchlights. About 45 draws and 375k triangles; prefers-reduced-motion stops the camera drift and slows the rest. Menu sounds: `audio.ui(kind)`.
+set, not a level: STEM-00 (Rig + soldier parts, `SEATED` pose in rig.js) seated on a roof edge, a procedural instanced skyline (weathered
+`panelTexture`, shader windows, about half ruined), Spire Cathedrals, CERBERUS (a quadruped war mech standing on the horizon, three heads = a sensor
+head and two shoulder gun pods, its own haze/rim shader, breathing violet eyes; towers in its sightline are capped), drones from `droneLook` (drone.js) instanced per material, roof dressing from the prop builders (props.js), haze veils,
+smoke, searchlights. About 51 draws and 375k triangles; prefers-reduced-motion stops the camera drift and slows the rest. Menu sounds: `audio.ui(kind)`.
 
 Modes: a system may declare a `group` (`engine.add({ group: 'play' })`); the engine runs it only while `engine.mode` equals it
 (`engine.setMode(name)`, default `'play'`), no group = always. `player`, `weapon`, `playerPose`, `encounter`, `pickups` and `camera`

@@ -162,6 +162,11 @@ const UI_GAP = { move: 0.04, slider: 0.03 };
 for (const [path, url] of Object.entries(import.meta.glob('../../assets/sfx/ui-*.mp3', { eager: true, query: '?url', import: 'default' }))) {
   SAMPLES[path.slice(path.lastIndexOf('/') + 1, -4)] = [url, 0.6, 0.03]; // id 'ui-<kind>'
 }
+// Title music (title(on)): `menu-music.mp3` when present (globbed: no file, no music), looped while the title is up.
+const MENU = { gain: 0.45, fadeIn: 1.5, fadeOut: 0.6 };
+for (const url of Object.values(import.meta.glob('../../assets/sfx/menu-music.mp3', { eager: true, query: '?url', import: 'default' }))) {
+  SAMPLES.menuMusic = [url, MENU.gain, 0];
+}
 
 // Sample bytes. The single-file artifact build inlines samples as base64 data: URLs, which its page's content
 // policy won't fetch, so those are decoded here instead.
@@ -196,6 +201,8 @@ export class Audio {
     this.track = null; // id of the music track (fading) in, null when none
     this.tracks = {}; // id -> its looping source, started on first use and kept running (silent when off)
     this.ambientLoop = null;
+    this.titleOn = false; // the title is up (title())
+    this.menuLoop = null; // the title music's looping source, started once decoded
     this.beds = {}; // id -> looping source of a bed (bayHum, consoleLoop, droneLoop), started once decoded
     this.bedLevel = {}; // id -> the 0..1 level last sent to its gain
     this.cinema = false; // an intro cinematic ran this run: the boot's wake cues are not scheduled
@@ -330,7 +337,10 @@ export class Audio {
       for (const url of [urls].flat()) {
         bytes(url)
           .then((b) => this.ctx.decodeAudioData(b))
-          .then((buf) => (this.samples[id] ??= []).push(buf))
+          .then((buf) => {
+            (this.samples[id] ??= []).push(buf);
+            if (id === 'menuMusic') this.title(this.titleOn); // the title was up before it decoded
+          })
           .catch(() => {}); // keep the synth sound
       }
     }
@@ -656,6 +666,21 @@ export class Audio {
     if (!src || Math.abs(level - (this.bedLevel[id] ?? -1)) < 0.01) return;
     this.bedLevel[id] = level;
     src.gain.gain.setTargetAtTime(SAMPLES[id][1] * level, this.ctx.currentTime, BED_FADE);
+  }
+
+  // The title is up (Shell, on) or play starts (off): the menu music fades in / out; under the title the game's ambience,
+  // music and beds are silenced, and mood() fades them back in once play resumes (it does not run while the engine idles).
+  title(on) {
+    this.titleOn = on;
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    if (on) {
+      this.menuLoop ??= this.#loop('menuMusic', 0);
+      for (const src of [this.ambientLoop, ...Object.values(this.tracks), ...Object.values(this.beds)]) src?.gain.gain.setTargetAtTime(0, t, 0.5);
+      this.track = undefined; // forces mood()'s music / ambience fade
+      this.bedLevel = {}; // and the beds'
+    }
+    this.menuLoop?.gain.gain.setTargetAtTime(on ? MENU.gain : 0, t, on ? MENU.fadeIn : MENU.fadeOut);
   }
 
   #loop(id, volume) {

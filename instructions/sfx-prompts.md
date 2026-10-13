@@ -61,6 +61,17 @@ out. All are peak-normalised to -3 dBFS, except `move` and `slider` at -6 dBFS.
 | `ui-warn.mp3` | overwrite-progress confirm | 0.5 s | A short two-tone warning alert on a grim military console, a high then lower muted buzzy klaxon tone, urgent but restrained, close, dry | recorded |
 
 
+## Title music
+
+`menu-music.mp3` (not recorded yet): looped while the title and its sub-pages are up (`Audio.title(on)`, from
+`Shell`), fades in over 1.5 s, out in 0.6 s when play starts; the game's ambience, music and beds are silent under it.
+Globbed, so no code change when the file lands; until then the title is silent (UI sounds still play). Same rules as
+the other music: instrumental, no intro / outro so it loops cleanly; trim to a whole number of bars.
+
+| File | Use | Prompt |
+|---|---|---|
+| `menu-music.mp3` | title screen loop | ElevenLabs Music v2.5, 90 s, instrumental: Slow, vast and ominous dark sci-fi ambient score for the title screen of a grim industrial robot war game, 70 BPM, a lone mechanical soldier watching a ruined machine city at dusk under a colossal three-headed war machine. Deep sustained analog synth drones and sub-bass swells, distant metallic resonances like wind through steel girders, a slow mournful low cello-like synth melody of a few notes, sparse heavy industrial percussion hits far away, faint radio static and servo textures, melancholic and lonely but powerful, restrained, no drums groove, no vocals, constant intensity with no intro and no outro so it loops seamlessly. |
+
 ## Terminal typing (boot intro, STEM-00 log)
 
 Synthesized (`Audio.type`, event `ui:type`). Wire as `SAMPLES` entries (`typeKey`, `typeEnd`), keep the synth as fallback. Played at most every 25 ms, pitch and volume varied.

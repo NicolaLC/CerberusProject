@@ -160,7 +160,7 @@ html body.title #overlay { opacity: 1; } /* index.html keeps it transparent unti
 #overlay .credits dt { margin-top: 12px; font-size: 10px; letter-spacing: 4px; color: #c9a23a; text-transform: uppercase; }
 #overlay .credits dd { padding-left: 12px; border-left: 1px solid rgba(234, 246, 250, 0.12); }
 /* the title (wide screens): logo, items and service record in a left column, the backdrop's STEM-00 and city on the right.
-   Items read as stencilled facility panels: left-set caps, a stencil serial, an ochre tab on the selected one. */
+   Items read as stencilled facility panels: left-set caps, a stencil serial (ochre on the selected one). */
 @media (min-width: 701px) {
   #overlay[data-page='title'] { align-items: flex-start; padding-left: max(40px, 7vw); }
   #overlay[data-page='title'] .brand { text-align: left; padding: 0; }
@@ -169,7 +169,7 @@ html body.title #overlay { opacity: 1; } /* index.html keeps it transparent unti
   #overlay[data-page='title'] .item { width: min(380px, calc(100vw - 32px)); height: 50px; padding: 0 22px; text-align: left; counter-increment: item; }
   #overlay[data-page='title'] .item::after, #overlay[data-page='title'] .item:focus::after { content: counter(item, decimal-leading-zero); position: absolute; top: 50%; right: 16px; width: auto; height: auto; margin-top: -0.5em; border: 0; background: none; transform: none; font: 11px / 1 ui-monospace, Consolas, monospace; letter-spacing: 1px; color: rgba(234, 246, 250, 0.3); }
   #overlay[data-page='title'] .item:focus::after { color: #c9a23a; }
-  #overlay[data-page='title'] .item:focus::before { left: -1px; top: -1px; bottom: -1px; width: 4px; height: auto; margin: 0; border: 0; background: #c9a23a; transform: none; }
+  #overlay[data-page='title'] .item:focus::before { content: none; }
   #overlay[data-page='title'] .info { display: block; position: static; width: min(380px, calc(100vw - 32px)); margin-top: 18px; text-align: left; }
 }
 @media (min-width: 701px) and (max-height: 640px) { #overlay[data-page='title'] .info { display: none; } }

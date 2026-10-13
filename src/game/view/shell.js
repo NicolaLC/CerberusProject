@@ -205,6 +205,7 @@ export class Shell {
     const { engine } = this.host;
     if (on) this.backdrop ??= new MenuScene(engine.renderer);
     engine.idle = on;
+    this.host.audio.title?.(on);
     this.overlay.classList.toggle('idle', on);
     document.body.classList.toggle('title', on);
   }
