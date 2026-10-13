@@ -189,6 +189,8 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
   Legs have 160 HP; a broken leg falls off and the body tilts toward the gap; it slows 12% per lost leg.
 - Every second leg lost (and the 5th) collapses it for 7 s (forever with none left): the shutters open and the
   core (900 HP, weak ×3) rises 1.2 m out of the hatch, 30% bigger (`coreRise`), so it can be shot from the ground. Destroying the core kills it.
+  One collapse takes at most 34% of the core (`coreBite`, 306 HP): once spent the core turns armored and the mech stands up
+  0.6 s later, so a kill needs three collapses (5 legs); with no legs left there is no cap.
 - Attacks: cannon bursts (0.7 s eye charge, 6 bolts × 9 dmg, cooldown 2.2-3.4 s, needs line of sight);
   plasma mortar every 6-8.5 s (×1.8 faster while the player is in cover) lobbed at the player's position with a ground
   ring telegraph, 3.6 m blast, 34 dmg; stomp when the player is within 6.5 m (0.75 s rear-up, 7 m blast, 24 dmg).
