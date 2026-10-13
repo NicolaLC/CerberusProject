@@ -34,7 +34,7 @@ src/
             enemies.js (system: builds enemy.* / boss.* pieces, bolts, stands, target cache, squad alerts, `all` = every enemy)
     ai/     cover.js (cover spots from cover boxes, protection test, spot choice + detour route)
     combat/ guns.js (gun table), weapon.js (controller, hitscan, aim probe), ballistics.js (pure shot math)
-    view/   camera.js, fx.js, hud.js, log.js (STEM-00 log lines, `game.log`), boot.js (boot intro overlay + input lock, `game.boot`), audio.js, juice.js, post.js, shell.js (DOM shell: start/pause panel, pointer lock, scene buttons, pad navigation)   (presentation only)
+    view/   camera.js, fx.js, hud.js, log.js (STEM-00 log lines, `game.log`), boot.js (boot intro overlay + input lock, `game.boot`), summary.js (mission complete screen, `game.summary`; stats in `game/run-stats.js`, `game.stats`), audio.js, juice.js, post.js, shell.js (DOM shell: start/pause panel, pointer lock, scene buttons, pad navigation)   (presentation only)
 ```
 
 `src/levels/` holds level files (plain JSON, see `level.md`); `scenes.js` lists them, `Game.loadScene(name)` hands one to the systems.
@@ -128,7 +128,7 @@ Payload objects marked * are reused: copy what you keep. `src/types.js` holds JS
 | `log:say` | { text, priority } (a `log.line` piece fired, after its delay; Encounter) | log (`Log.say`) |
 | `intro:start` | { lines, duration, skippable } (a played level's `intro.boot`, first play frame; Encounter) | boot (`Boot.start`) |
 | `intro:done` | { skipped } (the boot intro ended or was skipped; Boot) | encounter (`log.line` `on: intro:done`) |
-| `mission:complete` / `mission:failed` | { total } / { index, id, reason } | hud toast |
+| `mission:complete` / `mission:failed` | { total } / { index, id, reason } | hud toast, run stats (freeze), summary (mission complete screen) |
 | `bolt:fired` / `bolt:impact` | position / *{ point, normal } | audio / fx |
 | `pickup:collected` / `pickup:full` | label ('LIGHT AMMO +n AR ...') / – (all guns of the class full) | hud toast, audio |
 | `weapon:charge` | true (railgun charge started) / false (cancelled) | audio (the HUD ring reads `weapon.charging`) |

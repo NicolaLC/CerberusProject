@@ -15,6 +15,7 @@ import { FX } from './view/fx.js';
 import { Hud } from './view/hud.js';
 import { Log } from './view/log.js';
 import { Boot } from './view/boot.js';
+import { Summary } from './view/summary.js';
 import { Audio } from './view/audio.js';
 import { Post } from './view/post.js';
 import { Juice } from './view/juice.js';
@@ -75,6 +76,23 @@ export class Game {
     applyQuality(settings.quality, { engine, post, world });
     const juice = new Juice({ camRig, post, fx }).listen(events);
     const stats = new RunStats().listen(events);
+    // the mission complete screen: it frees the pointer for its button, and RESTART reloads the scene (or restarts the Workshop's play)
+    const summary = new Summary({
+      stats,
+      juice,
+      controls,
+      title: () => this.level?.title ?? this.sceneName ?? '',
+      release: () => {
+        this.padPlay = true; // keep running without the lock
+        if (input.locked) document.exitPointerLock();
+      },
+      restart: () => {
+        if (this.tool?.playing) this.tool.restart();
+        else this.loadScene(this.sceneName);
+        this.padPlay = false;
+        input.lock();
+      },
+    }).listen(events);
     events.on('puppet:down', (p) => {
       pickups.drop(p.pos);
       if (p.dropGun) pickups.dropGun(p.pos, p.dropGun, weapon.owned); // enemy params dropGun / dropAmmo / dropOnce
@@ -105,7 +123,7 @@ export class Game {
       if (near > 0) input.rumble(near * 0.35, 0, 70);
     });
     addEventListener('pointerdown', () => audio.init()); // resumes audio started from a controller
-    Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, mission, weapon, fx, hud, log, boot, audio, post, juice, stats, settings });
+    Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, mission, weapon, fx, hud, log, boot, audio, post, juice, stats, summary, settings });
 
     // skeleton debug overlay (H): the player's helper is permanent, the enemies' come and go with the level
     this.skeletons = false;
@@ -220,6 +238,8 @@ export class Game {
       group: 'play',
       update: (dt) => boot.update(dt, boot.active && (controls.actions.pressed('fire') || controls.actions.pressed('jump') || controls.actions.pressed('interact'))),
     });
+    // mission complete screen: real time (the game is in slow motion behind it); a pad A press restarts, keys are its own listener
+    engine.add({ name: 'summary', phase: 'present', update: (dt, e) => summary.update(e.realDt, summary.open && controls.pressed('restart')) });
     engine.add({
       name: 'audio',
       phase: 'present',
@@ -288,7 +308,7 @@ export class Game {
   // the level the systems were just loaded with (loadScene, and the Workshop's play in place).
   // `spawn` defaults to the level's own (levelSpawn: a `marker.spawn` piece, else `level.spawn`).
   resetRun(level, spawn = levelSpawn(level)) {
-    const { player, camRig, weapon, fx, hud, log, boot, juice, stats } = this;
+    const { player, camRig, weapon, fx, hud, log, boot, juice, stats, summary } = this;
     player.place(spawn);
     camRig.reset(player.facing);
     weapon.reset(level.loadout);
@@ -298,6 +318,7 @@ export class Game {
     boot.reset();
     juice.reset();
     stats.reset();
+    summary.reset();
   }
 
   // Skeleton debug helpers of the enemies that exist now (H shows them); dropHelpers frees them (before the enemies go).

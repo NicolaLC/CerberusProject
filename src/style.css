@@ -123,6 +123,22 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #boot .lines div.cur::after { content: '_'; animation: log-cursor 1s steps(1) infinite; }
 #boot .hive { color: #c04bff; text-shadow: 0 0 8px #ff3dcb, 0 0 2px #ff3dcb; animation: boot-flicker 0.9s steps(1) infinite; }
 @keyframes boot-flicker { 0% { opacity: 1; } 12% { opacity: 0.25; } 24% { opacity: 1; } 51% { opacity: 0.6; } 58% { opacity: 1; } 83% { opacity: 0.2; } 90% { opacity: 1; } }
+/* mission complete screen (view/summary.js): STEM-00's terminal, blue-black with scanlines, monospace; amber for STEM-00's light, cold white figures, no red */
+#summary { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(11, 17, 24, 0.78), rgba(5, 8, 12, 0.94)); font: 15px ui-monospace, Consolas, 'DejaVu Sans Mono', monospace; letter-spacing: 1px; color: #eaf6fa; animation: summary-in 0.6s ease-out both; }
+#summary[hidden] { display: none; }
+#summary .scan { position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0) 2px, rgba(0, 0, 0, 0.4) 3px, rgba(0, 0, 0, 0.4) 4px); }
+#summary .panel { position: relative; width: min(560px, calc(100vw - 32px)); padding: 28px 34px; background: rgba(11, 17, 24, 0.82); border: 1px solid rgba(255, 179, 71, 0.35); box-shadow: 0 0 40px rgba(255, 179, 71, 0.08); }
+#summary .head { font-size: 20px; letter-spacing: 5px; color: #ffb347; text-shadow: 0 0 8px rgba(255, 179, 71, 0.45); }
+#summary .sub { margin: 6px 0 22px; font-size: 12px; letter-spacing: 4px; color: rgba(234, 246, 250, 0.55); }
+#summary .row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; opacity: 0; animation: summary-row 0.25s steps(3) both; animation-delay: calc(0.5s + var(--i) * 0.18s); }
+#summary .k { font-size: 12px; letter-spacing: 3px; color: rgba(234, 246, 250, 0.7); white-space: nowrap; }
+#summary .dots { flex: 1; min-width: 12px; border-bottom: 1px dotted rgba(234, 246, 250, 0.25); transform: translateY(-3px); }
+#summary .v { font-size: 17px; color: #eaf6fa; white-space: nowrap; text-shadow: 0 0 6px rgba(234, 246, 250, 0.35); }
+#summary button { display: block; width: 100%; margin-top: 26px; padding: 11px 0; font: inherit; font-size: 14px; letter-spacing: 6px; color: #ffb347; background: rgba(255, 179, 71, 0.08); border: 1px solid rgba(255, 179, 71, 0.55); cursor: pointer; }
+#summary button:hover, #summary button:focus-visible { color: #0b1118; background: #ffb347; outline: none; }
+#summary .hint { margin-top: 8px; text-align: center; font-size: 11px; letter-spacing: 3px; color: rgba(234, 246, 250, 0.4); }
+@keyframes summary-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes summary-row { from { opacity: 0; } to { opacity: 1; } }
 #boot .skip { position: absolute; right: 24px; top: 20px; font-size: 12px; letter-spacing: 3px; color: rgba(234, 246, 250, 0.5); text-transform: uppercase; }
 #overlay .settings { display: grid; gap: 10px; margin-bottom: 18px; font: 12px var(--font-main); }
 #overlay .row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
