@@ -58,7 +58,13 @@ const r = await p.evaluate(() => {
   player.pos.set(4, 0, -6);
   fired = 0;
   step(8);
-  out.inCover = squad.map((t) => !!t.spot && t.state !== 'move' && t.pos.distanceTo(t.spot.pos) < 0.3 && cover.protects(t.spot, player.pos));
+  // each one is seen behind its cover at some frame: a single snapshot can catch it stepped out to peek or fire (random timings)
+  const hid = (t) => !!t.spot && t.state !== 'move' && t.pos.distanceTo(t.spot.pos) < 0.3 && cover.protects(t.spot, player.pos);
+  out.inCover = squad.map(() => false);
+  for (let i = 0; i < 360; i++) {
+    squad.forEach((t, k) => (out.inCover[k] ||= hid(t)));
+    step(1 / 60);
+  }
   out.squadFired = fired;
   const before = squad.map((t) => t.spot);
   player.pos.set(4, 0, -34); // walk around them
