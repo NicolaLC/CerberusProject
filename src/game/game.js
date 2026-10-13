@@ -73,7 +73,7 @@ export class Game {
     const log = new Log().listen(events);
     const audio = new Audio(weapon, camera, world, enemies).listen(events);
     const post = new Post(renderer, scene, camera, events);
-    const boot = new Boot({ controls, post }).listen(events);
+    const boot = new Boot({ controls, post, camRig }).listen(events);
     const cinematic = new Cinematic({ camRig, controls, post, player }).listen(events);
     // No HUD while the intro plays: from the cinematic until control returns (the boot it hands over to, or its own end).
     const hudEl = document.getElementById('hud');
@@ -220,8 +220,8 @@ export class Game {
         world.update(engine.time, camera.position); // the light pool picks the lights nearest the camera
         world.setScheme(controls.scheme);
         world.updateSun(this.editing ? camera.position : player.pos); // the editor's shadow window follows its camera
-        // hide the player model when the camera is pushed into it
-        player.view.root.visible = !this.editing && (!!camRig.script || camera.position.distanceTo(camRig.pivot) > 0.45);
+        // hide the player model when the camera is pushed into it or held at the eye (the boot intro's POV hold)
+        player.view.root.visible = !this.editing && (!!camRig.script || (camRig.povW < camRig.t.pov.hide && camera.position.distanceTo(camRig.pivot) > 0.45));
       },
     });
     engine.add({

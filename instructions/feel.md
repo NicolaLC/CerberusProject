@@ -15,6 +15,7 @@ All of it reacts to gameplay events (see the events table in architecture.md); g
   pulled against it yourself (details in gameplay.md, Gunplay). The gun model kicks back and climbs (`kick`).
 - Strafe roll, head bob (walk 0.015, sprint 0.05), landing/cover dip spring (`dip()`).
 - Cinematic override (`camRig.script` { pos, look, fov }, set by view/cinematic.js): the camera sits at `pos` looking at `look`; only the trauma shake applies; the gameplay state is untouched, the follow snaps back when it clears.
+- POV hold (`camRig.holdPov(p)`, `hold`, `povW`; the boot intro's `pov`, workshop.md "Boot intro"): weight 1 = camera at the eye (head pivot + `TUNING.pov.eye` forward), 0 = the normal rig; the camera is lerped between the eye and the collision-capped rig position, so the pull-back never crosses a wall. Released by distance / timeout, smoothstep over `blend`; the model is hidden while the weight is above `TUNING.pov.hide` (0.6). No hold: one null check per frame.
 - Boss lock-on (`camRig.focus`, set in game.js while the boss is awake, alive and within 40 m): when the player
   isn't steering (no look input for 0.35-0.9 s, eased) and isn't aiming, the camera turns toward the boss
   (yaw rate 3.5, pitch 2.5, pitch clamped) and pulls back +1.1 m / +5° FOV to fit it. Looking around overrides it,

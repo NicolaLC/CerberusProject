@@ -19,7 +19,7 @@ import { GUNS } from '../combat/guns.js';
 //  log.line           a STEM-00 log line (#40, instructions/narrative.md): params { text, on, priority? ('normal'), once? (true), delay? (s, 0) }.
 //                     When `on` happens (LOG_ON below) it emits `log:say` { text, priority } after `delay`; the Log view (view/log.js) shows it.
 //                     Never in a fight: a fired line waits until STEM-00 has been out of combat for TUNING.calm s, `delay` counts from then.
-//  intro.boot         the boot intro (#13): params { lines: [diagnostic strings], duration? (s, 12, max 20), skippable? (true), after? (an `on` form, 'start') }. When `after` happens (the first play frame by default)
+//  intro.boot         the boot intro (#13): params { lines: [diagnostic strings], duration? (s, 12, max 20), skippable? (true), after? (an `on` form, 'start'), pov? (false: true | { release, timeout, blend }, first-person hold, CameraRig.holdPov) }. When `after` happens (the first play frame by default)
 //                     it emits `intro:start` { lines, duration, skippable }; the Boot view (view/boot.js) covers the screen, locks the input and
 //                     emits `intro:done` { skipped } when it ends. The first one in the file plays. Inert in the editor and the Library (gizmo only).
 //  intro.cinematic    the intro cinematic (STEM-00 wakes up): params { shots: [{ from, to?, look, lookTo?, time, ease?, fov?, shake? }], wake? { at, rise, shake },
@@ -31,7 +31,7 @@ import { GUNS } from '../combat/guns.js';
 //                     and pulses it (world.setAlarm), Audio loops a synthesized siren. Ends at `off`, after `duration` s, or when the level unloads (`alarm:off` / `alarm:clear`).
 //                     Inert in the editor and the Library (gizmo: a beacon on a post).
 // Events out: `trigger:fired` { id, event }, `checkpoint:reached` { id, pos, yaw }, `group:wake` { group } (Enemies),
-// `group:spawn` { group, count }, `gate:open` { on } (a `kit.gate` starts opening), `log:say` { text, priority, voice }, `alarm:on` { id, color, strength, siren }, `alarm:off` { id }, `alarm:clear`, `intro:start` { lines, duration, skippable }, `cinematic:start` { shots, wake, skippable }. Events in (the mission, mission.js; tests): `encounter:wake` group, `encounter:spawn` group.
+// `group:spawn` { group, count }, `gate:open` { on } (a `kit.gate` starts opening), `log:say` { text, priority, voice }, `alarm:on` { id, color, strength, siren }, `alarm:off` { id }, `alarm:clear`, `intro:start` { lines, duration, skippable, pov }, `cinematic:start` { shots, wake, skippable }. Events in (the mission, mission.js; tests): `encounter:wake` group, `encounter:spawn` group.
 
 export const TUNING = {
   checkpointRadius: 2, // m, horizontal reach of a checkpoint
@@ -123,6 +123,11 @@ export function introBootProblem(p) {
   if (!Array.isArray(p.lines) || !p.lines.length || p.lines.some((l) => typeof l !== 'string' || !l.trim())) return 'lines must be a non-empty list of non-empty strings';
   if (p.duration != null && !(typeof p.duration === 'number' && p.duration > 0 && p.duration <= INTRO.max)) return `duration must be a number above 0, at most ${INTRO.max} (seconds)`;
   if (p.skippable != null && typeof p.skippable !== 'boolean') return 'skippable must be true or false';
+  const v = p.pov;
+  if (v != null && typeof v !== 'boolean') {
+    if (typeof v !== 'object' || Array.isArray(v)) return 'pov must be true, false or { release?, timeout?, blend? }';
+    for (const k of ['release', 'timeout', 'blend']) if (v[k] != null && !(typeof v[k] === 'number' && v[k] > 0)) return `pov.${k} must be a number above 0`;
+  }
   if (p.after != null) return onProblem(p.after, 'after');
   return null;
 }
@@ -185,7 +190,7 @@ export const ENCOUNTER_PIECES = {
   'intro.boot': {
     example: { params: { lines: ['> STEM-00 BOOT SEQUENCE', '> OPTICS: ONLINE', 'HIVEMIND LINK: LOST'], duration: INTRO.duration, skippable: true } },
     label: `boot intro at play start: typed diagnostics, fade in; locks input (default ${INTRO.duration} s, max ${INTRO.max})`,
-    fields: [{ key: 'lines', type: 'list', sep: '|' }, { key: 'duration', type: 'number', optional: true, min: 0.1 }, { key: 'skippable', type: 'bool', def: true }, { key: 'after', type: 'text', optional: true }],
+    fields: [{ key: 'lines', type: 'list', sep: '|' }, { key: 'duration', type: 'number', optional: true, min: 0.1 }, { key: 'skippable', type: 'bool', def: true }, { key: 'after', type: 'text', optional: true }, { key: 'pov', type: 'bool', def: false }],
     check: (p) => introBootProblem(p),
     build: (sys, d) => sys.add('intro', d),
   },
@@ -459,7 +464,7 @@ export class Encounter {
 
   #introStart(rec) {
     const p = rec.params;
-    this.events.emit('intro:start', { lines: p.lines.slice(), duration: p.duration ?? INTRO.duration, skippable: p.skippable ?? true });
+    this.events.emit('intro:start', { lines: p.lines.slice(), duration: p.duration ?? INTRO.duration, skippable: p.skippable ?? true, pov: p.pov || null });
   }
 
   // env.alarm: start / stop the queued alarms and run the `duration` timers.

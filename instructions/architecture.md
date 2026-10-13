@@ -127,7 +127,7 @@ Payload objects marked * are reused: copy what you keep. `src/types.js` holds JS
 | `mission:objective` / `mission:objective:done` | { index, total, id, kind, text } (fresh object) | hud toast (done) |
 | `gate:open` | { on } (a `kit.gate` waiting for that `on` key started opening; Encounter, via `world.react`) | – (no listener yet) |
 | `log:say` | { text, priority } (a `log.line` piece fired, after its delay; Encounter) | log (`Log.say`) |
-| `intro:start` | { lines, duration, skippable } (a played level's `intro.boot`, first play frame; Encounter) | boot (`Boot.start`) |
+| `intro:start` | { lines, duration, skippable, pov } (a played level's `intro.boot`, first play frame; Encounter) | boot (`Boot.start`) |
 | `intro:done` | { skipped } (the boot intro ended or was skipped; Boot) | encounter (`log.line` `on: intro:done`) |
 | `cinematic:start` | { shots, wake, skippable } (a played level's `intro.cinematic`, first play frame; Encounter) | cinematic (`Cinematic.start`) |
 | `cinematic:wake` | – (STEM-00's power surge at `wake.at`; emitted at the end instead if the cinematic is skipped before it; Cinematic) | encounter (`on: cinematic:wake`: a `prop.cradle` `releaseOn`, log lines, gates, alarms) |

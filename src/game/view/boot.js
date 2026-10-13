@@ -6,7 +6,7 @@ import { loadJSON, saveJSON } from '../../engine/storage.js';
 // Presentation plus the input lock: while `active`, `controls.locked` is set (controls.js); when it ends, `controls.ease`
 // ramps 0 -> 1 over TUNING.ease s so move and look return smoothly (the camera never snaps). Ends emit `intro:done` { skipped }.
 //
-// Started by the `intro:start` event { lines, duration, skippable } (Encounter, first play frame, after Game.resetRun) and
+// Started by the `intro:start` event { lines, duration, skippable, pov } (Encounter, first play frame, after Game.resetRun) and
 // updated in the `present` phase with the game's scaled dt, so pause freezes it and headless stepping drives it.
 // Skip: only when `skippable` and the intro was seen once before (localStorage `cerberus.introSeen`); the game passes the
 // press (fire / jump / interact / pad A) to `update`. The flag is set when an intro completes or is skipped.
@@ -28,8 +28,8 @@ export const STORAGE_KEY = 'cerberus.introSeen';
 export const HIVE = 'HIVEMIND LINK: LOST';
 
 export class Boot {
-  constructor({ controls, post }) {
-    Object.assign(this, { controls, post });
+  constructor({ controls, post, camRig = null }) {
+    Object.assign(this, { controls, post, camRig });
     this.el = document.getElementById('boot');
     this.active = false;
     this.inputLocked = false;
@@ -51,9 +51,11 @@ export class Boot {
     return this;
   }
 
-  // Begins an intro. params { lines, duration?, skippable? } are validated by the piece (encounter.js introBootProblem).
-  start({ lines, duration = TUNING.duration, skippable = true }) {
+  // Begins an intro. params { lines, duration?, skippable?, pov? } are validated by the piece (encounter.js introBootProblem).
+  // pov (true | { release, timeout, blend }): the camera holds STEM-00's eye under the overlay and eases out after the end (CameraRig.holdPov).
+  start({ lines, duration = TUNING.duration, skippable = true, pov = null }) {
     this.reset();
+    if (pov) this.camRig?.holdPov(pov);
     const { el, controls } = this;
     this.lines = lines.slice();
     this.duration = duration;
@@ -133,6 +135,7 @@ export class Boot {
     this.controls.locked = false;
     this.controls.ease = 0; // update() ramps it back
     this.easing = true;
+    if (this.camRig?.hold) this.camRig.hold.armed = true; // the POV hold may release from now on
     saveJSON(STORAGE_KEY, true);
     this.events?.emit('intro:done', { skipped });
   }

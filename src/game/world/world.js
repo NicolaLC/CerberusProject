@@ -375,20 +375,21 @@ export class World {
 
   // Level skins (level.md `skin`): the grid prototype textures stay where metrics read off them (Gym, Library,
   // Workshop); a "real" scene (arena, Prologue) wears weathered metal (art-style.md). Cover keeps a value split
-  // (low cover warmer and darker, high cover cooler and lighter) so heights still read at a glance.
+  // (low cover warmer and darker, high cover cooler and lighter) so heights still read at a glance, and both
+  // a painted hue (khaki / grey-green) the blue-grey floor and walls never use, so cover reads as cover.
   #makeSkins() {
     const std = (tex, opts = {}) => new THREE.MeshStandardMaterial({ map: tex, roughness: 0.82, metalness: 0.25, ...opts });
     return {
       weathered: {
         floor: std(panelTexture({ tint: '#5a5f62', grime: 0.8 }), { roughness: 0.7 }),
         wall: std(panelTexture({ tint: '#787f82', grime: 0.6 })),
-        low: std(panelTexture({ tint: '#6a655c', grime: 0.7, seams: 'rgba(0,0,0,0.55)' })),
-        high: std(panelTexture({ tint: '#76828a', grime: 0.5 })),
+        low: std(panelTexture({ tint: '#6e6646', grime: 0.7, seams: 'rgba(0,0,0,0.6)' })), // barrier khaki: warm against the cold floor
+        high: std(panelTexture({ tint: '#6f8078', grime: 0.5, seams: 'rgba(0,0,0,0.55)' })), // barrier grey-green
         platform: std(panelTexture({ tint: '#666c70', grime: 0.7 })),
         inFloor: std(panelTexture({ tint: '#454a4f', grime: 0.9, label: 'B1' }), { roughness: 0.55 }), // wet, darker
         inWall: std(panelTexture({ tint: '#576066', grime: 0.8 })),
-        inLow: std(panelTexture({ tint: '#5e5850', grime: 0.8, seams: 'rgba(0,0,0,0.55)' })),
-        inHigh: std(panelTexture({ tint: '#58656f', grime: 0.7 })),
+        inLow: std(panelTexture({ tint: '#655d3f', grime: 0.8, seams: 'rgba(0,0,0,0.6)' })),
+        inHigh: std(panelTexture({ tint: '#5f7068', grime: 0.7, seams: 'rgba(0,0,0,0.55)' })),
         roof: std(panelTexture({ tint: '#474c52', grime: 0.9 })),
       },
     };

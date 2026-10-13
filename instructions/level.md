@@ -174,7 +174,7 @@ The editor (#70) calls four functions plus `levelNames()`; the level is the plai
 - Prototype grid textures from `gridTexture()`: 1 tile = 2m, 1m checker, 25cm lines, optional label.
 - Colors: orange = low cover, blue = high cover, light gray = walls, gray = floor; interior variants are dark.
 - Weathered skin (`skin: "weathered"`, arena): `panelTexture()` metal panels per 2 m tile (1 m seams, rivets, oil streaks,
-  soot, scratches), one tint per role: low cover darker and warmer, high cover cooler and lighter, interiors darker.
+  soot, scratches), one tint per role: low cover a warm barrier khaki, high cover a grey-green (painted hues the blue-grey floor and walls never use, so cover reads as cover), interiors darker.
 - UVs are world-space (`applyWorldUVs`) so grids and panels align everywhere; per-face materials via `faces()`.
 
 ## Lighting
