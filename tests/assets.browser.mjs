@@ -1,9 +1,9 @@
 // Assets (engine/assets.js): cache, shared in-flight loads, instancing, refcounted release, failed-load retry.
 // Fixture: tests/fixtures/tri.gltf (hand-written triangle). Needs the dev server: `npm run dev`, then
-// `URL='http://localhost:5173/?debug' node tests/assets.browser.mjs`.
+// `URL='http://localhost:5173/?debug&scene=arena' node tests/assets.browser.mjs`.
 import { chromium } from 'playwright';
 
-const BASE = process.env.URL ?? 'http://localhost:5173/?debug';
+const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const p = await b.newPage({ viewport: { width: 160, height: 90 } });
 const errors = [];

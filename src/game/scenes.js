@@ -11,7 +11,7 @@ import prologue from '../levels/prologue.json';
 // (instructions/level.md). Add a scene: put the level file in src/levels/ and list it here.
 // The Gym is four rooms (Gym epic #58): gym = traversal and cover, then weapon range, enemy rooms, stress test.
 export const SCENES = { arena, gym, 'gym-range': gymRange, 'gym-ai': gymAi, 'gym-stress': gymStress, library, workshop, prologue };
-export const DEFAULT_SCENE = 'arena';
+export const DEFAULT_SCENE = 'prologue'; // a new game opens the Prologue (#13); the arena is `?scene=arena`
 
 // Valid scene name for `name` (null / undefined / '' = default). Unknown names warn and fall back to the default.
 export function resolveScene(name) {

@@ -6,7 +6,7 @@
 // Needs the dev server: `npx vite --port 5204 --strictPort`, then `URL='http://localhost:5204/?debug' node tests/gym-stress.browser.mjs`.
 import { chromium } from 'playwright';
 
-const BASE = process.env.URL ?? 'http://localhost:5173/?debug';
+const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
 const scene = (name) => {
   const u = new URL(BASE);
   u.searchParams.set('scene', name);

@@ -5,7 +5,7 @@
 // Needs the dev server: `npm run dev`, then `node tests/prologue-warden.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
-const BASE = process.env.URL ?? 'http://localhost:5173/?debug';
+const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
 const url = new URL(BASE);
 url.searchParams.set('scene', 'prologue');
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });

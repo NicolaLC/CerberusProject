@@ -6,10 +6,11 @@
 // uploaded to the GPU, which is what a leak would pile up.
 import { chromium } from 'playwright';
 
-const BASE = process.env.URL ?? 'http://localhost:5173/?debug';
+const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
 const withScene = (scene) => {
   const u = new URL(BASE);
   if (scene != null) u.searchParams.set('scene', scene);
+  else u.searchParams.delete('scene'); // the runner's URL pins the arena; null = no ?scene at all
   return u.href;
 };
 const SCENES = ['arena', 'gym', 'gym-range', 'gym-ai', 'gym-stress', 'library', 'workshop', 'prologue'];
@@ -93,18 +94,18 @@ for (const name of SCENES) {
   });
   await p.goto(withScene(null));
   await p.waitForFunction(() => window.game?.engine);
-  expect('no ?scene opens the arena', (await p.evaluate(() => window.game.sceneName)) === 'arena');
+  expect('no ?scene opens the prologue', (await p.evaluate(() => window.game.sceneName)) === 'prologue');
   expect('  without a warning', !warnings.some((w) => w.includes('scene')));
   await p.goto(withScene('nope'));
   await p.waitForFunction(() => window.game?.engine);
-  expect('unknown ?scene falls back to the arena', (await p.evaluate(() => window.game.sceneName)) === 'arena');
+  expect('unknown ?scene falls back to the prologue', (await p.evaluate(() => window.game.sceneName)) === 'prologue');
   expect('  with a console warning', warnings.some((w) => w.includes('"nope"')), warnings.join(' | '));
   const bad = await p.evaluate(() => {
     const g = window.game;
     g.loadScene('also-nope');
     return g.sceneName;
   });
-  expect('loadScene with an unknown name also falls back to the arena', bad === 'arena');
+  expect('loadScene with an unknown name also falls back to the prologue', bad === 'prologue');
   // a level that fails after the old one would have been unloaded (unknown tool): the current scene must survive intact
   const kept = await p.evaluate(async () => {
     const g = window.game;
@@ -132,7 +133,7 @@ for (const name of SCENES) {
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
   p.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-  await p.goto(withScene(null));
+  await p.goto(withScene('arena'));
   await p.waitForFunction(() => window.game?.engine);
   const first = await p.evaluate(probe, 3);
 

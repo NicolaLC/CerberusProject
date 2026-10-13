@@ -3,7 +3,7 @@
 // Needs the dev server: `npm run dev`, then `node tests/animation.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
-const URL = process.env.URL ?? 'http://localhost:5173/?debug';
+const URL = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader'] });
 const p = await b.newPage({ viewport: { width: 160, height: 90 } });
 const errors = [];
