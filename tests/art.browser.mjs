@@ -6,7 +6,7 @@
 // `npm run dev`, then `node tests/art.browser.mjs`.
 import { chromium } from 'playwright';
 
-const BASE = process.env.URL ?? 'http://localhost:5173/?debug';
+const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
 const PAGE = (() => { const u = new URL(BASE); u.searchParams.set('scene', 'library'); return u.href; })();
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const p = await b.newPage({ viewport: { width: 160, height: 90 } });

@@ -6,7 +6,7 @@
 // Needs the dev server: `npm run dev`, then `node tests/gym-ai.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
-const BASE = process.env.URL ?? 'http://localhost:5173/?debug';
+const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
 const URL_ROOM = (() => {
   const u = new URL(BASE);
   u.searchParams.set('scene', 'gym-ai');

@@ -2,10 +2,10 @@
 // by stepping the engine (stopped, headless: deterministic) and measures the metrics.md section 8 items it covers,
 // printing every value (lines starting with "item"). Asserts the current intended behaviour only: things that are
 // pure simulation (no rendering), so they do not move with SwiftShader.
-// Needs the dev server: `npm run dev`, then `URL='http://localhost:5173/?debug' node tests/gym-traversal.browser.mjs`.
+// Needs the dev server: `npm run dev`, then `URL='http://localhost:5173/?debug&scene=arena' node tests/gym-traversal.browser.mjs`.
 import { chromium } from 'playwright';
 
-const BASE = process.env.URL ?? 'http://localhost:5173/?debug';
+const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
 const PAGE = (() => { const u = new URL(BASE); u.searchParams.set('scene', 'gym'); return u.href; })();
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader'] });
 const p = await b.newPage({ viewport: { width: 160, height: 90 } });

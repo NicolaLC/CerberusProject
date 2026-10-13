@@ -2,7 +2,7 @@
 // Needs the dev server: `npm run dev`, then `node tests/render.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
-const URL = process.env.URL ?? 'http://localhost:5173/?debug';
+const URL = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
 const BUDGET = 140; // draw calls at the spawn view (~1200 before batching, ~240 before shadow batching, ~187 before puppet LOD)
 const SHADOW_BUDGET = 25; // of which the sun shadow pass (was ~60 before shadow-only meshes)
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });

@@ -22,7 +22,7 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 ## Testing
 - `?debug` URL flag: no start panel, stats readout on, `window.game` is the `Game` (`player`, `camRig`, `weapon`,
   `enemies`, `controls`, `engine` with `scene`, `input`, `events`, `timings`, `perf`; `loadScene(name)`, `sceneName`).
-- `?scene=<name>` URL flag: opens `arena` (default) / `gym` / `library` / `workshop` / `prologue` directly; unknown name → arena + console warning (`instructions/level.md`).
+- `?scene=<name>` URL flag: opens `prologue` (default: a new game starts the Prologue) / `arena` / `gym` / `library` / `workshop` directly; unknown name → prologue + console warning (`instructions/level.md`).
 - Headless check: Playwright with Chromium (`--use-angle=swiftshader`); real keyboard/mouse events work once the
   start button is clicked (pointer lock). SwiftShader runs at 3-15 fps and frames are clamped to 0.1 s,
   so count frames, not milliseconds.

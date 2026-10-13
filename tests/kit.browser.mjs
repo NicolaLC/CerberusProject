@@ -2,10 +2,10 @@
 // match metrics.md (cover class by height, sizes), stairs / ramp / platform are climbed with the real movement code,
 // a doorway is walked through, bad params and bad yaw throw, and the KIT station of the Gym loads.
 // Pure simulation (engine stopped, headless). Needs the dev server:
-// `npm run dev`, then `URL='http://localhost:5173/?debug' node tests/kit.browser.mjs`.
+// `npm run dev`, then `URL='http://localhost:5173/?debug&scene=arena' node tests/kit.browser.mjs`.
 import { chromium } from 'playwright';
 
-const BASE = process.env.URL ?? 'http://localhost:5173/?debug';
+const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
 const PAGE = (() => { const u = new URL(BASE); u.searchParams.set('scene', 'gym'); return u.href; })();
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader'] });
 const p = await b.newPage({ viewport: { width: 160, height: 90 } });

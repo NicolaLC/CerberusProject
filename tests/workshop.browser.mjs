@@ -6,7 +6,7 @@
 import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
 
-const BASE = process.env.URL ?? 'http://localhost:5173/?debug';
+const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
 const withScene = (scene) => {
   const u = new URL(BASE);
   u.searchParams.set('scene', scene);

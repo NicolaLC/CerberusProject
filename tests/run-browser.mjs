@@ -45,7 +45,7 @@ for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(130)
 const server = await createServer({ server: { port: 5173 }, logLevel: 'warn' }); // busy port: vite picks the next free one
 await server.listen();
 const port = server.httpServer.address().port;
-const env = { ...process.env, URL: `http://localhost:${port}/?debug`, BASE: `http://localhost:${port}` };
+const env = { ...process.env, URL: `http://localhost:${port}/?debug&scene=arena`, BASE: `http://localhost:${port}` };
 
 const run = (name) => new Promise((resolve) => {
   const t0 = Date.now();
