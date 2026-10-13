@@ -62,6 +62,8 @@ import objectiveNew from '../../assets/sfx/objective-new.mp3';
 import objectiveDone from '../../assets/sfx/objective-done.mp3';
 import gunDiscovered from '../../assets/sfx/gun-discovered.mp3';
 import missionComplete from '../../assets/sfx/mission-complete.mp3';
+import ambientLoop from '../../assets/sfx/ambient-loop.mp3';
+import combatMusic from '../../assets/sfx/combat-music.mp3';
 
 // SFX: synthesized at runtime, plus recorded samples (ElevenLabs, see credits.md) where one exists.
 // A sample replaces its synth sound once decoded; until then (or if loading fails) the synth plays.
@@ -120,7 +122,15 @@ const SAMPLES = {
   objectiveDone: [objectiveDone, 0.5, 0.02],
   gunDiscovered: [gunDiscovered, 0.6, 0.03],
   missionComplete: [missionComplete, 0.7, 0],
+  ambient: [ambientLoop, 0.3, 0], // looped from the first gesture on (mood())
+  music: [combatMusic, 0.35, 0], // looped while fighting (mood())
 };
+// Combat music: fades in on a combat signal (COMBAT_ON) and out `hold` s after the last one, sooner when the fight ends
+// (COMBAT_OFF). The ambience ducks under it. Fades are time constants (s) for setTargetAtTime.
+// The track fades out over its last ~5 s, so it loops at loopEnd: 39 bars at 174 BPM, before the fade.
+const MUSIC = { hold: 10, fadeIn: 0.5, fadeOut: 1.3, duck: 0.5, loopEnd: (39 * 4 * 60) / 174 };
+const COMBAT_ON = ['bolt:fired', 'player:hurt', 'group:wake', 'encounter:wake', 'boss:wake', 'trooper:flank', 'alarm:on'];
+const COMBAT_OFF = ['arena:clear', 'boss:dead', 'mission:complete', 'mission:failed', 'alarm:clear'];
 // Boot intro sound cues, in s from `intro:start`: the surge, the core right after it; the rise (5 s) ends with the intro.
 const WAKE = { surge: 2.4, core: 3.4, rise: 5 };
 const HIT_SAMPLE = { body: 'hitBody', head: 'hitHead', weak: 'hitWeak' };
@@ -157,6 +167,9 @@ export class Audio {
     this.engineLoop = null; // the boss's looped engine, while it is awake
     this.wakeFrom = 0; // performance.now() of the running boot intro, 0 when none
     this.wakeVoices = []; // its scheduled cues, cut on a skip
+    this.combatAt = -Infinity; // s (performance clock) of the last combat signal
+    this.fighting = false; // the music is (fading) in
+    this.ambientLoop = this.musicLoop = null;
     this.live = new Map(); // id -> enemy voices still playing (VOICE_CAP)
   }
 
@@ -226,6 +239,8 @@ export class Audio {
     events.on('weapon:discovered', () => this.sample('gunDiscovered'));
     events.on('mission:complete', () => this.sample('missionComplete'));
     events.on('intro:start', (e) => this.wake(e.duration));
+    for (const e of COMBAT_ON) events.on(e, () => (this.combatAt = performance.now() / 1000));
+    for (const e of COMBAT_OFF) events.on(e, () => (this.combatAt = -Infinity));
     events.on('intro:done', (e) => e.skipped && this.wake(0));
     events.on('alarm:on', (a) => a.siren && this.siren(true));
     events.on('alarm:off', (a) => !a.active && this.siren(false));
@@ -533,6 +548,29 @@ export class Audio {
     const src = this.sample('explosion', 0, 0.6 + size * 0.4, true);
     if (src) src.playbackRate.value = 1.25 - size * 0.3;
     else this.boom(size);
+  }
+
+  // Per frame: starts the ambience once decoded, fades the combat music in or out (out on pause too).
+  mood(paused) {
+    if (!this.ctx) return;
+    this.ambientLoop ??= this.#loop('ambient', 1);
+    const fighting = !paused && performance.now() / 1000 - this.combatAt < MUSIC.hold;
+    if (fighting && !this.musicLoop) {
+      this.musicLoop = this.#loop('music', 0); // starts silent, faded in below; null until decoded (retried)
+      if (this.musicLoop) this.musicLoop.loopEnd = MUSIC.loopEnd;
+      this.fighting = null;
+    }
+    if (fighting === this.fighting) return;
+    this.fighting = fighting;
+    const t = this.ctx.currentTime;
+    this.musicLoop?.gain.gain.setTargetAtTime(fighting ? SAMPLES.music[1] : 0, t, fighting ? MUSIC.fadeIn : MUSIC.fadeOut);
+    this.ambientLoop?.gain.gain.setTargetAtTime(SAMPLES.ambient[1] * (fighting ? MUSIC.duck : 1), t, 1);
+  }
+
+  #loop(id, volume) {
+    const src = this.sample(id, 0, volume);
+    if (src) src.loop = true;
+    return src;
   }
 
   // Boot intro cues (recorded only): wake(duration) schedules them from now, wake(0) cuts them (intro skipped).
