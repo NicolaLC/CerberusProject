@@ -18,6 +18,7 @@ import { wornMaterial } from '../world/textures.js';
 export const TUNING = {
   name: 'SX-6 TARANTULA',
   core: 900, // health of the core (the boss dies with it)
+  coreBite: 0.34, // share of the core's health one collapse can take; spent, it stands up early (none left: no cap)
   legHealth: 160,
   height: 3.4, // body height standing (tall walker stance, art-style.md)
   downHeight: 0.85,
@@ -68,6 +69,7 @@ export class SpiderMech {
     this.lift = 0;
     this.awake = false;
     this.down = 0; // > 0: collapsed, core exposed (seconds left)
+    this.bite = 0; // core damage this collapse can still take
     this.height = 2.4; // dormant: crouched
     this.vel = new THREE.Vector3();
     this.strafe = 1;
@@ -306,7 +308,7 @@ export class SpiderMech {
   armor(zone, object) {
     const p = object.userData.part;
     if (p === 'hull') return 0;
-    if (p === 'core') return this.down > 0 ? 1 : 0;
+    if (p === 'core') return this.down > 0 && (this.bite > 0 || this.down === Infinity) ? 1 : 0;
     return 1;
   }
 
@@ -317,6 +319,11 @@ export class SpiderMech {
     if (!this.awake && !this.dormant) this.#wake();
     const p = object?.userData.part;
     if (p === 'core') {
+      if (this.down !== Infinity) {
+        amount = Math.min(amount, this.bite);
+        this.bite -= amount;
+        if (this.bite <= 0) this.down = Math.min(this.down, 0.6); // hatch closes: break more legs
+      }
       this.health -= amount;
       if (this.health <= 0) {
         this.#die(dir);
@@ -382,6 +389,7 @@ export class SpiderMech {
     const lost = this.legsLost;
     if (lost % 2 === 0 || lost >= 5) {
       this.down = lost >= 6 ? Infinity : this.t.downTime;
+      this.bite = this.t.coreBite * this.maxHealth;
       this.gun.state = 'idle';
       this.gun.timer = 1.5;
       this.stomp.state = 'idle';

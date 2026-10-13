@@ -27,6 +27,8 @@ async function open(seen) {
     const { engine } = g;
     engine.stop();
     engine.headless = true;
+    // the browser loop ran a few frames before stop() (up to 0.1 s each on a slow CI runner): rewind the boot clock
+    g.boot.t = 0;
     const T = (window.T = { done: [], bolts: 0, hurt: 0, shots: 0 });
     T.step = (s) => {
       for (let i = 0; i < Math.round(s * 60); i++) {

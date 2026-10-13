@@ -2,10 +2,13 @@
 // Usage: node tests/run-browser.mjs [--all] [-j N] [name ...]   (--all adds gym-stress and bench; names filter, e.g. `scenes render`)
 // Suites run in parallel, each in its own browser: -j N (or BROWSER_JOBS) sets how many at once, default cores - 1.
 // Output is buffered per suite and printed whole when it ends. The slow suites (gym-stress, bench) always run alone, after the rest.
+// One run per machine: a second run (another agent, another worktree) waits for the first. Each run already uses every
+// core, so two at once only thrash SwiftShader: both get several times slower and timing checks flake.
 import { createServer } from 'vite';
 import { spawn } from 'node:child_process';
-import { readdirSync } from 'node:fs';
-import { availableParallelism } from 'node:os';
+import { readdirSync, openSync, closeSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { availableParallelism, tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const SLOW = ['gym-stress', 'bench'];
 const LONG = ['scenes', 'workshop', 'render', 'gym-ai', 'prologue']; // started first so the pool doesn't end on one long suite
@@ -20,6 +23,24 @@ const suites = readdirSync(dir)
   .map((f) => f.replace('.browser.mjs', ''))
   .filter((n) => (names.length ? names.includes(n) : all || !SLOW.includes(n)));
 if (!suites.length) { console.error('no suite matches', names); process.exit(1); }
+
+const LOCK = join(tmpdir(), 'cerberus-browser-tests.lock');
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+for (let said = false; ;) {
+  try {
+    closeSync(openSync(LOCK, 'wx'));
+    writeFileSync(LOCK, String(process.pid));
+    break;
+  } catch {
+    const pid = Number(readFileSync(LOCK, 'utf8')) || 0;
+    if (pid && !alive(pid)) { unlinkSync(LOCK); continue; } // left by a killed run
+    if (!said) { console.log(`waiting for another browser test run (pid ${pid}) to finish...`); said = true; }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+}
+const unlock = () => { try { if (readFileSync(LOCK, 'utf8') === String(process.pid)) unlinkSync(LOCK); } catch {} };
+process.on('exit', unlock);
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(130));
 
 const server = await createServer({ server: { port: 5173 }, logLevel: 'warn' }); // busy port: vite picks the next free one
 await server.listen();

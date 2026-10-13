@@ -16,6 +16,7 @@ export const GAITS = {
   walk: {
     ref: 1.4,
     duty: 0.6,
+    max: 1.25, // biggest swing scale (fast)
     twist: 0.09, // hips yaw toward the leading leg
     roll: 0.05, // hips dip on the swing side
     legs: [
@@ -37,19 +38,21 @@ export const GAITS = {
   },
   run: {
     ref: 4.2,
-    duty: 0.34,
+    // short stance, long flight and a big swing: few long bounding strides (cadence ~0.75 of a human sprint's)
+    duty: 0.28,
+    max: 1.45,
     twist: 0.14,
     roll: 0.04,
     legs: [
       [0.0, -0.5, 0.35, -0.05], // contact under the body, knee soft
-      [0.1, -0.2, 0.7, 0.0], // compression
-      [0.25, 0.3, 0.4, 0.35], // push
-      [0.34, 0.48, 0.35, 0.7], // toe off: long trailing leg
-      [0.45, 0.35, 1.55, 0.6], // follow-through: heel kicks up
-      [0.6, -0.35, 2.05, 0.45], // tuck: heel under the seat
-      [0.75, -0.95, 1.6, 0.15], // knee drive
-      [0.88, -0.85, 0.7, -0.05], // shin swings out
-      [0.95, -0.62, 0.4, -0.08], // reach, pawing back for contact
+      [0.08, -0.2, 0.7, 0.0], // compression
+      [0.2, 0.3, 0.4, 0.35], // push
+      [0.28, 0.48, 0.35, 0.7], // toe off: long trailing leg
+      [0.4, 0.35, 1.55, 0.6], // follow-through: heel kicks up
+      [0.56, -0.35, 2.05, 0.45], // tuck: heel under the seat
+      [0.73, -0.95, 1.6, 0.15], // knee drive
+      [0.87, -0.85, 0.7, -0.05], // shin swings out
+      [0.945, -0.62, 0.4, -0.08], // reach, pawing back for contact
     ],
     // heights stay small: the bent support leg already sinks the hips, and the flight arc (rig.js) lifts them
     hips: [
@@ -118,7 +121,7 @@ for (const g of Object.values(GAITS)) {
 
 // Leg swing scale at a speed: smaller steps when slow, bigger when fast.
 export function amplitude(gait, speed) {
-  return Math.min(1.25, Math.max(0.3, Math.sqrt(speed / gait.ref)));
+  return Math.min(gait.max, Math.max(0.3, Math.sqrt(speed / gait.ref)));
 }
 
 // Cycles per second so the planted foot moves back exactly at `speed`: travel × amp per duty × cycle.
