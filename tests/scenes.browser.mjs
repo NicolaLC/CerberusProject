@@ -111,6 +111,7 @@ for (const name of SCENES) {
     const g = window.game;
     const { SCENES } = await import('/src/game/scenes.js');
     SCENES.broken = { ...SCENES.gym, tool: 'no-such-tool' };
+    const was = g.sceneName;
     const before = g.world.meshes.length;
     let threw = false;
     try {
@@ -119,10 +120,11 @@ for (const name of SCENES) {
       threw = true;
     }
     delete SCENES.broken;
+    const intact = g.sceneName === was && g.world.meshes.length === before;
     g.loadScene('arena'); // still a working game: switching on works
-    return { threw, scene: g.sceneName, intact: g.world.meshes.length === before };
+    return { threw, intact, scene: g.sceneName };
   });
-  expect('loadScene with an unknown tool throws before unloading, the scene stays loaded and usable', kept.threw && kept.scene === 'arena' && kept.intact, JSON.stringify(kept));
+  expect('loadScene with an unknown tool throws before unloading, the scene stays loaded and usable', kept.threw && kept.intact && kept.scene === 'arena', JSON.stringify(kept));
   expect('  no errors', errors.length === 0, errors.join(' | '));
   await p.close();
 }
