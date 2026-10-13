@@ -60,6 +60,7 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 - `tests/log.browser.mjs`: STEM-00 log lines (#40): `log.line` on start / trigger / objective done / discovered, once, delay, priority queue, entries, validation; uses `?scene=workshop`.
 - `tests/intro.browser.mjs`: boot intro (#13): `intro.boot` overlay and input lock, `intro:done`, `log.line` on `intro:done`, skip only once seen, pause, restart / edit, validation; uses `?scene=workshop`.
 - `tests/prologue.browser.mjs`: the Prologue level (`?scene=prologue`): boot overlay, input lock, `intro:done` within 12 s, first log line and objective, pistol only (HUD ∞), skip only with the seen flag, passive yard, dormant `purge-*` groups.
+- `tests/prologue-exit.browser.mjs`: the Prologue's end (#15): exit gate shut then open, the exit needs the Warden, mission complete screen with real stats, RESTART, checkpoint respawn.
 - `tests/mission.browser.mjs`: mission framework (objective pieces, full mission in play, order, reinforcements, trigger reach, limit, restart / edit / scene switch, bad params); uses `?scene=workshop`.
 - `tests/gym-traversal|gym-range|gym-ai|gym-stress.browser.mjs`: the Gym rooms as fixtures (instructions/gym.md); they
   also print the measured metrics (metrics.md 8b). gym-stress takes several minutes under SwiftShader.

@@ -1,7 +1,7 @@
 // The Prologue weapon discovery (#93): the pistol-only start, the armoury rack (objective `armoury`, order 60: SALVAGE A WEAPON)
 // that grants the KR-7 Warden (toast, weapon:discovered once, STEM-00 log line), the stand-by pause that lets the line play before
 // the troopers wake, and the fallback: skipping the rack (walking out of the hall) lets the first destroyed trooper drop a Warden,
-// never twice, never if it is owned. Pure level data, headless stepping.
+// never twice, never if it is owned. The Prologue cannot end without it (#15: `armoury-late` before the arena gate, the exit needs it): both ways back are tested. Pure level data, headless stepping.
 // Needs the dev server: `npm run dev`, then `node tests/prologue-warden.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
@@ -206,25 +206,45 @@ const WARDEN_LINE = '> ITEM: KR-7. FUNCTION: KILL. QUERY: WHY DOES IT FEEL HEAVY
   await p.close();
 }
 
+// pistol only, the Warden never picked up, never taken: every wave is beaten without it, but the exit is not reachable without it (#15).
+// Two ways back to a Warden, both always available: the drop where the trooper fell (it never expires) and the armoury rack (asked for again).
 {
-  const { p, errors } = await open();
-  const r = await p.evaluate(() => {
-    const g = window.game;
-    T.toArmoury();
-    T.go(2, -28, 0.3);
-    T.step(5.2);
-    // pistol only, the drop left on the floor: every remaining stage is beaten
-    const seen = [];
-    for (const n of [3, 4, 5]) { T.killGroup(n); T.step(0.2); seen.push(T.cur()); }
-    T.go(39.75, -17, 0.2);
-    T.kill(T.group(6)[0]);
-    T.step(0.3);
-    return { seen, state: g.mission.state, owned: [...g.weapon.owned].join(), drops: T.guns().length };
-  });
-  expect('every wave is beatable with the pistol alone: the chain completes without the Warden', r.state === 'complete' && r.owned === 'pistol' && r.seen.join() === 'purge-troopers-hall,purge-drones,purge-gate', JSON.stringify(r));
-  expect('  the dropped Warden is still lying there (found only if the player picks it up)', r.drops === 1, r.drops);
-  expect('no page errors', errors.length === 0, errors.join(' | '));
-  await p.close();
+  const run = async (way) => {
+    const { p, errors } = await open();
+    const r = await p.evaluate((way) => {
+      const g = window.game;
+      T.toArmoury();
+      T.go(2, -28, 0.3);
+      T.step(5.2);
+      const seen = [];
+      const dropAt = { x: 0, z: 0 };
+      for (const n of [3, 4, 5]) {
+        if (n === 3) { const a = T.group(3)[0]; dropAt.x = a.pos.x; dropAt.z = a.pos.z; }
+        T.killGroup(n); T.step(0.2); seen.push(T.cur());
+      }
+      T.step(20); // time passes: the drop stays
+      const out = { seen, drops: T.guns().length, hud: g.mission.hudText(), owned: [...g.weapon.owned].join() };
+      T.go(39.75, -17, 0.3); // walking on to the arena gate does not skip the step
+      out.stillLate = T.cur();
+      if (way === 'drop') T.go(dropAt.x, dropAt.z, 0.4);
+      else { T.go(-21.5, -37, 0.2); T.press('KeyG'); T.step(0.2); }
+      out.found = { cur: T.cur(), owned: [...g.weapon.owned].sort().join(), disc: [...T.disc], drops: T.guns().length };
+      T.go(39.75, -17, 0.3);
+      T.kill(T.group(6)[0]);
+      T.step(0.3);
+      out.exit = { cur: T.cur(), state: g.mission.state };
+      T.go(39.75, -75, 0.3);
+      out.done = { state: g.mission.state, complete: T.complete };
+      return out;
+    }, way);
+    expect(`[${way}] every wave is beaten with the pistol; then the late armoury step waits (Warden not found), the drop is still there`, r.seen.join() === 'purge-troopers-hall,purge-drones,armoury-late' && r.owned === 'pistol' && r.drops === 1 && r.hud === 'SALVAGE A WEAPON' && r.stillLate === 'armoury-late', JSON.stringify(r));
+    expect(`[${way}] finding the Warden (${way === 'drop' ? 'picking up the trooper drop' : 'the rack, G'}) moves the chain on, discovered once`, r.found.cur === 'purge-gate' && r.found.owned === 'pistol,rifle' && r.found.disc.join() === 'rifle' && r.found.drops === (way === 'drop' ? 0 : 1), JSON.stringify(r.found)); // via the rack the drop stays (it is ammo for the Warden now)
+    expect(`[${way}] after the spider the exit is current; the mission completes at the transit node`, r.exit.cur === 'exit' && r.exit.state === 'active' && r.done.state === 'complete' && r.done.complete === 1, JSON.stringify([r.exit, r.done]));
+    expect(`[${way}] no page errors`, errors.length === 0, errors.join(' | '));
+    await p.close();
+  };
+  await run('drop');
+  await run('rack');
 }
 
 await b.close();
