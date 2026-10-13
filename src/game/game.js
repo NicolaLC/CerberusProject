@@ -243,7 +243,7 @@ export class Game {
     engine.add({
       name: 'audio',
       phase: 'present',
-      whilePaused: true, // silences the MG whine and fades the combat music on pause
+      whilePaused: true, // silences the MG whine and swaps the combat music for the menu track on pause
       update: () => {
         audio.spin(weapon.t.spinUp > 0 && !engine.paused ? weapon.spin : 0);
         audio.mood(engine.paused);
