@@ -58,6 +58,7 @@ import objectiveNew from '../../assets/sfx/objective-new.mp3';
 import objectiveDone from '../../assets/sfx/objective-done.mp3';
 import gunDiscovered from '../../assets/sfx/gun-discovered.mp3';
 import missionComplete from '../../assets/sfx/mission-complete.mp3';
+import droneLoop from '../../assets/sfx/drone-loop.mp3';
 import ambientLoop from '../../assets/sfx/ambient-loop.mp3';
 import combatMusic from '../../assets/sfx/combat-music.mp3';
 import bossMusic from '../../assets/sfx/boss-music.mp3';
@@ -118,6 +119,7 @@ const SAMPLES = {
   objectiveDone: [objectiveDone, 0.5, 0.02],
   gunDiscovered: [gunDiscovered, 0.6, 0.03],
   missionComplete: [missionComplete, 0.7, 0],
+  droneLoop: [droneLoop, 0.35, 0], // one looped voice, gain by the nearest alive drone (DRONE_RANGE)
   ambient: [ambientLoop, 0.3, 0], // looped from the first gesture on (mood())
   music: [combatMusic, 0.35, 0], // looped while fighting (mood())
   bossMusic: [bossMusic, 0.35, 0], // looped from boss:wake to boss:dead, instead of `music`
@@ -134,6 +136,8 @@ const COMBAT_OFF = ['arena:clear', 'boss:dead', 'mission:complete', 'mission:fai
 const WAKE = { surge: 2.4, core: 3.4, rise: 5 };
 const RUN_STEP = { gain: 1.15, rate: 1.08 }; // sprint steps vs walk steps (same takes)
 const HIT_SAMPLE = { body: 'hitBody', head: 'hitHead', weak: 'hitWeak' };
+const DRONE_RANGE = 25; // m from the camera where the drone hum fades out
+const BED_FADE = 0.5; // s, time constant of the bed loops' gain
 const ENEMY_STEP_RANGE = 28; // m from the camera where enemy steps fade out
 const GAIN_SPREAD = 0.12;
 const BOLT_DELAY = 0.22; // s after a sniper shot before the bolt is worked
@@ -155,10 +159,12 @@ function bytes(url) {
 
 export class Audio {
   // weapon: read for the gun being reloaded (the reload event carries no gun id)
-  // listener: where the ears are (the camera), for distance falloff of enemy steps
-  constructor(weapon, listener) {
+  // listener: where the ears are (the camera), for distance falloff of enemy steps and the drone hum
+  constructor(weapon, listener, world = null, enemies = null) {
     this.weapon = weapon;
     this.listener = listener;
+    this.world = world; // unused for now: interior zones and console positions, for the beds
+    this.enemies = enemies; // the drones, for the drone hum
     this.ctx = null;
     this.samples = {}; // id -> decoded AudioBuffers (one per take)
     this.voice = {}; // id -> playing source that may be cut short (reload, rail charge)
@@ -172,6 +178,8 @@ export class Audio {
     this.track = null; // id of the music track (fading) in, null when none
     this.tracks = {}; // id -> its looping source, started on first use and kept running (silent when off)
     this.ambientLoop = null;
+    this.beds = {}; // id -> looping source of a bed (droneLoop), started once decoded
+    this.bedLevel = {}; // id -> the 0..1 level last sent to its gain
     this.live = new Map(); // id -> enemy voices still playing (VOICE_CAP)
   }
 
@@ -562,6 +570,7 @@ export class Audio {
   mood(paused) {
     if (!this.ctx) return;
     this.ambientLoop ??= this.#loop('ambient', 1);
+    this.#beds(paused);
     const fighting = !paused && (this.bossFight || performance.now() / 1000 - this.combatAt < MUSIC.hold);
     const want = fighting ? (this.bossFight ? 'bossMusic' : 'music') : null;
     if (want && !this.tracks[want]) {
@@ -578,6 +587,26 @@ export class Audio {
       src.gain.gain.setTargetAtTime(id === want ? SAMPLES[id][1] : 0, t, id === want ? MUSIC.fadeIn : MUSIC.fadeOut);
     }
     this.ambientLoop?.gain.gain.setTargetAtTime(SAMPLES.ambient[1] * (want ? MUSIC.duck : 1), t, 1);
+  }
+
+  // The beds (called by mood, no allocations): one drone voice whose level follows the nearest alive drone. Silent on pause.
+  #beds(paused) {
+    const p = this.listener?.position;
+    let drone = 0;
+    if (p && !paused && this.enemies) {
+      let d = DRONE_RANGE;
+      for (const e of this.enemies.all) if (e.kind === 'drone' && e.alive) d = Math.min(d, e.pos.distanceTo(p));
+      drone = (1 - d / DRONE_RANGE) ** 2;
+    }
+    this.#bed('droneLoop', drone);
+  }
+
+  #bed(id, level) {
+    this.beds[id] ??= this.#loop(id, 0); // null until decoded (retried next frame)
+    const src = this.beds[id];
+    if (!src || Math.abs(level - (this.bedLevel[id] ?? -1)) < 0.01) return;
+    this.bedLevel[id] = level;
+    src.gain.gain.setTargetAtTime(SAMPLES[id][1] * level, this.ctx.currentTime, BED_FADE);
   }
 
   #loop(id, volume) {

@@ -32,14 +32,18 @@ ElevenLabs takes of the same prompt can come out 15-25 dB apart, and a quiet tak
 (walk take 4, metal 2 and 4, robot 2 were near silent). Every `step-*.mp3` is now trimmed to 5 ms before its onset and
 peak-normalised to -3 dBFS; do the same to any new take before adding it (the gain per list stays in `SAMPLES`).
 
+## Recorded and wired after the first pass
+
+- `drone-loop.mp3`: done. One looped voice (`Audio.mood` -> `#beds`), gain by the nearest alive drone (silent beyond
+  `DRONE_RANGE`, 25 m), silent on pause. One shared voice, not one per drone.
+
 ## Recorded, not wired yet
 
 | File | Event | Notes |
 |---|---|---|
-| `drone-loop.mp3` | drone hover, looping | needs one looped voice per drone, faded by distance (like enemy steps) |
-| `arm-retract.mp3` | maintenance arm folds up (`prop.arm` `retractOn`) | the prop does not exist yet |
-| `bay-hum-loop.mp3` | calibration bay ambience, inside `bay-zone` | the zone does not exist yet |
-| `console-loop.mp3` | `prop.console`, positional | the prop does not exist yet |
+| `arm-retract.mp3` | maintenance arm folds up (`prop.arm` `retractOn`) | the prop does not exist on main yet (it is on `feat/prologue-calibration`) |
+| `bay-hum-loop.mp3` | calibration bay ambience, inside `bay-zone` | the zone does not exist on main yet (same branch) |
+| `console-loop.mp3` | `prop.console`, positional | the prop does not exist on main yet (same branch) |
 
 The Prologue wake-up cues (`wake-surge`, `wake-core`, `wake-rise`) play off the boot intro today (`Audio.wake`, `WAKE` in
 `audio.js`: surge 2.4 s after `intro:start`, core 1 s later, rise timed to end with the intro; cut on a skip). Move them
