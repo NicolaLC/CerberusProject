@@ -149,12 +149,13 @@ for (const seen of [true, false]) {
       groups: [...new Set(purge.map((e) => e.squad))].sort(),
       awake: purge.filter((e) => e.awake).length,
       woken: [...g.enemies.woken],
-      refs: JSON.stringify(g.level.pieces.filter((q) => /^(trigger|objective|marker\.entry)/.test(q.id))).includes('purge'),
+      current: g.mission.current?.oid,
+      alarm: g.world.alarm.target,
     };
   });
   expect('passive targets and shooters fire nothing in 20 s (no bolts, no hurt)', r.bolts === 0 && r.hurt === 0 && r.hp === 0, JSON.stringify(r));
   expect('  the opening yard holds only passive puppets (static / mover)', r.openCount > 0 && r.kinds.every((k) => k === 'static' || k === 'mover'), JSON.stringify(r.kinds));
-  expect('  no enemy of a purge-* group is awake, no group woken, nothing references them', r.purgeCount > 0 && r.groups.length >= 5 && r.awake === 0 && r.woken.length === 0 && !r.refs, JSON.stringify(r));
+  expect('  no enemy of a purge-* group is awake, no group woken, the mission waits on leave-bay (the purge chain is not current), no alarm', r.purgeCount > 0 && r.groups.length >= 5 && r.awake === 0 && r.woken.length === 0 && r.current === 'leave-bay' && r.alarm === 0, JSON.stringify(r));
   await p.close();
 }
 

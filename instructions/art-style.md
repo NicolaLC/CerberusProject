@@ -83,7 +83,7 @@ empty now. Decisions taken in the pass (keep them unless the rule changes):
 - **HiveMind projectiles** (bolts, drone bursts, mortar orbs and rings, their impacts) are violet-white: a near-white
   core in a violet haze, so they never read as STEM-00's amber. Explosion fire (a drone or the mech dying) stays orange.
 - **World:** teal-cyan haze sky and heavy fog; cold sun and fill; interiors lit cold white and cyan, red only for story
-  beats (a Rejects or alarm room). The arena wears weathered metal (`skin: "weathered"`, level.md); the Gym rooms,
+  beats (a Rejects or alarm room) and the `env.alarm` lighting state (workshop.md "Alarm": the whole scene fades to red and pulses while the alarm runs; the HiveMind announcer line is cold white with a network-cyan glow, never red). The arena wears weathered metal (`skin: "weathered"`, level.md); the Gym rooms,
   Library and Workshop keep the grid textures because metrics read off them.
 - **Grade** (`post.js`): surfaces desaturated, shadows teal, HDR emissives keep their colour; bloom only above 1.0.
 - **HUD:** the crosshair's weak-spot state stays magenta, the kill shockwave stays cyan. The enemy state and damage

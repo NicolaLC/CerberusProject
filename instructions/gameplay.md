@@ -112,7 +112,7 @@
   the pistol always). `weapon.grant(id, { ammo })` adds a gun and rounds to its reserve (capped at max) and emits
   `weapon:discovered { gun }` the first time it is owned in the level; the HUD toasts `<NAME> ACQUIRED` for 3 s. `pickup.gun`
   calls it and raises the new gun. Ammo crates refill only owned guns. Planned: STEM-00 log line on discovery (#40), 2-primary
-  limit and swapping (#34), hideout armoury (#39), owned guns in the save (#53), enemy gun drops.
+  limit and swapping (#34), hideout armoury (#39), owned guns in the save (#53), enemy gun drops (done, #93: enemy param `dropGun`, workshop.md).
 - The ammo counter turns red at 25% of the magazine or less (`LOW_AMMO` in hud.js, at least the last round): AR ≤ 8, MG ≤ 22, SR / RG ≤ 1, pistol ≤ 3.
 - KR-7 Warden (AR): 540 rpm, mag 32, reserve 192/384, reload 1.8s, 18 dmg, head ×2.5, weak ×3, limbs ×0.8.
   Spread hip 0.022 / aim 0.004 + bloom 0.007 per shot.

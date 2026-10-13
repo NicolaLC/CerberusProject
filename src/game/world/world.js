@@ -5,6 +5,7 @@ import { disposeTree } from '../../engine/dispose.js';
 import { GUNS, gunMaterials } from '../combat/guns.js';
 import { KIT_PIECES, MAT } from './kit.js';
 import { Grid } from './grid.js';
+import { onProblem } from './encounter.js';
 
 // Static level: axis-aligned boxes only (collision, cover and shadows depend on that).
 // Coordinates: x = east, z = south, y = up. Floor is y = 0.
@@ -19,6 +20,7 @@ import { Grid } from './grid.js';
 // below the floor (three still loops it in the shader). Asking for more than the pool makes extra lights that are removed again.
 const PARKED = new THREE.Vector3(0, -1000, 0);
 
+export const ALARM = { color: '#ff2a1a', strength: 0.75, rate: 1.6, pulse: 3.2 }; // alarm lighting state: red tint, 0..1 mix, blend per second, pulse rad/s
 const HAZE = '#4f7b7e'; // horizon and fog: teal-cyan haze, desaturated
 export const SUN_DIR = new THREE.Vector3(0.45, 0.78, 0.43).normalize();
 
@@ -82,7 +84,14 @@ export const WORLD_PIECES = {
   },
   // Display model of one gun (Library). params: gun (key of GUNS). The model sits at pos with its stock at the origin,
   // barrel along +Z turned by yaw. No collision; freed on unload.
-  'prop.gun': { example: { params: { gun: 'rifle' } }, label: 'display model of one gun', fields: [{ key: 'gun', type: 'enum', options: Object.keys(GUNS) }], build: (world, d) => world.gunProp(d) },
+  // params: gun (key of GUNS), hideOn? (an `on` form, encounter.js: the model disappears when it happens, e.g. `objective:armoury:done` for a rack)
+  'prop.gun': {
+    example: { params: { gun: 'rifle' } },
+    label: 'display model of one gun, can hide on an event',
+    fields: [{ key: 'gun', type: 'enum', options: Object.keys(GUNS) }, { key: 'hideOn', type: 'text', optional: true }],
+    check: (p, registry) => (p.hideOn == null ? null : onProblem(p.hideOn, 'hideOn', registry.guns)),
+    build: (world, d) => world.gunProp(d),
+  },
 };
 
 const COLLIDER_CELL = 4; // m, grid cell of the collider hash (arena boxes are 1-10 m; bigger spans use several cells)
@@ -117,11 +126,14 @@ export class World {
     this.coverMeshes = [];
     this.interiorZones = [];
     this.flickerLights = [];
+    this.alarm = { level: 0, target: 0, strength: ALARM.strength, color: new THREE.Color(ALARM.color), t: null }; // lighting state (setAlarm)
     this.staticMeshes = []; // every level box; merged per material for rendering, kept as raycast proxies
     this.lights = []; // the level's point lights in use (pool lights, plus any beyond the pool)
     this.pool = []; // permanent point lights (QUALITY lights); those not in `lights` are parked at intensity 0
     this.labels = []; // env.label meshes: own geometry, material and canvas texture each
     this.props = []; // prop.gun display models: own merged geometry, shared materials
+    this.gates = []; // kit.gate records (addGate): { mesh, col, y0, h, dir, time, on, open, opening, inert }
+    this.gizmoMode = false; // set while spawn() builds a gizmo piece (editor, Library): a gate is inert and shows its travel
     this.registry = null; // of the loaded level, for spawn()
     this.batches = [];
 
@@ -181,17 +193,25 @@ export class World {
       disposeTree(m);
     }
     for (const g of this.props) disposeTree(g, { keep: this.keep });
+    for (const g of this.gates) disposeTree(g.mesh, { keep: this.keep });
     this.batches = [];
     this.gridDirty = true;
-    for (const list of [this.props, this.staticMeshes, this.colliders, this.meshes, this.coverMeshes, this.interiorZones, this.flickerLights, this.lights, this.labels]) list.length = 0;
+    for (const list of [this.props, this.gates, this.staticMeshes, this.colliders, this.meshes, this.coverMeshes, this.interiorZones, this.flickerLights, this.lights, this.labels]) list.length = 0;
     this.named.clear();
   }
 
   // Runtime spawn (tools, tests): builds one world piece after load through the registry and returns a handle for
   // despawn(). Boxes spawned this way are not merged into the level batches (they stay individual meshes).
-  spawn(data) {
+  // gizmo: for the editor and the Library (a gate is inert and draws where it slides to; nothing reacts to events).
+  spawn(data, { gizmo = false } = {}) {
     const seen = new Set(this.scene.children);
-    const piece = this.registry.build('world', this, data);
+    this.gizmoMode = gizmo;
+    let piece;
+    try {
+      piece = this.registry.build('world', this, data);
+    } finally {
+      this.gizmoMode = false;
+    }
     return { piece, objects: this.scene.children.filter((o) => !seen.has(o)) };
   }
 
@@ -208,6 +228,7 @@ export class World {
       for (let i = list.length - 1; i >= 0; i--) if (gone.has(of(list[i]))) list.splice(i, 1);
     };
     for (const list of [this.staticMeshes, this.meshes, this.coverMeshes, this.lights, this.labels, this.props]) drop(list);
+    drop(this.gates, (g) => g.mesh);
     drop(this.colliders, (c) => c.mesh);
     this.gridDirty = true;
     drop(this.flickerLights, (f) => f.light);
@@ -228,9 +249,65 @@ export class World {
     g.position.set(...pos);
     g.rotation.y = yaw;
     g.traverse((o) => (o.castShadow = o.isMesh));
+    g.userData.hideOn = params.hideOn ?? null;
     this.scene.add(g);
     this.props.push(g);
     return g;
+  }
+
+  // A sliding gate (kit.gate): `mesh` is the box kit.js just built through box(). It leaves the static batches (it moves) but keeps its
+  // collider and raycast entry; `react('<on form>')` starts it opening. opts: { on, height, slide: 'up' | 'down', time }. Inert in gizmo mode
+  // (editor, Library): it stays shut whatever happens and shows a ghost of the space it slides into.
+  addGate(mesh, { on, height, slide, time }) {
+    const i = this.staticMeshes.indexOf(mesh);
+    if (i >= 0) this.staticMeshes.splice(i, 1); // merged batches are static
+    const g = { mesh, col: mesh.userData.collider, y0: mesh.position.y, h: height, dir: slide === 'down' ? -1 : 1, time, on, open: 0, opening: false, inert: this.gizmoMode };
+    this.gates.push(g);
+    if (g.inert) {
+      const { width, height: h, depth } = mesh.geometry.parameters;
+      const box = new THREE.BoxGeometry(width, h, depth);
+      const ghost = new THREE.Group();
+      ghost.add(new THREE.Mesh(box, new THREE.MeshBasicMaterial({ color: 0x3fe0ff, transparent: true, opacity: 0.2, depthWrite: false })), new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: 0x3fe0ff, depthTest: false })));
+      ghost.position.y = g.dir * height;
+      ghost.traverse((o) => {
+        o.raycast = () => {};
+        o.userData.gizmo = true;
+      });
+      mesh.add(ghost);
+    }
+    return mesh;
+  }
+
+  // A level event happened (`key` in the `on` forms of encounter.js): gates waiting for it start opening, props with `hideOn` hide.
+  // Called by Encounter. Returns how many gates started opening.
+  react(key) {
+    for (const g of this.props) if (g.userData.hideOn === key) g.visible = false;
+    let n = 0;
+    for (const g of this.gates) {
+      if (g.inert || g.opening || g.on !== key) continue;
+      g.opening = true;
+      n++;
+    }
+    return n;
+  }
+
+  // Moves a gate to `open` (0 shut .. 1 open). Fully open it is out of the way: no collision, no raycast hits, not drawn.
+  #moveGate(g, open) {
+    g.open = open;
+    const dy = g.dir * g.h * open;
+    const m = g.mesh;
+    m.position.y = g.y0 + dy;
+    m.updateMatrix();
+    const b = g.col.box;
+    if (open >= 1) {
+      b.min.y = b.max.y = -1000; // parked: collideCircle and groundAt skip it (x / z stay so the collider grid stays valid)
+      m.visible = false;
+      const k = this.meshes.indexOf(m);
+      if (k >= 0) this.meshes.splice(k, 1);
+    } else {
+      b.min.y = g.y0 - g.h / 2 + dy;
+      b.max.y = g.y0 + g.h / 2 + dy;
+    }
   }
 
   // Textures of the permanent materials (grid textures, skins, gun props), for an upfront GPU upload (game.js).
@@ -328,11 +405,13 @@ export class World {
     this.sky.frustumCulled = false;
     this.scene.add(this.sky);
     this.scene.fog = new THREE.Fog(HAZE, 22, 210);
+    this.base = { fog: this.scene.fog.color.clone(), horizon: mat.uniforms.horizon.value.clone() };
   }
 
   #buildLights() {
     const hemi = new THREE.HemisphereLight(0xa6ccce, 0x3a3a36, 1.6); // teal sky fill, dark ground bounce
     this.scene.add(hemi);
+    this.hemi = hemi;
 
     const sun = new THREE.DirectionalLight(0xe4f0f0, 3.0); // cold, softened by the haze
     sun.castShadow = true;
@@ -344,6 +423,7 @@ export class World {
     sun.shadow.normalBias = 0.04;
     this.scene.add(sun, sun.target);
     this.sun = sun;
+    Object.assign(this.base, { hemi: hemi.color.clone(), ground: hemi.groundColor.clone(), hemiI: hemi.intensity, sun: sun.color.clone() });
   }
 
   // Keep the shadow frustum centered on the player.
@@ -355,7 +435,45 @@ export class World {
     this.sun.position.set(fx, 0, fz).addScaledVector(SUN_DIR, 110);
   }
 
+  // Lighting state (env.alarm): `color` (a CSS colour) fades the haze, fog, hemisphere, sun and the level's point lights toward it
+  // (by `strength`, 0..1) with a slow pulse; `null` fades back to the normal look. `instant` skips the fade. Permanent state, not part of a level.
+  setAlarm(color, strength = ALARM.strength, instant = false) {
+    const a = this.alarm;
+    if (color != null) {
+      a.color.set(color);
+      a.strength = strength;
+    }
+    a.target = color == null ? 0 : 1;
+    if (instant) a.level = a.target;
+    this.#applyAlarm(a.t ?? 0);
+  }
+
+  #applyAlarm(t) {
+    const a = this.alarm;
+    const k = a.level * a.strength * (0.85 + 0.15 * Math.sin(t * ALARM.pulse));
+    const mix = (c, base) => c.copy(base).lerp(a.color, k);
+    mix(this.scene.fog.color, this.base.fog);
+    mix(this.sky.material.uniforms.horizon.value, this.base.horizon);
+    mix(this.hemi.color, this.base.hemi);
+    mix(this.hemi.groundColor, this.base.ground);
+    mix(this.sun.color, this.base.sun);
+    this.hemi.intensity = this.base.hemiI * (1 - 0.35 * k);
+    for (const l of this.lights) if (l.userData.base) mix(l.color, l.userData.base);
+  }
+
   update(t) {
+    const a = this.alarm;
+    const dt = a.t == null ? 0 : Math.min(0.1, Math.max(0, t - a.t));
+    a.t = t;
+    if (a.level !== a.target || a.level > 0) {
+      a.level = a.level < a.target ? Math.min(a.target, a.level + dt * ALARM.rate) : Math.max(a.target, a.level - dt * ALARM.rate);
+      this.#applyAlarm(t);
+    }
+    for (const g of this.gates) {
+      if (!g.opening || g.open >= 1) continue;
+      const k = Math.min(1, g.open + dt / g.time);
+      this.#moveGate(g, k);
+    }
     for (const f of this.flickerLights) {
       const n = Math.sin(t * 23.0 + f.seed) * Math.sin(t * 7.3 + f.seed * 2.0);
       const off = n > 0.82 || (Math.sin(t * 1.3 + f.seed) > 0.97);
@@ -497,6 +615,7 @@ export class World {
       this.scene.add(l);
     }
     l.position.set(x, y, z);
+    l.userData.base = l.color.clone(); // the alarm state tints from this
     this.lights.push(l);
     if (flicker) this.flickerLights.push({ light: l, base: intensity, seed: Math.random() * 100, strip: flicker.strip });
     return l;

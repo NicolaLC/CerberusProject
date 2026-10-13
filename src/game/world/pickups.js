@@ -38,6 +38,7 @@ export class Pickups {
     this.registry = registry;
     this.t = TUNING;
     this.items = [];
+    this.dropped = new Set(); // guns already dropped by an enemy this level (dropGun with dropOnce)
     this.time = 0;
     this.fullCooldown = 0;
 
@@ -84,6 +85,7 @@ export class Pickups {
   unload() {
     for (const it of this.items) this.#free(it);
     this.items.length = 0;
+    this.dropped.clear();
     this.time = 0;
     this.fullCooldown = 0;
   }
@@ -95,15 +97,18 @@ export class Pickups {
 
   // a gun on a stand (pickup.gun). Stand and gun geometry are the item's own, freed with it: a shared stand geometry would
   // upload on the first gun stand drawn and break the exact GPU memory check in scenes.browser.mjs.
-  addGun(pos, { gun, ammo }, yaw = 0) {
+  // `stand: false` lays the bare gun on the floor (an enemy drop).
+  addGun(pos, { gun, ammo }, yaw = 0, stand = true) {
     if (ammo != null && !(typeof ammo === 'number' && ammo >= 0)) throw new Error(`pickup.gun: ammo must be a number >= 0, got ${JSON.stringify(ammo)}`);
     const gunModel = this.world.gunModel(gun, 'pickup.gun');
     gunModel.position.set(0, 0.82, -0.45);
     gunModel.traverse((o) => (o.castShadow = o.isMesh));
-    const stand = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.8, 1.0).translate(0, 0.4, 0), this.standMat); // waist-high, the gun lies along +Z
-    stand.castShadow = true;
-    gunModel.add(stand);
-    stand.position.set(0, -0.82, 0.45);
+    if (stand) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.8, 1.0).translate(0, 0.4, 0), this.standMat); // waist-high, the gun lies along +Z
+      post.castShadow = true;
+      gunModel.add(post);
+      post.position.set(0, -0.82, 0.45);
+    } else gunModel.position.y = 0.3;
     const model = new THREE.Group().add(gunModel);
     model.position.set(...pos);
     model.rotation.y = yaw;
@@ -114,6 +119,14 @@ export class Pickups {
     const item = { pos: new THREE.Vector3(...pos), model, ring, gunModel, gun, ammo: ammo ?? GUNS[gun].pickup?.crate ?? 0, crate: false, active: true };
     this.items.push(item);
     return item;
+  }
+
+  // A gun an enemy leaves behind (enemy params dropGun, dropAmmo, dropOnce): `drop` = { gun, ammo?, once? }. Nothing if the player
+  // already owns the gun, or if `once` (default true) and a gun of this id was already dropped in this level. Returns the item or null.
+  dropGun(pos, { gun, ammo, once = true }, owned) {
+    if (owned.has(gun) || (once && this.dropped.has(gun))) return null;
+    this.dropped.add(gun);
+    return this.addGun([pos.x, pos.y, pos.z], { gun, ammo: ammo ?? GUNS[gun].pickup?.drop }, 0, false);
   }
 
   #spawn(pos, { crate, type }) {

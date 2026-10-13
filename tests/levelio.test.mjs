@@ -74,8 +74,27 @@ for (const f of files) {
   const text = readFileSync(new URL('prologue.json', dir), 'utf8');
   check('prologue.json is byte-identical to serializeLevel(its own level)', serializeLevel(JSON.parse(text)) === text);
   const lv = parseLevel(text, registry);
-  const logic = JSON.stringify(lv.pieces.filter((p) => /^(trigger|objective|marker\.entry)/.test(p.id)));
-  check('prologue.json: no trigger / objective / entry references a purge-* group', !logic.includes('purge'));
+  // the purge (#14): purge-* groups are woken only by the ordered objective chain, never by a trigger or entry marker
+  const logic = JSON.stringify(lv.pieces.filter((p) => /^(trigger|marker\.entry)/.test(p.id)));
+  check('prologue.json: no trigger / entry references a purge-* group', !logic.includes('purge'));
+  const chain = lv.pieces.filter((p) => p.id.startsWith('objective.')).sort((a, b) => a.params.order - b.params.order);
+  check('prologue.json: every objective has an explicit, unique order', chain.every((o) => Number.isFinite(o.params.order)) && new Set(chain.map((o) => o.params.order)).size === chain.length);
+  const wakes = chain.filter((o) => o.params.wakeGroup).map((o) => o.params.wakeGroup);
+  check('prologue.json: purge-1..6 are woken once each, in order', wakes.join() === 'purge-1,purge-2,purge-3,purge-4,purge-5,purge-6', wakes.join());
+  // the armoury (#93): order 60 between the shooters (purge-2) and the troopers (purge-3); a skip trigger that exists; the troopers carry the drop
+  const arm = chain.find((o) => o.params.order === 60);
+  const prev = chain.filter((o) => o.params.order < 60).at(-1);
+  const next = chain.find((o) => o.params.order > 60 && o.params.wakeGroup);
+  check('prologue.json: the armoury (order 60, interact, grants the rifle) sits between the shooters (purge-2) and the troopers (purge-3)', arm?.id === 'objective.interact' && arm.params.grantGun === 'rifle' && prev?.params.wakeGroup === 'purge-2' && next?.params.wakeGroup === 'purge-3');
+  check('prologue.json: the armoury skipOn names a trigger.volume of the file', lv.pieces.some((p) => p.id === 'trigger.volume' && p.name === arm?.params.skipOn && p.params.once === false));
+  check('prologue.json: every trooper of purge-3 / purge-4 drops the rifle', lv.pieces.filter((p) => p.id === 'enemy.trooper' && /^purge-[34]$/.test(p.params?.group)).every((p) => p.params.dropGun === 'rifle'));
+  // the exit (#15): a gate opened by the boss objective, a last reach needing the rifle, the late armoury step before the arena gate
+  const gate = lv.pieces.find((p) => p.id === 'kit.gate');
+  check('prologue.json: the exit gate opens on the boss objective being done', gate?.params.on === `objective:${chain.find((o) => o.params.wakeGroup === 'purge-6')?.name}:done`);
+  const last = chain.at(-1);
+  check('prologue.json: the last objective is a reach beyond the gate (order 120) that requires the rifle', last?.id === 'objective.reach' && last.params.order === 120 && last.params.requiresGun === 'rifle' && last.pos[2] < gate.pos[2]);
+  const late = chain.find((o) => o.params.skipIfOwned === 'rifle');
+  check('prologue.json: a skipIfOwned rifle step sits after the drones and before the arena gate and can grant the rifle', late?.id === 'objective.interact' && late.params.grantGun === 'rifle' && late.params.order > 90 && late.params.order < 100);
 }
 check('all bundled level files covered', files.length === Object.keys(SCENES).length && levelNames().join() === Object.keys(SCENES).join(), `${files.length} files`);
 

@@ -9,6 +9,8 @@
 // World.mats), the hook for region skins. Bad params and bad yaw throw a readable error (a level file is data).
 // Library meta on every entry: `example` ({ params, yaw? }, what the Library spawns) and `label` (one line of stats).
 
+import { onProblem } from './encounter.js';
+
 // Material key per role: the only place a kit piece names a material.
 export const KIT_MATS = { floor: 'floor', wall: 'wall', low: 'low', high: 'high', platform: 'platform' };
 
@@ -20,6 +22,7 @@ const M = {
   tile: 4, tileThickness: 0.2,
   wallLength: 4, wallHeight: 7, wallThickness: 0.5, wallMinHeight: 2.0, // under 2.0 a jet climbs it (not a wall)
   doorWidth: 4, doorHeight: 4, doorMinWidth: 2.0, doorMinHeight: 1.8, jambMin: 0.9,
+  gateThickness: 0.3, gateTime: 1.2, // a gate is thinner than the 0.5 wall around it, so it slides into the lintel without touching its faces
   stepMax: 0.45, rise: 0.4, run: 1.0, runMin: 0.6, stairWidth: 4,
   rampRise: 0.1, rampMaxRise: 0.25, rampLength: 8,
   lowHeight: 1.1, lowThickness: 1.0, lowLength: 3, lowMin: 1.6,
@@ -164,6 +167,32 @@ export const KIT_PIECES = {
         { x: off, y: 0, z: 0, w: jamb, h: wallH, d: t, mat, cover: 'wall' },
         { x: 0, y: height, z: 0, w: width, h: wallH - height, d: t, mat },
       ]);
+    },
+  },
+
+  // A sealed gate for a doorway (kit.doorway): a heavy slab that blocks the opening (collision, bullets, sight) until its `on` happens,
+  // then slides into the lintel ('up') or the floor ('down') in `time` seconds. pos = center of the opening at the floor, like
+  // kit.doorway, so the two share the same pos / yaw. params: on (an `on` form, encounter.js: objective:<id>:done, trigger:<id>, ...),
+  // width (4, clamped up to 2.0), height (4, clamped up to 1.8), thickness (0.3), slide ('up'), time (1.2 s), mat (role high).
+  // Opens once per run; a restart, a scene load and the editor's play / edit rebuild it shut. In the editor and the Library it is inert and
+  // draws a ghost of the space it slides into (sliding up needs a lintel at least `height` tall above it: wallHeight >= 2 * height).
+  'kit.gate': {
+    example: { params: { on: 'trigger:gate', width: 4, height: 4 } },
+    label: 'GATE 4.0 × 4.0, opens on an event',
+    fields: [{ key: 'on', type: 'text' }, { key: 'width', type: 'number', min: 0.1 }, { key: 'height', type: 'number', min: 0.1 }, { key: 'thickness', type: 'number', min: 0.05 }, { key: 'slide', type: 'enum', options: ['up', 'down'], optional: true }, { key: 'time', type: 'number', min: 0.1, optional: true }, MAT],
+    check: (p, registry) => onProblem(p.on, 'on', registry.guns) ?? (p.slide != null && p.slide !== 'up' && p.slide !== 'down' ? 'slide must be up or down' : null),
+    build(world, d) {
+      const id = 'kit.gate';
+      const p = d.params ?? {};
+      const width = Math.max(M.doorMinWidth, num(id, p, 'width', M.doorWidth));
+      const height = Math.max(M.doorMinHeight, num(id, p, 'height', M.doorHeight));
+      const t = num(id, p, 'thickness', M.gateThickness);
+      const time = num(id, p, 'time', M.gateTime);
+      const slide = p.slide ?? 'up';
+      const problem = onProblem(p.on, 'on', world.registry?.guns) ?? (slide !== 'up' && slide !== 'down' ? 'slide must be up or down' : null);
+      if (problem) fail(id, problem);
+      const [mesh] = emit(world, id, d, [{ x: 0, y: 0, z: 0, w: width, h: height, d: t, mat: matOf(p, 'high') }]);
+      return world.addGate(mesh, { on: p.on, height, slide, time });
     },
   },
 
