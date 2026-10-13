@@ -2,7 +2,7 @@
 // that grants the KR-7 Warden (toast, weapon:discovered once, STEM-00 log line), the stand-by pause that lets the line play before
 // the troopers wake, and the fallback: skipping the rack (walking out of the hall) lets the first destroyed trooper drop a Warden,
 // never twice, never if it is owned. The Prologue cannot end without it (#15: `armoury-late` before the arena gate, the exit needs it): both ways back are tested. Pure level data, headless stepping.
-// Needs the dev server: `npm run dev`, then `node tests/prologue-warden.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/prologue-warden.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

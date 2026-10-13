@@ -3,7 +3,7 @@
 // MEASURES the open items of instructions/metrics.md section 8 (13, 14, 15, 17) and prints them. Only rules that
 // follow from the code are asserted; the measurements are printed, not asserted, because they depend on dice rolls
 // (AI timers) and would flake under SwiftShader. The engine is stopped and stepped, frame counts rather than time.
-// Needs the dev server: `npm run dev`, then `node tests/gym-ai.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/gym-ai.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

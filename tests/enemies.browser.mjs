@@ -1,6 +1,6 @@
 // Enemy rules: destroyed enemies stay destroyed; shooters only engage inside their range; troopers take
 // cover that actually blocks the player, relocate when flanked, and shoot back.
-// Needs the dev server: `npm run dev`, then `node tests/enemies.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/enemies.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const URL = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

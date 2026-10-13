@@ -15,6 +15,7 @@
 - `instructions/gameplay.md` — controls, mechanics, tuning tables
 - `instructions/animation.md` — skeleton, dummy parts, swapping in modeled parts
 - `instructions/level.md` — arena layout, lighting, grid textures
+- `instructions/level-design.md` — designing a mission: paper pass, beat sheet verbs, checks, Prologue example
 - `instructions/desktop.md` — Electron desktop app: shell, packaging, why not Tauri
 - `instructions/art-style.md` — visual style RULE: grim industrial military sci-fi, palette, never-list, prompt kit
 - `instructions/feel.md` — camera juice, hitstop, post-processing

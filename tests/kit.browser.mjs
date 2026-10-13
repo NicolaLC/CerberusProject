@@ -2,7 +2,7 @@
 // match metrics.md (cover class by height, sizes), stairs / ramp / platform are climbed with the real movement code,
 // a doorway is walked through, bad params and bad yaw throw, and the KIT station of the Gym loads.
 // Pure simulation (engine stopped, headless). Needs the dev server:
-// `npm run dev`, then `URL='http://localhost:5173/?debug&scene=arena' node tests/kit.browser.mjs`.
+// `bun run dev`, then `URL='http://localhost:5173/?debug&scene=arena' node tests/kit.browser.mjs`.
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

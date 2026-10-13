@@ -1,6 +1,6 @@
 // Mission framework (#12): `objective.*` encounter pieces, the Mission system (order, destroy / reach / survive / interact,
 // limit, actions), the HUD state line, restart / edit / scene switch, and parameter errors.
-// Needs the dev server: `npm run dev`, then `node tests/mission.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/mission.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

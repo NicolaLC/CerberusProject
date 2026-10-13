@@ -1,7 +1,7 @@
 // Scene switcher: every scene opens through ?scene=, and switching scenes at runtime unloads the old level
 // completely (no leaked geometry, textures or scene objects), puts the player at the new spawn and resets
 // per-level state (boss bar, kill counter, lock-on).
-// Needs the dev server: `npm run dev`, then `node tests/scenes.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/scenes.browser.mjs` (Playwright + Chromium).
 // Unlike the other suites this one RENDERS a few frames per scene: renderer.info.memory only counts what was
 // uploaded to the GPU, which is what a leak would pile up.
 import { chromium } from 'playwright';

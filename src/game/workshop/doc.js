@@ -13,11 +13,11 @@ export const clone = (o) => JSON.parse(JSON.stringify(o));
 export const round = (v) => Math.round(v * 1e4) / 1e4 + 0; // + 0: no -0
 export const xyz = (p) => (Array.isArray(p) ? [p[0], p[1] ?? 0, p[2]] : [p.x, p.y ?? 0, p.z]);
 
-// How a piece turns: 'quarter' kit.* (axis-aligned, yaw in 90 degree steps: kit.js throws otherwise), 'box' env.box /
+// How a piece turns: 'quarter' kit.* and arch.* (axis-aligned, yaw in 90 degree steps: kit.js throws otherwise), 'box' env.box /
 // env.strip / trigger.volume / zone.interior / objective.reach (builders ignore yaw: a quarter turn swaps width and depth), 'label' (yaw is a param), 'none' (lights),
 // 'free' everything else (enemies, pickups, props: 15 degree steps).
 export function rotationKind(id) {
-  if (id.startsWith('kit.')) return 'quarter';
+  if (id.startsWith('kit.') || id.startsWith('arch.') || id === 'prop.console' || id === 'prop.crate' || id === 'prop.puppetRack' || id === 'prop.cradle' || id === 'prop.bench') return 'quarter'; // props with a collision box
   if (id === 'env.box' || id === 'env.strip' || id === 'trigger.volume' || id === 'zone.interior' || id === 'objective.reach') return 'box';
   if (id === 'env.label') return 'label';
   if (id === 'light.point') return 'none';
@@ -139,7 +139,7 @@ export class WorkshopDoc {
     p.pos = [this.snap(x), round(y), this.snap(z)];
     const d = p.pos.map((v, k) => round(v - old.pos[k]));
     if (d.every((v) => v === 0)) return i;
-    if (Array.isArray(p.params?.to)) p.params.to = p.params.to.map((v, k) => round(v + d[k]));
+    if (Array.isArray(p.params?.to) && p.id !== 'prop.cables') p.params.to = p.params.to.map((v, k) => round(v + d[k])); // a mover's rail is absolute; prop.cables' `to` is an offset
     const a = p.params?.arena;
     if (a) Object.assign(p.params.arena, { minX: round(a.minX + d[0]), maxX: round(a.maxX + d[0]), minZ: round(a.minZ + d[2]), maxZ: round(a.maxZ + d[2]) });
     return this.#exec({ index: i, before: old, after: p });

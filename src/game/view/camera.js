@@ -45,6 +45,7 @@ export class CameraRig {
     this.zoom = null; // { fov, dist, sens } of a scoped gun while aiming (set by Weapon)
     this.focus = null; // world point to keep framed (boss lock-on), set each frame by the game; null = free
     this.focusBlend = 0; // 0..1, eased in/out
+    this.script = null; // { pos, look, fov }: a cinematic holds the camera there (view/cinematic.js); null = gameplay camera
     this.lookIdle = 99; // seconds since the player last moved the view
     this.pivot = new THREE.Vector3();
     this.smoothPivot = null;
@@ -72,6 +73,7 @@ export class CameraRig {
     this.zoom = null;
     this.focus = null;
     this.focusBlend = 0;
+    this.script = null;
     this.lookIdle = 99;
     this.smoothPivot = null;
     this.trauma = this.fovKick = this.roll = 0;
@@ -157,6 +159,7 @@ export class CameraRig {
     const t = this.t;
     const aiming = player.aiming;
     this.time += realDt;
+    if (this.script) return this.#scripted(dt);
     const k = 1 - Math.exp(-dt * 12);
 
     // recoil: apply pending kick through a fast spring, then recover once the burst ends
@@ -256,7 +259,26 @@ export class CameraRig {
     if (hit) desired.copy(this.pivot).addScaledVector(_dir, Math.max(0.2, hit.distance - 0.25));
     this.camera.position.copy(desired);
 
-    // trauma shake (visual only: aim uses this.forward computed above)
+    this.#shake(dt);
+    this.#setFov(this.fov + this.fovKick);
+  }
+
+  // Cinematic override: the camera sits at script.pos looking at script.look; the trauma shake still applies.
+  // The gameplay state (yaw, pitch, pivot) is left as it was, so the gameplay camera takes over where it would have been.
+  #scripted(dt) {
+    const s = this.script;
+    this.camera.position.copy(s.pos);
+    this.camera.lookAt(s.look);
+    this.forward.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
+    this.right.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
+    this.smoothPivot = null; // the follow snaps to the player when the override ends
+    this.#shake(dt);
+    this.#setFov(s.fov);
+  }
+
+  // trauma shake (visual only: aim uses this.forward)
+  #shake(dt) {
+    const t = this.t;
     this.trauma = Math.max(0, this.trauma - dt * t.traumaDecay);
     const s = this.trauma * this.trauma;
     const n = (f, o) => Math.sin(this.time * f + o) * 0.6 + Math.sin(this.time * f * 2.3 + o * 1.7) * 0.4;
@@ -266,8 +288,9 @@ export class CameraRig {
     }
     _euler.set(n(37, 2) * s * t.maxShakePitch, n(33, 7) * s * t.maxShakeYaw, n(23, 3) * s * t.maxShakeRoll + this.roll);
     this.camera.quaternion.multiply(_q.setFromEuler(_euler));
+  }
 
-    const fov = this.fov + this.fovKick;
+  #setFov(fov) {
     if (Math.abs(this.camera.fov - fov) > 0.01) {
       this.camera.fov = fov;
       this.camera.updateProjectionMatrix();

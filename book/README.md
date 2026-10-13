@@ -181,7 +181,7 @@ STEM-00's amber core. Those "after" frames are closer to the book's look.
 | `03-interior-hall.jpg` | A dark interior with a door to the bright arena and low cover | Light contrast between interior and exterior |
 | `05-library-units.jpg` | The full unit lineup in the Library | Bestiary and appendix page |
 
-Regenerate or add shots: run `npm run dev`, then `node scripts/screenshots.mjs <outDir> [shot names]`: the same 20
+Regenerate or add shots: run `bun run dev`, then `node scripts/screenshots.mjs <outDir> [shot names]`: the same 20
 angles every time (these plus close-ups of each unit, each gun and the Gym AI room). Add an angle to `SHOTS` in the script.
 
 ### Illustration list (one per chapter, suggested)

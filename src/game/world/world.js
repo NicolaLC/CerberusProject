@@ -6,6 +6,8 @@ import { GUNS, gunMaterials } from '../combat/guns.js';
 import { KIT_PIECES, MAT } from './kit.js';
 import { Grid } from './grid.js';
 import { onProblem } from './encounter.js';
+import { PROP_PIECES, propMaterials, animateProps } from './props.js';
+import { ARCH_PIECES } from './arch.js';
 
 // Static level: axis-aligned boxes only (collision, cover and shadows depend on that).
 // Coordinates: x = east, z = south, y = up. Floor is y = 0.
@@ -16,9 +18,14 @@ import { onProblem } from './encounter.js';
 // Point lights are a fixed pool: three.js compiles every lit material's program for the number of lights in the scene, so
 // the count must never change while a level is loaded or edited (a hitch per light placed, per scene switch). The pool is
 // built with the World and sized by the quality tier (QUALITY[tier].lights = the point-light cap in instructions/engine.md);
-// only a quality change resizes it (setLightPool, one recompile, a settings action). An unused light has intensity 0 and waits far
-// below the floor (three still loops it in the shader). Asking for more than the pool makes extra lights that are removed again.
+// only a quality change resizes it (setLightPool, one recompile, a settings action). A level's lights are records (pointLight:
+// position, colour, intensity, distance), any number of them; every LIGHT_PICK.every s (or when the focus jumps) the pool is
+// handed to the records that matter most from the camera, and lights swapping in or out fade over LIGHT_PICK.fade s.
+// An unused pool light has intensity 0 and waits far below the floor (three still loops it in the shader).
 const PARKED = new THREE.Vector3(0, -1000, 0);
+// every: s between reselects; move: m of focus travel that forces one; fade: s to ramp a light in / out;
+// keep: score bonus of a light already live (two equal lights do not trade places every reselect)
+const LIGHT_PICK = { every: 0.2, move: 2, fade: 0.25, keep: 1.2 };
 
 export const ALARM = { color: '#ff2a1a', strength: 0.75, rate: 1.6, pulse: 3.2 }; // alarm lighting state: red tint, 0..1 mix, blend per second, pulse rad/s
 const HAZE = '#4f7b7e'; // horizon and fog: teal-cyan haze, desaturated
@@ -76,6 +83,7 @@ export const WORLD_PIECES = {
   // Unlit text sign (Gym / Library markers), no collision, no shadow. pos = bottom center of the text.
   // params: text, size? (letter height in m, default 0.6), yaw? (rad, default 0 = readable from +Z),
   // flat? (lie on the floor, readable walking toward -Z, rotated by yaw), color? '#rrggbb', bg? css color
+  // text may hold input tokens ({jump} {aim} {fire} {sprint} {interact} {reload}, controls.js): the key / button of the active device, repainted on a device change
   'env.label': {
     example: { params: { text: 'LABEL', size: 0.6 } },
     label: 'LABEL text sign, no collision',
@@ -92,6 +100,8 @@ export const WORLD_PIECES = {
     check: (p, registry) => (p.hideOn == null ? null : onProblem(p.hideOn, 'hideOn', registry.guns)),
     build: (world, d) => world.gunProp(d),
   },
+  ...PROP_PIECES, // set dressing: prop.console, prop.crate, prop.cables, prop.pipes, prop.puppetRack, prop.arm, prop.cradle, prop.bench, prop.hazard, prop.panel (props.js)
+  ...ARCH_PIECES, // architectural dressing: arch.cove, arch.rib, arch.panelling, arch.bulkhead, arch.floorChannel, arch.coffers, arch.catwalk (arch.js)
 };
 
 const COLLIDER_CELL = 4; // m, grid cell of the collider hash (arena boxes are 1-10 m; bigger spans use several cells)
@@ -116,8 +126,10 @@ export class World {
   // Two lifetimes. Permanent (built once): materials + grid textures, sky, fog, hemisphere and sun. Per level
   // (load / unload, mirrored step by step): zones, boxes and strips (+ merged batches), point lights, colliders.
   // The arrays are cleared in place, other systems hold them by reference.
-  constructor(scene, { lights = 8 } = {}) {
+  constructor(scene, { lights = 8, inputName = (t) => { throw new Error(`label token {${t}}: no input resolver`); } } = {}) {
     this.scene = scene;
+    this.inputName = inputName; // (token, scheme) -> key name, injected by Game (controls.js); signs never see Controls
+    this.scheme = 'kbm'; // input scheme the token labels show (setScheme)
     this.named = new Map(); // piece name -> mesh (for references between pieces, e.g. a light flickering a strip)
     this.colliders = []; // { box: Box3, mesh, cover: 'low' | 'high' | null }
     this.grid = new Grid(COLLIDER_CELL);
@@ -128,10 +140,16 @@ export class World {
     this.flickerLights = [];
     this.alarm = { level: 0, target: 0, strength: ALARM.strength, color: new THREE.Color(ALARM.color), t: null }; // lighting state (setAlarm)
     this.staticMeshes = []; // every level box; merged per material for rendering, kept as raycast proxies
-    this.lights = []; // the level's point lights in use (pool lights, plus any beyond the pool)
-    this.pool = []; // permanent point lights (QUALITY lights); those not in `lights` are parked at intensity 0
+    this.lights = []; // the level's point-light records (pointLight), any number; the pool lights show the best of them
+    this.pool = []; // permanent THREE.PointLights (QUALITY lights); one without a record is parked at intensity 0
+    this.lightFocus = new THREE.Vector3(); // where the last reselect looked from
+    this.lightClock = 0; // s since the last reselect
+    this.lightsDirty = true; // a record came or went, or the pool changed size: reselect on the next update
+    this.lightSnap = true; // the next reselect lights its picks at once, no fade (level load, quality change)
+    this.lightPending = 0; // picked records still waiting for a free pool light
     this.labels = []; // env.label meshes: own geometry, material and canvas texture each
-    this.props = []; // prop.gun display models: own merged geometry, shared materials
+    this.props = []; // prop.gun display models, prop.arm / prop.cradle rigs and the props' hidden colliders: own geometry, shared materials
+    this.consoles = []; // prop.console positions (Vector3), for the audio's console hum; cleared with the level
     this.gates = []; // kit.gate records (addGate): { mesh, col, y0, h, dir, time, on, open, opening, inert }
     this.gizmoMode = false; // set while spawn() builds a gizmo piece (editor, Library): a gate is inert and shows its travel
     this.registry = null; // of the loaded level, for spawn()
@@ -142,34 +160,31 @@ export class World {
     this.skin = null; // the loaded level's `skin` (a key of this.skins), null = the grid prototype materials
     // gun display models share these (STEM-00's olive furniture, like the player's guns); permanent like the level materials
     this.propMats = gunMaterials();
-    this.keep = new Set([...Object.values(this.mats), ...Object.values(this.propMats), ...Object.values(this.skins).flatMap((t) => Object.values(t))]); // shared across levels: never disposed with a level
+    this.dressing = propMaterials(); // the prop.* set dressing materials (props.js); panels add theirs to `keep` as they appear
+    const dressing = Object.values(this.dressing).filter((m) => m.isMaterial);
+    this.keep = new Set([...Object.values(this.mats), ...Object.values(this.propMats), ...dressing, ...Object.values(this.skins).flatMap((t) => Object.values(t))]); // shared across levels: never disposed with a level
     this.#buildSky();
     this.#buildLights();
     this.setLightPool(lights);
   }
 
-  // Resizes the pool (quality change only: the light count changes, so shaders recompile once). Growing adopts temporary extra
-  // lights first; shrinking drops parked lights first, and a lit light that no longer fits becomes a temporary one.
+  // Resizes the pool (quality change only: the light count changes, so shaders recompile once); the records are reassigned at once.
   setLightPool(n) {
     if (n === this.pool.length) return;
     while (this.pool.length < n) {
-      let l = this.lights.find((x) => !x.userData.pooled);
-      if (l) l.userData.pooled = true;
-      else {
-        l = new THREE.PointLight(0xffffff, 0, 1, 2);
-        l.position.copy(PARKED);
-        l.userData.pooled = true;
-        this.scene.add(l);
-      }
+      const l = new THREE.PointLight(0xffffff, 0, 1, 2);
+      l.position.copy(PARKED);
+      l.userData.rec = null; // the record it shows
+      l.userData.k = 0; // fade, 0..1
+      this.scene.add(l);
       this.pool.push(l);
     }
     while (this.pool.length > n) {
-      let i = this.pool.findLastIndex((x) => !x.userData.used);
-      if (i < 0) i = this.pool.length - 1;
-      const [l] = this.pool.splice(i, 1);
-      if (l.userData.used) l.userData.pooled = false; // stays in the scene as a temporary light until released
-      else disposeTree(l);
+      const l = this.pool.pop();
+      if (l.userData.rec) l.userData.rec.userData.slot = null;
+      disposeTree(l);
     }
+    this.lightsDirty = this.lightSnap = true;
   }
 
   // level: parsed level file; registry: Registry holding WORLD_PIECES.
@@ -179,6 +194,7 @@ export class World {
     this.#buildLevel(level, registry);
     // ~60 boxes x up to 6 face materials -> one draw per material per 64 m chunk, one chunk for small levels (+ one shadow draw per chunk)
     this.batches = mergeStatic(this.staticMeshes, this.scene);
+    this.lightSnap = true; // the level opens lit, no fade-in
     return this;
   }
 
@@ -193,10 +209,13 @@ export class World {
       disposeTree(m);
     }
     for (const g of this.props) disposeTree(g, { keep: this.keep });
-    for (const g of this.gates) disposeTree(g.mesh, { keep: this.keep });
+    for (const g of this.gates) {
+      disposeTree(g.mesh, { keep: this.keep });
+      for (const l of g.lamps) disposeTree(l, { keep: this.keep });
+    }
     this.batches = [];
     this.gridDirty = true;
-    for (const list of [this.props, this.gates, this.staticMeshes, this.colliders, this.meshes, this.coverMeshes, this.interiorZones, this.flickerLights, this.lights, this.labels]) list.length = 0;
+    for (const list of [this.props, this.consoles, this.gates, this.staticMeshes, this.colliders, this.meshes, this.coverMeshes, this.interiorZones, this.flickerLights, this.lights, this.labels]) list.length = 0;
     this.named.clear();
   }
 
@@ -217,10 +236,9 @@ export class World {
 
   // Removes and frees what spawn() built (boxes, labels, lights, props, and their collision).
   despawn(handle) {
-    if (handle.piece?.isPointLight) this.releaseLight(handle.piece); // pool lights are not scene additions: no object in the handle
+    if (handle.piece?.isLightRecord) this.releaseLight(handle.piece); // light records are not scene objects: none in the handle
     const gone = new Set(handle.objects);
     for (const o of handle.objects) {
-      if (o.isPointLight) continue; // an over-pool light, already freed by releaseLight
       if (this.labels.includes(o)) o.material.map.dispose();
       disposeTree(o, { keep: this.keep });
     }
@@ -256,12 +274,12 @@ export class World {
   }
 
   // A sliding gate (kit.gate): `mesh` is the box kit.js just built through box(). It leaves the static batches (it moves) but keeps its
-  // collider and raycast entry; `react('<on form>')` starts it opening. opts: { on, height, slide: 'up' | 'down', time }. Inert in gizmo mode
+  // collider and raycast entry; `react('<on form>')` starts it opening. opts: { on, height, slide: 'up' | 'down', time, lamps (status lamp meshes), lampOpen (their material once open) }. Inert in gizmo mode
   // (editor, Library): it stays shut whatever happens and shows a ghost of the space it slides into.
-  addGate(mesh, { on, height, slide, time }) {
+  addGate(mesh, { on, height, slide, time, lamps = [], lampOpen = null }) {
     const i = this.staticMeshes.indexOf(mesh);
     if (i >= 0) this.staticMeshes.splice(i, 1); // merged batches are static
-    const g = { mesh, col: mesh.userData.collider, y0: mesh.position.y, h: height, dir: slide === 'down' ? -1 : 1, time, on, open: 0, opening: false, inert: this.gizmoMode };
+    const g = { mesh, col: mesh.userData.collider, y0: mesh.position.y, h: height, dir: slide === 'down' ? -1 : 1, time, on, lamps, lampOpen, open: 0, opening: false, inert: this.gizmoMode };
     this.gates.push(g);
     if (g.inert) {
       const { width, height: h, depth } = mesh.geometry.parameters;
@@ -278,14 +296,24 @@ export class World {
     return mesh;
   }
 
-  // A level event happened (`key` in the `on` forms of encounter.js): gates waiting for it start opening, props with `hideOn` hide.
-  // Called by Encounter. Returns how many gates started opening.
-  react(key) {
-    for (const g of this.props) if (g.userData.hideOn === key) g.visible = false;
+  // A level event happened (`key` in the `on` forms of encounter.js): gates waiting for it start opening, props with `hideOn` hide,
+  // arms with `retractOn` fold up, cradles with `releaseOn` open. Called by Encounter. Returns how many gates started opening.
+  // onArm(pos): called once for each arm that starts folding up (Encounter emits `prop:retract`).
+  react(key, onArm) {
+    for (const g of this.props) {
+      if (g.userData.hideOn === key) g.visible = false;
+      const arm = g.userData.arm;
+      if (arm?.on === key && !arm.retracting) {
+        arm.retracting = true;
+        onArm?.(g.position);
+      }
+      if (g.userData.cradle?.on === key) g.userData.cradle.releasing = true;
+    }
     let n = 0;
     for (const g of this.gates) {
       if (g.inert || g.opening || g.on !== key) continue;
       g.opening = true;
+      for (const l of g.lamps) l.material = g.lampOpen; // status lamp: sealed red -> open cyan
       n++;
     }
     return n;
@@ -461,7 +489,8 @@ export class World {
     for (const l of this.lights) if (l.userData.base) mix(l.color, l.userData.base);
   }
 
-  update(t) {
+  // focus: where the light pool looks from (the camera position, game.js); optional
+  update(t, focus) {
     const a = this.alarm;
     const dt = a.t == null ? 0 : Math.min(0.1, Math.max(0, t - a.t));
     a.t = t;
@@ -469,6 +498,7 @@ export class World {
       a.level = a.level < a.target ? Math.min(a.target, a.level + dt * ALARM.rate) : Math.max(a.target, a.level - dt * ALARM.rate);
       this.#applyAlarm(t);
     }
+    animateProps(this, t, dt);
     for (const g of this.gates) {
       if (!g.opening || g.open >= 1) continue;
       const k = Math.min(1, g.open + dt / g.time);
@@ -478,8 +508,79 @@ export class World {
       const n = Math.sin(t * 23.0 + f.seed) * Math.sin(t * 7.3 + f.seed * 2.0);
       const off = n > 0.82 || (Math.sin(t * 1.3 + f.seed) > 0.97);
       f.light.intensity = off ? f.base * 0.08 : f.base * (0.85 + 0.15 * Math.sin(t * 40));
-      if (f.strip) f.strip.material.emissiveIntensity = off ? 0.2 : 2.0;
+      if (f.strip) f.strip.material.emissiveIntensity = off ? 0.2 : 2.0; // the record flickers, live or not, so its strip does too
     }
+    this.#updateLights(dt, focus);
+  }
+
+  // Hands the pool to the records that matter most from `focus` (the camera; the last focus if none is given) and fades swaps.
+  #updateLights(dt, focus) {
+    const P = LIGHT_PICK;
+    this.lightClock += dt;
+    const at = focus ?? this.lightFocus;
+    if (this.lightsDirty || this.lightClock >= P.every || at.distanceToSquared(this.lightFocus) > P.move * P.move) this.#pickLights(at);
+    const step = dt / P.fade;
+    for (const p of this.pool) {
+      const s = p.userData;
+      let rec = s.rec;
+      if (rec && !rec.userData.want) {
+        s.k -= step;
+        if (s.k <= 0 || this.lightSnap) {
+          this.#park(p);
+          rec = null;
+        }
+      } else if (rec) s.k = this.lightSnap ? 1 : Math.min(1, s.k + step);
+      if (!rec && this.lightPending > 0) {
+        rec = this.lights.find((r) => r.userData.want && !r.userData.slot) ?? null;
+        if (rec) {
+          s.rec = rec;
+          s.k = this.lightSnap ? 1 : 0;
+          rec.userData.slot = p;
+          this.lightPending--;
+        } else this.lightPending = 0;
+      }
+      if (!rec) continue;
+      p.position.copy(rec.position);
+      p.color.copy(rec.color); // the alarm tints the record
+      p.distance = rec.distance;
+      p.intensity = rec.intensity * s.k; // the record's intensity flickers
+    }
+    this.lightSnap = false;
+  }
+
+  // Marks the pool-size best records `want`: pinned first, then by score = power * r^2 / (r^2 + d^2) (r = the light's
+  // distance, d = from the focus), x keep for a live one. No sort: pool size passes of max over the records, a reselect only.
+  // ponytail: no occlusion, a bright light behind a wall still competes; add a room / zone test if that shows.
+  #pickLights(at) {
+    const P = LIGHT_PICK;
+    this.lightClock = 0;
+    this.lightsDirty = false;
+    this.lightFocus.copy(at);
+    const L = this.lights;
+    for (const r of L) {
+      const u = r.userData;
+      const r2 = r.distance > 0 ? r.distance * r.distance : 1e6; // distance 0 = no cutoff in three
+      u.score = u.pin ? Infinity : (u.power * r2 / (r2 + r.position.distanceToSquared(at))) * (u.slot ? P.keep : 1);
+      u.want = false;
+    }
+    let pending = 0;
+    for (let i = 0; i < this.pool.length; i++) {
+      let best = null;
+      for (const r of L) if (!r.userData.want && r.userData.score > 0 && (!best || r.userData.score > best.userData.score)) best = r;
+      if (!best) break;
+      best.userData.want = true;
+      if (!best.userData.slot) pending++;
+    }
+    this.lightPending = pending;
+  }
+
+  #park(p) {
+    if (p.userData.rec) p.userData.rec.userData.slot = null;
+    p.userData.rec = null;
+    p.userData.k = 0;
+    p.intensity = 0;
+    p.distance = 1;
+    p.position.copy(PARKED);
   }
 
   isInterior(p) {
@@ -571,8 +672,11 @@ export class World {
 
   // Box from min corner style args: center x/z, bottom y, size w/h/d.
   box(cx, y, cz, w, h, d, mat, { cover = null, collide = true, shadow = true } = {}) {
-    const geo = new THREE.BoxGeometry(w, h, d);
-    const center = new THREE.Vector3(cx, y + h / 2, cz);
+    // Walls standing on the ground floor sink 0.3 m into it (mesh only, the collider keeps y): a shadow caster that
+    // only touches the floor leaks a thin line of sun at its foot (shadow bias), visible inside closed rooms.
+    const sink = shadow && collide && Math.abs(y) < 1e-6 && h >= 1.5 ? 0.3 : 0;
+    const geo = new THREE.BoxGeometry(w, h + sink, d);
+    const center = new THREE.Vector3(cx, y + (h - sink) / 2, cz);
     applyWorldUVs(geo, center);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.copy(center);
@@ -601,48 +705,53 @@ export class World {
     return this.box(cx, y, cz, w, h, d, mat, { collide: false, shadow: false });
   }
 
-  // Takes a light from the pool (or, past the pool, a temporary one) and sets it up.
-  pointLight(x, y, z, color, intensity, distance, flicker = null) {
-    let l = this.pool.find((p) => !p.userData.used);
-    if (l) {
-      l.color.set(color);
-      l.intensity = intensity;
-      l.distance = distance;
-      l.userData.used = true;
-    } else {
-      console.warn(`world: more than ${this.pool.length} point lights: the extra light changes the light count (shaders recompile)`);
-      l = new THREE.PointLight(color, intensity, distance, 2);
-      this.scene.add(l);
-    }
-    l.position.set(x, y, z);
+  // Adds a light record (not a scene object: the pool shows it while it is among the best, #updateLights). Any number.
+  // pin: always live (a tool's light that must show); more pins than the pool is warned and the extras stay dark.
+  pointLight(x, y, z, color, intensity, distance, flicker = null, { pin = false } = {}) {
+    const l = { isLightRecord: true, position: new THREE.Vector3(x, y, z), color: new THREE.Color(color), intensity, distance, userData: { power: intensity, pin, slot: null, want: false, score: 0 } };
     l.userData.base = l.color.clone(); // the alarm state tints from this
     this.lights.push(l);
     if (flicker) this.flickerLights.push({ light: l, base: intensity, seed: Math.random() * 100, strip: flicker.strip });
+    if (pin && this.lights.filter((r) => r.userData.pin).length > this.pool.length) console.warn(`world: more than ${this.pool.length} pinned point lights: the extras stay dark`);
+    this.lightsDirty = true;
     return l;
   }
 
-  // Gives a light back: a pool light is parked at intensity 0, a temporary one is removed from the scene.
+  // Drops a light record; the pool light showing it goes dark at once (a deletion, not a swap).
   releaseLight(l) {
     let i = this.lights.indexOf(l);
     if (i >= 0) this.lights.splice(i, 1);
     i = this.flickerLights.findIndex((f) => f.light === l);
     if (i >= 0) this.flickerLights.splice(i, 1);
-    if (l.userData.pooled) {
-      l.intensity = 0;
-      l.distance = 1;
-      l.position.copy(PARKED);
-      l.userData.used = false;
-    } else disposeTree(l);
+    if (l.userData.slot) this.#park(l.userData.slot);
+    l.userData.want = false;
+    this.lightsDirty = true;
   }
 
   // Text sign, see env.label. Not merged into the static batches (one texture per sign).
   label(pos, { text, size = 0.6, yaw = 0, flat = false, color = '#ffffff', bg = 'rgba(0,0,0,0.55)' }) {
+    const tokens = /\{(\w+)\}/g.test(text);
+    const mesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ transparent: true, polygonOffset: true, polygonOffsetFactor: -2 }));
+    mesh.userData.label = { text: String(text), tokens, pos, size, flat, color, bg };
+    this.#paintLabel(mesh); // throws on an unknown token
+    if (flat) mesh.rotation.set(-Math.PI / 2, yaw, 0, 'YXZ');
+    else mesh.rotation.y = yaw;
+    mesh.matrixAutoUpdate = false;
+    mesh.updateMatrix();
+    this.scene.add(mesh);
+    this.labels.push(mesh);
+    return mesh;
+  }
+
+  // (Re)draws a label's canvas texture and plane for the active scheme (a new texture: the size can change).
+  #paintLabel(mesh) {
+    const { text, tokens, pos, size, flat, color, bg } = mesh.userData.label;
     const px = 64; // canvas pixels per letter height
     const c = document.createElement('canvas');
     const g = c.getContext('2d');
     const font = `bold ${px}px monospace`;
     g.font = font;
-    const lines = String(text).split('\n');
+    const lines = (tokens ? text.replace(/\{(\w+)\}/g, (_, t) => this.inputName(t, this.scheme)) : text).split('\n');
     const pad = px * 0.25;
     c.width = Math.ceil(Math.max(...lines.map((l) => g.measureText(l).width)) + pad * 2);
     c.height = Math.ceil(lines.length * px * 1.15 + pad * 2);
@@ -655,21 +764,24 @@ export class World {
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     const k = size / px;
-    const geo = new THREE.PlaneGeometry(c.width * k, c.height * k);
-    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, polygonOffset: true, polygonOffsetFactor: -2 });
-    const mesh = new THREE.Mesh(geo, mat);
-    if (flat) {
-      mesh.rotation.set(-Math.PI / 2, yaw, 0, 'YXZ');
-      mesh.position.set(pos[0], pos[1] + 0.02, pos[2]);
-    } else {
-      mesh.rotation.y = yaw;
-      mesh.position.set(pos[0], pos[1] + (c.height * k) / 2, pos[2]);
+    mesh.geometry.dispose();
+    mesh.geometry = new THREE.PlaneGeometry(c.width * k, c.height * k);
+    mesh.material.map?.dispose();
+    mesh.material.map = tex;
+    mesh.material.needsUpdate = true;
+    if (flat) mesh.position.set(pos[0], pos[1] + 0.02, pos[2]);
+    else mesh.position.set(pos[0], pos[1] + (c.height * k) / 2, pos[2]);
+  }
+
+  // Input scheme ('kbm' | 'pad' | 'trackpad', Controls.scheme): repaints the labels with tokens, only when it changed.
+  setScheme(scheme) {
+    if (scheme === this.scheme) return;
+    this.scheme = scheme;
+    for (const m of this.labels) {
+      if (!m.userData.label.tokens) continue;
+      this.#paintLabel(m);
+      m.updateMatrix();
     }
-    mesh.matrixAutoUpdate = false;
-    mesh.updateMatrix();
-    this.scene.add(mesh);
-    this.labels.push(mesh);
-    return mesh;
   }
 
   #buildLevel(level, registry) {

@@ -58,6 +58,10 @@ import objectiveNew from '../../assets/sfx/objective-new.mp3';
 import objectiveDone from '../../assets/sfx/objective-done.mp3';
 import gunDiscovered from '../../assets/sfx/gun-discovered.mp3';
 import missionComplete from '../../assets/sfx/mission-complete.mp3';
+import armRetract from '../../assets/sfx/arm-retract.mp3';
+import bayHumLoop from '../../assets/sfx/bay-hum-loop.mp3';
+import consoleLoop from '../../assets/sfx/console-loop.mp3';
+import droneLoop from '../../assets/sfx/drone-loop.mp3';
 import ambientLoop from '../../assets/sfx/ambient-loop.mp3';
 import combatMusic from '../../assets/sfx/combat-music.mp3';
 import bossMusic from '../../assets/sfx/boss-music.mp3';
@@ -110,14 +114,18 @@ const SAMPLES = {
   bossLeg: [bossLeg, 0.75, 0.04],
   bossDeath: [bossDeath, 0.85, 0],
   bossLoop: [bossLoop, 0.25, 0], // looped while the boss is awake (engine())
-  wakeSurge: [wakeSurge, 0.7, 0], // boot intro (wake()): power comes back,
+  wakeSurge: [wakeSurge, 0.7, 0], // intro cinematic (cinematic:wake; else the boot, wake()): power comes back,
   wakeCore: [wakeCore, 0.6, 0], // STEM-00's core lights,
-  wakeRise: [wakeRise, 0.6, 0], // it straightens as the view fades in
+  wakeRise: [wakeRise, 0.6, 0], // it straightens (stretched over wake.rise)
   gateOpen: [gateOpen, 0.6, 0.05],
   objectiveNew: [objectiveNew, 0.4, 0.02],
   objectiveDone: [objectiveDone, 0.5, 0.02],
   gunDiscovered: [gunDiscovered, 0.6, 0.03],
   missionComplete: [missionComplete, 0.7, 0],
+  armRetract: [armRetract, 0.5, 0.03], // prop:retract, positional (ARM_RANGE)
+  bayHum: [bayHumLoop, 0.2, 0], // looped bed, fades in while the camera is in an interior zone (mood())
+  consoleLoop: [consoleLoop, 0.3, 0], // one looped voice, gain by the nearest prop.console (CONSOLE_RANGE)
+  droneLoop: [droneLoop, 0.35, 0], // one looped voice, gain by the nearest alive drone (DRONE_RANGE)
   ambient: [ambientLoop, 0.3, 0], // looped from the first gesture on (mood())
   music: [combatMusic, 0.35, 0], // looped while fighting (mood())
   bossMusic: [bossMusic, 0.35, 0], // looped from boss:wake to boss:dead, instead of `music`
@@ -130,8 +138,15 @@ const BAR = (4 * 60) / 174;
 const MUSIC = { hold: 10, fadeIn: 0.5, fadeOut: 1.3, duck: 0.5, loopEnd: { music: 39 * BAR, bossMusic: 54 * BAR } };
 const COMBAT_ON = ['bolt:fired', 'player:hurt', 'group:wake', 'encounter:wake', 'boss:wake', 'trooper:flank', 'alarm:on'];
 const COMBAT_OFF = ['arena:clear', 'boss:dead', 'mission:complete', 'mission:failed', 'alarm:clear'];
-// Boot intro sound cues, in s from `intro:start`: the surge, the core right after it; the rise (5 s) ends with the intro.
+// Wake-up cues. Intro cinematic: the surge on `cinematic:wake`, the core CORE_DELAY s later, the rise stretched to wake.rise.
+// Fallback for a level with an `intro.boot` and no cinematic, in s from `intro:start`: the surge, the core right after it;
+// the rise (5 s) ends with the intro.
 const WAKE = { surge: 2.4, core: 3.4, rise: 5 };
+const CORE_DELAY = 1;
+const ARM_RANGE = 20; // m from the camera where a folding arm fades out
+const CONSOLE_RANGE = 6;
+const DRONE_RANGE = 25;
+const BED_FADE = 0.5; // s, time constant of the bed loops' gain
 const RUN_STEP = { gain: 1.15, rate: 1.08 }; // sprint steps vs walk steps (same takes)
 const HIT_SAMPLE = { body: 'hitBody', head: 'hitHead', weak: 'hitWeak' };
 const ENEMY_STEP_RANGE = 28; // m from the camera where enemy steps fade out
@@ -155,10 +170,12 @@ function bytes(url) {
 
 export class Audio {
   // weapon: read for the gun being reloaded (the reload event carries no gun id)
-  // listener: where the ears are (the camera), for distance falloff of enemy steps
-  constructor(weapon, listener) {
+  // listener: where the ears are (the camera), for distance falloff of enemy steps and the beds
+  constructor(weapon, listener, world = null, enemies = null) {
     this.weapon = weapon;
     this.listener = listener;
+    this.world = world; // interior zones and console positions, for the beds
+    this.enemies = enemies; // the drones, for the drone hum
     this.ctx = null;
     this.samples = {}; // id -> decoded AudioBuffers (one per take)
     this.voice = {}; // id -> playing source that may be cut short (reload, rail charge)
@@ -172,6 +189,10 @@ export class Audio {
     this.track = null; // id of the music track (fading) in, null when none
     this.tracks = {}; // id -> its looping source, started on first use and kept running (silent when off)
     this.ambientLoop = null;
+    this.beds = {}; // id -> looping source of a bed (bayHum, consoleLoop, droneLoop), started once decoded
+    this.bedLevel = {}; // id -> the 0..1 level last sent to its gain
+    this.cinema = false; // an intro cinematic ran this run: the boot's wake cues are not scheduled
+    this.riseLen = 2; // wake.rise of the cinematic
     this.live = new Map(); // id -> enemy voices still playing (VOICE_CAP)
   }
 
@@ -240,7 +261,19 @@ export class Audio {
     events.on('mission:objective:done', (e) => !e.skipped && this.sample('objectiveDone')); // a skipped optional objective is silent
     events.on('weapon:discovered', () => this.sample('gunDiscovered'));
     events.on('mission:complete', () => this.sample('missionComplete'));
-    events.on('intro:start', (e) => this.wake(e.duration));
+    events.on('intro:start', (e) => this.cinema || this.wake(e.duration));
+    events.on('cinematic:start', (e) => {
+      this.cinema = true;
+      this.riseLen = e.wake?.rise ?? 2;
+      this.wake(0);
+    });
+    events.on('cinematic:wake', () => this.#wakeNow());
+    events.on('cinematic:done', (e) => e.skipped && this.wake(0));
+    events.on('prop:retract', (e) => {
+      if (!this.listener) return;
+      const f = 1 - this.listener.position.distanceTo(e.pos) / ARM_RANGE;
+      if (f > 0.05) this.sample('armRetract', 0, f * f);
+    });
     for (const e of COMBAT_ON) events.on(e, () => (this.combatAt = performance.now() / 1000));
     for (const e of COMBAT_OFF) events.on(e, () => (this.combatAt = -Infinity));
     events.on('boss:wake', () => (this.bossFight = true));
@@ -249,9 +282,11 @@ export class Audio {
     events.on('alarm:on', (a) => a.siren && this.siren(true));
     events.on('alarm:off', (a) => !a.active && this.siren(false));
     events.on('alarm:clear', () => {
+      this.cinema = false; // the level unloads
       this.siren(false);
       this.engine(false); // the level unloads: a boss left awake goes quiet too
     });
+    events.on('ui:type', (e) => this.type(e.end));
     events.on('player:step', (s) => {
       // sprinting reuses the walking takes, a little louder and higher, so the two gaits sound like the same boots
       const src = this.sample(s.raised ? 'stepMetal' : 'stepWalk', 0, s.run && !s.raised ? RUN_STEP.gain : 1);
@@ -562,6 +597,7 @@ export class Audio {
   mood(paused) {
     if (!this.ctx) return;
     this.ambientLoop ??= this.#loop('ambient', 1);
+    this.#beds(paused);
     const fighting = !paused && (this.bossFight || performance.now() / 1000 - this.combatAt < MUSIC.hold);
     const want = fighting ? (this.bossFight ? 'bossMusic' : 'music') : null;
     if (want && !this.tracks[want]) {
@@ -580,6 +616,37 @@ export class Audio {
     this.ambientLoop?.gain.gain.setTargetAtTime(SAMPLES.ambient[1] * (want ? MUSIC.duck : 1), t, 1);
   }
 
+  // The beds (called by mood, no allocations): a bay hum while the camera is in an interior zone, one console voice and one
+  // drone voice whose level follows the nearest source (positions cached by the world / the enemies list). All silent on pause.
+  #beds(paused) {
+    const p = this.listener?.position;
+    let bay = 0, con = 0, drone = 0;
+    if (p && !paused) {
+      if (this.world) {
+        bay = this.world.isInterior(p) ? 1 : 0;
+        let d = CONSOLE_RANGE;
+        for (const c of this.world.consoles) d = Math.min(d, c.distanceTo(p));
+        con = (1 - d / CONSOLE_RANGE) ** 2;
+      }
+      if (this.enemies) {
+        let d = DRONE_RANGE;
+        for (const e of this.enemies.all) if (e.kind === 'drone' && e.alive) d = Math.min(d, e.pos.distanceTo(p));
+        drone = (1 - d / DRONE_RANGE) ** 2;
+      }
+    }
+    this.#bed('bayHum', bay);
+    this.#bed('consoleLoop', con);
+    this.#bed('droneLoop', drone);
+  }
+
+  #bed(id, level) {
+    this.beds[id] ??= this.#loop(id, 0); // null until decoded (retried next frame)
+    const src = this.beds[id];
+    if (!src || Math.abs(level - (this.bedLevel[id] ?? -1)) < 0.01) return;
+    this.bedLevel[id] = level;
+    src.gain.gain.setTargetAtTime(SAMPLES[id][1] * level, this.ctx.currentTime, BED_FADE);
+  }
+
   #loop(id, volume) {
     const src = this.sample(id, 0, volume);
     if (src) src.loop = true;
@@ -594,6 +661,17 @@ export class Audio {
     this.wakeFrom = duration ? performance.now() : 0;
     this.wakeDuration = duration;
     if (duration) this.#wakeCues();
+  }
+
+  // The cinematic's surge: surge now, core CORE_DELAY s on, rise stretched to last wake.rise. A skip cuts them (cinematic:done).
+  #wakeNow() {
+    this.wake(0);
+    for (const [id, delay] of [['wakeSurge', 0], ['wakeCore', CORE_DELAY], ['wakeRise', 0]]) {
+      const src = this.sample(id, delay);
+      if (!src) continue;
+      if (id === 'wakeRise') src.playbackRate.value = Math.min(2, Math.max(0.5, src.buffer.duration / this.riseLen));
+      this.wakeVoices.push(src);
+    }
   }
 
   #wakeCues() {
@@ -845,6 +923,27 @@ export class Audio {
       lfo.start(t);
       this.sirenNode = { nodes: [osc, lfo], gain };
     }
+  }
+
+  // Terminal key tick (boot intro, STEM-00 log): short dry bandpassed noise click, pitch and level jittered; `end` = a
+  // lower, softer thunk plus a small blip (carriage return). At most one per 25 ms.
+  type(end = false) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    if (t - (this.typeAt ?? -1) < 0.025) return;
+    this.typeAt = t;
+    const n = this.ctx.createBufferSource();
+    n.buffer = this.noise;
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = (end ? 900 : 2200) * (1 + (Math.random() * 2 - 1) * 0.25);
+    f.Q.value = 2;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime((end ? 0.3 : 0.2) * (1 + (Math.random() * 2 - 1) * 0.3), t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + (end ? 0.07 : 0.02));
+    n.connect(f).connect(g).connect(this.master);
+    n.start(t, Math.random() * 0.4);
+    n.stop(t + 0.1);
   }
 
   click() {

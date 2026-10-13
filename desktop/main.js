@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Desktop shell (Electron). Serves the Vite build (dist/) from app://game/ — a fixed origin, so settings
 // in localStorage persist across launches — in a fullscreen window that never throttles the game loop.
-// `--debug` (after `--` on npm scripts) loads ?debug and opens DevTools.
+// `--debug` (passed through by `bun run desktop --debug`) loads ?debug and opens DevTools.
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
 const LEVELS = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'levels'); // the repo's level files
 const debug =process.argv.includes('--debug');

@@ -196,12 +196,12 @@ Measures what content costs, so encounters can be budgeted (numbers: `engine.md`
 - **Enemies don't fight**: the tool sets `enemies.demo` (they see a dead player), so only rendering and update cost is measured.
   Killing puppets still drops ammo clips (Pickups, 45%, gone after 25 s).
 - **Runtime spawning**: `Enemies.spawn(piece)` / `Enemies.despawn(actor)` (stand slots are reused, the stand buffers grow on demand).
-  Lights are built with the `light.point` builder (pool lights, `world.releaseLight` frees them; past the tier pool the extras are temporary); `dispose()` frees everything it spawned.
+  Lights are built with the `light.point` builder (light records, `world.releaseLight` frees them; only the nearest N by tier are live); `dispose()` frees everything it spawned.
 - **Test** (`tests/gym-stress.browser.mjs`): per-unit draws / triangles / geometries are asserted linear and stable (0..32 of each
   kind, worst case: all in view, near LOD, culling off); frame time only printed. Also: far LOD cost, debris cost, enemies never
   fire, keys and sweep, clearing returns geometries / textures / scene objects to the baseline, scene switches with 80 units spawned
   leave no leak. `SHOT=/path.png` saves a screenshot with a crowd; `ONLY=fx` runs the cost table of one kind.
-- Gotchas: the first N lights (N = 4 / 8 / 12 by quality tier) take pool lights (no recompile); the rest are temporary scene lights and recompile shaders (a hitch, not a leak; the sweep's `settle` skips it). The fx pools
+- Gotchas: past N lights (N = 4 / 8 / 12 by quality tier) the light sweep measures nothing more: the pool shows the nearest N, the rest are dark records (no recompile). The fx pools
   create hidden meshes on demand, so the scene object count grows up to the most particles ever alive at once, then stays.
 
 ---
@@ -235,5 +235,7 @@ suite `tests/library.browser.mjs`.
 - **Panel** (top-left): id, owner and label of the exhibit within 14 m, awake / idle, exhibit counts.
 - Keys in use elsewhere (do not reuse): controls W A S D E F R Q H 1-6, Gym tools T G B N M J K L O P [ ].
 - `prop.gun` frees its merged geometry in `World.unload()` (own list `world.props`); its materials are permanent.
+- The set dressing `prop.*` ids (console, crate, cables, pipes, puppetRack, arm, hazard, panel) are not in the file: the kit aisle shows them
+  from their `example` (4 rows of 9 now). `prop.arm` hangs from 5.85 m over its aisle spot.
 - Gotchas fixed on the way: a `mover` with speed 0 or no `to` went NaN (division by a zero rail length); `boss.spider` without an
   `arena` now gets a 20 m box around its position.

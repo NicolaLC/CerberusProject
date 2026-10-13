@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GUNS, GUN_ORDER } from '../combat/guns.js';
+import { inputName } from '../controls.js';
 
 const _p = new THREE.Vector3();
 
@@ -45,7 +46,13 @@ export class Hud {
       death: $('death'),
       zone: $('zone'),
       objective: $('objective'),
+      objHead: $('obj-head'),
+      objDetail: $('obj-detail'),
+      prompt: $('prompt'),
+      objProg: $('obj-prog'),
+      killsWrap: $('kills-wrap'),
       gunName: $('gun-name'),
+      weapon: $('weapon'),
       ar: $('areload'),
       arGood: document.querySelector('#areload .good'),
       arPerfect: document.querySelector('#areload .perfect'),
@@ -91,6 +98,46 @@ export class Hud {
     return this;
   }
 
+  // Objective panel: the detail (key-cap spans) is rebuilt only when the objective or the input scheme changes; the slide-in replays on an objective change.
+  #objective(p, scheme) {
+    const e = this.el;
+    css(e.objective, 'display', p ? 'block' : 'none');
+    css(e.killsWrap, 'display', p ? 'none' : ''); // the kill counter stays for scenes without objectives
+    if (!p) return;
+    text(e.objHead, p.head);
+    text(e.objProg, p.prog);
+    if (!changed(e.objDetail, 'detail', `${p.key}|${scheme}|${p.detail}`)) return;
+    const nodes = p.detail.split(/\{(\w+)\}/).map((s, i) => {
+      if (i % 2 === 0) return s;
+      const k = document.createElement('kbd');
+      try { k.textContent = inputName(s, scheme); } catch { k.textContent = s; }
+      return k;
+    });
+    e.objDetail.replaceChildren(...nodes);
+    if (changed(e.objective, 'key', p.key)) {
+      e.objective.classList.remove('in');
+      void e.objective.offsetWidth;
+      e.objective.classList.add('in');
+    }
+  }
+
+  // Interact prompt floating in the world over the thing to take (projected each frame), key cap + text; the content
+  // is rebuilt only when the text or the input scheme changes. Hidden when the point is behind the camera.
+  #prompt(p, scheme, camera) {
+    const e = this.el.prompt;
+    let on = !!p;
+    if (on) {
+      _p.set(p.at.x, p.at.y, p.at.z).project(camera);
+      on = _p.z < 1;
+      if (on) css(e, 'transform', `translate(${(((_p.x + 1) / 2) * innerWidth).toFixed(0)}px, ${(((1 - _p.y) / 2) * innerHeight).toFixed(0)}px) translate(-50%, -100%)`);
+    }
+    css(e, 'display', on ? 'block' : 'none');
+    if (!on || !changed(e, 'prompt', `${p.label}|${scheme}`)) return;
+    const k = document.createElement('kbd');
+    k.textContent = inputName('interact', scheme);
+    e.replaceChildren(k, ` ${p.label}`);
+  }
+
   #boss(b) {
     const e = this.el.boss;
     const on = !!b && b.awake && (b.alive || b.debris.length > 0);
@@ -126,7 +173,7 @@ export class Hud {
     css(this.el.dmgDir, 'transform', `translate(-50%, -50%) rotate(${-rel}rad)`);
   }
 
-  update(dt, { player, weapon, enemies, camRig, world, mission }) {
+  update(dt, { player, weapon, enemies, camRig, world, mission, scheme = 'kbm' }) {
     const e = this.el;
     this.#boss(enemies.boss);
     // lock-on marker on the boss while the camera follows it
@@ -207,15 +254,18 @@ export class Hud {
     if (changed(e.ar, 'data-state', kind)) e.ar.dataset.state = kind;
     text(e.arLabel, AR_LABEL[kind] ?? '');
 
+    // unarmed: no weapon block, no crosshair (overrides what the lines above set)
+    css(e.weapon, 'display', weapon.current ? '' : 'none');
+    if (!weapon.current) for (const k of ['cross', 'scope', 'charge', 'ar', 'block']) css(e[k], 'opacity', 0);
+
     css(e.shield, 'width', `${player.shields}%`);
     css(e.health, 'width', `${player.health}%`);
 
 
     text(e.kills, `${enemies.kills} / ${enemies.all.length}`);
     text(e.zone, world.isInterior(player.pos) ? 'INTERIOR' : this.zoneName);
-    const line = mission.hudText();
-    text(e.objective, line ?? '');
-    css(e.objective, 'display', line ? 'block' : 'none');
+    this.#objective(mission.hudPanel(), scheme);
+    this.#prompt(mission.interactPrompt(player), scheme, camRig.camera);
 
     this.dmgTime -= dt;
     const lowHp = player.shields <= 0 ? 0.35 + (1 - player.health / 100) * 0.5 : 0;

@@ -2,7 +2,7 @@
 // starts after the first kills (alarm lighting, siren state, announcer line), every stage wakes in order and only after the previous one,
 // the run reaches the spider and killing it completes the chain (alarm off), kills out of order never soft-lock, and checkpoints exist
 // between stages. Pure level data, headless stepping.
-// Needs the dev server: `npm run dev`, then `node tests/prologue-purge.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/prologue-purge.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

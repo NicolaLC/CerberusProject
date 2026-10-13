@@ -1,6 +1,6 @@
 // Boot intro (#13): the `intro.boot` piece, the Boot view (view/boot.js), the input lock, `intro:done`, skip (only once seen),
 // pause, restart / edit, `log.line` on intro:done, and validation. Built in the Workshop and played in place, headless stepping.
-// Needs the dev server: `npm run dev`, then `node tests/intro.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/intro.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

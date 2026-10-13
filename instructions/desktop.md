@@ -28,8 +28,11 @@ renderer, gamepad, pointer lock and audio behave exactly as in the Chromium the 
   panel shows QUIT TO DESKTOP only when it exists. Context isolation and sandbox stay on.
 
 ## Commands
-- `npm run desktop` — build and run (`npm run desktop -- --debug` for DevTools).
-- `npm run desktop:dist` — installers in `release/`: Windows NSIS, macOS dmg, Linux AppImage
+- `bun run desktop` — build and run (`bun run desktop --debug` for DevTools). On Ubuntu 24.04+ it aborts with
+  "SUID sandbox helper ... not configured correctly": either `sudo chown root:root node_modules/electron/dist/chrome-sandbox
+  && sudo chmod 4755 node_modules/electron/dist/chrome-sandbox` (redo after reinstalling electron) or
+  `bun run desktop --no-sandbox`.
+- `bun run desktop:dist` — installers in `release/`: Windows NSIS, macOS dmg, Linux AppImage
   (pass `--win`, `--mac`, `--linux` to pick; a macOS build needs a Mac).
 - The app archive holds only `dist/` (minus `dist/artifact`) and `desktop/`: three.js is bundled by Vite, so
   `node_modules` is excluded (~0.7 MB archive; installer ~125 MB, mostly Chromium).

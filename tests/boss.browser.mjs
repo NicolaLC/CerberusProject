@@ -1,6 +1,6 @@
 // Spider mech miniboss: dormant until the player enters its arena; the hull is armored; breaking legs
 // collapses it and exposes the core; it fights back (cannon, mortar over cover); it stays in its arena.
-// Needs the dev server: `npm run dev`, then `node tests/boss.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/boss.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const URL = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

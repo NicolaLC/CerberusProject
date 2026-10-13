@@ -59,7 +59,7 @@
   hunched run (`snap.run`, the cover-move animation with real velocity, hips 0.45 behind low cover) at `coverRunSpeed`
   6.8 m/s, event `player:coverRun` ({ to, type, collider }) once, then cover on the new face (type from its height,
   `player:coverSlam`). Like the entry snap, input is ignored until it lands: no aiming, shooting or jump. Rotated boxes are skipped.
-- No on-screen hints or button prompts: the HUD shows state (ammo, health, boss bar, warnings), never instructions.
+- No on-screen hints or button prompts: the HUD shows state (ammo, health, boss bar, warnings), never instructions. The one exception is the objective panel (top left, `#objective`): it states the current objective and how to do it (`detail`, with input tokens as key caps). Diegetic signs in the world (`env.label`) may show input tokens (`{jump}`...: SPACE / A, aim is E in trackpad mode); names live next to `BINDINGS` (`inputName`, `Controls.scheme`).
   Jump (`Space`) during the run or a corner move cancels it: the snap and its pending cover are dropped, the velocity stays,
   and the normal jet burst fires (none while `jetTimer` runs: plain free movement); auto cover waits its cooldown. The cover
   entry snap and vaults can't be cancelled.
@@ -109,7 +109,8 @@
 - 1–6 (AR, MG, SR, BR burst, RG railgun, PS pistol) or mouse wheel switches (0.45s lower/raise, model swaps at the bottom). Ammo is tracked per gun.
 - Owned guns (`weapon.owned`, a Set): keys, wheel, d-pad and next gun only reach owned guns (unowned keys do nothing, cycling
   skips them); the HUD shows a slot only for an owned gun. The level's `loadout` sets them at load (level.md; absent = all six,
-  the pistol always). `weapon.grant(id, { ammo })` adds a gun and rounds to its reserve (capped at max) and emits
+  the pistol always unless `[]`).
+  **Unarmed** (`loadout: []`, the Prologue start): `weapon.current` is null (`weapon.t` / `ammo` / `reserve` then read the pistol, so readers never crash); `weapon.update` does nothing (fire, reload, slots, wheel), `player.aiming` stays false (no zoom, no aim assist), the HUD hides the weapon block and the crosshair, there is no gun model or muzzle, and the animator runs unarmed (arms swing). Movement, sprint, cover and vault are unchanged. The first `weapon.grant` + `switchTo` (pickup.gun or an objective's `grantGun`) raises that gun at once, no lowering. `weapon.grant(id, { ammo })` adds a gun and rounds to its reserve (capped at max) and emits
   `weapon:discovered { gun }` the first time it is owned in the level; the HUD toasts `<NAME> ACQUIRED` for 3 s. `pickup.gun`
   calls it and raises the new gun. Ammo crates refill only owned guns. Planned: STEM-00 log line on discovery (#40), 2-primary
   limit and swapping (#34), hideout armoury (#39), owned guns in the save (#53), enemy gun drops (done, #93: enemy param `dropGun`, workshop.md).
@@ -140,7 +141,7 @@
 - Add a gun: new entry in `GUNS` (stats, sockets, `build()` model) and its id in `GUN_ORDER`.
 - Hit = camera ray (starts at player distance), then re-cast from muzzle; muzzle hit wins.
 
-## Gunplay (math in `combat/ballistics.js`, unit-tested by `npm test`)
+## Gunplay (math in `combat/ballistics.js`, unit-tested by `bun run test`)
 - Spread is a cone half-angle; rounds are uniform over the cone's disc (`coneDir`). The crosshair gap draws
   exactly `weapon.spread()`.
 - `spread = lerp(hip, aim, aimBlend) + spreadMove × speed/walk (×0.4 aimed) + bloom`. `aimBlend` follows the

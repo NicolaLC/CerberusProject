@@ -19,10 +19,10 @@ curl -fsSL https://raw.githubusercontent.com/NicolaLC/CerberusProject/main/scrip
 ## Run from source
 
 ```bash
-npm install
-npm run dev      # http://localhost:5173
-npm run build    # static build in dist/
-npm run build:artifact  # single-file page for hosting (dist/artifact/)
+bun install
+bun run dev      # http://localhost:5173
+bun run build    # static build in dist/
+bun run build:artifact  # single-file page for hosting (dist/artifact/)
 ```
 
 Click **Deploy** to lock the mouse. Add `?debug` to the URL to skip the start panel, show the

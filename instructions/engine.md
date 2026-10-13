@@ -88,7 +88,7 @@ Costs are WORST CASE per unit: in view, near LOD, sun shadow pass included (draw
 | puppet (`enemy.static`) | 7 | 15.3k | 8 | 1 / 7.5k | + 22 draws for 5 s (debris, was 75 before #75), then the stand sinks |
 | trooper (`enemy.trooper`) | 9 | 47.4k | 10 | 1 / 23.7k | + 23 draws for 5 s (was 119) |
 | drone (`enemy.drone`) | 4 | 9.2k | 5 | 1 / 9.2k (shadow stays) | + 2 (falls in one piece) |
-| point light (`light.point`) | 0 | 0 | 0 | | cost is per lit fragment, not per draw; takes a pool light (no recompile, below) |
+| point light (`light.point`) | 0 | 0 | 0 | | cost is per lit fragment, not per draw; a record, shown by a pool light while among the nearest N (below) |
 | effect burst (`blast`: sparks, smoke, ring) | 3 | 0.4k | 0 | | sparks capped at 256 (16 bursts); lives 0.3-0.6 s |
 
 Triangles are doubled by the shadow pass (a trooper is ~23.7k triangles drawn twice). The empty room (floor, 16 cover boxes, the
@@ -119,12 +119,19 @@ Assumptions, stated plainly:
 If kills must get denser still: merge a whole body's chunks into one moving batch, or shorten `DEBRIS_LIFE`.
 **Rule: the number of lights in the scene never changes while a level is loaded, edited or played.** three.js recompiles every lit material when the light
 count changes (a hitch; measured in the Workshop: +5 programs per light placed). `World` therefore owns a fixed pool of point lights sized by the quality
-tier: `QUALITY[tier].lights` in `view/quality.js` (4 / 8 / 12, the point-light column above; that constant is the single source). `light.point` takes one
-(colour, intensity, distance, position) and gives it back on unload / despawn (`releaseLight`: intensity 0, parked below the floor). Scene loads, editor
-placement and play do not recompile. Only a quality change resizes the pool (`applyQuality` -> `world.setLightPool`, one recompile, a settings action; lit lights
-that no longer fit stay as temporary ones, temporary ones are adopted when it grows). A dynamic light is still a permanent light switched with its intensity,
-like the muzzle flash in `fx.js`. The pool is the level's light budget and depends on the tier: past it a temporary extra light is added with a console
-warning (the count changes, so it recompiles, once on the way in and once out; the stress room's 64-light sweep does this). Parked lights are NOT free:
+tier: `QUALITY[tier].lights` in `view/quality.js` (4 / 8 / 12, the point-light column above; that constant is the single source).
+
+**Light pool.** A level may hold any number of `light.point` pieces: each is a record in `world.lights` (`world.pointLight`: position, colour,
+intensity, distance, flicker; not a scene object). `World.update(t, focus)` (focus = camera position, `game.js`) hands the N pool lights to the N records
+that matter most: score = intensity x r^2 / (r^2 + d^2) (r = the light's distance, d = from the focus), x1.2 for a record already live (no flip-flop),
+re-evaluated every 0.2 s, when the focus moves more than 2 m, or when a record comes or goes (`LIGHT_PICK` in `world.js`). A record entering or leaving
+fades its pool light over 0.25 s, so swaps never pop; a level load or a quality change assigns at once (no fade). No sort, no per-frame allocation: N passes
+of max over the records on a reselect, a copy of position / colour / distance / intensity x fade per pool light per frame. Unused pool lights sit at intensity 0,
+parked below the floor. Flicker and the alarm tint act on the record, so a flickering light's strip keeps flickering while its light is not live.
+`releaseLight` drops a record (its pool light goes dark at once). `pointLight(..., flicker, { pin: true })` always keeps a record live (a tool's light);
+more pins than the pool is the only warning, the extras stay dark. No occlusion test: a bright light behind a wall still competes for the pool.
+Scene loads, editor placement and play do not recompile. Only a quality change resizes the pool (`applyQuality` -> `world.setLightPool`, one recompile,
+a settings action). A dynamic light is still a permanent light switched with its intensity, like the muzzle flash in `fx.js`. Parked lights are NOT free:
 three (0.180) does not skip a light with intensity 0 or no colour, every light in the scene stays in the shader's point-light loop for every lit fragment; that is
 why low and high do not get 12. `tests/workshop.browser.mjs` section 15 asserts the pool size per tier and equal `renderer.info.programs` through place / play / restart.
 

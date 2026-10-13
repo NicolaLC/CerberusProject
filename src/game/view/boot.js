@@ -61,6 +61,7 @@ export class Boot {
     this.canSkip = skippable && this.seen;
     this.active = this.inputLocked = true;
     this.t = 0;
+    this.typedN = this.doneN = 0; // characters / finished lines already ticked (ui:type)
     controls.locked = true;
     controls.ease = 0;
     // pacing: every line costs its characters plus a short pause; all of it fits between the lead and the hold + fade
@@ -141,12 +142,20 @@ export class Boot {
     // typed text: characters of each line reached by now
     const typed = Math.max(0, (t - this.lead) * this.rate);
     let from = 0;
+    let chars = 0;
+    let done = 0;
     for (let i = 0; i < this.lines.length; i++) {
       const n = Math.min(this.lines[i].length, Math.max(0, Math.floor(typed - from)));
+      chars += n;
+      if (n === this.lines[i].length) done++;
       from += this.units[i];
       if (n <= 0 && !this.rows[i]) break;
       this.#row(i, n, typed < from && typed >= from - this.units[i]);
     }
+    // one typing tick per frame that typed something (the audio throttles); `end` when a line finished
+    if (chars > this.typedN) this.events?.emit('ui:type', { end: done > this.doneN });
+    this.typedN = chars;
+    this.doneN = done;
     // the picture: static and scanlines come up first, then everything clears while the exposure settles
     const p = t < this.fadeStart ? 0 : Math.min(1, (t - this.fadeStart) / this.fadeLen);
     this.fade = p * p * (3 - 2 * p);

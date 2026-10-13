@@ -15,11 +15,12 @@ import { FX } from './view/fx.js';
 import { Hud } from './view/hud.js';
 import { Log } from './view/log.js';
 import { Boot } from './view/boot.js';
+import { Cinematic } from './view/cinematic.js';
 import { Summary } from './view/summary.js';
 import { Audio } from './view/audio.js';
 import { Post } from './view/post.js';
 import { Juice } from './view/juice.js';
-import { Controls } from './controls.js';
+import { Controls, inputName } from './controls.js';
 import { settings } from './settings.js';
 import { Shell } from './view/shell.js';
 import { applyQuality, QUALITY } from './view/quality.js';
@@ -55,7 +56,7 @@ export class Game {
     const first = resolveScene(sceneName);
 
     // ---- systems ----
-    const world = new World(scene, { lights: QUALITY[settings.quality]?.lights });
+    const world = new World(scene, { lights: QUALITY[settings.quality]?.lights, inputName });
     // upload every permanent level texture now (grids and skins): a scene's first visit has no upload hitch, and GPU memory
     // doesn't depend on which scenes were visited (scenes.browser.mjs compares it exactly)
     for (const tex of world.permanentTextures()) renderer.initTexture(tex);
@@ -70,9 +71,16 @@ export class Game {
     const fx = new FX(scene, camera, world).listen(events);
     const hud = new Hud().listen(events, camRig);
     const log = new Log().listen(events);
-    const audio = new Audio(weapon, camera).listen(events);
+    const audio = new Audio(weapon, camera, world, enemies).listen(events);
     const post = new Post(renderer, scene, camera, events);
     const boot = new Boot({ controls, post }).listen(events);
+    const cinematic = new Cinematic({ camRig, controls, post, player }).listen(events);
+    // No HUD while the intro plays: from the cinematic until control returns (the boot it hands over to, or its own end).
+    const hudEl = document.getElementById('hud');
+    const hideHud = (on) => hudEl.classList.toggle('cine', on);
+    events.on('cinematic:start', () => hideHud(true));
+    events.on('cinematic:done', () => queueMicrotask(() => !boot.active && hideHud(false)));
+    events.on('intro:done', () => hideHud(false));
     applyQuality(settings.quality, { engine, post, world });
     const juice = new Juice({ camRig, post, fx }).listen(events);
     const stats = new RunStats().listen(events);
@@ -123,7 +131,7 @@ export class Game {
       if (near > 0) input.rumble(near * 0.35, 0, 70);
     });
     addEventListener('pointerdown', () => audio.init()); // resumes audio started from a controller
-    Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, mission, weapon, fx, hud, log, boot, audio, post, juice, stats, summary, settings });
+    Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, mission, weapon, fx, hud, log, boot, cinematic, audio, post, juice, stats, summary, settings });
 
     // skeleton debug overlay (H): the player's helper is permanent, the enemies' come and go with the level
     this.skeletons = false;
@@ -174,12 +182,19 @@ export class Game {
       },
     });
     engine.add({ name: 'weapon', group: 'play', update: (dt) => weapon.update(dt, controls) });
-    engine.add({ name: 'runStats', group: 'play', update: (dt) => !boot.active && stats.update(dt) }); // the boot intro is not play time
+    engine.add({ name: 'runStats', group: 'play', update: (dt) => !boot.active && !cinematic.active && stats.update(dt) }); // the intro (cinematic, boot) is not play time
     engine.add({ name: 'enemies', update: (dt) => enemies.update(dt, player) });
     engine.add({ name: 'playerPose', phase: 'late', group: 'play', update: () => player.view.pose() });
     engine.add({ name: 'enemyAnim', phase: 'late', update: (dt) => enemies.animate(dt, camera) });
     engine.add({ name: 'encounter', group: 'play', update: (dt) => encounter.update(dt, player, controls.pressed('interact')) });
     engine.add({ name: 'pickups', group: 'play', update: (dt) => pickups.update(dt, player, weapon) });
+    // intro cinematic: drives camRig.script before the camera runs; skip = a fire / jump / interact press (only a skippable piece)
+    engine.add({
+      name: 'cinematic',
+      phase: 'late',
+      group: 'play',
+      update: (dt) => cinematic.update(dt, cinematic.active && (controls.actions.pressed('fire') || controls.actions.pressed('jump') || controls.actions.pressed('interact'))),
+    });
     // boss lock-on: an engaged boss within range stays framed (CameraRig.focus)
     const bossFocus = new THREE.Vector3();
     engine.add({
@@ -202,10 +217,11 @@ export class Game {
       name: 'world',
       phase: 'present',
       update: () => {
-        world.update(engine.time);
+        world.update(engine.time, camera.position); // the light pool picks the lights nearest the camera
+        world.setScheme(controls.scheme);
         world.updateSun(this.editing ? camera.position : player.pos); // the editor's shadow window follows its camera
         // hide the player model when the camera is pushed into it
-        player.view.root.visible = !this.editing && camera.position.distanceTo(camRig.pivot) > 0.45;
+        player.view.root.visible = !this.editing && (!!camRig.script || camera.position.distanceTo(camRig.pivot) > 0.45);
       },
     });
     engine.add({
@@ -227,7 +243,7 @@ export class Game {
       name: 'hud',
       phase: 'present',
       update: (dt) => {
-        hud.update(dt, { player, weapon, enemies, camRig, world, mission });
+        hud.update(dt, { player, weapon, enemies, camRig, world, mission, scheme: controls.scheme });
       },
     });
     engine.add({ name: 'log', phase: 'present', update: (dt) => log.update(dt) });
@@ -311,7 +327,7 @@ export class Game {
   // the level the systems were just loaded with (loadScene, and the Workshop's play in place).
   // `spawn` defaults to the level's own (levelSpawn: a `marker.spawn` piece, else `level.spawn`).
   resetRun(level, spawn = levelSpawn(level)) {
-    const { player, camRig, weapon, fx, hud, log, boot, juice, stats, summary } = this;
+    const { player, camRig, weapon, fx, hud, log, boot, cinematic, juice, stats, summary } = this;
     player.place(spawn);
     camRig.reset(player.facing);
     weapon.reset(level.loadout);
@@ -319,6 +335,8 @@ export class Game {
     hud.reset(level);
     log.reset();
     boot.reset();
+    cinematic.reset();
+    document.getElementById('hud').classList.remove('cine');
     juice.reset();
     stats.reset();
     summary.reset();

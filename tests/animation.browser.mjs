@@ -1,6 +1,6 @@
 // Locomotion: the key-pose gait plants its feet (no sliding while a foot carries weight) at walk, jog, sprint,
 // strafe and backpedal speeds, and the swing foot actually leaves the ground.
-// Needs the dev server: `npm run dev`, then `node tests/animation.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/animation.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const URL = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

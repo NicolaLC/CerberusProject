@@ -23,6 +23,7 @@ export class Mission {
   // owns(gun): does the player own that gun (game.js: weapon.owned); a mission without gun conditions never calls it.
   constructor({ events, enemies, owns = () => true }) {
     Object.assign(this, { events, enemies, owns });
+    this.promptAt = { x: 0, y: 0, z: 0 }; // reused by interactPrompt
     this.held = false; // the current objective's condition is met but its `requiresGun` is not owned yet
     this.objectives = []; // records of the objective pieces, in mission order
     this.index = 0; // of `current` (= objectives.length when complete)
@@ -30,7 +31,8 @@ export class Mission {
     this.state = 'none'; // 'none' (no objectives) | 'active' | 'complete' | 'failed'
     this.elapsed = 0; // s since the current objective began
     this.progress = 0; // destroy: kills counted
-    this.target = 0; // destroy: kills needed
+    this.target = 0; // destroy: kills needed (action: moves)
+    this.player = null; // last player seen by update (the position test of an action's `size`)
     const fired = (e) => {
       const r = this.current;
       if (!r) return;
@@ -43,6 +45,16 @@ export class Mission {
       const r = this.current;
       if (r?.obj === 'destroy' && this.#matches(r, a) && ++this.progress >= this.target) this.#complete();
     });
+    // objective.action: each move counts while the objective is current (and the player is inside its `size`, when it has one)
+    const MOVE = { jet: 'player:jet', cover: 'player:coverSlam', vault: 'player:vault', slide: 'player:vault', coverRun: 'player:coverRun' };
+    for (const [action, name] of Object.entries(MOVE)) {
+      events.on(name, (e) => {
+        const r = this.current;
+        if (r?.obj !== 'action' || r.params.action !== action || (name === 'player:vault' && e !== (action === 'slide' ? 'slide' : 'hop'))) return;
+        if (r.size && !this.#inside(r)) return;
+        if (++this.progress >= this.target) this.#complete();
+      });
+    }
     events.on('group:spawn', (e) => {
       const r = this.current;
       if (r?.obj === 'destroy' && r.params.count == null && (r.params.group == null || r.params.group === e.group)) this.target += e.count;
@@ -76,6 +88,7 @@ export class Mission {
     const r = this.current;
     if (this.state !== 'active' || !r) return;
     this.elapsed += dt;
+    this.player = player;
     const p = player.pos;
     if (r.params.skipIfOwned != null && this.owns(r.params.skipIfOwned)) return this.#complete(true);
     if (this.held && this.owns(r.params.requiresGun)) return this.#complete();
@@ -84,10 +97,8 @@ export class Mission {
     } else if (r.obj === 'reach' && r.params.trigger == null) {
       const [w, h, d] = r.size;
       if (!player.dead && Math.abs(p.x - r.pos.x) <= w / 2 && Math.abs(p.z - r.pos.z) <= d / 2 && p.y >= r.pos.y - 0.1 && p.y <= r.pos.y + h) this.#complete();
-    } else if (r.obj === 'interact' && interact && !player.dead) {
-      const dx = p.x - r.pos.x;
-      const dz = p.z - r.pos.z;
-      if (dx * dx + dz * dz <= r.radius ** 2 && Math.abs(p.y - r.pos.y) < TUNING.reach) this.#complete();
+    } else if (r.obj === 'interact' && interact && this.#inReach(r, player)) {
+      this.#complete();
     }
     if (this.current === r && r.params.limit != null && this.elapsed >= r.params.limit) {
       this.state = 'failed';
@@ -96,22 +107,52 @@ export class Mission {
     }
   }
 
+  #inReach(r, player) {
+    const p = player.pos;
+    const dx = p.x - r.pos.x;
+    const dz = p.z - r.pos.z;
+    return !player.dead && dx * dx + dz * dz <= r.radius ** 2 && Math.abs(p.y - r.pos.y) < TUNING.reach;
+  }
+
+  // The interact prompt while the player stands in reach of the current interact objective, else null: { label (the
+  // `prompt` text), at (world point it floats over: `promptAt` or 1.3 m above the objective) }.
+  interactPrompt(player) {
+    const r = this.current;
+    if (this.state !== 'active' || r?.obj !== 'interact' || !this.#inReach(r, player)) return null;
+    const a = r.params.promptAt;
+    const at = this.promptAt;
+    [at.x, at.y, at.z] = a ?? [r.pos.x, r.pos.y + 1.3, r.pos.z];
+    return { label: r.params.prompt ?? 'INTERACT', at: this.promptAt };
+  }
+
   // The HUD state line (state, never instructions), null when the level has no objectives.
   hudText() {
+    const p = this.hudPanel();
+    return p && (p.prog ? `${p.head}  ${p.prog}` : p.head);
+  }
+
+  // The HUD objective panel: { key (changes with the objective / state), head, detail (raw, with input tokens), prog }, null without objectives.
+  hudPanel() {
     if (this.state === 'none') return null;
-    if (this.state === 'complete') return 'MISSION COMPLETE';
-    if (this.state === 'failed') return 'MISSION FAILED';
+    if (this.state === 'complete') return { key: 'complete', head: 'MISSION COMPLETE', detail: '', prog: '' };
+    if (this.state === 'failed') return { key: 'failed', head: 'MISSION FAILED', detail: '', prog: '' };
     const r = this.current;
-    let s = r.text.toUpperCase();
-    if (r.params.requiresGun != null && !this.owns(r.params.requiresGun)) s += `  ${GUNS[r.params.requiresGun].name}: NOT FOUND`;
-    if (r.obj === 'destroy') s += `  ${this.progress} / ${this.target}`;
-    else if (r.obj === 'survive') s += `  ${clock(r.time - this.elapsed)}`;
-    if (r.params.limit != null && r.obj !== 'survive') s += `  ${clock(r.params.limit - this.elapsed)}`;
-    return s;
+    const prog = [];
+    if (r.params.requiresGun != null && !this.owns(r.params.requiresGun)) prog.push(`${GUNS[r.params.requiresGun].name}: NOT FOUND`);
+    if (r.obj === 'destroy' || (r.obj === 'action' && this.target > 1)) prog.push(`${this.progress} / ${this.target}`);
+    else if (r.obj === 'survive') prog.push(clock(r.time - this.elapsed));
+    if (r.params.limit != null && r.obj !== 'survive') prog.push(clock(r.params.limit - this.elapsed));
+    return { key: r.oid, head: r.text.toUpperCase(), detail: r.detail ?? '', prog: prog.join('  ') };
   }
 
   #info(r, skipped = false) {
     return { index: this.index, total: this.objectives.length, id: r.oid, kind: r.obj, text: r.text, skipped };
+  }
+
+  #inside(r) {
+    const [w, h, d] = r.size;
+    const p = this.player.pos;
+    return Math.abs(p.x - r.pos.x) <= w / 2 && Math.abs(p.z - r.pos.z) <= d / 2 && p.y >= r.pos.y - 0.1 && p.y <= r.pos.y + h;
   }
 
   #matches(r, a) {
@@ -123,7 +164,7 @@ export class Mission {
     const r = (this.current = this.objectives[(this.index = i)]);
     this.elapsed = this.progress = 0;
     this.held = false;
-    this.target = r.obj === 'destroy' ? r.params.count ?? this.enemies.all.filter((a) => a.alive && (r.params.group == null || a.squad === r.params.group)).length : 0;
+    this.target = r.obj === 'action' ? r.params.count ?? 1 : r.obj === 'destroy' ? r.params.count ?? this.enemies.all.filter((a) => a.alive && (r.params.group == null || a.squad === r.params.group)).length : 0;
     if (r.params.wakeGroup != null) this.events.emit('encounter:wake', r.params.wakeGroup);
     if (r.params.spawnGroup != null) this.events.emit('encounter:spawn', r.params.spawnGroup);
     this.events.emit('mission:objective', this.#info(r));

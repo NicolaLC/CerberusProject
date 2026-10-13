@@ -11,9 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm test
-      - run: npm run build
-      - run: npm run test:browser
+        with: { node-version: 22 } # node runs the test and build scripts
+      - uses: oven-sh/setup-bun@v2 # bun installs and runs package scripts
+        with: { bun-version: 1.4.2 }
+      - run: bun install --frozen-lockfile
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run test
+      - run: bun run build
+      - run: bun run test:browser

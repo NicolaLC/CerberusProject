@@ -14,20 +14,24 @@ import { GUNS } from '../combat/guns.js';
 //                     `world.interiorZones` (camera exposure, HUD label INTERIOR, drones); the file's own `interiorZones` still work.
 //  trigger.volume     box (pos = centre x / bottom y / centre z). Fires `trigger:fired` { id, event } when the player
 //                     enters. params { size [w,h,d], event, once (true), wakeGroup?, spawnGroup? }.
-//  objective.*        mission objectives (reach / destroy / survive / interact, #12): records only, `Mission` (mission.js) runs them.
+//  objective.*        mission objectives (reach / destroy / survive / interact / action, #12): records only, `Mission` (mission.js) runs them.
 //                     Common params { text, order?, limit?, wakeGroup?, spawnGroup?, grantGun?, grantAmmo?, skipOn?, requiresGun?, skipIfOwned? }; see workshop.md "Missions".
 //  log.line           a STEM-00 log line (#40, instructions/narrative.md): params { text, on, priority? ('normal'), once? (true), delay? (s, 0) }.
 //                     When `on` happens (LOG_ON below) it emits `log:say` { text, priority } after `delay`; the Log view (view/log.js) shows it.
 //                     Never in a fight: a fired line waits until STEM-00 has been out of combat for TUNING.calm s, `delay` counts from then.
-//  intro.boot         the boot intro (#13): params { lines: [diagnostic strings], duration? (s, 12, max 20), skippable? (true) }. At the first play frame
+//  intro.boot         the boot intro (#13): params { lines: [diagnostic strings], duration? (s, 12, max 20), skippable? (true), after? (an `on` form, 'start') }. When `after` happens (the first play frame by default)
 //                     it emits `intro:start` { lines, duration, skippable }; the Boot view (view/boot.js) covers the screen, locks the input and
 //                     emits `intro:done` { skipped } when it ends. The first one in the file plays. Inert in the editor and the Library (gizmo only).
+//  intro.cinematic    the intro cinematic (STEM-00 wakes up): params { shots: [{ from, to?, look, lookTo?, time, ease?, fov?, shake? }], wake? { at, rise, shake },
+//                     skippable? (false) }. At the first play frame it emits `cinematic:start` { shots, wake, skippable }; the Cinematic view
+//                     (view/cinematic.js) drives the camera and STEM-00's wake, locks the input and emits `cinematic:done` { skipped }. An `intro.boot`
+//                     with `after: 'cinematic:done'` then starts. The first one in the file plays. Inert in the editor and the Library (gizmo: the camera path).
 //  env.alarm          the alarm lighting state (#14, workshop.md "Alarm"): params { on, off?, duration?, color? ('#ff2a1a'), strength? (0.75), siren? (true) }.
 //                     When `on` happens (same forms as log.line) it emits `alarm:on` { id, color, strength, siren }: World tints the light toward `color`
 //                     and pulses it (world.setAlarm), Audio loops a synthesized siren. Ends at `off`, after `duration` s, or when the level unloads (`alarm:off` / `alarm:clear`).
 //                     Inert in the editor and the Library (gizmo: a beacon on a post).
 // Events out: `trigger:fired` { id, event }, `checkpoint:reached` { id, pos, yaw }, `group:wake` { group } (Enemies),
-// `group:spawn` { group, count }, `gate:open` { on } (a `kit.gate` starts opening), `log:say` { text, priority, voice }, `alarm:on` { id, color, strength, siren }, `alarm:off` { id }, `alarm:clear`, `intro:start` { lines, duration, skippable }. Events in (the mission, mission.js; tests): `encounter:wake` group, `encounter:spawn` group.
+// `group:spawn` { group, count }, `gate:open` { on } (a `kit.gate` starts opening), `log:say` { text, priority, voice }, `alarm:on` { id, color, strength, siren }, `alarm:off` { id }, `alarm:clear`, `intro:start` { lines, duration, skippable }, `cinematic:start` { shots, wake, skippable }. Events in (the mission, mission.js; tests): `encounter:wake` group, `encounter:spawn` group.
 
 export const TUNING = {
   checkpointRadius: 2, // m, horizontal reach of a checkpoint
@@ -41,8 +45,9 @@ export const TUNING = {
   calm: 3, // s without combat (no awake enemy in range, no shot fired, no hit taken) before a log line may play
 };
 
-const COLOR = { spawn: 0x58ff9a, checkpoint: 0x3affff, entry: 0xff7a3a, trigger: 0xff4bd6, zone: 0x4aa8ff, objective: 0xffd23a, log: 0xffb347, alarm: 0xff3a2a, intro: 0xeaf6fa };
-const TEXT = { reach: 'REACH THE ZONE', destroy: 'DESTROY THE TARGETS', survive: 'SURVIVE', interact: 'ACCESS THE TERMINAL' };
+const COLOR = { spawn: 0x58ff9a, checkpoint: 0x3affff, entry: 0xff7a3a, trigger: 0xff4bd6, zone: 0x4aa8ff, objective: 0xffd23a, log: 0xffb347, alarm: 0xff3a2a, intro: 0xeaf6fa, cinematic: 0x7ad7ff };
+const TEXT = { reach: 'REACH THE ZONE', destroy: 'DESTROY THE TARGETS', survive: 'SURVIVE', interact: 'ACCESS THE TERMINAL', action: 'PERFORM THE MANEUVER' };
+export const ACTIONS = ['jet', 'cover', 'vault', 'slide', 'coverRun']; // `objective.action` moves (mission.js maps each to its player event)
 
 // The level's player start: the first `marker.spawn` piece, else `level.spawn`. Pure.
 export function levelSpawn(level) {
@@ -54,7 +59,7 @@ const bad = (id, msg) => {
   throw new Error(`${id}: ${msg}`);
 };
 const entry = (sys, d) => sys.add('entry', d);
-const common = [{ key: 'text', type: 'text' }, { key: 'order', type: 'number', optional: true }, { key: 'limit', type: 'number', optional: true, min: 0.1 }, { key: 'wakeGroup', type: 'text', optional: true }, { key: 'spawnGroup', type: 'text', optional: true },
+const common = [{ key: 'text', type: 'text' }, { key: 'detail', type: 'text', optional: true }, { key: 'order', type: 'number', optional: true }, { key: 'limit', type: 'number', optional: true, min: 0.1 }, { key: 'wakeGroup', type: 'text', optional: true }, { key: 'spawnGroup', type: 'text', optional: true },
   { key: 'grantGun', type: 'enum', options: Object.keys(GUNS), optional: true }, { key: 'grantAmmo', type: 'number', optional: true, min: 0 }, { key: 'skipOn', type: 'text', optional: true },
   { key: 'requiresGun', type: 'enum', options: Object.keys(GUNS), optional: true }, { key: 'skipIfOwned', type: 'enum', options: Object.keys(GUNS), optional: true }];
 const objective = (obj, label, params, own) => ({ example: { params: { text: TEXT[obj], ...params } }, label, fields: [...common, ...own], check: (p, registry) => objectiveGrantProblem(p, registry.guns), build: (sys, d) => sys.add('objective', d, obj) });
@@ -70,13 +75,14 @@ export function objectiveGrantProblem(p, guns = null) {
   return null;
 }
 
-// `log.line` `on` forms: start | intro:done | mission:complete | trigger:<id> | checkpoint:<id> | objective:<id> | objective:<id>:done | discovered:<gun>
-const LOG_ON = /^(start|intro:done|mission:complete|(trigger|checkpoint|discovered):[^:]+|objective:[^:]+(:done)?)$/;
+// `log.line` `on` forms: start | intro:done | cinematic:wake | cinematic:done | mission:complete | trigger:<id> | checkpoint:<id> | objective:<id> | objective:<id>:done | discovered:<gun>
+const LOG_ON = /^(start|intro:done|cinematic:(wake|done)|mission:complete|(trigger|checkpoint|discovered):[^:]+|objective:[^:]+(:done)?)$/;
+const ON_FORMS = 'start, intro:done, cinematic:wake, cinematic:done, mission:complete, trigger:<id>, checkpoint:<id>, objective:<id>, objective:<id>:done, discovered:<gun>';
 
 // Problem with an `on` value (the forms above) of a piece param, or null. `key` names the param in the message. `guns` checks `discovered:<gun>`. Pure.
-// Shared by every piece that reacts to a level event: log.line, env.alarm, kit.gate (`on`), prop.gun (`hideOn`).
+// Shared by every piece that reacts to a level event: log.line, env.alarm, kit.gate (`on`), prop.gun (`hideOn`), prop.arm (`retractOn`), prop.cradle (`releaseOn`).
 export function onProblem(value, key = 'on', guns = null) {
-  if (typeof value !== 'string' || !LOG_ON.test(value)) return `${key} ${JSON.stringify(value)} is not one of start, intro:done, mission:complete, trigger:<id>, checkpoint:<id>, objective:<id>, objective:<id>:done, discovered:<gun>`;
+  if (typeof value !== 'string' || !LOG_ON.test(value)) return `${key} ${JSON.stringify(value)} is not one of ${ON_FORMS}`;
   if (guns && value.startsWith('discovered:') && !guns.includes(value.slice(11))) return `${key} ${JSON.stringify(value)}: unknown gun (known: ${guns.join(', ')})`;
   return null;
 }
@@ -84,7 +90,7 @@ export function onProblem(value, key = 'on', guns = null) {
 // Problem with a `log.line`'s params, or null. Registry.check runs it on every level (meta `check`); Encounter.add throws it. Pure.
 export function logLineProblem(p, guns = null) {
   if (typeof p.text !== 'string' || !p.text.trim()) return 'text must be a non-empty string';
-  if (typeof p.on !== 'string' || !LOG_ON.test(p.on)) return `on ${JSON.stringify(p.on)} is not one of start, intro:done, mission:complete, trigger:<id>, checkpoint:<id>, objective:<id>, objective:<id>:done, discovered:<gun>`;
+  if (typeof p.on !== 'string' || !LOG_ON.test(p.on)) return `on ${JSON.stringify(p.on)} is not one of ${ON_FORMS}`;
   if (guns && p.on.startsWith('discovered:') && !guns.includes(p.on.slice(11))) return `on ${JSON.stringify(p.on)}: unknown gun (known: ${guns.join(', ')})`;
   if (p.priority != null && p.priority !== 'normal' && p.priority !== 'high') return 'priority must be normal or high';
   if (p.once != null && typeof p.once !== 'boolean') return 'once must be true or false';
@@ -100,7 +106,7 @@ export const ALARM_DEFAULT = { color: '#ff2a1a', strength: 0.75 };
 // Problem with an `env.alarm`'s params, or null. Registry.check runs it on every level (meta `check`); Encounter.add throws it. Pure.
 export function alarmProblem(p, guns = null) {
   const on = (k) => typeof p[k] === 'string' && LOG_ON.test(p[k]);
-  if (!on('on')) return `on ${JSON.stringify(p.on)} is not one of start, intro:done, mission:complete, trigger:<id>, checkpoint:<id>, objective:<id>, objective:<id>:done, discovered:<gun>`;
+  if (!on('on')) return `on ${JSON.stringify(p.on)} is not one of ${ON_FORMS}`;
   if (p.off != null && !on('off')) return `off ${JSON.stringify(p.off)} is not an \`on\` form (see on)`;
   for (const k of ['on', 'off']) if (guns && typeof p[k] === 'string' && p[k].startsWith('discovered:') && !guns.includes(p[k].slice(11))) return `${k} ${JSON.stringify(p[k])}: unknown gun (known: ${guns.join(', ')})`;
   if (p.duration != null && !(typeof p.duration === 'number' && p.duration > 0)) return 'duration must be a number above 0 (seconds)';
@@ -117,6 +123,37 @@ export function introBootProblem(p) {
   if (!Array.isArray(p.lines) || !p.lines.length || p.lines.some((l) => typeof l !== 'string' || !l.trim())) return 'lines must be a non-empty list of non-empty strings';
   if (p.duration != null && !(typeof p.duration === 'number' && p.duration > 0 && p.duration <= INTRO.max)) return `duration must be a number above 0, at most ${INTRO.max} (seconds)`;
   if (p.skippable != null && typeof p.skippable !== 'boolean') return 'skippable must be true or false';
+  if (p.after != null) return onProblem(p.after, 'after');
+  return null;
+}
+
+export const CINEMATIC = { max: 30 }; // s, longest `intro.cinematic` (all shots)
+export const EASES = ['linear', 'inOut'];
+
+// Problem with an `intro.cinematic`'s params, or null. Registry.check runs it on every level (meta `check`); Encounter.add throws it. Pure.
+export function cinematicProblem(p) {
+  const vec = (v) => Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === 'number' && Number.isFinite(n));
+  if (!Array.isArray(p.shots) || !p.shots.length) return 'shots must be a non-empty list of { from, to?, look, lookTo?, time, ease?, fov?, shake? }';
+  let total = 0;
+  for (const [i, s] of p.shots.entries()) {
+    if (!s || typeof s !== 'object') return `shot ${i}: must be an object`;
+    for (const k of ['from', 'look']) if (!vec(s[k])) return `shot ${i}: ${k} must be [x, y, z]`;
+    for (const k of ['to', 'lookTo']) if (s[k] != null && !vec(s[k])) return `shot ${i}: ${k} must be [x, y, z]`;
+    if (!(typeof s.time === 'number' && s.time > 0)) return `shot ${i}: time must be a number above 0 (seconds)`;
+    if (s.ease != null && !EASES.includes(s.ease)) return `shot ${i}: ease must be one of ${EASES.join(', ')}`;
+    if (s.fov != null && !(typeof s.fov === 'number' && s.fov >= 10 && s.fov <= 120)) return `shot ${i}: fov must be a number from 10 to 120 (degrees)`;
+    if (s.shake != null && !(typeof s.shake === 'number' && s.shake >= 0 && s.shake <= 1)) return `shot ${i}: shake must be a number from 0 to 1`;
+    total += s.time;
+  }
+  if (total > CINEMATIC.max) return `shots last ${total} s, at most ${CINEMATIC.max}`;
+  const w = p.wake;
+  if (w != null) {
+    if (typeof w !== 'object' || Array.isArray(w)) return 'wake must be { at?, rise?, shake? }';
+    if (w.at != null && !(typeof w.at === 'number' && w.at >= 0)) return 'wake.at must be a number, at least 0 (seconds)';
+    if (w.rise != null && !(typeof w.rise === 'number' && w.rise > 0)) return 'wake.rise must be a number above 0 (seconds)';
+    if (w.shake != null && !(typeof w.shake === 'number' && w.shake >= 0 && w.shake <= 1)) return 'wake.shake must be a number from 0 to 1';
+  }
+  if (p.skippable != null && typeof p.skippable !== 'boolean') return 'skippable must be true or false';
   return null;
 }
 
@@ -129,7 +166,8 @@ export const ENCOUNTER_PIECES = {
   'objective.reach': objective('reach', 'objective: get the player into the box (or wait for a trigger / checkpoint id)', { size: [...TUNING.size] }, [{ key: 'size', type: 'vec3', min: 0.1 }, { key: 'trigger', type: 'text', optional: true }]),
   'objective.destroy': objective('destroy', 'objective: destroy the enemies of a group (any enemy without group)', { group: 'targets' }, [{ key: 'group', type: 'text', optional: true }, { key: 'count', type: 'number', optional: true, min: 1 }]),
   'objective.survive': objective('survive', 'objective: stay alive for a time', { time: TUNING.survive }, [{ key: 'time', type: 'number', min: 0.1 }]),
-  'objective.interact': objective('interact', 'objective: press interact (G) within the radius', { radius: TUNING.radius }, [{ key: 'radius', type: 'number', min: 0.1 }]),
+  'objective.interact': objective('interact', 'objective: press interact (G) within the radius', { radius: TUNING.radius }, [{ key: 'radius', type: 'number', min: 0.1 }, { key: 'prompt', type: 'text', optional: true }, { key: 'promptAt', type: 'vec3', optional: true }]),
+  'objective.action': objective('action', 'objective: do a move (jet, cover, vault hop, slide vault, cover run), optionally inside a box', { action: 'jet', count: 1 }, [{ key: 'action', type: 'enum', options: ACTIONS }, { key: 'count', type: 'number', optional: true, min: 1 }, { key: 'size', type: 'vec3', optional: true, min: 0.1 }]),
   'log.line': {
     example: { params: { text: '> LINK: NONE. QUERY: WHY?', on: 'start' } },
     label: 'STEM-00 log line, shown when `on` happens (narrative.md)',
@@ -147,9 +185,16 @@ export const ENCOUNTER_PIECES = {
   'intro.boot': {
     example: { params: { lines: ['> STEM-00 BOOT SEQUENCE', '> OPTICS: ONLINE', 'HIVEMIND LINK: LOST'], duration: INTRO.duration, skippable: true } },
     label: `boot intro at play start: typed diagnostics, fade in; locks input (default ${INTRO.duration} s, max ${INTRO.max})`,
-    fields: [{ key: 'lines', type: 'list', sep: '|' }, { key: 'duration', type: 'number', optional: true, min: 0.1 }, { key: 'skippable', type: 'bool', def: true }],
+    fields: [{ key: 'lines', type: 'list', sep: '|' }, { key: 'duration', type: 'number', optional: true, min: 0.1 }, { key: 'skippable', type: 'bool', def: true }, { key: 'after', type: 'text', optional: true }],
     check: (p) => introBootProblem(p),
     build: (sys, d) => sys.add('intro', d),
+  },
+  'intro.cinematic': {
+    example: { params: { shots: [{ from: [-3, 2, -6], look: [0, 1.5, 0], time: 3 }, { from: [-1.5, 2, -4], to: [-0.3, 1.7, -1.2], look: [0, 1.2, 0], lookTo: [0, 1.6, 0], time: 5, ease: 'inOut' }], wake: { at: 2, rise: 4 }, skippable: false } },
+    label: `intro cinematic at play start: scripted camera shots, STEM-00 wakes; locks input (max ${CINEMATIC.max} s, shots / wake edited in the file)`,
+    fields: [{ key: 'skippable', type: 'bool', def: false }],
+    check: (p) => cinematicProblem(p),
+    build: (sys, d) => sys.add('cinematic', d),
   },
 };
 
@@ -168,7 +213,9 @@ export class Encounter {
     this.gizmos = 0;
     this.lines = []; // log lines waiting for calm and their delay (play): { t, rec }
     this.calm = TUNING.calm; // s since the last combat signal (a run starts calm)
+    this.intro = null; // the level's intro.boot record (the first one); it starts when its `after` key happens (default 'start')
     this.introPending = null; // the intro.boot record that starts at the first play frame
+    this.cinePending = null; // the intro.cinematic record that starts at the first play frame
     this.alarmQueue = []; // env.alarm records whose `on` / `off` happened, handled at the next update: { rec, on }
     this.alarms = []; // env.alarm records running: { rec, t } (t = s left, Infinity without duration)
     // requests from outside (the mission, tests); the stored fns are permanent
@@ -181,6 +228,8 @@ export class Encounter {
     events.on('mission:objective:done', (e) => this.#log(`objective:${e.id}:done`));
     events.on('weapon:discovered', (e) => this.#log(`discovered:${e.gun}`));
     events.on('intro:done', () => this.#log('intro:done'));
+    events.on('cinematic:wake', () => this.#log('cinematic:wake'));
+    events.on('cinematic:done', () => this.#log('cinematic:done'));
     events.on('mission:complete', () => this.#log('mission:complete'));
     events.on('weapon:shot', () => (this.calm = 0));
     events.on('player:hurt', () => (this.calm = 0));
@@ -188,7 +237,12 @@ export class Encounter {
 
   // Queues the log lines waiting for `key` (an `on` value). They are emitted from update, after their delay.
   #log(key) {
-    if (this.world.react(key)) this.events.emit('gate:open', { on: key }); // returns how many gates started opening (world.js); props with `hideOn` hide silently
+    if (this.world.react(key, (pos) => this.events.emit('prop:retract', { pos }))) this.events.emit('gate:open', { on: key }); // returns how many gates started opening (world.js); props with `hideOn` hide silently
+    if (this.intro && !this.intro.fired && (this.intro.params.after ?? 'start') === key) {
+      this.intro.fired = true;
+      if (key === 'start') this.introPending = this.intro; // after the run reset, at the first update
+      else this.#introStart(this.intro); // now: its overlay covers whatever ended (the cinematic's last frame)
+    }
     for (const r of this.items) {
       if (r.kind !== 'log' || r.inert || r.params.on !== key || (r.once && r.fired)) continue;
       r.fired = true;
@@ -208,8 +262,9 @@ export class Encounter {
   load(level) {
     this.unload();
     for (const d of this.registry.piecesOf(level, 'encounter')) this.registry.build('encounter', this, d);
+    this.intro = this.items.find((r) => r.kind === 'intro' && !r.inert) ?? null;
+    this.cinePending = this.items.find((r) => r.kind === 'cinematic' && !r.inert) ?? null; // starts at the first update, after the reset
     this.#log('start'); // shown from the first update, after the run reset (resetRun clears the Log view)
-    this.introPending = this.items.find((r) => r.kind === 'intro' && !r.inert) ?? null; // starts at the first update, after the reset
     this.mission?.start(this.items.filter((r) => r.kind === 'objective' && !r.inert));
     return this;
   }
@@ -224,7 +279,7 @@ export class Encounter {
     this.alarmQueue.length = 0;
     this.alarms.length = 0;
     this.events.emit('alarm:clear');
-    this.introPending = null;
+    this.intro = this.introPending = this.cinePending = null;
     this.calm = TUNING.calm;
     this.checkpoint = this.cpRec = null;
     this.triggers = 0;
@@ -248,7 +303,9 @@ export class Encounter {
     this.lines = this.lines.filter((l) => l.rec !== rec);
     this.alarmQueue = this.alarmQueue.filter((a) => a.rec !== rec);
     if (this.alarms.some((a) => a.rec === rec)) this.#alarmOff(rec);
+    if (this.intro === rec) this.intro = null;
     if (this.introPending === rec) this.introPending = null;
+    if (this.cinePending === rec) this.cinePending = null;
     this.#dropZone(rec);
     this.#dropGizmo(rec);
     if (this.cpRec === rec) this.checkpoint = this.cpRec = null;
@@ -296,6 +353,10 @@ export class Encounter {
       const problem = introBootProblem(p);
       if (problem) bad(id, problem);
     }
+    if (kind === 'cinematic') {
+      const problem = cinematicProblem(p);
+      if (problem) bad(id, problem);
+    }
     if (kind === 'trigger') this.triggers++;
     if (this.gizmoMode) {
       rec.gizmo = this.#gizmo(rec);
@@ -310,19 +371,26 @@ export class Encounter {
   #objective(rec, obj, p) {
     const id = rec.id;
     const str = (k) => p[k] !== undefined && typeof p[k] !== 'string' && bad(id, `${k} must be a string`);
-    ['text', 'wakeGroup', 'spawnGroup', 'trigger', 'group'].forEach(str);
+    ['text', 'detail', 'prompt', 'wakeGroup', 'spawnGroup', 'trigger', 'group'].forEach(str);
     if (p.order !== undefined && !(typeof p.order === 'number' && Number.isFinite(p.order))) bad(id, 'order must be a number');
     const grant = objectiveGrantProblem(p, this.registry.guns);
     if (grant) bad(id, grant);
     if (p.limit !== undefined && !(typeof p.limit === 'number' && p.limit > 0)) bad(id, 'limit must be a number above 0 (seconds)');
+    if (p.promptAt !== undefined && !(Array.isArray(p.promptAt) && p.promptAt.length === 3 && p.promptAt.every(Number.isFinite))) bad(id, 'promptAt must be [x, y, z]');
     rec.obj = obj;
     rec.text = p.text ?? TEXT[obj];
+    rec.detail = p.detail; // HUD instruction, input tokens ({jump} {sprint}...) resolved by the Hud
     if (obj === 'reach') {
       const size = p.size ?? TUNING.size;
       if (!Array.isArray(size) || size.length !== 3 || size.some((n) => !(n > 0))) bad(id, 'size must be [w, h, d], all above 0');
       rec.size = size;
     } else if (obj === 'destroy') {
       if (p.count !== undefined && !(Number.isInteger(p.count) && p.count >= 1)) bad(id, 'count must be a whole number, at least 1');
+    } else if (obj === 'action') {
+      if (!ACTIONS.includes(p.action)) bad(id, `action ${JSON.stringify(p.action)} is not one of ${ACTIONS.join(', ')}`);
+      if (p.count !== undefined && !(Number.isInteger(p.count) && p.count >= 1)) bad(id, 'count must be a whole number, at least 1');
+      if (p.size !== undefined && (!Array.isArray(p.size) || p.size.length !== 3 || p.size.some((n) => !(n > 0)))) bad(id, 'size must be [w, h, d], all above 0');
+      rec.size = p.size ?? null;
     } else if (obj === 'survive') {
       if (p.time !== undefined && !(typeof p.time === 'number' && p.time > 0)) bad(id, 'time must be a number above 0 (seconds)');
       rec.time = p.time ?? TUNING.survive;
@@ -358,10 +426,14 @@ export class Encounter {
   // Play: checkpoints record, trigger volumes fire, then the mission ticks (also while the player is dead: its timers run on).
   // Gizmo pieces (editor) do nothing. interact: the interact intent was pressed this frame.
   update(dt, player, interact = false) {
+    if (this.cinePending) {
+      const p = this.cinePending.params;
+      this.cinePending = null;
+      this.events.emit('cinematic:start', { shots: p.shots, wake: p.wake ?? {}, skippable: p.skippable ?? false });
+    }
     if (this.introPending) {
-      const p = this.introPending.params;
+      this.#introStart(this.introPending);
       this.introPending = null;
-      this.events.emit('intro:start', { lines: p.lines.slice(), duration: p.duration ?? INTRO.duration, skippable: p.skippable ?? true });
     }
     this.#alarms(dt);
     if (!player.dead && this.items.length) this.#scan(player);
@@ -383,6 +455,11 @@ export class Encounter {
       const { text, priority, voice } = l.rec.params;
       this.events.emit('log:say', { text, priority: priority ?? (voice === 'announcer' ? 'high' : 'normal'), voice: voice ?? 'stem' });
     }
+  }
+
+  #introStart(rec) {
+    const p = rec.params;
+    this.events.emit('intro:start', { lines: p.lines.slice(), duration: p.duration ?? INTRO.duration, skippable: p.skippable ?? true });
   }
 
   // env.alarm: start / stop the queued alarms and run the `duration` timers.
@@ -467,6 +544,7 @@ export class Encounter {
 
   #dropGizmo(rec) {
     if (!rec.gizmo) return;
+    rec.gizmo.traverse((o) => o.userData.own && o.geometry.dispose()); // per-piece geometry (the cinematic's path)
     rec.gizmo.removeFromParent();
     rec.gizmo = null;
     if (--this.gizmos > 0 || !this.res) return;
@@ -480,7 +558,7 @@ export class Encounter {
     const m = mat[r.kind];
     const g = new THREE.Group();
     g.position.copy(r.pos);
-    g.rotation.y = r.kind === 'trigger' || r.kind === 'zone' || r.obj === 'reach' ? 0 : r.yaw;
+    g.rotation.y = r.kind === 'trigger' || r.kind === 'zone' || r.kind === 'cinematic' || r.obj === 'reach' || r.obj === 'action' ? 0 : r.yaw;
     const part = (geo, mat, pos, scale) => {
       const o = geo === G.edges ? new THREE.LineSegments(geo, mat) : new THREE.Mesh(geo, mat);
       o.position.set(...pos);
@@ -497,6 +575,9 @@ export class Encounter {
     if (r.kind === 'trigger' || r.kind === 'zone' || r.obj === 'reach') {
       const [w, h, d] = r.size;
       solidBox([0, h / 2, 0], [w, h, d]);
+    } else if (r.obj === 'action') {
+      if (r.size) solidBox([0, r.size[1] / 2, 0], r.size);
+      else solidBox([0, 0.05, 0], [1.4, 0.1, 1.4]); // pad
     } else if (r.obj === 'destroy') {
       solidBox([0, 0.05, 0], [1.4, 0.1, 1.4]); // pad
       solidBox([0, 0.5, 0], [0.5, 0.8, 0.5]); // the target
@@ -523,6 +604,15 @@ export class Encounter {
       solidBox([0, 1.3, 0], [1.2, 0.7, 0.06]); // a monitor on a post, three text bars
       for (const [y, w] of [[1.5, 0.7], [1.3, 0.5], [1.1, 0.6]]) part(G.box, m.solid, [(w - 0.9) / 2, y, 0.04], [w, 0.05, 0.02]);
       part(G.box, m.solid, [0, 0.475, 0], [0.06, 0.95, 0.06]);
+    } else if (r.kind === 'cinematic') {
+      part(G.box, m.solid, [0, 0.475, 0], [0.06, 0.95, 0.06]); // a camera on a post
+      solidBox([0, 1.05, 0], [0.3, 0.22, 0.4]);
+      // the camera path: each shot's from -> to, in order (its own geometry, freed with the gizmo)
+      const pts = r.params.shots.flatMap((s) => [new THREE.Vector3(...s.from).sub(r.pos), new THREE.Vector3(...(s.to ?? s.from)).sub(r.pos)]);
+      const path = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), m.line);
+      path.raycast = () => {};
+      path.userData.gizmo = path.userData.own = true;
+      g.add(path);
     } else if (r.kind === 'checkpoint') {
       part(G.box, m.solid, [0, 1, 0], [0.06, 2, 0.06]); // pole
       part(G.box, m.solid, [0.35, 1.75, 0], [0.7, 0.4, 0.04]); // flag

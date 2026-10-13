@@ -38,6 +38,7 @@ const TUNING = {
   standHeight: 1.8,
   crouchHeight: 1.05,
   stepHeight: 0.45,
+  stepSmooth: 0.1, // s: render-only time constant easing the model / camera up a step (physics snaps at once)
   walk: 4.6,
   sprint: 7.4,
   sprintCooldown: 0.4, // seconds after a shot before sprinting is allowed again
@@ -102,6 +103,8 @@ export class Player {
     this.snap = null; // smooth move into cover / vault
     this.sliding = 0; // 0..1 eased: the hip slide over deep low cover (the camera widens its FOV)
     this.slideTail = 99; // seconds since a slide ended (the torso twist unwinds for VAULT.tail s)
+    this.stepOff = 0; // render height minus pos.y (<= 0 while easing up a step), see #present
+    this.lastY = 0;
     this.airborne = false; // jetpack burst: true from take-off until landed
     this.jetting = 0; // seconds of thrust left
     this.jetTimer = 0; // seconds until the next burst is allowed
@@ -132,7 +135,7 @@ export class Player {
 
   // Show the gun and move the hand / muzzle sockets to it.
   setGun(id) {
-    this.gun = GUNS[id];
+    this.gun = id ? GUNS[id] : null; // null = unarmed
     this.view.setGun(id);
   }
 
@@ -160,7 +163,7 @@ export class Player {
   }
 
   visualPos() {
-    return _v.copy(this.pos).add(this.peek);
+    return _v.copy(this.pos).add(this.peek).setY(this.pos.y + this.stepOff);
   }
 
   chest(out) {
@@ -302,10 +305,11 @@ export class Player {
 
     // behind a wall or high block away from its ends there's no line of fire: no aiming, no shooting
     this.pinned = !!this.cover && this.cover.type === 'high' && !this.cover.edgeL && !this.cover.edgeR;
-    this.aiming = controls.aiming && (!this.snap || slide) && !this.pinned;
+    const armed = !!weapon.current; // unarmed: no aiming, and the trigger doesn't stop the sprint
+    this.aiming = armed && controls.aiming && (!this.snap || slide) && !this.pinned;
     if (weapon.firing) this.lastShot = 0;
     // sprint: forward only, not while aiming, shooting or in cover; pulling the trigger ends it
-    this.sprinting = controls.running && ax.y > 0 && !this.aiming && !this.airborne && !this.cover && !this.snap && !controls.firing && this.lastShot > t.sprintCooldown;
+    this.sprinting = controls.running && ax.y > 0 && !this.aiming && !this.airborne && !this.cover && !this.snap && !(armed && controls.firing) && this.lastShot > t.sprintCooldown;
 
     // jump cancels a cover run / corner move (not the entry snap or a vault): drop it and its pending cover, keep the
     // velocity; the jump below does the burst (or just free movement while the jet is on cooldown)
@@ -428,6 +432,14 @@ export class Player {
 
   // End of every substep: ease the crouch, then hand the state to the view (pose input, root placement).
   #present(dt, camRig, alive, weaponLower = 0) {
+    // Render-only step smoothing: a grounded upward snap of at most a step (+ margin) leaves stepOff below pos.y and decays it;
+    // anything else (falls, jet arcs, teleports, respawns) snaps the render height back at once.
+    const dy = this.pos.y - this.lastY;
+    this.lastY = this.pos.y;
+    if (dy > 0.02 && dy <= this.t.stepHeight + 0.1 && !this.airborne && this.vy === 0 && !this.snap) this.stepOff -= dy;
+    else if (dy !== 0 || this.airborne || this.snap) this.stepOff = 0;
+    this.stepOff *= Math.exp(-dt / this.t.stepSmooth);
+    if (this.stepOff > -0.001) this.stepOff = 0;
     const moving = this.coverMoving();
     // behind low cover the hips come half up while moving along it (crouch-run), full kneel when still
     const target = this.crouched ? (moving ? 0.45 : 1) : this.snap?.run ? (this.snap.low ? 0.45 : 0) : this.snap && !this.snap.hop ? 1 : 0;

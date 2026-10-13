@@ -371,7 +371,7 @@ shutters), so the shell protects the core. The trail is drawn to where it stops.
   world discovers its gun: a toast `<NAME> ACQUIRED` and the gun is raised; a gun already owned gives its ammo instead.
 
 Planned (#91), not in the code yet:
-- **STEM-00 starts with the KP-12 Ember only** (the Prologue's `loadout`, #93). Every other gun is **discovered** in play: taken from a defeated
+- **STEM-00 starts unarmed in the Prologue** (`loadout: []`) and finds the KP-12 Ember at the calibration bay, right before the first shooting test (#93). Every other gun is **discovered** in play: taken from a defeated
   unit (enemy gun drops) or found in the world (armoury rack, crate: `pickup.gun`). Picking a gun up for the first time is a
   small beat: a toast (implemented), a STEM-00 log line (#40), and the gun goes into the hideout armoury for good (#39, saved: #53).
 - **The pistol can never be dropped or swapped out.**
@@ -580,13 +580,13 @@ Shots 0.12 (MG 0.3, sniper and railgun 0.7), hits taken 0.6, jet 0.2, nearby bla
 | Ammo counter | Turns red at 25% of the magazine or less, at least the last round: AR 8, MG 22, BR 6, SR 1, RG 1, PS 3. Glows after a perfect reload |
 | Active reload bar | Good and perfect zones with a sweeping cursor and an "R" label; disappears on a jam; shows PERFECT / GOOD |
 | Top bar | Zone name (TRAINING YARD / INTERIOR), "TARGETS DOWN n / 32" |
-| Objective | State line under the top bar (hidden without objectives): current objective text, `n / N` kills or time left, MISSION COMPLETE / MISSION FAILED. Never says what to do |
+| Objective | Panel top left under the top bar (hidden without objectives): header = objective text, below it the instruction in plain words (`detail`, input tokens drawn as key caps of the active device), then `n / N` kills or time left; MISSION COMPLETE / MISSION FAILED. Slides in on each new objective. While it shows, "TARGETS DOWN" is hidden |
 | Boss bar | Name, core health fill, six leg pips (grey out when destroyed), state text "CORE EXPOSED" / "DESTROYED"; shown only while the boss is awake |
 | Toasts | ammo pickups, AMMO FULL, ARENA CLEAR (6 s), boss name on wake, CORE EXPOSED, MECH DESTROYED, OBJECTIVE COMPLETE, MISSION COMPLETE / FAILED (4 s), SYSTEM FAULT (engine fault isolation) |
 | Death | "SHIELDS DOWN, RESPAWNING" |
 | Lock-on | Diamond marker on the awake boss |
 
-Principle: state only, never instructions (pillar 4). The HUD gives no cover prompts and no flank warning. Start panel
+Principle: state only, never instructions (pillar 4); the one exception is the objective panel, which says the current objective and how to do it. The HUD gives no cover prompts and no flank warning. Start panel
 shows the control table and settings once.
 
 **Fonts:** Chakra Petch (OFL) is the main UI font; Space Nova (demo, non-commercial) is used for numbers (ammo,

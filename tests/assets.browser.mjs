@@ -1,5 +1,5 @@
 // Assets (engine/assets.js): cache, shared in-flight loads, instancing, refcounted release, failed-load retry.
-// Fixture: tests/fixtures/tri.gltf (hand-written triangle). Needs the dev server: `npm run dev`, then
+// Fixture: tests/fixtures/tri.gltf (hand-written triangle). Needs the dev server: `bun run dev`, then
 // `URL='http://localhost:5173/?debug&scene=arena' node tests/assets.browser.mjs`.
 import { chromium } from 'playwright';
 

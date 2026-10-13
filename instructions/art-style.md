@@ -34,6 +34,9 @@ A round hull with a row of round lights can read as a friendly face. Avoid it:
   motifs (skulls on everything, double-headed eagles, purity seals, specific armour designs), and do not name
   other franchises or living artists in prompts.
 
+## Signs (diegetic, `env.label`)
+Facility signage only: floor stencils and wall panels of the calibration facility, never a HUD prompt. Stencil caps in monospace on a dark panel (`bg`), text in the palette below (cold white `#EAF6FA`, glow teal `#3FE0FF`, ochre `#C9A23A` for warnings), no emissive. Input tokens (`{jump}`) follow the active device.
+
 ## 3. Colour
 | Role | Colour | Hex | Notes |
 |---|---|---|---|
@@ -91,6 +94,33 @@ empty now. Decisions taken in the pass (keep them unless the rule changes):
   and a violet enemy state would blur into the magenta weak-spot state.
 - Screenshots: `node scripts/screenshots.mjs <dir>` (dev server running) saves the same 20 angles every time
   (book/screenshots angles plus close-ups of every unit and gun) for before/after comparisons.
+
+## Props (`prop.*`, `world/props.js`)
+Facility set dressing for the calibration bay and later interiors: consoles, crates, cables, pipes, puppet racks, cradles, workbenches, the
+maintenance arm, hazard stripes, warning panels.
+- Materials: dark worn metal `#3A3D40` (frames, pedestals, pipes), near-black `#202328` (joints, brackets, cable sheaths),
+  calibration-frame ochre `#C9A640` (the puppets' shell, the arm, valve wheels, rack plates), dull grey-green crate paint
+  `#4A5452`; all matte under the shared wear maps. Nothing clean or glossy.
+- **Warnings are ochre on near-black**, never yellow / black: hazard stripes and the panels' stripe band use `#C9A23A`.
+- **Gates (`kit.gate`) read as doors:** darker heavy metal slab (`mat` param overrides it), ochre chevron bands, dark vertical seams, a dark jamb + lintel frame, and an emissive status lamp over the opening (red while sealed, cyan once `gate:open`; basic material, no light).
+  Panels are stencil caps in ochre on a dark plate, lit like any surface (no emissive, like signs).
+- **Screens are the props' only light:** cold cyan `#3FE0FF` readouts, a few bars per row, scrolling a row at a time with an
+  occasional dropout. Never amber (STEM-00's light) or violet (enemy sensors).
+- Hanging puppets are inert: same ochre and black as the live ones, sensor band dark (no glow), limbs slack.
+- Cradles and benches read as long service: dark worn frames, ochre clamps and livery (the calibration-frame colour), cable
+  bundles, darker worn floor (`inFloor` patches) under them; the only light is a small cyan status readout.
+- Budget: a level's props are one draw per material (about 7 plus one per panel text, per 64 m chunk) and no extra shadow draw;
+  plain boxes for frames and brackets, rounded boxes only where the silhouette shows it.
+
+## Architecture (`arch.*`, `world/arch.js`)
+Interiors read as a military installation (layered, structural, serviced), never as a grid of boxes and never as a glowing temple:
+- **Break the box:** 45 degree coves where walls meet the ceiling (a recessed cyan light line in the cove), chamfered vertical corners, ribs every 3-4 m,
+  coffered ceilings (I-beams) between the light fixtures. Walls are layered: dark kick band, inset panels with dark seams, a metal trim rail at ~2.6 m,
+  larger upper panels.
+- **Doors are bulkheads:** heavy octagonal metal surround with ochre edges around the gate, a low sill; the gate's own lamp stays the status light.
+- **Floors guide:** lit channels flank the walking line through each gate; grates and hatches break the floor plates.
+- Materials are the level's own (skin wall / roof tones, worn dark metal, near-black, calibration ochre); light is cold cyan or white strips only, no
+  extra point lights, no violet or amber. Ochre stays a paint (edges, warnings), never a glow.
 
 ## 6. Prompt kit (concept art, the book, marketing)
 Style suffix, pasted unchanged:

@@ -28,7 +28,7 @@ const TUNING = {
 };
 const TINT = { wall: 0xe8f0ff, high: 0x3aa0ff, low: 0xff9a3a, none: 0xffe14a }; // box helper by cover class
 const font = '11px/1.45 monospace';
-const VOLUME = new Set(['trigger.volume', 'zone.interior', 'objective.reach']);
+const VOLUME = new Set(['trigger.volume', 'zone.interior', 'objective.reach', 'objective.action']);
 const FIELD = /^(INPUT|SELECT|TEXTAREA)$/;
 const FALLBACK = new THREE.Box3(new THREE.Vector3(-0.45, 0, -0.45), new THREE.Vector3(0.45, 1.9, 0.45)); // enemy / pickup stand-in
 // What posed enemies see instead of the player: nobody to fight (`dead` stops every enemy from waking, aiming and firing).

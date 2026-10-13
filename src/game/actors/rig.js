@@ -210,6 +210,9 @@ const RUN = {
 };
 const HIP_YAW = 0.9; // rad: strafing turns the hips (and legs) toward the movement, the chest keeps facing
 const LOCK_RELEASE = 0.45; // m: a planted foot this far from its pose (spinning on the spot, a shove) lets go
+// Dormant (powered down: the wake-up cinematic, `s.dormant` 1 slumped .. 0 normal): hips drop (the feet IK bends the knees),
+// spine and head fold forward, arms hang. Radians per bone, added on top of the pose.
+const DORMANT = { drop: 0.09, spine: 0.12, neck: 0.35, head: 0.4, arm: 0.08, armOut: 0.1, fore: -0.15 };
 
 export class Animator {
   // ground(x, z, maxY) -> floor height; enables feet IK
@@ -252,13 +255,14 @@ export class Animator {
   }
 
   // s: { speed, run, crouch, aimPitch, combat, recoil, lean, lookYaw, lower, kickBack, kickClimb,
-  //      vel (world velocity, optional), yaw (facing, with vel), leftHanded (mirror the gun hold) }
+  //      vel (world velocity, optional), yaw (facing, with vel), leftHanded (mirror the gun hold), dormant (0..1, slumped powered-down pose) }
   update(dt, s) {
     this.rig.resetPose();
     this.#hitSpring(dt);
     this.#locomotion(dt, s);
     this.#torso(dt, s);
     this.#arms(dt, s);
+    if (s.dormant > 0.001) this.#dormant(s.dormant);
     this.#legs(dt);
     this.#layers(dt, s);
   }
@@ -463,6 +467,24 @@ export class Animator {
       this.#refresh();
     }
 
+  }
+
+  // Dormant layer (DORMANT): after the arms (it overrides the gun hold / swing), before the legs and feet IK.
+  #dormant(w) {
+    const B = this.rig.bones;
+    const D = DORMANT;
+    B.Hips.position.y -= D.drop * w;
+    for (const b of [B.Spine, B.Spine1, B.Spine2]) b.rotation.x += D.spine * w;
+    B.Neck.rotation.x += D.neck * w;
+    B.Head.rotation.x += D.head * w;
+    for (const side of SIDES) {
+      const out = side === 'Left' ? 1 : -1;
+      blendTo(B[side + 'Shoulder'], 0, 0, 0, w);
+      blendTo(B[side + 'Arm'], D.arm, 0, D.armOut * out, w);
+      blendTo(B[side + 'ForeArm'], D.fore, 0, 0, w);
+      blendTo(B[side + 'Hand'], 0, 0, 0, w);
+    }
+    this.#refresh();
   }
 
   // Legs: planted feet locked in place (IK), kneel blended over everything.

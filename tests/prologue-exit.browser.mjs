@@ -1,7 +1,7 @@
 // The Prologue's exit (#15): the sealed arena gate (kit.gate `exit-gate`) opens when the spider falls, the last objective REACH TRANSIT NODE
 // (requiresGun: rifle, #93) ends the mission, the mission complete screen shows the run stats and RESTART reloads the scene,
 // and a death respawns at the last checkpoint. Pure level data, headless stepping; the stats come from real shots and a real reload.
-// Needs the dev server: `npm run dev`, then `node tests/prologue-exit.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/prologue-exit.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

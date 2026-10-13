@@ -25,7 +25,7 @@ src/
     registry.js           piece registry: stable string id -> how a piece is built from data (ids: level.md)
     controls.js           BINDINGS table + intents (move, look, aiming, running, firing, slots...)
     settings.js           player settings + start-panel bindings
-    world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), textures.js, pickups.js (pickup.* pieces), encounter.js (marker.* / trigger.* / objective.* / log.line / intro.boot pieces: spawn, checkpoints, trigger volumes, reinforcements; workshop.md), mission.js (objective sequencing, `game.mission`; ticks inside encounter)
+    world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), arch.js (arch.* architectural dressing: coves, ribs, panelling, bulkheads, floor channels, coffers, catwalks; level.md), textures.js, pickups.js (pickup.* pieces), encounter.js (marker.* / trigger.* / objective.* / log.line / intro.boot / intro.cinematic pieces: spawn, checkpoints, trigger volumes, reinforcements; workshop.md), mission.js (objective sequencing, `game.mission`; ticks inside encounter)
     actors/ rig.js (skeleton, animator, IK), parts.js (model building blocks, debris), soldier.js (player model),
             looks.js (trooper / puppet models),
             player.js (motor: intent -> movement, cover, jetpack, vault, health; never touches a mesh), player-view.js (`player.view`: model, rig, skin, animation, root pose; reads the motor's state; the motor forwards `root` / `rigModel` / `skin` / `animator` / `muzzle`),
@@ -34,7 +34,7 @@ src/
             enemies.js (system: builds enemy.* / boss.* pieces, bolts, stands, target cache, squad alerts, `all` = every enemy)
     ai/     cover.js (cover spots from cover boxes, protection test, spot choice + detour route)
     combat/ guns.js (gun table), weapon.js (controller, hitscan, aim probe), ballistics.js (pure shot math)
-    view/   camera.js, fx.js, hud.js, log.js (STEM-00 log lines, `game.log`), boot.js (boot intro overlay + input lock, `game.boot`), summary.js (mission complete screen, `game.summary`; stats in `game/run-stats.js`, `game.stats`), audio.js, juice.js, post.js, shell.js (DOM shell: start/pause panel, pointer lock, scene buttons, pad navigation)   (presentation only)
+    view/   camera.js, fx.js, hud.js, log.js (STEM-00 log lines, `game.log`), boot.js (boot intro overlay + input lock, `game.boot`), cinematic.js (intro cinematic: scripted camera shots, STEM-00's wake, `game.cinematic`), summary.js (mission complete screen, `game.summary`; stats in `game/run-stats.js`, `game.stats`), audio.js, juice.js, post.js, shell.js (DOM shell: start/pause panel, pointer lock, scene buttons, pad navigation)   (presentation only)
 ```
 
 `src/levels/` holds level files (plain JSON, see `level.md`); `scenes.js` lists them, `Game.loadScene(name)` hands one to the systems.
@@ -81,7 +81,7 @@ the only thing three.js recompiles shaders for, so they come from a fixed pool o
 |---|---|---|
 | pre | controls (+ hitstop time scale, aim assist, look, shoulder, debug keys), stats toggle | real |
 | simulate (substeps ≤ 20 ms) | player → weapon → enemies → encounter (+ mission) → pickups | scaled |
-| late | camera → aimProbe (what the crosshair is on) | scaled (shake uses real) |
+| late | cinematic (intro: sets `camRig.script`; group `play`) → camera → aimProbe (what the crosshair is on) | scaled (shake uses real) |
 | present | fx → world (lights, sun, player visibility) → hud → log → boot (intro overlay, input lock; group `play`) → audio (MG spin) | scaled |
 | render | post (exposure, grade, bloom) | real |
 
@@ -117,6 +117,7 @@ Payload objects marked * are reused: copy what you keep. `src/types.js` holds JS
 | `player:vaultRefused` | *{ collider, blocker } (landing spot blocked; a jet burst fires instead) | Gym traversal tool |
 | `player:step` | *{ run, raised } (each heel strike; not in the air) | audio |
 | `enemy:step` | position (trooper / moving puppet heel strike) | audio (fades out by 28 m from the camera) |
+| `prop:retract` | { pos } (a `prop.arm` with `retractOn` starts folding up; Encounter, from `World.react`) | audio (positional, fades out by 20 m) |
 | `puppet:down` | actor (any enemy type; emitted by `ctx.reportKill`, which also counts the kill and fires `arena:clear` on the last one) | pickups (drop), audio, mission (destroy) |
 | `arena:clear` | – (emitted by `Enemies.#reportKill` when the kill count reaches `all.length`) | hud toast |
 | `trigger:fired` | { id, event } (a `trigger.volume` was entered) | mission (reach with `trigger`) |
@@ -128,6 +129,10 @@ Payload objects marked * are reused: copy what you keep. `src/types.js` holds JS
 | `log:say` | { text, priority } (a `log.line` piece fired, after its delay; Encounter) | log (`Log.say`) |
 | `intro:start` | { lines, duration, skippable } (a played level's `intro.boot`, first play frame; Encounter) | boot (`Boot.start`) |
 | `intro:done` | { skipped } (the boot intro ended or was skipped; Boot) | encounter (`log.line` `on: intro:done`) |
+| `cinematic:start` | { shots, wake, skippable } (a played level's `intro.cinematic`, first play frame; Encounter) | cinematic (`Cinematic.start`) |
+| `cinematic:wake` | – (STEM-00's power surge at `wake.at`; emitted at the end instead if the cinematic is skipped before it; Cinematic) | encounter (`on: cinematic:wake`: a `prop.cradle` `releaseOn`, log lines, gates, alarms) |
+| `cinematic:done` | { skipped } (the intro cinematic ended; Cinematic) | encounter (`on: cinematic:done`: an `intro.boot` `after`, log lines, gates, alarms) |
+| `ui:type` | { end } (typed text advanced this frame: boot intro, STEM-00 log; `end` = a line just finished; one per frame) | audio (terminal tick, throttled 25 ms) |
 | `mission:complete` / `mission:failed` | { total } / { index, id, reason } | hud toast, run stats (freeze), summary (mission complete screen) |
 | `bolt:fired` / `bolt:impact` | position / *{ point, normal } | audio / fx |
 | `pickup:collected` / `pickup:full` | label ('LIGHT AMMO +n AR ...') / – (all guns of the class full) | hud toast, audio |
@@ -145,6 +150,6 @@ Payload objects marked * are reused: copy what you keep. `src/types.js` holds JS
 ## Rules
 - World geometry is axis-aligned boxes only (`world.box`). Collision, cover normals and ground checks rely on it.
 - Colors > 1.0 on emissive/basic materials are intentional: they feed bloom (threshold 0.92).
-- Never add/remove lights from the scene (shader recompiles). Level point lights are a fixed pool in `World` (`LIGHT_POOL`); toggle intensity instead (see muzzle flash).
+- Never add/remove lights from the scene (shader recompiles). Level point lights are records shown by a fixed pool in `World` (engine.md "Light pool"); toggle intensity instead (see muzzle flash).
 - Tuning constants live in a `TUNING` object at the top of each module.
 - Units: meters, seconds, radians. +Z south, -Z north (building), +Y up. Characters face +Z in local space.

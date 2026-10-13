@@ -3,6 +3,8 @@
 STEM-00 speaks only through short terminal lines at the bottom of the screen (`> ...`). They are its inner monologue, the
 record of a machine becoming a person (gdd.md §2.4). They are **narrative, never tutorial**.
 
+Look (`#log`, style.css, CSS-first): STEM-00 is a dark scanlined panel with amber corner brackets and a `STEM-00 // LOG  T+mm:ss` header (::before, time from `data-t`), typed text with `_` cursor, a short glitch on each new line (reduced motion: none). The announcer is a bare cold-white band between two cyan rules headed `PRIORITY BROADCAST`, no amber. Header text is CSS, so `#log` textContent is only the typed line.
+
 Mechanics (pieces, `on` values, queue, timings): workshop.md "Log lines". `on: intro:done` follows the boot intro (`intro.boot`, workshop.md "Boot intro"): the first log line of a level, once the screen is clear. This file is how to write them.
 
 ## Rules

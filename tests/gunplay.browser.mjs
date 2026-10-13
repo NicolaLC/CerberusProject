@@ -1,5 +1,5 @@
 // Deterministic gunplay checks in a real browser (engine stepped at exact 1/60 s, seeded RNG).
-// Needs the dev server: `npm run dev`, then `node tests/gunplay.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/gunplay.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const URL = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

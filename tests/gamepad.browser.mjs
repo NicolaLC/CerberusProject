@@ -1,6 +1,6 @@
 // Controller support with a simulated standard gamepad (navigator.getGamepads is replaced before load):
 // sticks move and look, triggers aim and fire, buttons reload / switch / jump, Menu pauses and A deploys.
-// Needs the dev server: `npm run dev`, then `node tests/gamepad.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/gamepad.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const URL = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

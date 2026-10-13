@@ -1,7 +1,7 @@
 // Owned guns and weapon discovery (#91, #93): a level's `loadout`, switching only reaches owned guns (keys, wheel, pad),
 // `pickup.gun` discovers a gun once (event, auto-switch, toast) and gives ammo after that, levels without `loadout` keep
 // all six, and bad ids fail validation. Built in the Workshop and played in place (the Prologue's path).
-// Needs the dev server: `npm run dev`, then `node tests/loadout.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/loadout.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

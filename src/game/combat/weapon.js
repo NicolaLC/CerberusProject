@@ -40,16 +40,17 @@ export class Weapon {
   }
 
   // Fresh loadout and no running action (new level): full magazines, nothing reloading or charging.
-  // `loadout`: the guns owned at the start (level file `loadout`, absent = all six); the pistol is always owned.
+  // `loadout`: the guns owned at the start (level file `loadout`, absent = all six); the pistol is always owned, except for `[]`: unarmed (current = null).
   // Owned guns start with their default reserve, the others with a full magazine and an empty reserve (grant() fills it).
-  // The rifle is raised if owned, else the first owned gun in GUN_ORDER.
+  // The rifle is raised if owned, else the first owned gun in GUN_ORDER; none owned = unarmed: `current` is null, update()
+  // does nothing and `t` / `ammo` / `reserve` read the pistol (safe values for readers; the HUD hides the block).
   reset(loadout = GUN_ORDER) {
-    this.owned = new Set(['pistol', ...loadout]);
+    this.owned = new Set(loadout.length ? ['pistol', ...loadout] : []);
     this.state = {};
     for (const id of GUN_ORDER) this.state[id] = { ammo: GUNS[id].mag, reserve: this.owned.has(id) ? GUNS[id].reserve : 0, boost: false };
     this.active = null; // { total, attempted, result } while a reload runs
     this.result = null; // last active-reload result for the HUD: { kind, time }
-    this.current = this.owned.has('rifle') ? 'rifle' : GUN_ORDER.find((id) => this.owned.has(id));
+    this.current = this.owned.has('rifle') ? 'rifle' : GUN_ORDER.find((id) => this.owned.has(id)) ?? null;
     this.cooldown = 0;
     this.reloading = 0;
     this.switching = 0; // > 0 while lowering / raising
@@ -67,23 +68,23 @@ export class Weapon {
   }
 
   get t() {
-    return GUNS[this.current];
+    return GUNS[this.current ?? 'pistol'];
   }
 
   get ammo() {
-    return this.state[this.current].ammo;
+    return this.state[this.current ?? 'pistol'].ammo;
   }
 
   set ammo(v) {
-    this.state[this.current].ammo = v;
+    this.state[this.current ?? 'pistol'].ammo = v;
   }
 
   get reserve() {
-    return this.state[this.current].reserve;
+    return this.state[this.current ?? 'pistol'].reserve;
   }
 
   set reserve(v) {
-    this.state[this.current].reserve = v;
+    this.state[this.current ?? 'pistol'].reserve = v;
   }
 
   // 0 = gun up, 1 = fully lowered (drives the switch animation)
@@ -114,7 +115,7 @@ export class Weapon {
   probe() {
     const a = this.aim;
     a.enemy = a.weak = a.blocked = false;
-    if (this.player.dead || !this.player.muzzle) return;
+    if (this.player.dead || !this.current || !this.player.muzzle) return;
     const camPos = this.camera.position;
     _probeDir.copy(this.rig.forward);
     this.#targets();
@@ -184,7 +185,7 @@ export class Weapon {
     return got;
   }
 
-  // Next owned gun from `from` in GUN_ORDER, stepping `dir` (+1 / -1). The pistol is always owned, so it ends.
+  // Next owned gun from `from` in GUN_ORDER, stepping `dir` (+1 / -1). Only called armed (the pistol is always owned then), so it ends.
   #nextOwned(from, dir) {
     const n = GUN_ORDER.length;
     let i = GUN_ORDER.indexOf(from);
@@ -194,6 +195,14 @@ export class Weapon {
   }
 
   switchTo(id) {
+    if (!this.current) {
+      // unarmed: the gun is raised at once (no lowering), whatever the slot
+      this.current = id;
+      this.player.setGun(id);
+      this.rig.zoom = this.t.zoom ?? null;
+      this.events.emit('weapon:switch', id);
+      return;
+    }
     if (id === this.current && !this.pending) return;
     if (this.switching > 0 && this.pending === id) return;
     this.pending = id;
@@ -205,7 +214,7 @@ export class Weapon {
   }
 
   get boosted() {
-    return this.state[this.current].boost;
+    return this.state[this.current ?? 'pistol'].boost;
   }
 
   // 0..1 position of the active-reload marker
@@ -257,6 +266,11 @@ export class Weapon {
   }
 
   update(dt, controls) {
+    if (!this.current) {
+      // unarmed: fire, aim, reload, slots and the wheel do nothing
+      this.firing = false;
+      return;
+    }
     // switching: number keys, or the mouse wheel (not in trackpad mode, where the wheel looks around); owned guns only
     const slot = controls.slotPressed;
     if (slot >= 0 && slot < GUN_ORDER.length && this.owned.has(GUN_ORDER[slot])) this.switchTo(GUN_ORDER[slot]);

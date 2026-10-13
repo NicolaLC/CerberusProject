@@ -1,7 +1,7 @@
 // The Prologue level (#2, #13, #93): src/levels/prologue.json opens through ?scene=prologue and plays the awakening: boot
 // overlay and input lock, intro:done within the duration, the first log line and objective, pistol only, skip only once
 // seen, passive targets, and dormant purge-* groups. Pure level data, headless stepping.
-// Needs the dev server: `npm run dev`, then `node tests/prologue.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/prologue.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug';
