@@ -26,6 +26,12 @@ the looping sounds. Add new rows here for the next missing sounds.
 | `reload-jam.mp3` | same | Weapon reload jamming: a magazine grinding and catching in the receiver with a harsh scraping metal crunch and a dull failed clunk, frustrating, close, dry (0.6 s, influence 0.5) |
 | `boss-music.mp3` | boss fight music, boss:wake to boss:dead (crossfades from the combat track) | ElevenLabs Music v2.5, 75 s, instrumental: Intense dark sci-fi boss battle drum and bass at 174 BPM, pounding breakbeats with huge industrial impacts, a menacing growling distorted bass, ominous low synth brass stabs and urgent pulsing arpeggios, heavier and more threatening than regular combat, relentless full energy from start to end with no intro and no outro so it loops cleanly. Looped at 54 bars. |
 
+## Footstep levels
+
+ElevenLabs takes of the same prompt can come out 15-25 dB apart, and a quiet take in a random-pick list drops steps
+(walk take 4, metal 2 and 4, robot 2 were near silent). Every `step-*.mp3` is now trimmed to 5 ms before its onset and
+peak-normalised to -3 dBFS; do the same to any new take before adding it (the gain per list stays in `SAMPLES`).
+
 ## Recorded, not wired yet
 
 | File | Event | Notes |
