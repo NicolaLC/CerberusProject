@@ -14,15 +14,11 @@ import reloadPerfect from '../../assets/sfx/reload-perfect.mp3';
 import reloadJam from '../../assets/sfx/reload-jam.mp3';
 import switchGun from '../../assets/sfx/switch.mp3';
 import stepWalk1 from '../../assets/sfx/step-walk-1.mp3';
-import stepRun1 from '../../assets/sfx/step-run-1.mp3';
 import stepMetal1 from '../../assets/sfx/step-metal-1.mp3';
 import stepRobot1 from '../../assets/sfx/step-robot-1.mp3';
 import stepWalk2 from '../../assets/sfx/step-walk-2.mp3';
 import stepWalk3 from '../../assets/sfx/step-walk-3.mp3';
 import stepWalk4 from '../../assets/sfx/step-walk-4.mp3';
-import stepRun2 from '../../assets/sfx/step-run-2.mp3';
-import stepRun3 from '../../assets/sfx/step-run-3.mp3';
-import stepRun4 from '../../assets/sfx/step-run-4.mp3';
 import stepMetal2 from '../../assets/sfx/step-metal-2.mp3';
 import stepMetal3 from '../../assets/sfx/step-metal-3.mp3';
 import stepMetal4 from '../../assets/sfx/step-metal-4.mp3';
@@ -64,6 +60,7 @@ import gunDiscovered from '../../assets/sfx/gun-discovered.mp3';
 import missionComplete from '../../assets/sfx/mission-complete.mp3';
 import ambientLoop from '../../assets/sfx/ambient-loop.mp3';
 import combatMusic from '../../assets/sfx/combat-music.mp3';
+import bossMusic from '../../assets/sfx/boss-music.mp3';
 
 // SFX: synthesized at runtime, plus recorded samples (ElevenLabs, see credits.md) where one exists.
 // A sample replaces its synth sound once decoded; until then (or if loading fails) the synth plays.
@@ -86,7 +83,6 @@ const SAMPLES = {
   jam: [reloadJam, 0.5, 0.06],
   switch: [switchGun, 0.9, 0.1],
   stepWalk: [[stepWalk1, stepWalk2, stepWalk3, stepWalk4], 0.55, 0.1], // player on the floor
-  stepRun: [[stepRun1, stepRun2, stepRun3, stepRun4], 0.45, 0.1],
   stepMetal: [[stepMetal1, stepMetal2, stepMetal3, stepMetal4], 0.4, 0.1], // player on anything raised (platform, stairs, blocks)
   stepRobot: [[stepRobot1, stepRobot2, stepRobot3, stepRobot4], 0.45, 0.12], // troopers and moving puppets, quieter with distance
   hitBody: [hitBody, 0.55, 0.08], // hit confirms: UI-like, must cut through gunfire
@@ -124,15 +120,19 @@ const SAMPLES = {
   missionComplete: [missionComplete, 0.7, 0],
   ambient: [ambientLoop, 0.3, 0], // looped from the first gesture on (mood())
   music: [combatMusic, 0.35, 0], // looped while fighting (mood())
+  bossMusic: [bossMusic, 0.35, 0], // looped from boss:wake to boss:dead, instead of `music`
 };
 // Combat music: fades in on a combat signal (COMBAT_ON) and out `hold` s after the last one, sooner when the fight ends
-// (COMBAT_OFF). The ambience ducks under it. Fades are time constants (s) for setTargetAtTime.
-// The track fades out over its last ~5 s, so it loops at loopEnd: 39 bars at 174 BPM, before the fade.
-const MUSIC = { hold: 10, fadeIn: 0.5, fadeOut: 1.3, duck: 0.5, loopEnd: (39 * 4 * 60) / 174 };
+// (COMBAT_OFF). While the boss is awake its own track plays instead (crossfaded). The ambience ducks under the music.
+// Fades are time constants (s) for setTargetAtTime. Each track loops at loopEnd, a whole number of bars at 174 BPM: the
+// combat track before its own fade-out (~55 s), the boss track (75 s, no fade) on its last full bar.
+const BAR = (4 * 60) / 174;
+const MUSIC = { hold: 10, fadeIn: 0.5, fadeOut: 1.3, duck: 0.5, loopEnd: { music: 39 * BAR, bossMusic: 54 * BAR } };
 const COMBAT_ON = ['bolt:fired', 'player:hurt', 'group:wake', 'encounter:wake', 'boss:wake', 'trooper:flank', 'alarm:on'];
 const COMBAT_OFF = ['arena:clear', 'boss:dead', 'mission:complete', 'mission:failed', 'alarm:clear'];
 // Boot intro sound cues, in s from `intro:start`: the surge, the core right after it; the rise (5 s) ends with the intro.
 const WAKE = { surge: 2.4, core: 3.4, rise: 5 };
+const RUN_STEP = { gain: 1.15, rate: 1.08 }; // sprint steps vs walk steps (same takes)
 const HIT_SAMPLE = { body: 'hitBody', head: 'hitHead', weak: 'hitWeak' };
 const ENEMY_STEP_RANGE = 28; // m from the camera where enemy steps fade out
 const GAIN_SPREAD = 0.12;
@@ -168,8 +168,10 @@ export class Audio {
     this.wakeFrom = 0; // performance.now() of the running boot intro, 0 when none
     this.wakeVoices = []; // its scheduled cues, cut on a skip
     this.combatAt = -Infinity; // s (performance clock) of the last combat signal
-    this.fighting = false; // the music is (fading) in
-    this.ambientLoop = this.musicLoop = null;
+    this.bossFight = false; // boss:wake .. boss:dead
+    this.track = null; // id of the music track (fading) in, null when none
+    this.tracks = {}; // id -> its looping source, started on first use and kept running (silent when off)
+    this.ambientLoop = null;
     this.live = new Map(); // id -> enemy voices still playing (VOICE_CAP)
   }
 
@@ -241,6 +243,8 @@ export class Audio {
     events.on('intro:start', (e) => this.wake(e.duration));
     for (const e of COMBAT_ON) events.on(e, () => (this.combatAt = performance.now() / 1000));
     for (const e of COMBAT_OFF) events.on(e, () => (this.combatAt = -Infinity));
+    events.on('boss:wake', () => (this.bossFight = true));
+    for (const e of COMBAT_OFF) events.on(e, () => (this.bossFight = false)); // boss:dead, or the level ends
     events.on('intro:done', (e) => e.skipped && this.wake(0));
     events.on('alarm:on', (a) => a.siren && this.siren(true));
     events.on('alarm:off', (a) => !a.active && this.siren(false));
@@ -248,7 +252,11 @@ export class Audio {
       this.siren(false);
       this.engine(false); // the level unloads: a boss left awake goes quiet too
     });
-    events.on('player:step', (s) => this.sample(s.raised ? 'stepMetal' : s.run ? 'stepRun' : 'stepWalk'));
+    events.on('player:step', (s) => {
+      // sprinting reuses the walking takes, a little louder and higher, so the two gaits sound like the same boots
+      const src = this.sample(s.raised ? 'stepMetal' : 'stepWalk', 0, s.run && !s.raised ? RUN_STEP.gain : 1);
+      if (src && s.run && !s.raised) src.playbackRate.value *= RUN_STEP.rate;
+    });
     events.on('enemy:step', (pos) => {
       if (!this.listener) return;
       const f = 1 - this.listener.position.distanceTo(pos) / ENEMY_STEP_RANGE;
@@ -550,21 +558,26 @@ export class Audio {
     else this.boom(size);
   }
 
-  // Per frame: starts the ambience once decoded, fades the combat music in or out (out on pause too).
+  // Per frame: starts the ambience once decoded, crossfades the music to the track the fight calls for (none on pause).
   mood(paused) {
     if (!this.ctx) return;
     this.ambientLoop ??= this.#loop('ambient', 1);
-    const fighting = !paused && performance.now() / 1000 - this.combatAt < MUSIC.hold;
-    if (fighting && !this.musicLoop) {
-      this.musicLoop = this.#loop('music', 0); // starts silent, faded in below; null until decoded (retried)
-      if (this.musicLoop) this.musicLoop.loopEnd = MUSIC.loopEnd;
-      this.fighting = null;
+    const fighting = !paused && (this.bossFight || performance.now() / 1000 - this.combatAt < MUSIC.hold);
+    const want = fighting ? (this.bossFight ? 'bossMusic' : 'music') : null;
+    if (want && !this.tracks[want]) {
+      const src = this.#loop(want, 0); // starts silent, faded in below; null until decoded (retried next frame)
+      if (!src) return;
+      if (MUSIC.loopEnd[want]) src.loopEnd = MUSIC.loopEnd[want];
+      this.tracks[want] = src;
+      this.track = undefined; // forces the fade below
     }
-    if (fighting === this.fighting) return;
-    this.fighting = fighting;
+    if (want === this.track) return;
+    this.track = want;
     const t = this.ctx.currentTime;
-    this.musicLoop?.gain.gain.setTargetAtTime(fighting ? SAMPLES.music[1] : 0, t, fighting ? MUSIC.fadeIn : MUSIC.fadeOut);
-    this.ambientLoop?.gain.gain.setTargetAtTime(SAMPLES.ambient[1] * (fighting ? MUSIC.duck : 1), t, 1);
+    for (const [id, src] of Object.entries(this.tracks)) {
+      src.gain.gain.setTargetAtTime(id === want ? SAMPLES[id][1] : 0, t, id === want ? MUSIC.fadeIn : MUSIC.fadeOut);
+    }
+    this.ambientLoop?.gain.gain.setTargetAtTime(SAMPLES.ambient[1] * (want ? MUSIC.duck : 1), t, 1);
   }
 
   #loop(id, volume) {

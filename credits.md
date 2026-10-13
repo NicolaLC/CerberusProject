@@ -34,11 +34,9 @@ Most sounds are synthesized at runtime (`src/game/view/audio.js`). Recorded samp
 | Dry fire | `src/assets/sfx/dry-fire.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Weapon switch | `src/assets/sfx/switch.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Player footstep, walking | `src/assets/sfx/step-walk-1.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
-| Player footstep, sprinting | `src/assets/sfx/step-run-1.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Player footstep on raised surfaces | `src/assets/sfx/step-metal-1.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Robot footstep (troopers, puppets) | `src/assets/sfx/step-robot-1.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Player footstep, walking (takes 2-4) | `src/assets/sfx/step-walk-2.mp3`, `src/assets/sfx/step-walk-3.mp3`, `src/assets/sfx/step-walk-4.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
-| Player footstep, sprinting (takes 2-4) | `src/assets/sfx/step-run-2.mp3`, `src/assets/sfx/step-run-3.mp3`, `src/assets/sfx/step-run-4.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Player footstep on raised surfaces (takes 2-4) | `src/assets/sfx/step-metal-2.mp3`, `src/assets/sfx/step-metal-3.mp3`, `src/assets/sfx/step-metal-4.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Robot footstep (takes 2-4) | `src/assets/sfx/step-robot-2.mp3`, `src/assets/sfx/step-robot-3.mp3`, `src/assets/sfx/step-robot-4.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Hit confirm, body | `src/assets/sfx/hit-body.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
@@ -80,6 +78,7 @@ Most sounds are synthesized at runtime (`src/game/view/audio.js`). Recorded samp
 | Diagnostic console (loop, not wired yet) | `src/assets/sfx/console-loop.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Facility ambience (loop) | `src/assets/sfx/ambient-loop.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Combat music (sci-fi drum and bass, loop) | `src/assets/sfx/combat-music.mp3` | generated with ElevenLabs Music (eleven_music_v2_5) by the project owner | per the ElevenLabs plan used (commercial use of generated music needs a paid plan: see `before-shipping.md`) |
+| Boss music (SX-6 Tarantula fight, drum and bass, loop) | `src/assets/sfx/boss-music.mp3` | generated with ElevenLabs Music (eleven_music_v2_5) by the project owner | per the ElevenLabs plan used (commercial use of generated music needs a paid plan: see `before-shipping.md`) |
 
 ## Libraries
 
