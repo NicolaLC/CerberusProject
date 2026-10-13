@@ -95,6 +95,7 @@ await ev(() => {
     g.player.pos.set(20, 0, 0);
     T.step(0.5);
     const done = T.texts();
+    g.juice.reset(); // this one-objective mission just completed: its debrief slow motion (summary.js) would stretch the delay
     T.step(0.8);
     return { triggers, done, delayed: T.texts(), shown: T.shown() };
   });
