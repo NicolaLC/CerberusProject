@@ -17,6 +17,43 @@ import stepWalk1 from '../../assets/sfx/step-walk-1.mp3';
 import stepRun1 from '../../assets/sfx/step-run-1.mp3';
 import stepMetal1 from '../../assets/sfx/step-metal-1.mp3';
 import stepRobot1 from '../../assets/sfx/step-robot-1.mp3';
+import stepWalk2 from '../../assets/sfx/step-walk-2.mp3';
+import stepWalk3 from '../../assets/sfx/step-walk-3.mp3';
+import stepWalk4 from '../../assets/sfx/step-walk-4.mp3';
+import stepRun2 from '../../assets/sfx/step-run-2.mp3';
+import stepRun3 from '../../assets/sfx/step-run-3.mp3';
+import stepRun4 from '../../assets/sfx/step-run-4.mp3';
+import stepMetal2 from '../../assets/sfx/step-metal-2.mp3';
+import stepMetal3 from '../../assets/sfx/step-metal-3.mp3';
+import stepMetal4 from '../../assets/sfx/step-metal-4.mp3';
+import stepRobot2 from '../../assets/sfx/step-robot-2.mp3';
+import stepRobot3 from '../../assets/sfx/step-robot-3.mp3';
+import stepRobot4 from '../../assets/sfx/step-robot-4.mp3';
+import hitBody from '../../assets/sfx/hit-body.mp3';
+import hitHead from '../../assets/sfx/hit-head.mp3';
+import hitWeak from '../../assets/sfx/hit-weak.mp3';
+import killSfx from '../../assets/sfx/kill.mp3';
+import lowMag from '../../assets/sfx/low-mag.mp3';
+import reloadGood from '../../assets/sfx/reload-good.mp3';
+import jetSfx from '../../assets/sfx/jet.mp3';
+import landSfx from '../../assets/sfx/land.mp3';
+import hurtSfx from '../../assets/sfx/hurt.mp3';
+import pickupSfx from '../../assets/sfx/pickup.mp3';
+import pickupFull from '../../assets/sfx/pickup-full.mp3';
+import enemyShot from '../../assets/sfx/enemy-shot.mp3';
+import boltImpact from '../../assets/sfx/bolt-impact.mp3';
+import robotDown from '../../assets/sfx/robot-down.mp3';
+import explosion from '../../assets/sfx/explosion.mp3';
+import alarmSiren from '../../assets/sfx/alarm-siren.mp3';
+import bossWake from '../../assets/sfx/boss-wake.mp3';
+import bossCharge from '../../assets/sfx/boss-charge.mp3';
+import bossStomp from '../../assets/sfx/boss-stomp.mp3';
+import bossStep from '../../assets/sfx/boss-step.mp3';
+import bossSlam from '../../assets/sfx/boss-slam.mp3';
+import bossMortar from '../../assets/sfx/boss-mortar.mp3';
+import bossLeg from '../../assets/sfx/boss-leg.mp3';
+import bossDeath from '../../assets/sfx/boss-death.mp3';
+import bossLoop from '../../assets/sfx/boss-loop.mp3';
 
 // SFX: synthesized at runtime, plus recorded samples (ElevenLabs, see credits.md) where one exists.
 // A sample replaces its synth sound once decoded; until then (or if loading fails) the synth plays.
@@ -38,11 +75,37 @@ const SAMPLES = {
   perfect: [reloadPerfect, 0.5, 0.04],
   jam: [reloadJam, 0.5, 0.06],
   switch: [switchGun, 0.9, 0.1],
-  stepWalk: [[stepWalk1], 0.55, 0.1], // player on the floor
-  stepRun: [[stepRun1], 0.45, 0.1],
-  stepMetal: [[stepMetal1], 0.4, 0.1], // player on anything raised (platform, stairs, blocks)
-  stepRobot: [[stepRobot1], 0.45, 0.12], // troopers and moving puppets, quieter with distance
+  stepWalk: [[stepWalk1, stepWalk2, stepWalk3, stepWalk4], 0.55, 0.1], // player on the floor
+  stepRun: [[stepRun1, stepRun2, stepRun3, stepRun4], 0.45, 0.1],
+  stepMetal: [[stepMetal1, stepMetal2, stepMetal3, stepMetal4], 0.4, 0.1], // player on anything raised (platform, stairs, blocks)
+  stepRobot: [[stepRobot1, stepRobot2, stepRobot3, stepRobot4], 0.45, 0.12], // troopers and moving puppets, quieter with distance
+  hitBody: [hitBody, 0.55, 0.08], // hit confirms: UI-like, must cut through gunfire
+  hitHead: [hitHead, 0.6, 0.05],
+  hitWeak: [hitWeak, 0.6, 0.05],
+  kill: [killSfx, 0.7, 0.04],
+  lowMag: [lowMag, 0.4, 0], // pitched by the rounds left (lowMag())
+  reloadGood: [reloadGood, 0.5, 0.06],
+  jet: [jetSfx, 0.55, 0.06],
+  land: [landSfx, 0.5, 0.1],
+  hurt: [hurtSfx, 0.6, 0.08],
+  pickup: [pickupSfx, 0.5, 0.04],
+  pickupFull: [pickupFull, 0.35, 0.03],
+  enemyShot: [enemyShot, 0.35, 0.1], // enemy voices: capped (VOICE_CAP)
+  boltImpact: [boltImpact, 0.3, 0.12],
+  robotDown: [robotDown, 0.55, 0.1],
+  explosion: [explosion, 0.7, 0], // pitched by blast size (blast())
+  siren: [alarmSiren, 0.3, 0], // looped (siren())
+  bossWake: [bossWake, 0.7, 0],
+  bossCharge: [bossCharge, 0.55, 0.04],
+  bossStomp: [bossStomp, 0.6, 0.05],
+  bossStep: [bossStep, 0.55, 0.1],
+  bossSlam: [bossSlam, 0.8, 0.05],
+  bossMortar: [bossMortar, 0.6, 0.06],
+  bossLeg: [bossLeg, 0.75, 0.04],
+  bossDeath: [bossDeath, 0.85, 0],
+  bossLoop: [bossLoop, 0.25, 0], // looped while the boss is awake (engine())
 };
+const HIT_SAMPLE = { body: 'hitBody', head: 'hitHead', weak: 'hitWeak' };
 const ENEMY_STEP_RANGE = 28; // m from the camera where enemy steps fade out
 const GAIN_SPREAD = 0.12;
 const BOLT_DELAY = 0.22; // s after a sniper shot before the bolt is worked
@@ -73,6 +136,7 @@ export class Audio {
     this.voice = {}; // id -> playing source that may be cut short (reload, rail charge)
     this.sirenNode = null; // the alarm siren voices, while it plays
     this.sirenWanted = false;
+    this.engineLoop = null; // the boss's looped engine, while it is awake
     this.live = new Map(); // id -> enemy voices still playing (VOICE_CAP)
   }
 
@@ -87,7 +151,13 @@ export class Audio {
       if (s.gun === 'sniper' && this.samples.sniper) this.sample('sniperBolt', BOLT_DELAY);
       if (s.mag <= 0.2) this.lowMag(s.mag); // last rounds: a rising click warns before the mag runs dry
     });
-    events.on('weapon:hit', (h) => (h.killed ? this.kill() : this.hit(h.weak ? 'weak' : h.crit ? 'head' : 'body')));
+    events.on('weapon:hit', (h) => {
+      if (h.killed) this.sample('kill') || this.kill();
+      else {
+        const kind = h.weak ? 'weak' : h.crit ? 'head' : 'body';
+        this.sample(HIT_SAMPLE[kind]) || this.hit(kind);
+      }
+    });
     events.on('weapon:switch', () => {
       this.#cut('reload');
       this.#cut('railCharge');
@@ -105,26 +175,37 @@ export class Audio {
         this.#cut('reload'); // good / perfect finish it now; a jam stops it (the reload drags on, silent)
         if (kind === 'perfect') this.sample('perfect') || this.perfect();
         else if (kind === 'jam') this.sample('jam') || this.jam();
-        else this.click();
+        else this.sample('reloadGood') || this.click();
       }
     });
-    events.on('puppet:down', () => this.thud());
-    events.on('player:hurt', () => this.thud());
-    events.on('player:jet', () => this.jet());
-    events.on('player:land', () => this.land());
-    events.on('bolt:fired', () => this.zap(0.12));
-    events.on('blast', (b) => this.boom(Math.min(1.2, 0.4 + b.radius / 6)));
-    events.on('boss:leg', () => this.boom(0.8));
-    events.on('boss:dead', () => this.boom(1.4));
-    events.on('boss:step', () => this.thud());
-    events.on('boss:charge', () => this.charge());
-    events.on('boss:stomp', () => this.charge());
-    events.on('boss:mortar', () => this.zap(0.25));
-    events.on('boss:wake', () => this.charge());
-    events.on('pickup:collected', () => this.pickup());
+    events.on('puppet:down', () => this.sample('robotDown', 0, 1, true) || this.thud());
+    events.on('player:hurt', () => this.sample('hurt') || this.thud());
+    events.on('player:jet', () => this.sample('jet') || this.jet());
+    events.on('player:land', () => this.sample('land') || this.land());
+    events.on('bolt:fired', () => this.sample('enemyShot', 0, 1, true) || this.zap(0.12));
+    events.on('bolt:impact', () => this.sample('boltImpact', 0, 1, true));
+    events.on('blast', (b) => (b.kind === 'stomp' && this.sample('bossSlam')) || this.blast(Math.min(1.2, 0.4 + b.radius / 6)));
+    events.on('boss:leg', () => this.sample('bossLeg') || this.boom(0.8));
+    events.on('boss:dead', () => {
+      this.engine(false);
+      this.sample('bossDeath') || this.boom(1.4);
+    });
+    events.on('boss:step', () => this.sample('bossStep', 0, 1, true) || this.thud());
+    events.on('boss:charge', () => this.sample('bossCharge') || this.charge());
+    events.on('boss:stomp', () => this.sample('bossStomp') || this.charge());
+    events.on('boss:mortar', () => this.sample('bossMortar') || this.zap(0.25));
+    events.on('boss:wake', () => {
+      this.engine(true);
+      this.sample('bossWake') || this.charge();
+    });
+    events.on('pickup:collected', () => this.sample('pickup') || this.pickup());
+    events.on('pickup:full', () => this.sample('pickupFull'));
     events.on('alarm:on', (a) => a.siren && this.siren(true));
     events.on('alarm:off', (a) => !a.active && this.siren(false));
-    events.on('alarm:clear', () => this.siren(false));
+    events.on('alarm:clear', () => {
+      this.siren(false);
+      this.engine(false); // the level unloads: a boss left awake goes quiet too
+    });
     events.on('player:step', (s) => this.sample(s.raised ? 'stepMetal' : s.run ? 'stepRun' : 'stepWalk'));
     events.on('enemy:step', (pos) => {
       if (!this.listener) return;
@@ -306,6 +387,11 @@ export class Audio {
 
   lowMag(frac) {
     if (!this.ctx) return;
+    const src = this.sample('lowMag');
+    if (src) {
+      src.playbackRate.value = 1 + (0.2 - frac) * 2.5; // pitch rises as the mag empties
+      return;
+    }
     const t = this.ctx.currentTime;
     const o = this.ctx.createOscillator();
     o.type = 'triangle';
@@ -412,6 +498,27 @@ export class Audio {
     o.start(t);
     o.stop(t + 0.2);
     this.#hold('zap', o);
+  }
+
+  // Blast (drone, mortar): the recorded explosion, deeper and louder the bigger it is, else the synth boom.
+  blast(size) {
+    const src = this.sample('explosion', 0, 0.6 + size * 0.4, true);
+    if (src) src.playbackRate.value = 1.25 - size * 0.3;
+    else this.boom(size);
+  }
+
+  // The boss's idle engine: a looped rumble from wake to death (recorded only, no synth fallback).
+  engine(on) {
+    if (on && !this.engineLoop) {
+      this.engineLoop = this.sample('bossLoop');
+      if (this.engineLoop) this.engineLoop.loop = true;
+    } else if (!on && this.engineLoop) {
+      const src = this.engineLoop;
+      this.engineLoop = null;
+      const t = this.ctx.currentTime;
+      src.gain.gain.setTargetAtTime(0, t, 0.3);
+      src.stop(t + 1.5);
+    }
   }
 
   // Explosion: low noise burst with a long tail plus a sub drop.
@@ -595,7 +702,8 @@ export class Audio {
     o.stop(t + 0.24);
   }
 
-  // Alarm siren (env.alarm): a looping two-tone wail, synthesized (a triangle-LFO swept sawtooth through a lowpass), faded in and out.
+  // Alarm siren (env.alarm): the recorded loop once decoded, else a looping two-tone wail, synthesized (a triangle-LFO
+  // swept sawtooth through a lowpass); faded in and out.
   // Started before the first user gesture it waits for init().
   siren(on) {
     this.sirenWanted = on;
@@ -606,9 +714,17 @@ export class Audio {
       this.sirenNode = null;
       cur.gain.gain.cancelScheduledValues(t);
       cur.gain.gain.setTargetAtTime(0, t, 0.15);
-      cur.osc.stop(t + 1);
-      cur.lfo.stop(t + 1);
+      for (const node of cur.nodes) node.stop(t + 1);
     } else if (on && !cur) {
+      const src = this.sample('siren');
+      if (src) {
+        src.loop = true;
+        const peak = src.gain.gain.value;
+        src.gain.gain.setValueAtTime(0.001, t);
+        src.gain.gain.linearRampToValueAtTime(peak, t + 0.4);
+        this.sirenNode = { nodes: [src], gain: src.gain };
+        return;
+      }
       const osc = this.ctx.createOscillator();
       osc.type = 'sawtooth';
       osc.frequency.value = 700;
@@ -627,7 +743,7 @@ export class Audio {
       osc.connect(lp).connect(gain).connect(this.master);
       osc.start(t);
       lfo.start(t);
-      this.sirenNode = { osc, lfo, gain };
+      this.sirenNode = { nodes: [osc, lfo], gain };
     }
   }
 
