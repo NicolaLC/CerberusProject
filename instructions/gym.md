@@ -208,7 +208,7 @@ Measures what content costs, so encounters can be budgeted (numbers: `engine.md`
 
 ## Library (`?scene=library`, #68)
 
-The showroom: a walkable bare-grid floor (x -40..40, z 60..-100) with labelled aisles. Spawn (0, 0, 34) facing north; aisles run
+The showroom: a walkable bare-grid floor (x -40..40, z 60..-106) with labelled aisles. Spawn (0, 0, 34) facing north; aisles run
 west-east, one per row, signs (yellow) at the west end. Level `library.json` (`demo: true`, `tool: "library"`), tool `gym/library.js`,
 suite `tests/library.browser.mjs`.
 
@@ -219,7 +219,9 @@ suite `tests/library.browser.mjs`.
 | 3 Cover and environment | -6 | `env.box` low / high / wall / platform / faces, `env.strip`, `env.label` |
 | 4 Pickups | -20 | `pickup.light`, `pickup.heavy` |
 | 5 Light presets | -30 | four `light.point` over pedestals: cyan, warm white, red, flicker (with its strip) |
-| 6 Kit aisle | -46 | empty in the file on purpose; the tool fills it |
+| 6 Props | -42 / -52 | floor row: console, crate (small / medium / large), cables, puppet rack, cradle (open), bench, hazard; behind it a backdrop wall (`inWall`, face z -52) with wall pipes and a panel, and a roofed east end (slab underside 6 m, posts, one `light.point`) with ceiling pipes and the arm |
+| 7 Architecture | -57 / -66 | one backdrop wall (face z -66): a roofed alcove at the west end (side walls, slab at 6 m, fascia, two lights) with ceiling + wall coves and coffers, then rib, panelling, `arch.bulkhead` on a `kit.doorway` (walk-through), catwalk, a cyan floor channel |
+| 8 Kit aisle | -78 | empty in the file on purpose; the tool fills it (3 rows of 9 now, to z -98) |
 
 - **Exhibit** = a level piece named `ex:<id>`. Each has a flat floor caption (readable walking north): its id and the entry's `label`
   meta (guns: name, damage, mag, falloff). Enemy and pickup captions in the file must equal their meta (the suite checks it); the
@@ -235,7 +237,8 @@ suite `tests/library.browser.mjs`.
 - **Panel** (top-left): id, owner and label of the exhibit within 14 m, awake / idle, exhibit counts.
 - Keys in use elsewhere (do not reuse): controls W A S D E F R Q H 1-6, Gym tools T G B N M J K L O P [ ].
 - `prop.gun` frees its merged geometry in `World.unload()` (own list `world.props`); its materials are permanent.
-- The set dressing `prop.*` ids (console, crate, cables, pipes, puppetRack, arm, hazard, panel) are not in the file: the kit aisle shows them
-  from their `example` (4 rows of 9 now). `prop.arm` hangs from 5.85 m over its aisle spot.
+- The `prop.*` and `arch.*` dressing is hand-placed (sections 6, 7) because wall and ceiling pieces need a wall or roof to mount on; their
+  captions are written by the script from the `label` meta. Mounted pieces sit exactly on the faces (decor 1 cm off where faces would be
+  coplanar); re-dress by script (load, edit `pieces`, `serializeLevel`) and run a z-fight check on the region.
 - Gotchas fixed on the way: a `mover` with speed 0 or no `to` went NaN (division by a zero rail length); `boss.spider` without an
   `arena` now gets a 20 m box around its position.
