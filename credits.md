@@ -87,6 +87,7 @@ Most sounds are synthesized at runtime (`src/game/view/audio.js`). Recorded samp
 | Facility ambience (loop) | `src/assets/sfx/ambient-loop.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Combat music (sci-fi drum and bass, loop) | `src/assets/sfx/combat-music.mp3` | generated with ElevenLabs Music (eleven_music_v2_5) by the project owner | per the ElevenLabs plan used (commercial use of generated music needs a paid plan: see `before-shipping.md`) |
 | Boss music (SX-6 Tarantula fight, drum and bass, loop) | `src/assets/sfx/boss-music.mp3` | generated with ElevenLabs Music (eleven_music_v2_5) by the project owner | per the ElevenLabs plan used (commercial use of generated music needs a paid plan: see `before-shipping.md`) |
+| Menu music (title / pause, dark ambient, loop) | `src/assets/sfx/menu-music.mp3` | generated with ElevenLabs Music (eleven_music_v2_5) by the project owner | per the ElevenLabs plan used (commercial use of generated music needs a paid plan: see `before-shipping.md`) |
 
 ## Libraries
 

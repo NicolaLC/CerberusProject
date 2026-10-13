@@ -62,6 +62,7 @@ import droneLoop from '../../assets/sfx/drone-loop.mp3';
 import ambientLoop from '../../assets/sfx/ambient-loop.mp3';
 import combatMusic from '../../assets/sfx/combat-music.mp3';
 import bossMusic from '../../assets/sfx/boss-music.mp3';
+import menuMusic from '../../assets/sfx/menu-music.mp3';
 
 // SFX: synthesized at runtime, plus recorded samples (ElevenLabs, see credits.md) where one exists.
 // A sample replaces its synth sound once decoded; until then (or if loading fails) the synth plays.
@@ -123,6 +124,7 @@ const SAMPLES = {
   ambient: [ambientLoop, 0.3, 0], // looped from the first gesture on (mood())
   music: [combatMusic, 0.35, 0], // looped while fighting (mood())
   bossMusic: [bossMusic, 0.35, 0], // looped from boss:wake to boss:dead, instead of `music`
+  menuMusic: [menuMusic, 0.35, 0], // looped while the start / pause panel is up (engine paused)
 };
 // Combat music: fades in on a combat signal (COMBAT_ON) and out `hold` s after the last one, sooner when the fight ends
 // (COMBAT_OFF). While the boss is awake its own track plays instead (crossfaded). The ambience ducks under the music.
@@ -566,13 +568,14 @@ export class Audio {
     else this.boom(size);
   }
 
-  // Per frame: starts the ambience once decoded, crossfades the music to the track the fight calls for (none on pause).
+  // Per frame: starts the ambience once decoded, crossfades the music to the track the moment calls for: the menu track while
+  // paused (start / pause panel), the fight's track in combat, none otherwise.
   mood(paused) {
     if (!this.ctx) return;
     this.ambientLoop ??= this.#loop('ambient', 1);
     this.#beds(paused);
     const fighting = !paused && (this.bossFight || performance.now() / 1000 - this.combatAt < MUSIC.hold);
-    const want = fighting ? (this.bossFight ? 'bossMusic' : 'music') : null;
+    const want = paused ? 'menuMusic' : fighting ? (this.bossFight ? 'bossMusic' : 'music') : null;
     if (want && !this.tracks[want]) {
       const src = this.#loop(want, 0); // starts silent, faded in below; null until decoded (retried next frame)
       if (!src) return;
