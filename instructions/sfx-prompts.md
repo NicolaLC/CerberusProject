@@ -16,3 +16,10 @@ the looping sounds. Add new rows here for the next missing sounds.
 | File | Event | Notes |
 |---|---|---|
 | `drone-loop.mp3` | drone hover, looping | needs one looped voice per drone, faded by distance (like enemy steps) |
+| `arm-retract.mp3` | maintenance arm folds up (`prop.arm` `retractOn`) | the prop does not exist yet |
+| `bay-hum-loop.mp3` | calibration bay ambience, inside `bay-zone` | the zone does not exist yet |
+| `console-loop.mp3` | `prop.console`, positional | the prop does not exist yet |
+
+The Prologue wake-up cues (`wake-surge`, `wake-core`, `wake-rise`) play off the boot intro today (`Audio.wake`, `WAKE` in
+`audio.js`: surge 2.4 s after `intro:start`, core 1 s later, rise timed to end with the intro; cut on a skip). Move them
+to the `intro.cinematic` timeline (`wake.at`, `wake.rise`) once it exists.

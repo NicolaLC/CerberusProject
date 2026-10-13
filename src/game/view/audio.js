@@ -54,6 +54,14 @@ import bossMortar from '../../assets/sfx/boss-mortar.mp3';
 import bossLeg from '../../assets/sfx/boss-leg.mp3';
 import bossDeath from '../../assets/sfx/boss-death.mp3';
 import bossLoop from '../../assets/sfx/boss-loop.mp3';
+import wakeSurge from '../../assets/sfx/wake-surge.mp3';
+import wakeCore from '../../assets/sfx/wake-core.mp3';
+import wakeRise from '../../assets/sfx/wake-rise.mp3';
+import gateOpen from '../../assets/sfx/gate-open.mp3';
+import objectiveNew from '../../assets/sfx/objective-new.mp3';
+import objectiveDone from '../../assets/sfx/objective-done.mp3';
+import gunDiscovered from '../../assets/sfx/gun-discovered.mp3';
+import missionComplete from '../../assets/sfx/mission-complete.mp3';
 
 // SFX: synthesized at runtime, plus recorded samples (ElevenLabs, see credits.md) where one exists.
 // A sample replaces its synth sound once decoded; until then (or if loading fails) the synth plays.
@@ -104,7 +112,17 @@ const SAMPLES = {
   bossLeg: [bossLeg, 0.75, 0.04],
   bossDeath: [bossDeath, 0.85, 0],
   bossLoop: [bossLoop, 0.25, 0], // looped while the boss is awake (engine())
+  wakeSurge: [wakeSurge, 0.7, 0], // boot intro (wake()): power comes back,
+  wakeCore: [wakeCore, 0.6, 0], // STEM-00's core lights,
+  wakeRise: [wakeRise, 0.6, 0], // it straightens as the view fades in
+  gateOpen: [gateOpen, 0.6, 0.05],
+  objectiveNew: [objectiveNew, 0.4, 0.02],
+  objectiveDone: [objectiveDone, 0.5, 0.02],
+  gunDiscovered: [gunDiscovered, 0.6, 0.03],
+  missionComplete: [missionComplete, 0.7, 0],
 };
+// Boot intro sound cues, in s from `intro:start`: the surge, the core right after it; the rise (5 s) ends with the intro.
+const WAKE = { surge: 2.4, core: 3.4, rise: 5 };
 const HIT_SAMPLE = { body: 'hitBody', head: 'hitHead', weak: 'hitWeak' };
 const ENEMY_STEP_RANGE = 28; // m from the camera where enemy steps fade out
 const GAIN_SPREAD = 0.12;
@@ -137,6 +155,8 @@ export class Audio {
     this.sirenNode = null; // the alarm siren voices, while it plays
     this.sirenWanted = false;
     this.engineLoop = null; // the boss's looped engine, while it is awake
+    this.wakeFrom = 0; // performance.now() of the running boot intro, 0 when none
+    this.wakeVoices = []; // its scheduled cues, cut on a skip
     this.live = new Map(); // id -> enemy voices still playing (VOICE_CAP)
   }
 
@@ -200,6 +220,13 @@ export class Audio {
     });
     events.on('pickup:collected', () => this.sample('pickup') || this.pickup());
     events.on('pickup:full', () => this.sample('pickupFull'));
+    events.on('gate:open', () => this.sample('gateOpen'));
+    events.on('mission:objective', () => this.sample('objectiveNew'));
+    events.on('mission:objective:done', (e) => !e.skipped && this.sample('objectiveDone')); // a skipped optional objective is silent
+    events.on('weapon:discovered', () => this.sample('gunDiscovered'));
+    events.on('mission:complete', () => this.sample('missionComplete'));
+    events.on('intro:start', (e) => this.wake(e.duration));
+    events.on('intro:done', (e) => e.skipped && this.wake(0));
     events.on('alarm:on', (a) => a.siren && this.siren(true));
     events.on('alarm:off', (a) => !a.active && this.siren(false));
     events.on('alarm:clear', () => {
@@ -225,6 +252,7 @@ export class Audio {
     this.master.gain.value = 0.35;
     this.master.connect(this.ctx.destination);
     if (this.sirenWanted) this.siren(true); // an alarm that started before the first gesture
+    if (this.wakeFrom) this.#wakeCues(); // an intro that started before it
     const len = this.ctx.sampleRate * 0.5;
     this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = this.noise.getChannelData(0);
@@ -505,6 +533,27 @@ export class Audio {
     const src = this.sample('explosion', 0, 0.6 + size * 0.4, true);
     if (src) src.playbackRate.value = 1.25 - size * 0.3;
     else this.boom(size);
+  }
+
+  // Boot intro cues (recorded only): wake(duration) schedules them from now, wake(0) cuts them (intro skipped).
+  // Scheduled on the audio clock, so pausing during the intro does not hold them back.
+  wake(duration) {
+    for (const src of this.wakeVoices) src.stop();
+    this.wakeVoices = [];
+    this.wakeFrom = duration ? performance.now() : 0;
+    this.wakeDuration = duration;
+    if (duration) this.#wakeCues();
+  }
+
+  #wakeCues() {
+    if (!this.ctx) return; // waits for init()
+    const since = (performance.now() - this.wakeFrom) / 1000;
+    const riseAt = Math.max(this.wakeDuration - WAKE.rise, WAKE.core);
+    for (const [id, at] of [['wakeSurge', WAKE.surge], ['wakeCore', WAKE.core], ['wakeRise', riseAt]]) {
+      if (at < since) continue; // already past when the context came up
+      const src = this.sample(id, at - since);
+      if (src) this.wakeVoices.push(src);
+    }
   }
 
   // The boss's idle engine: a looped rumble from wake to death (recorded only, no synth fallback).

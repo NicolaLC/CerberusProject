@@ -67,6 +67,17 @@ Most sounds are synthesized at runtime (`src/game/view/audio.js`). Recorded samp
 | Spider mech leg shot off | `src/assets/sfx/boss-leg.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Spider mech destroyed | `src/assets/sfx/boss-death.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Spider mech engine (loop) | `src/assets/sfx/boss-loop.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Prologue power surge | `src/assets/sfx/wake-surge.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| STEM-00 core ignites | `src/assets/sfx/wake-core.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| STEM-00 rises | `src/assets/sfx/wake-rise.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Maintenance arm folds (not wired yet) | `src/assets/sfx/arm-retract.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Blast door opens | `src/assets/sfx/gate-open.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Objective done | `src/assets/sfx/objective-done.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| New objective | `src/assets/sfx/objective-new.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Weapon discovered | `src/assets/sfx/gun-discovered.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Mission complete | `src/assets/sfx/mission-complete.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Calibration bay hum (loop, not wired yet) | `src/assets/sfx/bay-hum-loop.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Diagnostic console (loop, not wired yet) | `src/assets/sfx/console-loop.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 
 ## Libraries
 
