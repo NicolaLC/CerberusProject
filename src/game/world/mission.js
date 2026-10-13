@@ -3,6 +3,12 @@
 // `Encounter` owns the records and calls start / stop / update; the listeners here are permanent and look at `current`.
 // Logic only: no scene objects, nothing to dispose. Events out: `mission:objective` / `mission:objective:done` { index, total, id, kind, text },
 // `mission:complete` { total }, `mission:failed` { index, id, reason }. Actions on becoming current: `encounter:wake` / `encounter:spawn`.
+// Optional objectives: `skipOn` (a trigger / checkpoint id) completes the current one when it fires, flagged `skipped`.
+// Gun conditions (#93, #15): `skipIfOwned: <gun>` completes the objective as skipped, now or any time later, as soon as the player owns the gun (a "find it if you
+// have not" step); `requiresGun: <gun>` lets it finish only once the gun is owned (the condition is met, the objective waits: `held`). Both ask `owns(gun)`.
+// On done: `grantGun` / `grantAmmo` emit `mission:grant` { gun, ammo } right after `mission:objective:done` (game.js hands it to the Weapon), never when skipped.
+
+import { GUNS } from '../combat/guns.js';
 
 export const TUNING = {
   reach: 2.5, // m, vertical reach of an interact terminal (feet to marker)
@@ -14,8 +20,10 @@ const clock = (s) => {
 };
 
 export class Mission {
-  constructor({ events, enemies }) {
-    Object.assign(this, { events, enemies });
+  // owns(gun): does the player own that gun (game.js: weapon.owned); a mission without gun conditions never calls it.
+  constructor({ events, enemies, owns = () => true }) {
+    Object.assign(this, { events, enemies, owns });
+    this.held = false; // the current objective's condition is met but its `requiresGun` is not owned yet
     this.objectives = []; // records of the objective pieces, in mission order
     this.index = 0; // of `current` (= objectives.length when complete)
     this.current = null; // record being worked on, null when none / complete / failed
@@ -25,7 +33,9 @@ export class Mission {
     this.target = 0; // destroy: kills needed
     const fired = (e) => {
       const r = this.current;
-      if (r?.obj === 'reach' && r.params.trigger != null && r.params.trigger === e.id) this.#complete();
+      if (!r) return;
+      if (r.obj === 'reach' && r.params.trigger != null && r.params.trigger === e.id) this.#complete();
+      else if (r.params.skipOn != null && r.params.skipOn === e.id) this.#complete(true); // optional objective: the player moved on without it
     };
     events.on('trigger:fired', fired);
     events.on('checkpoint:reached', fired);
@@ -57,6 +67,7 @@ export class Mission {
     this.index = 0;
     this.current = null;
     this.state = 'none';
+    this.held = false;
     this.elapsed = this.progress = this.target = 0;
   }
 
@@ -66,6 +77,8 @@ export class Mission {
     if (this.state !== 'active' || !r) return;
     this.elapsed += dt;
     const p = player.pos;
+    if (r.params.skipIfOwned != null && this.owns(r.params.skipIfOwned)) return this.#complete(true);
+    if (this.held && this.owns(r.params.requiresGun)) return this.#complete();
     if (r.obj === 'survive') {
       if (this.elapsed >= r.time) this.#complete();
     } else if (r.obj === 'reach' && r.params.trigger == null) {
@@ -90,14 +103,15 @@ export class Mission {
     if (this.state === 'failed') return 'MISSION FAILED';
     const r = this.current;
     let s = r.text.toUpperCase();
+    if (r.params.requiresGun != null && !this.owns(r.params.requiresGun)) s += `  ${GUNS[r.params.requiresGun].name}: NOT FOUND`;
     if (r.obj === 'destroy') s += `  ${this.progress} / ${this.target}`;
     else if (r.obj === 'survive') s += `  ${clock(r.time - this.elapsed)}`;
     if (r.params.limit != null && r.obj !== 'survive') s += `  ${clock(r.params.limit - this.elapsed)}`;
     return s;
   }
 
-  #info(r) {
-    return { index: this.index, total: this.objectives.length, id: r.oid, kind: r.obj, text: r.text };
+  #info(r, skipped = false) {
+    return { index: this.index, total: this.objectives.length, id: r.oid, kind: r.obj, text: r.text, skipped };
   }
 
   #matches(r, a) {
@@ -108,16 +122,21 @@ export class Mission {
   #begin(i) {
     const r = (this.current = this.objectives[(this.index = i)]);
     this.elapsed = this.progress = 0;
+    this.held = false;
     this.target = r.obj === 'destroy' ? r.params.count ?? this.enemies.all.filter((a) => a.alive && (r.params.group == null || a.squad === r.params.group)).length : 0;
     if (r.params.wakeGroup != null) this.events.emit('encounter:wake', r.params.wakeGroup);
     if (r.params.spawnGroup != null) this.events.emit('encounter:spawn', r.params.spawnGroup);
     this.events.emit('mission:objective', this.#info(r));
-    if (r.obj === 'destroy' && this.target <= 0) this.#complete(); // nothing to destroy: done at once
+    if (r.params.skipIfOwned != null && this.owns(r.params.skipIfOwned)) this.#complete(true); // already owned: nothing to find
+    else if (r.obj === 'destroy' && this.target <= 0) this.#complete(); // nothing to destroy: done at once
   }
 
-  #complete() {
+  // skipped: `skipOn` fired instead of the objective being done (no grantGun then).
+  #complete(skipped = false) {
     const r = this.current;
-    this.events.emit('mission:objective:done', this.#info(r));
+    if (!skipped && r.params.requiresGun != null && !this.owns(r.params.requiresGun)) return void (this.held = true); // done, but waits for the gun
+    this.events.emit('mission:objective:done', this.#info(r, skipped));
+    if (!skipped && r.params.grantGun != null) this.events.emit('mission:grant', { gun: r.params.grantGun, ammo: r.params.grantAmmo ?? 0 }); // after :done, so its toast (OBJECTIVE COMPLETE) gives way to KR-7 WARDEN ACQUIRED
     if (this.index + 1 < this.objectives.length) return this.#begin(this.index + 1);
     this.current = null;
     this.state = 'complete';

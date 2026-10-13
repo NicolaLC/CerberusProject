@@ -23,12 +23,14 @@ export class Juice {
     this.t = TUNING;
     this.stop = 0;
     this.timeScale = 1;
+    this.cap = this.capNow = 1; // hold(): a ceiling on the time scale, eased in
   }
 
-  // Level change: no hitstop left running.
+  // Level change: no hitstop or hold left running.
   reset() {
     this.stop = 0;
     this.timeScale = 1;
+    this.cap = this.capNow = 1;
   }
 
   listen(events) {
@@ -55,6 +57,11 @@ export class Juice {
       this.post.kill();
     });
     return this;
+  }
+
+  // Caps the game time scale at `scale` (eased in over ~0.25 s of real time) until hold(1) or reset(): slow motion behind the mission complete screen.
+  hold(scale) {
+    this.cap = scale;
   }
 
   hitstop(s) {
@@ -109,6 +116,7 @@ export class Juice {
     } else {
       this.timeScale += (1 - this.timeScale) * Math.min(1, realDt * 12);
     }
-    return this.timeScale;
+    this.capNow += (this.cap - this.capNow) * Math.min(1, realDt * 4);
+    return Math.min(this.timeScale, this.capNow);
   }
 }

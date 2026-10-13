@@ -85,7 +85,7 @@ export class Hud {
     events.on('boss:wake', (b) => this.toast(`⚠ ${b.name}`, 3));
     events.on('boss:down', () => this.toast('CORE EXPOSED', 2));
     events.on('boss:dead', () => this.toast('MECH DESTROYED', 3));
-    events.on('mission:objective:done', () => this.toast('OBJECTIVE COMPLETE'));
+    events.on('mission:objective:done', (e) => !e.skipped && this.toast('OBJECTIVE COMPLETE')); // a skipped optional objective is silent
     events.on('mission:complete', () => this.toast('MISSION COMPLETE', 4)); // after the last objective's toast: wins
     events.on('mission:failed', () => this.toast('MISSION FAILED', 4));
     return this;

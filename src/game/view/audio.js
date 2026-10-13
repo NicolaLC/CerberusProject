@@ -71,6 +71,8 @@ export class Audio {
     this.ctx = null;
     this.samples = {}; // id -> decoded AudioBuffers (one per take)
     this.voice = {}; // id -> playing source that may be cut short (reload, rail charge)
+    this.sirenNode = null; // the alarm siren voices, while it plays
+    this.sirenWanted = false;
     this.live = new Map(); // id -> enemy voices still playing (VOICE_CAP)
   }
 
@@ -120,6 +122,9 @@ export class Audio {
     events.on('boss:mortar', () => this.zap(0.25));
     events.on('boss:wake', () => this.charge());
     events.on('pickup:collected', () => this.pickup());
+    events.on('alarm:on', (a) => a.siren && this.siren(true));
+    events.on('alarm:off', (a) => !a.active && this.siren(false));
+    events.on('alarm:clear', () => this.siren(false));
     events.on('player:step', (s) => this.sample(s.raised ? 'stepMetal' : s.run ? 'stepRun' : 'stepWalk'));
     events.on('enemy:step', (pos) => {
       if (!this.listener) return;
@@ -138,6 +143,7 @@ export class Audio {
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.35;
     this.master.connect(this.ctx.destination);
+    if (this.sirenWanted) this.siren(true); // an alarm that started before the first gesture
     const len = this.ctx.sampleRate * 0.5;
     this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = this.noise.getChannelData(0);
@@ -587,6 +593,42 @@ export class Audio {
     this.#env(o, 0.3, 0.22);
     o.start(t);
     o.stop(t + 0.24);
+  }
+
+  // Alarm siren (env.alarm): a looping two-tone wail, synthesized (a triangle-LFO swept sawtooth through a lowpass), faded in and out.
+  // Started before the first user gesture it waits for init().
+  siren(on) {
+    this.sirenWanted = on;
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const cur = this.sirenNode;
+    if (cur && !on) {
+      this.sirenNode = null;
+      cur.gain.gain.cancelScheduledValues(t);
+      cur.gain.gain.setTargetAtTime(0, t, 0.15);
+      cur.osc.stop(t + 1);
+      cur.lfo.stop(t + 1);
+    } else if (on && !cur) {
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.value = 700;
+      const lfo = this.ctx.createOscillator();
+      lfo.type = 'triangle';
+      lfo.frequency.value = 0.9;
+      const depth = this.ctx.createGain();
+      depth.gain.value = 240;
+      lfo.connect(depth).connect(osc.frequency);
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 1500;
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.linearRampToValueAtTime(0.09, t + 0.4);
+      osc.connect(lp).connect(gain).connect(this.master);
+      osc.start(t);
+      lfo.start(t);
+      this.sirenNode = { osc, lfo, gain };
+    }
   }
 
   click() {

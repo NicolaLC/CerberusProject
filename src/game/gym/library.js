@@ -118,7 +118,7 @@ export class LibraryTool {
       return r;
     }
     if (owner === 'world') {
-      const h = world.spawn(data);
+      const h = world.spawn(data, { gizmo: true }); // a gate stays shut and shows its travel
       this.handles.push({ owner, thing: h });
       return h;
     }
