@@ -102,8 +102,13 @@ const r = await p.evaluate(async () => {
   });
   step(boss.t.downTime + 0.5);
   out.getsBackUp = boss.down <= 0 && boss.height > 2;
-  // 8. kill it through the core
+  // 8. one collapse takes at most coreBite of the core, then the hatch closes and it stands up early
   for (const l of boss.legs.slice(2, 4)) boss.damage(500, l.foot, dir, 'weak', l.knee);
+  for (let i = 0; i < 20; i++) boss.damage(100, boss.pos, dir, 'weak', boss.core);
+  out.coreTaken = boss.maxHealth - boss.health;
+  out.biteCapped = boss.alive && Math.abs(out.coreTaken - boss.t.coreBite * boss.maxHealth) < 1e-6 && boss.armor('weak', boss.core) === 0 && boss.down <= 0.6;
+  // 9. no legs left: down for good, no cap, kill it through the core
+  for (const l of boss.legs.slice(4)) boss.damage(500, l.foot, dir, 'weak', l.knee);
   const kills = enemies.kills;
   let killed = false;
   for (let i = 0; i < 20 && !killed; i++) killed = boss.damage(100, boss.pos, dir, 'weak', boss.core);
@@ -128,6 +133,7 @@ expect('hull is armored', r.hullArmor === 0 && r.hullNoDamage && r.coreClosed ==
 expect('two legs down: collapsed, core exposed', r.legsLost === 2 && r.down && r.coreOpen === 1 && r.legsNotTargetable);
 expect('down: the risen core is hittable from the ground (half the sides at least)', r.coreShots.filter((x) => x === true).length >= 4);
 expect('gets back up after a while', r.getsBackUp);
+expect('one collapse takes at most coreBite of the core, then the hatch closes', r.biteCapped);
 expect('dies when the core is destroyed', r.dies);
 expect('no page errors', errors.length === 0);
 if (errors.length) console.log(errors);

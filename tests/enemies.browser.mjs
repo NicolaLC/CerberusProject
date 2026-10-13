@@ -58,12 +58,25 @@ const r = await p.evaluate(() => {
   player.pos.set(4, 0, -6);
   fired = 0;
   step(8);
-  out.inCover = squad.map((t) => !!t.spot && t.state !== 'move' && t.pos.distanceTo(t.spot.pos) < 0.3 && cover.protects(t.spot, player.pos));
+  // each one is seen behind its cover at some frame: a single snapshot can catch it stepped out to peek or fire (random timings)
+  const hid = (t) => !!t.spot && t.state !== 'move' && t.pos.distanceTo(t.spot.pos) < 0.3 && cover.protects(t.spot, player.pos);
+  out.inCover = squad.map(() => false);
+  // stops as soon as both were seen: the relocation below needs them close (from 34 m out a trooper finds no spot)
+  for (let i = 0; i < 360; i++) {
+    squad.forEach((t, k) => (out.inCover[k] ||= hid(t)));
+    if (out.inCover.every(Boolean)) break;
+    step(1 / 60);
+  }
   out.squadFired = fired;
   const before = squad.map((t) => t.spot);
   player.pos.set(4, 0, -34); // walk around them
-  step(12); // AI timings are randomized: leave room for a full cover cycle before they move
-  out.relocated = squad.map((t, i) => t.spot !== before[i] && !!t.spot && cover.protects(t.spot, player.pos));
+  // AI timings are randomized: each one must take a new spot that protects it at some point within 20 s (a full cover cycle or more)
+  const moved = (t, i) => t.spot !== before[i] && !!t.spot && cover.protects(t.spot, player.pos);
+  out.relocated = squad.map(() => false);
+  for (let i = 0; i < 40 && !out.relocated.every(Boolean); i++) {
+    step(0.5);
+    squad.forEach((t, k) => (out.relocated[k] ||= moved(t, k)));
+  }
   // diagnostics when it fails: where each trooper is and what it is doing
   out.relocDetail = squad.map((t, i) => `${t.state} at ${t.pos.x.toFixed(1)},${t.pos.z.toFixed(1)} spot ${t.spot ? `${t.spot.pos.x.toFixed(1)},${t.spot.pos.z.toFixed(1)} ${t.spot.type}` : 'none'}${t.spot === before[i] ? ' (same)' : ''} protects=${!!t.spot && cover.protects(t.spot, player.pos)} alive=${t.alive}`);
   const inside = (t) => { const v = t.pos.clone(); g.world.collideCircle(v, 0.38, 1.8, 0.45); return v.distanceTo(t.pos) > 0.01; };

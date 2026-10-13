@@ -86,7 +86,9 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
   per gait (walk, run) 8-9 authored LEFT-leg poses over one cycle (thigh, knee, foot pitch; heel strike at t=0)
   plus hips height/pitch keys per step; the right leg plays half a cycle later. Keys are interpolated with a cyclic
   Catmull-Rom spline. Walk ↔ run blend by speed (2.0-3.2 m/s, sprint forces run), phase-synced.
-  - Speed: the swing scales with sqrt(speed / authored speed) (clamped), and the cycle rate is set so the planted
+  The run is a long bound, not a human sprint: short stance (`duty` 0.28), swing up to ×1.45 (`max`), so the
+  sprint takes ~2 cycles/s (it was ~2.7). Lower cadence = lower duty or bigger `max`; the foot lock keeps it honest.
+  - Speed: the swing scales with sqrt(speed / authored speed) (clamped to the gait's `max`), and the cycle rate is set so the planted
     ankle travels back exactly at ground speed (stance travel measured from the keys at load).
   - Hips sink by how much the supporting leg is bent (weighted by stance), so a straight leg vaults the body and
     a bent one lowers it: the bob comes from the poses, not a sine.

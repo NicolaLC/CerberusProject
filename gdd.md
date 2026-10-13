@@ -484,7 +484,7 @@ with line of sight, or shoots it. On wake: toast "(warning sign) SX-6 TARANTULA"
 |---|---|
 | Hull, turret, closed shutters | Take no damage (sparks; the crosshair does not turn red). Block the railgun line |
 | Legs (6) | 160 HP each, limb x0.8; glowing knee joints are weak spots (x3). A broken leg falls off, the body tilts toward the gap, speed drops 12% per lost leg (base 2.4 m/s) |
-| Core | 900 HP, weak x3. Reachable only when the mech is collapsed (shutters open, the core rises out of the hatch). Destroying it kills the mech |
+| Core | 900 HP, weak x3. Reachable only when the mech is collapsed (shutters open, the core rises out of the hatch). One collapse takes at most 34% of it, then the hatch closes and the mech stands up (no cap once every leg is gone). Destroying it kills the mech |
 
 **Phases (driven by leg loss):**
 1. **Standing:** armored, all attacks active, shoot the legs.

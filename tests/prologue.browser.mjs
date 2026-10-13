@@ -4,7 +4,7 @@
 // Needs the dev server: `npm run dev`, then `node tests/prologue.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
-const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
+const BASE = process.env.URL ?? 'http://localhost:5173/?debug';
 const url = new URL(BASE);
 url.searchParams.set('scene', 'prologue');
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
@@ -27,8 +27,8 @@ async function open(seen) {
     const { engine } = g;
     engine.stop();
     engine.headless = true;
-    // the real loop may have run the intro for a while before stop() (a slow CI page): start the scene again, stepped from 0
-    g.loadScene('prologue');
+    // the browser loop ran a few frames before stop() (up to 0.1 s each on a slow CI runner): rewind the boot clock
+    g.boot.t = 0;
     const T = (window.T = { done: [], bolts: 0, hurt: 0, shots: 0 });
     T.step = (s) => {
       for (let i = 0; i < Math.round(s * 60); i++) {
