@@ -32,14 +32,40 @@ ElevenLabs takes of the same prompt can come out 15-25 dB apart, and a quiet tak
 (walk take 4, metal 2 and 4, robot 2 were near silent). Every `step-*.mp3` is now trimmed to 5 ms before its onset and
 peak-normalised to -3 dBFS; do the same to any new take before adding it (the gain per list stays in `SAMPLES`).
 
+## Recorded and wired after the first pass
+
+- `drone-loop.mp3`: done. One looped voice (`Audio.mood` -> `#beds`), gain by the nearest alive drone (silent beyond
+  `DRONE_RANGE`, 25 m), silent on pause. One shared voice, not one per drone.
+
+## Menu UI
+
+Recorded, waiting for the menu sound code: `Audio.ui(kind)` / event `ui:sfx` { kind } (title, pause menu, sub-pages,
+confirm dialog) is not on any pushed branch yet. Once it lands, the files are picked up on their own (globbed `ui-*.mp3`,
+id `ui-<kind>`, gain 0.6, on the UI bus) with the synth as fallback. Same style as the rest: grim industrial military
+hardware, no arcade bleeps, dry. `move` plays at most every 40 ms, `slider` every 30 ms.
+
+The model's shortest take is about 0.5 s, so every file was cut to the length below. `move` and `slider` start 5 ms
+before their loudest click (it came late in the take), the others at their first sound above -40 dB, then a short fade
+out. All are peak-normalised to -3 dBFS, except `move` and `slider` at -6 dBFS.
+
+| File | Kind | Length | Prompt | Status |
+|---|---|---|---|---|
+| `ui-move.mp3` | focus moves / hover | 0.1 s | A single very short soft metallic tick of a small relay contact on a military console, tight and quiet, close, dry, no reverb (influence 0.6) | recorded |
+| `ui-select.mp3` | confirm an item | 0.4 s | A heavy mechanical clunk of a toggle switch locking on an armored military control panel, followed by a very short servo whir, solid and tactile, close, dry | recorded |
+| `ui-back.mp3` | leave a sub-page / cancel | 0.4 s | A short servo whir winding down followed by a soft lower metallic clunk as a console switch disengages, heavy industrial, close, dry | recorded |
+| `ui-open.mp3` | sub-page / pause menu opens | 0.5 s | A short hydraulic hiss as a heavy metal panel slides open on an industrial military console, ending in a small latch click, close, dry | recorded |
+| `ui-deny.mp3` | disabled / not allowed | 0.3 s | A dull low electrical buzz of a rejected input on an old military terminal, short and flat, no beep, close, dry | recorded |
+| `ui-slider.mp3` | slider / dropdown step | 0.08 s | A tiny crisp detent click of a heavy rotary dial turning one notch on a military control panel, close, dry, no reverb (influence 0.6) | recorded |
+| `ui-start.mp3` | NEW GAME / CONTINUE / scene launch | 1.2 s | A deep powerful power-up thrum of a combat machine's reactor spinning up, rising low hum and air rush, ending in a heavy metal latch clamping shut, ominous industrial sci-fi, close, dry | recorded |
+| `ui-warn.mp3` | overwrite-progress confirm | 0.5 s | A short two-tone warning alert on a grim military console, a high then lower muted buzzy klaxon tone, urgent but restrained, close, dry | recorded |
+
 ## Recorded, not wired yet
 
 | File | Event | Notes |
 |---|---|---|
-| `drone-loop.mp3` | drone hover, looping | needs one looped voice per drone, faded by distance (like enemy steps) |
-| `arm-retract.mp3` | maintenance arm folds up (`prop.arm` `retractOn`) | the prop does not exist yet |
-| `bay-hum-loop.mp3` | calibration bay ambience, inside `bay-zone` | the zone does not exist yet |
-| `console-loop.mp3` | `prop.console`, positional | the prop does not exist yet |
+| `arm-retract.mp3` | maintenance arm folds up (`prop.arm` `retractOn`) | the prop does not exist on main yet (it is on `feat/prologue-calibration`) |
+| `bay-hum-loop.mp3` | calibration bay ambience, inside `bay-zone` | the zone does not exist on main yet (same branch) |
+| `console-loop.mp3` | `prop.console`, positional | the prop does not exist on main yet (same branch) |
 
 The Prologue wake-up cues (`wake-surge`, `wake-core`, `wake-rise`) play off the boot intro today (`Audio.wake`, `WAKE` in
 `audio.js`: surge 2.4 s after `intro:start`, core 1 s later, rise timed to end with the intro; cut on a skip). Move them

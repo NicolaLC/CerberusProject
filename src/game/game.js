@@ -70,7 +70,7 @@ export class Game {
     const fx = new FX(scene, camera, world).listen(events);
     const hud = new Hud().listen(events, camRig);
     const log = new Log().listen(events);
-    const audio = new Audio(weapon, camera).listen(events);
+    const audio = new Audio(weapon, camera, world, enemies).listen(events);
     const post = new Post(renderer, scene, camera, events);
     const boot = new Boot({ controls, post }).listen(events);
     applyQuality(settings.quality, { engine, post, world });
