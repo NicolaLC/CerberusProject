@@ -1,7 +1,8 @@
 # Credits
 
 Third-party assets and code shipped with Cerberus. Everything else (geometry, textures, audio, code) is
-original and procedural. Keep this file in sync whenever an external asset or library is added, replaced or removed.
+original and procedural. Keep this file in sync whenever an external asset or library is added, replaced or removed,
+and keep the in-game CREDITS page (`index.html`, `data-page="credits"`) in sync with it.
 
 ## Fonts
 

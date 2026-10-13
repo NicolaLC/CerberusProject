@@ -155,6 +155,13 @@ const BOLT_DELAY = 0.22; // s after a sniper shot before the bolt is worked
 // Enemy voices playing at once, per sound id (steps, bolts, blasts). Over the cap a new voice is skipped.
 // The player's own sounds are never capped.
 const VOICE_CAP = 6;
+// Menu UI (ui(kind)): recorded `ui-<kind>.mp3` when present (globbed, so a missing file is fine), else the synth.
+// Played on their own bus, outside the game's pause / slow-mo. move / slider are rate-limited (s apart).
+const UI_GAIN = 0.8;
+const UI_GAP = { move: 0.04, slider: 0.03 };
+for (const [path, url] of Object.entries(import.meta.glob('../../assets/sfx/ui-*.mp3', { eager: true, query: '?url', import: 'default' }))) {
+  SAMPLES[path.slice(path.lastIndexOf('/') + 1, -4)] = [url, 0.6, 0.03]; // id 'ui-<kind>'
+}
 
 // Sample bytes. The single-file artifact build inlines samples as base64 data: URLs, which its page's content
 // policy won't fetch, so those are decoded here instead.
@@ -287,6 +294,7 @@ export class Audio {
       this.engine(false); // the level unloads: a boss left awake goes quiet too
     });
     events.on('ui:type', (e) => this.type(e.end));
+    events.on('ui:sfx', (e) => this.ui(e?.kind));
     events.on('player:step', (s) => {
       // sprinting reuses the walking takes, a little louder and higher, so the two gaits sound like the same boots
       const src = this.sample(s.raised ? 'stepMetal' : 'stepWalk', 0, s.run && !s.raised ? RUN_STEP.gain : 1);
@@ -309,6 +317,9 @@ export class Audio {
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.35;
     this.master.connect(this.ctx.destination);
+    this.uiBus = this.ctx.createGain();
+    this.uiBus.gain.value = UI_GAIN;
+    this.uiBus.connect(this.master);
     if (this.sirenWanted) this.siren(true); // an alarm that started before the first gesture
     if (this.wakeFrom) this.#wakeCues(); // an intro that started before it
     const len = this.ctx.sampleRate * 0.5;
@@ -339,7 +350,7 @@ export class Audio {
     src.playbackRate.value = 1 + (Math.random() * 2 - 1) * spread;
     src.gain = this.ctx.createGain();
     src.gain.gain.value = gain * volume * (1 + (Math.random() * 2 - 1) * GAIN_SPREAD);
-    src.connect(src.gain).connect(this.master);
+    src.connect(src.gain).connect(id.startsWith('ui-') ? this.uiBus : this.master);
     src.start(this.ctx.currentTime + delay);
     if (enemy) this.#hold(id, src);
     return src;
@@ -944,6 +955,80 @@ export class Audio {
     n.connect(f).connect(g).connect(this.master);
     n.start(t, Math.random() * 0.4);
     n.stop(t + 0.1);
+  }
+
+  // Menu UI sound (title, pause menu, sub-pages): move | select | back | open | deny | slider | start | warn.
+  // Recorded `ui-<kind>` sample if loaded, else synthesized: metal, relays, servos, hydraulics. No-op before init().
+  ui(kind) {
+    if (!this.ctx || !kind) return;
+    const t = this.ctx.currentTime;
+    if (UI_GAP[kind]) {
+      if (t - ((this.uiAt ??= {})[kind] ?? -1) < UI_GAP[kind]) return;
+      this.uiAt[kind] = t;
+    }
+    if (this.sample('ui-' + kind)) return;
+    // tone: oscillator `type` sweeping f0 -> f1, through a lowpass at `lp`; hit: noise burst through a `ft` filter at f
+    const env = (node, at, dur, peak, attack = 0.002) => {
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + at);
+      g.gain.exponentialRampToValueAtTime(peak, t + at + attack);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + dur);
+      node.connect(g).connect(this.uiBus);
+    };
+    const tone = (type, f0, f1, at, dur, peak, lp = 4000, attack) => {
+      const o = this.ctx.createOscillator();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, t + at);
+      o.frequency.exponentialRampToValueAtTime(f1, t + at + dur);
+      const f = this.ctx.createBiquadFilter();
+      f.frequency.value = lp;
+      env(o.connect(f), at, dur, peak, attack);
+      o.start(t + at);
+      o.stop(t + at + dur + 0.02);
+    };
+    const hit = (ft, f, at, dur, peak, q = 1, attack) => {
+      const n = this.ctx.createBufferSource();
+      n.buffer = this.noise;
+      const fl = this.ctx.createBiquadFilter();
+      fl.type = ft;
+      fl.frequency.value = f;
+      fl.Q.value = q;
+      env(n.connect(fl), at, dur, peak, attack);
+      n.start(t + at, Math.random() * 0.3);
+      n.stop(t + at + dur + 0.02);
+      return fl;
+    };
+    const clunk = (at, f, peak) => {
+      tone('sine', f, f * 0.35, at, 0.12, peak);
+      hit('lowpass', 1400, at, 0.05, peak * 0.6);
+    };
+    if (kind === 'move') hit('bandpass', 3000 + Math.random() * 400, 0, 0.018, 0.12, 3);
+    else if (kind === 'slider') hit('bandpass', 4200, 0, 0.01, 0.1, 5);
+    else if (kind === 'select') {
+      hit('bandpass', 2000, 0, 0.012, 0.25, 2); // relay contact
+      clunk(0.006, 160, 0.5);
+      tone('sawtooth', 260, 420, 0.05, 0.12, 0.04, 900, 0.02); // servo
+    } else if (kind === 'back') {
+      tone('sawtooth', 420, 220, 0, 0.12, 0.04, 800, 0.02); // servo winding back
+      clunk(0.1, 110, 0.35);
+    } else if (kind === 'open') {
+      const f = hit('highpass', 3500, 0, 0.3, 0.14, 0.7, 0.03); // hydraulic hiss
+      f.frequency.exponentialRampToValueAtTime(1200, t + 0.3);
+      tone('sawtooth', 70, 55, 0, 0.25, 0.05, 300, 0.04); // panel slide rumble
+      hit('bandpass', 1800, 0.26, 0.02, 0.18, 2); // latch
+    } else if (kind === 'deny') {
+      tone('square', 92, 88, 0, 0.18, 0.08, 500, 0.005);
+      tone('square', 97, 93, 0, 0.18, 0.06, 500, 0.005);
+    } else if (kind === 'start') {
+      tone('sawtooth', 38, 72, 0, 0.9, 0.18, 260, 0.6); // power-up thrum
+      tone('sine', 30, 48, 0, 1.0, 0.35, 200, 0.5); // sub
+      hit('bandpass', 600, 0, 0.8, 0.06, 0.8, 0.6); // air rush
+      hit('bandpass', 2200, 0.72, 0.012, 0.3, 2); // latch relay
+      clunk(0.73, 140, 0.6);
+    } else if (kind === 'warn') {
+      tone('square', 520, 515, 0, 0.13, 0.06, 1400, 0.005);
+      tone('square', 390, 386, 0.16, 0.18, 0.06, 1200, 0.005);
+    }
   }
 
   click() {

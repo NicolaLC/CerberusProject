@@ -1,0 +1,720 @@
+import * as THREE from 'three';
+import { Rig, Animator } from '../actors/rig.js';
+import { buildSoldier } from '../actors/soldier.js';
+import { droneMaterials, droneLook, ROTORS } from '../actors/drone.js';
+import { GUNS, gunMaterials } from '../combat/guns.js';
+import { RigidSkin, mergeGroup } from '../../engine/batch.js';
+import { panelTexture, applyWorldUVs } from '../world/textures.js';
+import { propMaterials, PROP_PIECES } from '../world/props.js';
+import { cyl, part, group } from '../actors/parts.js';
+import { Rng } from '../../engine/random.js';
+
+// Main menu backdrop (instructions/architecture.md "Main menu and save"): a self-contained set, not a game level. STEM-00
+// sits on the broken corner of a skyscraper roof, legs over the drop, looking over IO's city (gdd 2.1, 2.9) toward the
+// HiveMind: a colossal shape on the horizon, sunk in the haze, sensed more than seen (three faint violet sensor clusters,
+// the heads of CERBERUS, breathing). The skyline is about half in ruin (broken tops, girders, leaning towers, rubble,
+// smoke, a few Rejects fires), with Spire Cathedrals, transit rails and cyan beacons; VIGIL drones patrol with searchlights.
+// Reuses: the player rig, soldier parts and SEATED pose, the rifle, the drone look, the prop builders and materials, the
+// weathered panel texture. Shell renders it with the game's renderer only while the title is up: no game system runs.
+// Budget: about 40 draws and 330k triangles, the skyline and the drones instanced, the roof merged, no shadows.
+const ROOF = -0.3; // top of the hero tower's body (the roof slab sits on it, its top at y = 0)
+const GROUND = -420; // city floor
+const FOG = new THREE.Color(0x2e6f78); // art-style haze
+const FOG_DENSITY = 0.0012;
+const ZENITH = new THREE.Color(0x0b1118);
+const SUN = new THREE.Vector3(0.2, 0.16, -1).normalize(); // cold white smear behind the HiveMind
+const CYAN = new THREE.Color(0x3fe0ff);
+const VIOLET = new THREE.Color(0x8c3cff); // sensors (art-style 5: VISOR)
+const FIRE = new THREE.Color(0xff7a1a); // Rejects sodium orange
+const TOWER = { x: [-0.8, 27.2], z: [-2, 26] }; // the hero tower's footprint
+const STEM = new THREE.Vector3(TOWER.x[0] + 0.16, 0, TOWER.z[0] + 0.16); // STEM-00's root: hips on the roof's front-left corner
+const HIVE = new THREE.Vector3(560, GROUND, -2900); // the HiveMind's foot, mid screen
+const FACING = -2.45; // STEM-00's body: out over the corner, legs down the left face (a side view from the camera)
+const GAZE = Math.atan2(HIVE.x - STEM.x, HIVE.z - STEM.z); // where its head turns: the HiveMind
+// the camera floats off the tower's left face, behind STEM-00: STEM-00 on the right third, the drop and the city on the left
+const CAM = { dist: 7.5, height: 1.6, yaw: -0.08, pitch: -0.1, offset: -0.3, fov: 38 };
+const DRONES = 44;
+const FORMATION = 7; // a wedge crossing the skyline
+const SMOKE_PER = 18;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+
+const _m = new THREE.Matrix4();
+const _q = new THREE.Quaternion();
+const _e = new THREE.Euler();
+const _p = new THREE.Vector3();
+const _s = new THREE.Vector3();
+const _d = new THREE.Vector3();
+const _down = new THREE.Vector3(0, -1, 0);
+const _size = new THREE.Vector2();
+const ZERO = new THREE.Vector2();
+const set3 = (a, i, x, y, z) => {
+  a[i * 3] = x;
+  a[i * 3 + 1] = y;
+  a[i * 3 + 2] = z;
+};
+
+// the sky's colour by view direction: haze at the horizon, dark overhead, the sun smeared sideways through the haze
+const SKY_UNIFORMS = { horizon: { value: FOG }, zenith: { value: ZENITH }, sun: { value: SUN } };
+const SKY_GLSL = /* glsl */ `
+  uniform vec3 horizon, zenith, sun;
+  vec3 sky(vec3 d) {
+    vec3 c = mix(horizon, zenith, smoothstep(0.0, 0.6, d.y));
+    float s = max(dot(d, sun), 0.0);
+    float smear = exp(-abs(d.y - sun.y) * 30.0) * pow(s, 6.0);
+    return c + vec3(0.85, 0.95, 1.0) * (pow(s, 40.0) * 0.4 + pow(s, 6.0) * 0.12 + smear * 0.3);
+  }`;
+
+// soft glow points: additive lights (beacons, fires, sensors) or smoke (normal blend); size in metres, fogged like the scene
+function pointsMaterial(additive) {
+  return new THREE.ShaderMaterial({
+    uniforms: { time: { value: 0 }, scale: { value: 800 }, fogColor: { value: FOG }, fogDensity: { value: FOG_DENSITY } },
+    vertexShader: /* glsl */ `
+      attribute float size; attribute vec4 tint; attribute vec2 anim;
+      uniform float time, scale, fogDensity;
+      varying vec4 vTint; varying float vVis;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = min(size * scale / -mv.z, 256.0);
+        float d = length(mv.xyz);
+        vVis = exp(-fogDensity * fogDensity * d * d);
+        float k = 1.0;
+        if (anim.x > 3.5) k = 0.3 + 0.7 * pow(0.5 + 0.5 * sin(time * 0.45 + anim.y * 6.28), 3.0); // the HiveMind breathing
+        else if (anim.x > 2.5) k = 0.75 + 0.25 * sin(time * 2.0 + anim.y * 6.28); // sensor
+        else if (anim.x > 1.5) k = 0.55 + 0.25 * sin(time * 9.0 + anim.y * 40.0) + 0.2 * sin(time * 23.0 + anim.y * 17.0); // fire flicker
+        else if (anim.x > 0.5) k = 0.08 + step(0.86, fract(time * 0.55 + anim.y)); // beacon blink
+        vTint = vec4(tint.rgb, tint.a * k);
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 fogColor;
+      varying vec4 vTint; varying float vVis;
+      void main() {
+        float a = smoothstep(0.5, 0.0, length(gl_PointCoord - 0.5));
+        ${additive
+          ? 'gl_FragColor = vec4(vTint.rgb * vTint.a * a * a * vVis, 1.0);'
+          : 'gl_FragColor = vec4(mix(fogColor, vTint.rgb, vVis), vTint.a * a);'}
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+    transparent: true,
+    depthWrite: false,
+    blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+  });
+}
+
+// Points with per-point size, tint (rgb, alpha) and anim (mode 0 steady / 1 blink / 2 flicker / 3 pulse / 4 breathe, phase)
+function makePoints(n, additive) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+  g.setAttribute('size', new THREE.BufferAttribute(new Float32Array(n), 1));
+  g.setAttribute('tint', new THREE.BufferAttribute(new Float32Array(n * 4), 4));
+  g.setAttribute('anim', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
+  const p = new THREE.Points(g, pointsMaterial(additive));
+  p.frustumCulled = false;
+  p.count = 0;
+  p.put = (x, y, z, size, color, alpha, mode = 0, phase = Math.random()) => {
+    const i = p.count++;
+    g.attributes.position.array.set([x, y, z], i * 3);
+    g.attributes.size.array[i] = size;
+    g.attributes.tint.array.set([color.r, color.g, color.b, alpha], i * 4);
+    g.attributes.anim.array.set([mode, phase], i * 2);
+    return i;
+  };
+  return p;
+}
+
+// The weathered wall panels (world.js skin) on world-space UVs, 4 m per tile, plus lit windows from world position (walls
+// only, a 3.2 x 3.6 m cell grid, per-instance `aLit`), faded to their average where a cell gets smaller than a pixel so
+// the skyline does not shimmer while the camera drifts.
+function cityMaterial() {
+  const m = new THREE.MeshLambertMaterial({ map: panelTexture({ tint: '#787f82', grime: 0.6 }) });
+  m.onBeforeCompile = (s) => {
+    s.vertexShader = s.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aLit;\nvarying float vLit;\nvarying vec3 vWPos;\nvarying vec3 vWN;')
+      .replace('#include <fog_vertex>', `#include <fog_vertex>
+        vec4 wp = vec4(transformed, 1.0); vec3 wn = objectNormal;
+        #ifdef USE_INSTANCING
+          wp = instanceMatrix * wp; wn = mat3(instanceMatrix) * wn;
+        #endif
+        vWPos = (modelMatrix * wp).xyz; vWN = normalize(mat3(modelMatrix) * wn); vLit = aLit;
+        vMapUv = (abs(vWN.y) > 0.6 ? vWPos.xz : vec2(abs(vWN.x) > abs(vWN.z) ? vWPos.z : vWPos.x, vWPos.y)) / 4.0;`);
+    s.fragmentShader = s.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vLit;\nvarying vec3 vWPos;\nvarying vec3 vWN;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        {
+          vec3 n = normalize(vWN);
+          float wall = 1.0 - step(0.6, abs(n.y));
+          vec2 cell = vec2((abs(n.x) > abs(n.z) ? vWPos.z : vWPos.x) / 3.2, vWPos.y / 3.6);
+          vec2 id = floor(cell), f = fract(cell);
+          float win = step(0.2, f.x) * step(f.x, 0.7) * step(0.3, f.y) * step(f.y, 0.75);
+          float h = fract(sin(dot(id, vec2(12.9898, 78.233))) * 43758.5453);
+          float lit = step(0.87, h) * win;
+          float px = max(length(fwidth(cell)), 1e-4);
+          lit = mix(lit, 0.034, smoothstep(0.35, 0.9, px));
+          vec3 wc = mix(vec3(0.62, 0.78, 0.82), vec3(0.2, 0.75, 0.95), step(0.96, h));
+          totalEmissiveRadiance += wc * lit * wall * vLit * 1.6;
+        }`);
+  };
+  m.customProgramCacheKey = () => 'menu-city';
+  return m;
+}
+
+// haze band texture: soft blobs, opaque at the bottom fading to nothing at the top, tiles horizontally
+function hazeTexture(rng) {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 128;
+  const g = c.getContext('2d');
+  for (let i = 0; i < 90; i++) {
+    const x = rng.next() * 512;
+    const y = 40 + rng.next() * 100;
+    const r = 30 + rng.next() * 70;
+    for (const dx of [-512, 0, 512]) {
+      const grd = g.createRadialGradient(x + dx, y, 0, x + dx, y, r);
+      grd.addColorStop(0, 'rgba(255,255,255,0.22)');
+      grd.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grd;
+      g.fillRect(x + dx - r, y - r, r * 2, r * 2);
+    }
+  }
+  g.globalCompositeOperation = 'destination-in';
+  const v = g.createLinearGradient(0, 0, 0, 128);
+  v.addColorStop(0, 'rgba(0,0,0,0)');
+  v.addColorStop(0.55, 'rgba(0,0,0,0.6)');
+  v.addColorStop(1, 'rgba(0,0,0,1)');
+  g.fillStyle = v;
+  g.fillRect(0, 0, 512, 128);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// a stand-in World for the prop builders (props.js): they bake into `scene` (the roof group); colliders are dropped
+function propWorld(scene) {
+  const w = { scene, dressing: propMaterials(), staticMeshes: [], props: [], consoles: [], keep: new Set(), mats: {} };
+  w.box = () => {
+    const m = new THREE.Mesh();
+    w.staticMeshes.push(m);
+    return m;
+  };
+  return w;
+}
+
+export class MenuScene {
+  static frames = 0; // frames rendered, all instances (menu smoke test)
+
+  constructor(renderer) {
+    this.renderer = renderer;
+    this.t = 0;
+    this.mouse = new THREE.Vector2();
+    this.look = new THREE.Vector2(); // damped mouse parallax
+    addEventListener('pointermove', (e) => this.mouse.set((e.clientX / innerWidth) * 2 - 1, (e.clientY / innerHeight) * 2 - 1));
+    const rng = new Rng(7);
+    const scene = (this.scene = new THREE.Scene());
+    scene.fog = new THREE.FogExp2(FOG, FOG_DENSITY);
+    this.camera = new THREE.PerspectiveCamera(CAM.fov, 16 / 9, 0.1, 5000);
+
+    scene.add(new THREE.HemisphereLight(0x5f8f98, 0x0b1118, 1.4));
+    const sun = new THREE.DirectionalLight(0xeaf6fa, 2.2); // from the haze ahead: STEM-00 rim-lit, a silhouette
+    sun.position.copy(SUN).multiplyScalar(100);
+    scene.add(sun);
+    const core = new THREE.PointLight(0xffb347, 3, 3, 2); // STEM-00's core spilling on its knees and the ledge
+    core.position.set(STEM.x + Math.sin(FACING) * 0.4, 0.5, STEM.z + Math.cos(FACING) * 0.4);
+    scene.add(core);
+
+    this.beacons = [];
+    this.fires = [];
+    this.#sky(scene);
+    this.#city(scene, rng);
+    this.#hive(scene);
+    this.#roof(scene);
+    this.#stem(scene);
+    this.#haze(scene, rng);
+    this.#drones(scene, rng);
+    this.#fit();
+  }
+
+  #sky(scene) {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: SKY_UNIFORMS,
+      vertexShader: /* glsl */ `
+        varying vec3 vDir;
+        void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: /* glsl */ `
+        ${SKY_GLSL}
+        varying vec3 vDir;
+        void main() {
+          gl_FragColor = vec4(sky(normalize(vDir)), 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+      side: THREE.BackSide,
+      depthWrite: false,
+    });
+    this.sky = new THREE.Mesh(new THREE.SphereGeometry(4000, 32, 16), mat);
+    this.sky.renderOrder = -1;
+    scene.add(this.sky);
+  }
+
+  // Skyline: one InstancedMesh of unit boxes (base at y 0). Lots in a wedge ahead of the camera; a noise field marks the ruined
+  // half: shorter towers with a slumped top chunk, bare girders, leaning towers, rubble, gaps. Spire Cathedrals on the horizon.
+  #city(scene, rng) {
+    const parts = []; // [x, y, z, w, h, d, rx, rz, ry, color, lit]
+    const strips = []; // network-cyan lines: [x, y, z, w, h, d]
+    const add = (x, y, z, w, h, d, color, lit, rx = 0, rz = 0, ry = 0) => parts.push([x, y, z, w, h, d, rx, rz, ry, color, lit]);
+    const R = () => rng.next();
+    const [x0, x1] = TOWER.x;
+    const [z0, z1] = TOWER.z;
+    add((x0 + x1) / 2, GROUND, (z0 + z1) / 2, x1 - x0, ROOF - GROUND, z1 - z0, 0x30383d, 0.5); // the hero tower
+    const ruinAt = (x, z) => Math.sin(x * 0.0042 + 1.3) * Math.cos(z * 0.0051 - 0.7) + 0.55 * Math.sin(x * 0.011 + z * 0.0083) + 0.2;
+    const STEP = 38;
+    for (let z = 20; z > -2300; z -= STEP) {
+      for (let x = -2000; x < 2000; x += STEP) {
+        if (Math.abs(x) > 80 + (20 - z) * 1.05) continue; // outside the view wedge
+        if (x > -50 && x < 60 && z > -40) continue; // the hero tower's lot
+        if (R() < 0.12) continue; // plazas, rails
+        const w = 12 + R() * 16;
+        const d = 12 + R() * 16;
+        const px = x + (R() - 0.5) * (STEP - w) * 0.8;
+        const pz = z + (R() - 0.5) * (STEP - d) * 0.8;
+        let h = 40 + 320 * R() ** 2.4 + (R() < 0.04 ? 260 : 0);
+        if (Math.hypot(px, pz) < 160) h = Math.min(h, 330); // the hero tower stands above its block
+        const tone = 0.32 + R() * 0.14;
+        const ruined = ruinAt(px, pz) > 0;
+        if (!ruined) {
+          const c = new THREE.Color(tone * 0.85, tone, tone * 1.08);
+          add(px, GROUND, pz, w, h, d, c, R() < 0.25 ? 0.25 : 1);
+          if (R() < 0.5) add(px + (R() - 0.5) * w * 0.4, GROUND + h, pz + (R() - 0.5) * d * 0.4, w * (0.3 + R() * 0.3), 3 + R() * 10, d * (0.3 + R() * 0.3), c, 0.6); // roof plant
+          if (h > 200 && R() < 0.45) this.beacons.push([px, GROUND + h + 6, pz]);
+          if (h > 180 && R() < 0.3) strips.push([px, GROUND + h * 0.5, pz + d / 2 + 0.3, 0.6, h, 0.2]);
+          continue;
+        }
+        const c = new THREE.Color(tone * 0.9, tone * 0.82, tone * 0.72).lerp(new THREE.Color(0x5a3422), R() * 0.35); // soot, rust
+        const roll = R();
+        if (roll < 0.22) {
+          // collapsed: a rubble mound
+          for (let i = 0; i < 4; i++) add(px + (R() - 0.5) * w, GROUND, pz + (R() - 0.5) * d, w * (0.4 + R() * 0.5), 4 + R() * 12, d * (0.4 + R() * 0.5), c, 0, (R() - 0.5) * 0.5, (R() - 0.5) * 0.5, R() * 3);
+          continue;
+        }
+        const lean = roll > 0.8 ? (R() - 0.5) * 0.3 : 0; // leaning towers
+        const leanX = R() < 0.5;
+        h *= 0.35 + R() * 0.45;
+        add(px, GROUND, pz, w, h, d, c, R() < 0.15 ? 0.15 : 0, leanX ? lean : 0, leanX ? 0 : lean);
+        if (lean) continue;
+        const top = GROUND + h;
+        // broken top: a slumped slab chunk and bare girders
+        add(px + (R() - 0.5) * w * 0.3, top - 2, pz + (R() - 0.5) * d * 0.3, w * (0.5 + R() * 0.3), 4 + R() * 10, d * (0.4 + R() * 0.3), c, 0, (R() - 0.5) * 0.7, (R() - 0.5) * 0.7);
+        const girders = 2 + Math.floor(R() * 4);
+        for (let i = 0; i < girders; i++) add(px + (R() - 0.5) * w * 0.9, top, pz + (R() - 0.5) * d * 0.9, 0.7, 6 + R() * 18, 0.7, 0x1c1f22, 0, (R() - 0.5) * 0.6, (R() - 0.5) * 0.6);
+        if (R() < 0.07) this.fires.push([px, top + 3, pz, 6 + R() * 8]);
+      }
+    }
+    // Spire Cathedrals (gdd 2.6): server towers on the horizon, stacked tapering tiers, buttress fins, a needle, cyan strips
+    for (const [sx, sz, sh] of [[700, -1300, 1150], [-1000, -1600, 900], [1400, -1850, 820]]) {
+      const c = new THREE.Color(0x2a3338);
+      let y = GROUND;
+      let w = 110;
+      for (let i = 0; i < 6; i++) {
+        const th = sh * (0.24 - i * 0.025);
+        add(sx, y, sz, w, th, w, c, 0.35);
+        for (const [fx, fz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) add(sx + (fx * w) / 2, y, sz + (fz * w) / 2, fx ? 6 : w * 0.18, th * 0.9, fz ? 6 : w * 0.18, c, 0, fz * 0.08, -fx * 0.08);
+        for (const o of [-0.3, 0, 0.3]) strips.push([sx + o * w, y + th / 2, sz + w / 2 + 0.6, 1.2, th * 0.85, 0.4]);
+        y += th;
+        w *= 0.74;
+      }
+      add(sx, y, sz, 4, sh * 0.22, 4, c, 0);
+      this.beacons.push([sx, y + sh * 0.22, sz]);
+    }
+    // transit rails: long elevated cyan lines across the city (the lattice of rails)
+    for (let i = 0; i < 9; i++) strips.push([(R() - 0.5) * 600, GROUND + 25 + R() * 50, -200 - i * 220, 4000, 0.5, 0.8]);
+    for (let i = 0; i < 6; i++) strips.push([-1400 + i * 520 + R() * 100, GROUND + 25 + R() * 40, -1100, 0.8, 0.5, 2200]);
+
+    const geo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+    const city = new THREE.InstancedMesh(geo, cityMaterial(), parts.length);
+    const lit = new Float32Array(parts.length);
+    const col = new THREE.Color();
+    parts.forEach(([x, y, z, w, h, d, rx, rz, ry, color, l], i) => {
+      city.setMatrixAt(i, _m.compose(_p.set(x, y, z), _q.setFromEuler(_e.set(rx, ry, rz)), _s.set(w, h, d)));
+      city.setColorAt(i, color instanceof THREE.Color ? color : col.set(color));
+      lit[i] = l;
+    });
+    geo.setAttribute('aLit', new THREE.InstancedBufferAttribute(lit, 1));
+    city.frustumCulled = false; // spans the whole view
+    scene.add(city);
+
+    const strip = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: CYAN.clone().multiplyScalar(1.6) }), strips.length);
+    strips.forEach(([x, y, z, w, h, d], i) => strip.setMatrixAt(i, _m.compose(_p.set(x, y, z), _q.identity(), _s.set(w, h, d))));
+    strip.frustumCulled = false;
+    scene.add(strip);
+  }
+
+  // The HiveMind: a colossus on the horizon past the spires, sunk in the haze (its own fog blend: never sharp, never lit).
+  // A crowned mass with three heads (CERBERUS) leaning over the city; violet sensor clusters breathe on each head; the
+  // heads turn very slowly. Five draws: the body, the three heads, their lights.
+  #hive(scene) {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { ...SKY_UNIFORMS, dark: { value: new THREE.Color(0x14232a) }, base: { value: GROUND + 200 }, top: { value: GROUND + 1700 } },
+      vertexShader: /* glsl */ `
+        varying vec3 vW;
+        void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+      fragmentShader: /* glsl */ `
+        ${SKY_GLSL}
+        uniform vec3 dark; uniform float base, top;
+        varying vec3 vW;
+        void main() {
+          // a shade of the sky behind it, deeper toward the crown, gone into the haze toward its foot
+          float k = smoothstep(base, top, vW.y);
+          gl_FragColor = vec4(mix(sky(normalize(vW - cameraPosition)), dark, 0.12 + 0.42 * k), 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+    });
+    const box = (w, h, d, x, y, z, rx = 0, ry = 0, rz = 0) => part(new THREE.BoxGeometry(w, h, d), mat, x, y, z, rx, ry, rz);
+    const cone = (r, h, x, y, z, rz = 0) => part(new THREE.ConeGeometry(r, h, 6), mat, x, y, z, 0, 0, rz);
+    const body = mergeGroup(group(
+      box(900, 700, 500, 0, 350, 0), // the mass rising out of the city
+      box(1300, 260, 420, 0, 760, 0, 0, 0, 0.04), // shoulders
+      box(500, 420, 360, 0, 1000, -40), // the neck yoke
+      cone(160, 700, -620, 1000, 0, 0.35), // spines off the shoulders
+      cone(140, 560, 640, 960, 0, -0.3),
+      cone(90, 420, -380, 1220, -80, 0.15),
+      cone(90, 380, 380, 1200, -80, -0.12),
+    ));
+    this.heads = [-300, 0, 300].map((x, i) => {
+      const h = mergeGroup(group(box(170, 150, 260, 0, 0, 60), box(120, 70, 200, 0, -70, 130, 0.2), cone(40, 220, 0, 150, 0)));
+      h.position.set(x, 1200 + (i === 1 ? 90 : 0), 40);
+      h.rotation.set(0.25, x * -0.0008, 0);
+      h.userData.yaw = h.rotation.y;
+      body.add(h);
+      return h;
+    });
+    body.position.copy(HIVE);
+    body.rotation.y = Math.atan2(STEM.x - HIVE.x, STEM.z - HIVE.z); // faces STEM-00
+    body.scale.setScalar(0.62);
+    scene.add(body);
+    // sensor clusters on each head (their own light fog: the haze is in the silhouette's colour already)
+    const lights = (this.hiveLights = makePoints(30, true));
+    lights.material.uniforms.fogDensity.value = 0.00028;
+    body.updateMatrixWorld(true);
+    const rnd = new Rng(3);
+    this.hiveSensors = [];
+    this.heads.forEach((h, i) => {
+      for (let k = 0; k < 9; k++) {
+        const local = new THREE.Vector3((rnd.next() - 0.5) * 150, (rnd.next() - 0.4) * 110, 192);
+        this.hiveSensors.push([h, local, lights.put(0, 0, 0, 14 + rnd.next() * 26, VIOLET, 0.8, 4, i * 0.33 + rnd.next() * 0.05)]);
+      }
+    });
+    scene.add(lights);
+  }
+
+  // The hero tower's roof: slab and parapet in the weathered panels, an antenna mast (parts.js primitives in the prop
+  // materials), and set dressing from the prop builders (props.js): crates as AC units, a console, pipes, cables, hazard
+  // stripes at the broken corner. Merged into one mesh per material.
+  #roof(scene) {
+    const roof = new THREE.Group();
+    const W = propWorld(roof);
+    const M = W.dressing;
+    const wall = new THREE.MeshStandardMaterial({ map: panelTexture({ tint: '#787f82', grime: 0.6 }), roughness: 0.82, metalness: 0.25 });
+    const floor = new THREE.MeshStandardMaterial({ map: panelTexture({ tint: '#5a5f62', grime: 0.8 }), roughness: 0.7, metalness: 0.25 });
+    const slab = (mat, w, h, d, x, y, z, rz = 0) => {
+      const g = new THREE.BoxGeometry(w, h, d);
+      applyWorldUVs(g, _p.set(x, y, z));
+      const m = new THREE.Mesh(g, mat);
+      m.position.set(x, y, z);
+      m.rotation.z = rz;
+      roof.add(m);
+    };
+    const [x0, x1] = TOWER.x;
+    const [z0, z1] = TOWER.z;
+    slab(floor, x1 - x0, 0.3, z1 - z0, (x0 + x1) / 2, -0.15, (z0 + z1) / 2);
+    // parapet: broken away at STEM-00's corner, stubs, then the run along the front; a low lip on the left face
+    slab(wall, 0.9, 0.3, 0.3, 2.0, 0.12, z0 + 0.15, 0.25);
+    slab(wall, x1 - 3.4, 0.6, 0.3, (3.4 + x1) / 2, 0.3, z0 + 0.15);
+    slab(wall, 0.3, 0.6, z1 - z0 - 6, x1 - 0.15, 0.3, (z0 + z1 + 6) / 2);
+    slab(wall, 0.25, 0.12, z1 - z0 - 3, x0 + 0.12, 0.06, (z0 + z1 + 3) / 2);
+    slab(wall, 0.5, 0.25, 0.4, 1.6, 0.12, -0.6, 0.6); // debris from the parapet
+    slab(wall, 0.35, 0.2, 0.3, 2.6, 0.1, -0.9, 0.3);
+    slab(wall, 0.3, 0.15, 0.3, 0.1, 0.08, 0.6, 0.2);
+    // antenna mast with cross bars and stays
+    const ax = 5.2;
+    const az = -0.7;
+    roof.add(
+      cyl(M.dark, 0.1, 0.14, 22, ax, 11, az, 0, 0, 0, 6),
+      cyl(M.metal, 0.03, 0.03, 1.8, ax, 6, az, 0, 0, Math.PI / 2, 4),
+      cyl(M.metal, 0.03, 0.03, 1.3, ax, 12, az, 0, 0, Math.PI / 2, 4),
+      cyl(M.metal, 0.03, 0.03, 0.9, ax, 17, az, 0, 0, Math.PI / 2, 4),
+      cyl(M.dark, 0.02, 0.02, 11, ax + 0.8, 5.4, az, 0, 0, 0.16, 4),
+      cyl(M.dark, 0.02, 0.02, 11, ax, 5.4, az + 0.9, -0.16, 0, 0, 4),
+      cyl(M.metal, 0.8, 0.15, 0.3, ax + 0.4, 9, az + 0.2, 0.9, 0, -0.4, 14), // dish
+    );
+    this.beacons.push([ax, 22.3, az]);
+    // set dressing through the prop builders
+    const P = (id, pos, yaw = 0, params = {}) => PROP_PIECES[id].build(W, { id, pos, yaw, params });
+    P('prop.crate', [5.0, 0, 2.6], 0, { size: 'large' }); // AC units and stores
+    P('prop.crate', [6.9, 0, 2.6], 0, { size: 'large' });
+    P('prop.crate', [6.2, 0, 4.7], Math.PI / 2, { size: 'medium' });
+    P('prop.crate', [3.4, 0, 6.5], 0, { size: 'small' });
+    P('prop.console', [3.2, 0, 1.0], Math.PI / 2);
+    P('prop.pipes', [10, 0.35, -1.55], 0, { length: 12, count: 2, mount: 'wall', valves: 2 });
+    P('prop.cables', [3.2, 0, 1.4], 0, { to: [1.6, 0, -2.4], count: 3 });
+    P('prop.hazard', [2.4, 0, -1.45], 0, { size: [2.4, 0.6] });
+    scene.add(mergeGroup(roof));
+  }
+
+  // STEM-00: the real player model (rig + soldier parts, batched like PlayerView) in the rig's SEATED pose on the roof's edge,
+  // legs over the drop, its rifle laid down beside it. Life on top: breathing, a slow look around, the core pulsing.
+  #stem(scene) {
+    const rig = new Rig({ dummy: false });
+    const M = buildSoldier(rig);
+    this.skin = new RigidSkin(rig.root, rig.skeleton);
+    rig.root.position.copy(STEM);
+    rig.root.rotation.y = FACING;
+    scene.add(rig.root);
+    this.rig = rig;
+    this.core = M.core;
+    this.animator = new Animator(rig, { armed: false });
+    this.pose = { speed: 0, run: false, crouch: 0, aimPitch: 0, combat: false, recoil: 0, lean: 0, lookYaw: 0, lower: 0, dormant: 0, seated: 1 };
+    const gun = mergeGroup(GUNS.rifle.build(gunMaterials({ plate: M.armor, glow: M.glow })));
+    gun.position.set(STEM.x + 0.9, 0.05, STEM.z + 0.5);
+    gun.rotation.set(0, 2.4, Math.PI / 2); // on its side, muzzle toward the edge
+    scene.add(gun);
+  }
+
+  // Haze bands: soft vertical veils between the rows of towers (one in front of the HiveMind), the fog's colour, drifting.
+  #haze(scene, rng) {
+    const tex = hazeTexture(rng);
+    this.veils = [];
+    for (const [dist, h, a] of [[260, 220, 0.6], [480, 300, 0.6], [780, 380, 0.55], [1150, 460, 0.5], [2100, 1100, 0.7], [2700, 1700, 0.45]]) {
+      const t = tex.clone();
+      t.repeat.x = 3;
+      t.offset.x = rng.next();
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(dist * 3.2, h), new THREE.MeshBasicMaterial({ color: FOG, map: t, transparent: true, opacity: a, depthWrite: false, fog: false }));
+      m.position.set(-Math.sin(CAM.yaw) * dist, GROUND + h / 2 - 5, -Math.cos(CAM.yaw) * dist);
+      m.rotation.y = CAM.yaw;
+      m.userData.speed = 0.004 + rng.next() * 0.004;
+      scene.add(m);
+      this.veils.push(m);
+    }
+    // static lights: beacons and fires; smoke columns from the nearest fires
+    const lights = (this.lights = makePoints(this.beacons.length + this.fires.length + DRONES + FORMATION + 4, true));
+    for (const [x, y, z] of this.beacons) lights.put(x, y, z, 7, CYAN, 3, 1);
+    for (const [x, y, z, s] of this.fires) lights.put(x, y, z, s * 2.2, FIRE, 1.4, 2);
+    scene.add(lights);
+    const sources = this.fires.slice().sort((a, b) => Math.hypot(a[0], a[2]) - Math.hypot(b[0], b[2])).slice(0, 9);
+    const smoke = (this.smoke = makePoints(sources.length * SMOKE_PER, false));
+    this.smokeSrc = sources;
+    const tone = new THREE.Color(0x1a1c1d);
+    for (const [x, y, z] of sources) for (let i = 0; i < SMOKE_PER; i++) smoke.put(x, y, z, 10, tone, 0, 0);
+    scene.add(smoke);
+  }
+
+  // VIGIL drones (the game's drone look, drone.js, merged and instanced: one draw per material for all of them) patrolling
+  // slow loops over the city (some nearly straight lanes), a few close to the roof, some with searchlights, and a wedge
+  // crossing the skyline now and then. The far ones are scaled up so they read at range.
+  #drones(scene, rng) {
+    const R = () => rng.next();
+    // near (the four by the roof and the wedge): the full model; far: its hull and core only (a few pixels at range)
+    const M = droneMaterials();
+    const L = droneLook(M);
+    const near = group(...L.body);
+    for (const [x, z] of ROTORS) {
+      const b = L.blades();
+      b.position.set(x, 0.12, z);
+      near.add(b);
+    }
+    const lod = droneLook(M).body;
+    const instanced = (model, n) =>
+      mergeGroup(model).children.map((m) => {
+        const im = new THREE.InstancedMesh(m.geometry, m.material, n);
+        im.frustumCulled = false;
+        scene.add(im);
+        return im;
+      });
+    this.nearMeshes = instanced(near, 4 + FORMATION);
+    this.farMeshes = instanced(group(lod[0], lod[3]), DRONES - 4);
+    this.drones = [];
+    for (let i = 0; i < DRONES; i++) {
+      const close = i < 4;
+      const dist = close ? 30 + i * 20 : 120 + R() * 1100;
+      const ang = (R() - 0.5) * 1.3 + CAM.yaw;
+      this.drones.push({
+        cx: -Math.sin(ang) * dist,
+        cz: -Math.cos(ang) * dist,
+        y: close ? 3 + R() * 12 : GROUND + 90 + R() * 300,
+        rx: close ? 25 + R() * 20 : 40 + R() * 220,
+        rz: close ? 8 + R() * 10 : R() < 0.3 ? 5 : 30 + R() * 160,
+        w: (0.04 + R() * 0.08) * (R() < 0.5 ? -1 : 1) * (close ? 0.6 : 1),
+        ph: R() * 6.28,
+        bob: R() * 6.28,
+        size: close ? 1 : 3,
+        cone: !close && i < 16,
+      });
+    }
+    for (const d of this.drones) d.light = this.lights.put(0, 0, 0, d.size * 0.9, VIOLET, 3, 3);
+    this.wedge = [];
+    for (let i = 0; i < FORMATION; i++) this.wedge.push({ dx: Math.ceil(i / 2) * 14, dz: (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 10, light: this.lights.put(0, 0, 0, 3, VIOLET, 3, 3) });
+
+    // searchlight cones: apex at the origin, opening down -Y, unit length and radius; faded along the beam and at the rim
+    const coneGeo = new THREE.ConeGeometry(1, 1, 20, 1, true).translate(0, -0.5, 0);
+    const coneMat = new THREE.ShaderMaterial({
+      uniforms: { fogDensity: { value: FOG_DENSITY } },
+      vertexShader: /* glsl */ `
+        uniform float fogDensity;
+        varying float vV; varying float vRim; varying float vVis;
+        void main() {
+          vec4 mv = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+          gl_Position = projectionMatrix * mv;
+          vec3 n = normalize(mat3(modelViewMatrix) * mat3(instanceMatrix) * normal);
+          vRim = abs(dot(n, normalize(-mv.xyz)));
+          vV = uv.y;
+          float d = length(mv.xyz);
+          vVis = exp(-fogDensity * fogDensity * d * d * 0.6);
+        }`,
+      fragmentShader: /* glsl */ `
+        varying float vV; varying float vRim; varying float vVis;
+        void main() {
+          float a = (0.02 + 0.22 * pow(vV, 4.0)) * vRim * vRim * vVis;
+          gl_FragColor = vec4(vec3(0.75, 0.95, 1.0) * a, 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+    this.coneUsers = this.drones.filter((d) => d.cone);
+    this.cones = new THREE.InstancedMesh(coneGeo, coneMat, this.coneUsers.length + 1);
+    this.cones.frustumCulled = false;
+    scene.add(this.cones);
+  }
+
+  // camera framing: STEM-00 on the right third whatever the aspect (narrow screens turn the camera toward it)
+  #fit() {
+    this.renderer.getSize(_size);
+    const aspect = _size.x / Math.max(1, _size.y);
+    this.camera.aspect = aspect;
+    this.camera.updateProjectionMatrix();
+    this.aspect = aspect;
+    this.offset = CAM.offset * Math.min(1, aspect / 1.6); // narrow screens bring STEM-00 toward the centre
+    const scale = _size.y / 2 / Math.tan(THREE.MathUtils.degToRad(CAM.fov / 2));
+    for (const p of [this.lights, this.smoke, this.hiveLights]) p.material.uniforms.scale.value = scale;
+  }
+
+  // One frame of the backdrop (Shell, while the title is up): animate, then draw straight to the canvas.
+  render(dt) {
+    const r = this.renderer;
+    r.getSize(_size);
+    if (Math.abs(_size.x / Math.max(1, _size.y) - this.aspect) > 1e-3) this.#fit();
+    const still = reduce.matches;
+    const t = (this.t += dt * (still ? 0.35 : 1));
+    this.#animate(dt, t, still);
+    r.toneMappingExposure = 1;
+    r.info.reset();
+    r.render(this.scene, this.camera);
+    MenuScene.frames++;
+  }
+
+  #animate(dt, t, still) {
+    // camera: slow dolly and sway, a little mouse parallax (none with reduced motion)
+    const cam = this.camera;
+    this.look.lerp(still ? ZERO : this.mouse, 1 - Math.exp(-dt * 2));
+    const yaw = CAM.yaw + (still ? 0 : Math.sin(t * 0.05) * 0.02) - this.look.x * 0.02;
+    const pitch = CAM.pitch + (still ? 0 : Math.sin(t * 0.07 + 1) * 0.008) - this.look.y * 0.012;
+    const dist = CAM.dist + (still ? 0 : Math.sin(t * 0.04) * 0.4);
+    const toStem = yaw + this.offset;
+    cam.position.set(STEM.x + Math.sin(toStem) * dist + this.look.x * 0.2, CAM.height + (still ? 0 : Math.sin(t * 0.09) * 0.06), STEM.z + Math.cos(toStem) * dist);
+    cam.rotation.set(pitch, yaw, 0, 'YXZ');
+
+    // STEM-00: seated, breathing, now and then a slow look along the skyline; the core pulses faintly
+    const P = this.pose;
+    P.lookYaw = THREE.MathUtils.clamp(THREE.MathUtils.euclideanModulo(GAZE - FACING + Math.PI, Math.PI * 2) - Math.PI, -0.8, 0.8) + Math.sin(t * 0.11) * 0.12 + Math.sin(t * 0.37) * 0.04;
+    this.animator.update(dt, P);
+    const B = this.rig.bones;
+    const breath = Math.sin(t * 1.5);
+    B.Spine1.rotation.x -= breath * 0.014;
+    B.Spine2.rotation.x -= breath * 0.02;
+    this.core.emissiveIntensity = 2.6 + Math.sin(t * 0.8) * 0.6;
+
+    // the HiveMind's heads turn, very slowly; their sensors follow
+    const hp = this.hiveLights.geometry.attributes.position;
+    for (let i = 0; i < this.heads.length; i++) this.heads[i].rotation.y = this.heads[i].userData.yaw + Math.sin(t * 0.03 + i * 2.1) * 0.06;
+    for (const [h, local, i] of this.hiveSensors) {
+      h.updateMatrixWorld(true);
+      _p.copy(local).applyMatrix4(h.matrixWorld);
+      set3(hp.array, i, _p.x, _p.y, _p.z);
+    }
+    hp.needsUpdate = true;
+    this.hiveLights.material.uniforms.time.value = t;
+
+    // drones
+    for (let i = 0; i < this.drones.length; i++) {
+      const d = this.drones[i];
+      const a = d.ph + t * d.w;
+      _p.set(d.cx + Math.cos(a) * d.rx, d.y + Math.sin(t * 0.6 + d.bob) * 1.2, d.cz + Math.sin(a) * d.rz);
+      const heading = Math.atan2(-Math.sin(a) * d.rx * d.w, Math.cos(a) * d.rz * d.w);
+      _q.setFromEuler(_e.set(0.12, heading, Math.sin(t * 0.8 + d.bob) * 0.05, 'YXZ'));
+      if (i < 4) this.#place(this.nearMeshes, i, d.light, d.size);
+      else this.#place(this.farMeshes, i - 4, d.light, d.size);
+      d.x = _p.x;
+      d.yy = _p.y;
+      d.z = _p.z;
+    }
+    // the wedge: crosses left to right high over the city, then waits off screen
+    const wx = -1400 + (((t + 20) % 120) / 120) * 2800;
+    _q.setFromEuler(_e.set(0.1, Math.PI / 2, 0, 'YXZ'));
+    for (let j = 0; j < this.wedge.length; j++) {
+      const w = this.wedge[j];
+      _p.set(wx - w.dx * 3, -40 + Math.sin(t * 0.5 + j) * 2, -620 + w.dz * 3);
+      this.#place(this.nearMeshes, 4 + j, w.light, 4);
+    }
+    for (const im of this.nearMeshes) im.instanceMatrix.needsUpdate = true;
+    for (const im of this.farMeshes) im.instanceMatrix.needsUpdate = true;
+    this.lights.geometry.attributes.position.needsUpdate = true;
+    this.lights.material.uniforms.time.value = t;
+
+    // searchlights sweep the streets
+    const users = this.coneUsers;
+    for (let i = 0; i < users.length; i++) {
+      const d = users[i];
+      this.#beam(i, d.x, d.yy - 0.6, d.z, Math.sin(t * 0.21 + d.ph) * 0.45, Math.cos(t * 0.17 + d.bob) * 0.45);
+    }
+    this.#beam(users.length, wx, -44, -620, Math.sin(t * 0.25) * 0.3, 0.2);
+    this.cones.instanceMatrix.needsUpdate = true;
+
+    // smoke: puffs rise, widen, drift with the wind and fade
+    const sp = this.smoke.geometry.attributes;
+    for (let s = 0; s < this.smokeSrc.length; s++) {
+      const [x, y, z] = this.smokeSrc[s];
+      for (let i = 0; i < SMOKE_PER; i++) {
+        const j = s * SMOKE_PER + i;
+        const age = (t * 0.018 + i / SMOKE_PER + s * 0.37) % 1;
+        const rise = age * 420;
+        set3(sp.position.array, j, x + rise * 0.55 + Math.sin(i * 7.1 + s) * 4, y + rise, z + Math.cos(i * 3.3) * 4);
+        sp.size.array[j] = 18 + age * 130;
+        sp.tint.array[j * 4 + 3] = Math.sin(age * Math.PI) * 0.55;
+      }
+    }
+    sp.position.needsUpdate = sp.size.needsUpdate = sp.tint.needsUpdate = true;
+
+    for (const v of this.veils) v.material.map.offset.x += dt * v.userData.speed * (still ? 0.3 : 1);
+    this.sky.position.copy(cam.position);
+  }
+
+  // a drone at _p / _q: its instance in `meshes` and its sensor glow
+  #place(meshes, i, light, size) {
+    _m.compose(_p, _q, _s.setScalar(size));
+    for (const im of meshes) im.setMatrixAt(i, _m);
+    _d.set(0, 0.02, 0.45 * size).applyQuaternion(_q).add(_p);
+    set3(this.lights.geometry.attributes.position.array, light, _d.x, _d.y, _d.z);
+  }
+
+  // searchlight cone i from (x, y, z) toward the street along (sx, -1, sz)
+  #beam(i, x, y, z, sx, sz) {
+    _d.set(sx, -1, sz).normalize();
+    const len = (y - GROUND) / -_d.y;
+    _q.setFromUnitVectors(_down, _d);
+    this.cones.setMatrixAt(i, _m.compose(_p.set(x, y, z), _q, _s.set(len * 0.12, len, len * 0.12)));
+  }
+}

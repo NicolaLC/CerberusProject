@@ -24,7 +24,7 @@ import { Controls, inputName } from './controls.js';
 import { settings } from './settings.js';
 import { Shell } from './view/shell.js';
 import { applyQuality, QUALITY } from './view/quality.js';
-import { SCENES, resolveScene } from './scenes.js';
+import { SCENES, resolveScene, saveProgress } from './scenes.js';
 import { TOOLS } from './gym/tools.js';
 import { KeyHints } from './view/keyhints.js';
 import { disposeTree } from '../engine/dispose.js';
@@ -109,7 +109,10 @@ export class Game {
       weapon.grant(gun, { ammo }); // emits weapon:discovered the first time (toast, discovered:<gun> log line)
       weapon.switchTo(gun);
     });
-    events.on('checkpoint:reached', () => hud.toast('CHECKPOINT'));
+    events.on('checkpoint:reached', (c) => {
+      hud.toast('CHECKPOINT');
+      saveProgress(this.sceneName, c.id); // campaign scenes only
+    });
     // env.alarm: the lighting state (the siren is Audio's)
     events.on('alarm:on', (a) => world.setAlarm(a.color, a.strength));
     events.on('alarm:off', (a) => !a.active && world.setAlarm(null));
@@ -138,7 +141,7 @@ export class Game {
     this.playerHelper = this.#helper(player.view.rigModel);
     this.helpers = [];
     this.keyHints = new KeyHints();
-    this.loadScene(first);
+    if (debug) this.loadScene(first); // the main menu has no level behind it: NEW GAME / CONTINUE / DEVELOPMENT load one
 
     // ---- frame order ----
     const look = { x: 0, y: 0 };
@@ -273,7 +276,7 @@ export class Game {
     });
     engine.events.on('engine:systemFailed', ({ name }) => hud.toast(`SYSTEM FAULT: ${name.toUpperCase()}`));
 
-    this.shell = new Shell({ engine, audio, controls, debug, systems: this, editing: () => this.editing, sceneName: () => this.sceneName, loadScene: (k) => this.loadScene(k) });
+    this.shell = new Shell({ engine, audio, controls, debug, systems: this, editing: () => this.editing, sceneName: () => this.sceneName, loadScene: (k) => this.loadScene(k), unloadScene: () => this.unloadScene() });
     if (debug) engine.stats.visible = true;
   }
 
@@ -301,6 +304,17 @@ export class Game {
     this.keyHints.set({ debug: this.debug, tool: this.tool });
     this.rebuildHelpers();
     this.#warmShaders();
+    return this;
+  }
+
+  // Frees the current level (QUIT TO MAIN MENU): no scene is loaded until the next loadScene. Systems never update meanwhile
+  // (the main menu idles the engine).
+  unloadScene() {
+    if (!this.sceneName) return this;
+    this.#unloadLevel();
+    this.sceneName = null;
+    this.level = null;
+    this.shell?.markScene();
     return this;
   }
 

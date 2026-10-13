@@ -23,7 +23,7 @@ plain `bun test` is bun's own test runner and finds nothing.
 - No pointer lock (sandboxed frames): input falls back to free-mouse mode; arrow keys also turn the camera.
 
 ## Testing
-- `?debug` URL flag: no start panel, stats readout on, `window.game` is the `Game` (`player`, `camRig`, `weapon`,
+- `?debug` URL flag: no main menu, stats readout on, `window.game` is the `Game` (`player`, `camRig`, `weapon`,
   `enemies`, `controls`, `engine` with `scene`, `input`, `events`, `timings`, `perf`; `loadScene(name)`, `sceneName`).
 - `?scene=<name>` URL flag: opens `prologue` (default: a new game starts the Prologue) / `arena` / `gym` / `library` / `workshop` directly; unknown name → prologue + console warning (`instructions/level.md`).
 - Headless check: Playwright with Chromium (`--use-angle=swiftshader`); real keyboard/mouse events work once the

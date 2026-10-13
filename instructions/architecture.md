@@ -21,7 +21,7 @@ src/
     random.js             seedable RNG streams
   game/
     game.js               COMPOSITION ROOT: builds systems, wires events, declares frame order, level lifecycle; loads `settings` once and injects it (Controls)
-    scenes.js             scene list: name -> level file, ?scene= resolution (level.md)
+    scenes.js             scene list: name -> level file, ?scene= resolution (level.md); CAMPAIGN order + progress (`cerberus.progress`)
     registry.js           piece registry: stable string id -> how a piece is built from data (ids: level.md)
     controls.js           BINDINGS table + intents (move, look, aiming, running, firing, slots...)
     settings.js           player settings + start-panel bindings
@@ -34,7 +34,7 @@ src/
             enemies.js (system: builds enemy.* / boss.* pieces, bolts, stands, target cache, squad alerts, `all` = every enemy)
     ai/     cover.js (cover spots from cover boxes, protection test, spot choice + detour route)
     combat/ guns.js (gun table), weapon.js (controller, hitscan, aim probe), ballistics.js (pure shot math)
-    view/   camera.js, fx.js, hud.js, log.js (STEM-00 log lines, `game.log`), boot.js (boot intro overlay + input lock, `game.boot`), cinematic.js (intro cinematic: scripted camera shots, STEM-00's wake, `game.cinematic`), summary.js (mission complete screen, `game.summary`; stats in `game/run-stats.js`, `game.stats`), audio.js, juice.js, post.js, shell.js (DOM shell: start/pause panel, pointer lock, scene buttons, pad navigation)   (presentation only)
+    view/   camera.js, fx.js, hud.js, log.js (STEM-00 log lines, `game.log`), boot.js (boot intro overlay + input lock, `game.boot`), cinematic.js (intro cinematic: scripted camera shots, STEM-00's wake, `game.cinematic`), summary.js (mission complete screen, `game.summary`; stats in `game/run-stats.js`, `game.stats`), audio.js (SFX, music; `Audio.ui(kind)` = menu UI sounds, see `ui:sfx`), juice.js, post.js, shell.js (DOM shell: main menu / pause menu and sub-pages, pointer lock, scene buttons, keyboard / pad navigation, progress save for CONTINUE), menu-scene.js (the title's own 3D set, `MenuScene`)   (presentation only)
 ```
 
 `src/levels/` holds level files (plain JSON, see `level.md`); `scenes.js` lists them, `Game.loadScene(name)` hands one to the systems.
@@ -85,7 +85,27 @@ the only thing three.js recompiles shaders for, so they come from a fixed pool o
 | present | fx → world (lights, sun, player visibility) → hud → log → boot (intro overlay, input lock; group `play`) → audio (MG spin) | scaled |
 | render | post (exposure, grade, bloom) | real |
 
-Paused (start panel): only `whilePaused` systems run (controls, stats, camera, post).
+Paused (pause menu): only `whilePaused` systems run (controls, stats, camera, post).
+Idle (`engine.idle`, the main menu and its sub-pages): only the `pre` phase runs (controls + shell: menu navigation, which also
+renders the menu set); no game system is simulated or drawn. `?debug` skips the main menu and runs at once.
+
+## Main menu and save (view/shell.js)
+Title (launch, and QUIT TO MAIN MENU): CONTINUE (only with a save) / NEW GAME (with a save: "Overwrite progress?") / SETTINGS /
+DEVELOPMENT (scene buttons `#scenes`, debug keys) / CREDITS (static HTML in index.html, kept in sync with `credits.md`) / QUIT TO
+DESKTOP (desktop build, bottom-left; Esc / B on the title). Pause (Esc / pad Menu in play): RESUME (`#start`, re-locks the pointer)
+/ SETTINGS / QUIT TO MAIN MENU / QUIT TO DESKTOP. Pages are `#overlay .page[data-page]`; items `data-go` (sub-page) or `data-act`.
+Progress: `cerberus.progress` = { scene, checkpoint } (scenes.js), written when a campaign scene (`CAMPAIGN`) starts and on
+`checkpoint:reached`. CONTINUE restarts the saved scene from its beginning: mission state (objectives, gates, pickups) is not
+saved, so the checkpoint id is recorded but not resumed yet.
+The main menu is its own scene: at launch (no `?debug`) no level is loaded, `?scene=` included; NEW GAME / CONTINUE / a
+DEVELOPMENT pick call `game.loadScene`, QUIT TO MAIN MENU calls `game.unloadScene()` (sceneName / level null). `<body class="title">`
+(set in index.html for the first paint, toggled by the shell) hides every game, editor and Gym panel; the editor ignores input
+while paused. Backdrop: `view/menu-scene.js` (`MenuScene`), built on the first title and drawn by `Shell.update` with the game's
+renderer only while idle, so it stops the moment play starts and resumes on QUIT TO MAIN MENU (kept, not disposed). It is a fixed
+set, not a level: STEM-00 (Rig + soldier parts, `SEATED` pose in rig.js) on a roof corner, a procedural instanced skyline (weathered
+`panelTexture`, shader windows, about half ruined), Spire Cathedrals, the HiveMind as a sky-shaded silhouette with breathing violet
+sensors, drones from `droneLook` (drone.js) instanced per material, roof dressing from the prop builders (props.js), haze veils,
+smoke, searchlights. About 45 draws and 375k triangles; prefers-reduced-motion stops the camera drift and slows the rest. Menu sounds: `audio.ui(kind)`.
 
 Modes: a system may declare a `group` (`engine.add({ group: 'play' })`); the engine runs it only while `engine.mode` equals it
 (`engine.setMode(name)`, default `'play'`), no group = always. `player`, `weapon`, `playerPose`, `encounter`, `pickups` and `camera`
@@ -133,6 +153,7 @@ Payload objects marked * are reused: copy what you keep. `src/types.js` holds JS
 | `cinematic:wake` | – (STEM-00's power surge at `wake.at`; emitted at the end instead if the cinematic is skipped before it; Cinematic) | encounter (`on: cinematic:wake`: a `prop.cradle` `releaseOn`, log lines, gates, alarms) |
 | `cinematic:done` | { skipped } (the intro cinematic ended; Cinematic) | encounter (`on: cinematic:done`: an `intro.boot` `after`, log lines, gates, alarms) |
 | `ui:type` | { end } (typed text advanced this frame: boot intro, STEM-00 log; `end` = a line just finished; one per frame) | audio (terminal tick, throttled 25 ms) |
+| `ui:sfx` | { kind } (`move` / `select` / `back` / `open` / `deny` / `slider` / `start` / `warn`; any non-shell code wanting a menu sound) | audio (`Audio.ui(kind)`: the `ui-<kind>` sample if present, else synth; own UI bus, ignores pause / slow-mo; no-op before `init()`; `move` ≥ 40 ms apart, `slider` ≥ 30 ms) |
 | `mission:complete` / `mission:failed` | { total } / { index, id, reason } | hud toast, run stats (freeze), summary (mission complete screen) |
 | `bolt:fired` / `bolt:impact` | position / *{ point, normal } | audio / fx |
 | `pickup:collected` / `pickup:full` | label ('LIGHT AMMO +n AR ...') / – (all guns of the class full) | hud toast, audio |

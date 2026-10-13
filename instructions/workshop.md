@@ -56,7 +56,7 @@ Keys (the key bar shows them; `static KEYS` is the source and the suite checks i
 | Ctrl+S / Ctrl+O | `saveLevel(doc)` / `openLevel(registry)` from io.js; a failure ("not implemented" until #72) is a toast |
 | P | play in place / back to edit (see below) |
 | T | while playing: restart the encounter |
-| Esc | in an inspector field: revert + blur; otherwise disarm, then deselect, then pause (the start panel has the scene buttons) |
+| Esc | in an inspector field: revert + blur; otherwise disarm, then deselect, then pause (scene buttons: QUIT TO MAIN MENU, then DEVELOPMENT) |
 
 ## Play in place (#71)
 `P` toggles edit and play (`play()`, `edit()`, `togglePlay()`, `restart()`, `playing`); `editing` is false while playing, so

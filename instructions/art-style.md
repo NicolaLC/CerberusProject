@@ -88,6 +88,8 @@ empty now. Decisions taken in the pass (keep them unless the rule changes):
 - **World:** teal-cyan haze sky and heavy fog; cold sun and fill; interiors lit cold white and cyan, red only for story
   beats (a Rejects or alarm room) and the `env.alarm` lighting state (workshop.md "Alarm": the whole scene fades to red and pulses while the alarm runs; the HiveMind announcer line is cold white with a network-cyan glow, never red). The arena wears weathered metal (`skin: "weathered"`, level.md); the Gym rooms,
   Library and Workshop keep the grid textures because metrics read off them.
+- **The HiveMind itself** (main menu backdrop, `view/menu-scene.js`) is never sharp or lit: a colossal silhouette a shade darker
+  than the sky behind it, sunk in the haze, its only light three faint clusters of violet sensors that breathe. Sensed, not seen.
 - **Grade** (`post.js`): surfaces desaturated, shadows teal, HDR emissives keep their colour; bloom only above 1.0.
 - **HUD:** the crosshair's weak-spot state stays magenta, the kill shockwave stays cyan. The enemy state and damage
   feedback **stay red, as UI-only colours**: red appears nowhere in the world, so it can't be confused with a sensor,

@@ -13,7 +13,7 @@
  * @property {string} name key in `engine.timings`
  * @property {(dt: number, engine: any) => void} update
  * @property {Phase} [phase]
- * @property {boolean} [whilePaused] runs while the start panel is up
+ * @property {boolean} [whilePaused] runs while the pause menu is up
  * @property {boolean} [disabled]
  * @property {number} [fails] consecutive failures
  */

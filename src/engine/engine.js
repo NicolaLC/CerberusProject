@@ -49,6 +49,7 @@ export class Engine {
     this.time = 0; // scaled seconds since start
     this.realDt = 0; // unscaled seconds of the current frame
     this.paused = false;
+    this.idle = false; // a menu with nothing behind it: only the 'pre' phase runs, nothing is simulated or drawn
     this.mode = 'play'; // active system group (setMode): systems of another group are skipped
     this.headless = false; // tests: step the simulation without rendering (see #tick)
     this.contextLost = false;
@@ -143,6 +144,10 @@ export class Engine {
     const input = this.input;
     input.poll();
     this.#run('pre', realDt);
+    if (this.idle) {
+      input.endFrame();
+      return;
+    }
 
     if (this.paused) {
       this.#run('late', realDt);

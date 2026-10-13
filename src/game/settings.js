@@ -14,7 +14,7 @@ export const settings = { ...DEFAULTS, ...loadJSON(KEY) };
 
 export const saveSettings = () => saveJSON(KEY, settings);
 
-// Wires the controls in the start/pause panel. onQuality(name) applies a graphics preset.
+// Wires the controls in the menu SETTINGS page. onQuality(name) applies a graphics preset.
 export function bindSettingsUI({ onQuality } = {}) {
   const $ = (id) => document.getElementById(id);
   const sens = $('sens');

@@ -826,7 +826,7 @@ export class WorkshopEditor {
     this.#guard(() => this.move(this.sel, [p[0] + sign * dx * step, p[1], p[2] + sign * dz * step]));
   }
 
-  // Esc: drop what is armed, then the selection, then pause (the start panel has the scene picker).
+  // Esc: drop what is armed, then the selection, then pause (the main menu DEVELOPMENT page has the scene picker).
   #cancel() {
     if (this.armed) this.arm(null);
     else if (this.sel >= 0) this.select(-1);

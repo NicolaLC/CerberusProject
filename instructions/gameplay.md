@@ -14,8 +14,8 @@
 - Input lock during the boot intro (`intro.boot`, workshop.md "Boot intro"): `controls.locked` makes move, look, aim, sprint, fire, jump, reload, interact, shoulder and weapon switch read idle; pause and the debug toggles still work. When the intro ends, `controls.ease` brings move and look back over 0.6 s (no camera snap). Skip (fire / jump / interact / pad A) only after the intro was seen once.
 - Controller (standard mapping, Xbox names): L stick move (analog: partial tilt walks slower), R stick look,
   LT aim, RT fire, X reload, A jump / vault, B interact, LB swap shoulder, Y or RB next gun, d-pad ← ↑ → ↓ = AR / MG / SR / pistol,
-  L3 click sprints until the stick is released or pulled back, View = stats, Menu = pause (A or Menu deploys from
-  the start panel, no pointer lock needed). Look: 15% radial dead zone, response curve ^2.2, ×1.7 turn boost after
+  L3 click sprints until the stick is released or pulled back, View = stats, Menu = pause (menus: d-pad / left stick select, A confirm,
+  B back, Menu resumes from the pause menu; play started from a pad needs no pointer lock). Look: 15% radial dead zone, response curve ^2.2, ×1.7 turn boost after
   0.25 s at the rim (`PAD_LOOK`), optional invert Y. Aim assist uses the stronger trackpad profile (friction + pull).
   Rumble on shots (sniper hardest), hits taken, nearby blasts and boss footsteps.
 
