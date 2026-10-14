@@ -121,7 +121,8 @@ CAM   over the west cover as they advance, 2.6 s
 CAM   back behind STEM-00, 1.6 s, control returns
 
 ## 4. Purge: drill hall
-GOAL  destroy purge-1 "PURGE: DRILL HALL"   -- 4 shooters on posts, 3 troopers + 3 drones from the pen; troopers drop a rifle (fallback)
+GOAL  destroy purge-1 "PURGE: DRILL HALL"   -- 4 shooters on posts, 3 troopers + 3 drones from the pen; nobody drops anything
+-- the KR-7 waits on a stand on the landing [landing-rifle], in the path from the range exit to the cut: the first fight has two guns
 
 ## 5. Purge: hall
 GOAL  destroy purge-2 "PURGE: HALL SHOOTERS"  WAKE purge-2
@@ -129,7 +130,7 @@ LOG   "> TARGETS: ARMED. DIRECTIVE: STILL NONE. QUERY: WHO ARMED THEM?"  ON DONE
 CHECKPOINT [cp-hall], [cp-hall-east]
 
 ## 6. Armoury (optional)
-GOAL  interact [armoury] "SALVAGE A WEAPON"  GIVES rifle +64  SKIP IF [armoury-skip]
+GOAL  interact [armoury] "SALVAGE A WEAPON"  GIVES rifle +64  SKIP IF [armoury-skip]  SKIP IF OWNED rifle
 LOG   "> ITEM: KR-7. FUNCTION: KILL. QUERY: WHY DOES IT FEEL HEAVY?"  ON DISCOVER rifle
 
 ## 8. Purge: hall troopers
