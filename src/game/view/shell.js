@@ -85,6 +85,7 @@ export class Shell {
     if (opening && this.inGame) this.#ui('open'); // the pause menu opens
     engine.paused = !running;
     this.overlay.style.display = running ? 'none' : 'flex';
+    document.body.classList.toggle('paused', !running); // style.css: the objective pin hides under the pause menu
     canvas.style.cursor = input.free && running ? 'crosshair' : '';
     if (running) document.activeElement?.blur?.(); // keys go back to the game
     else if (opening || !this.page) this.show('root');
@@ -117,6 +118,9 @@ export class Shell {
     const { engine, controls } = host;
     if (engine.idle) this.backdrop?.render(engine.realDt); // the title's own set (menu-scene.js), never the level
     const input = engine.input;
+    // controller in use: no mouse cursor anywhere (body.pad, style.css) until the mouse really moves again (input.device)
+    const pad = input.device === 'pad';
+    if (pad !== this.padCursor) document.body.classList.toggle('pad', (this.padCursor = pad));
     if (!engine.paused) {
       if (controls.pressed('pause')) {
         this.padPlay = false;

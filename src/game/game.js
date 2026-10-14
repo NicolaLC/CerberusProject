@@ -246,7 +246,7 @@ export class Game {
       name: 'hud',
       phase: 'present',
       update: (dt) => {
-        hud.update(dt, { player, weapon, enemies, camRig, world, mission, scheme: controls.scheme });
+        hud.update(dt, { player, weapon, enemies, camRig, world, mission, scheme: controls.scheme, pin: !boot.active && !cinematic.active });
       },
     });
     engine.add({ name: 'log', phase: 'present', update: (dt) => log.update(dt) });

@@ -7,8 +7,11 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: var(--font-main); color: #e8f4ff; user-select: none; }
 #game { display: block; width: 100%; height: 100%; }
+/* a controller is the device in use (shell.js): no mouse cursor on anything, menus included */
+body.pad, body.pad * { cursor: none !important; }
 
-#hud { position: fixed; inset: 0; pointer-events: none; }
+/* HUD text scales with the screen: 1em = 14px at 1280x720, about 19px at 1920x1080, capped at 22px. Panels size in em. */
+#hud { position: fixed; inset: 0; pointer-events: none; font-size: clamp(14px, 0.45vw + 0.75vh + 2px, 22px); }
 #hud.cine { visibility: hidden; } /* intro cinematic: no HUD (game.js) */
 
 #crosshair { --gap: 8px; position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
@@ -58,30 +61,42 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #numbers .dmg { position: absolute; left: 0; top: 0; font: 700 16px var(--font-main); color: #fff; text-shadow: 0 0 3px #000, 0 0 6px #000; }
 #numbers .dmg.crit { color: #ffd23a; font-size: 20px; }
 
-#status { position: absolute; left: 32px; bottom: 32px; width: 280px; }
-.bar { height: 10px; background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(160, 220, 255, 0.35); margin-top: 6px; transform: skewX(-20deg); }
+#status { position: absolute; left: 32px; bottom: 32px; width: 20em; }
+.bar { height: max(10px, 0.7em); background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(160, 220, 255, 0.35); margin-top: 6px; transform: skewX(-20deg); }
 .bar > div { height: 100%; transition: width 0.1s; }
 .shield > div { background: linear-gradient(90deg, #2aa8ff, #7fe8ff); box-shadow: 0 0 8px #3ac0ff; }
 .health > div { background: linear-gradient(90deg, #d82a2a, #ff6a4a); }
 
 #weapon { position: absolute; right: 32px; bottom: 28px; text-align: right; font-family: var(--font-main); }
-#weapon .name { font-size: 12px; letter-spacing: 2px; color: #9fc8e8; }
-#ammo { font-size: 42px; font-weight: 700; }
+#weapon .name { font-size: 0.85em; letter-spacing: 2px; color: #b4d4ec; }
+#ammo { font-size: 3em; font-weight: 700; }
 #ammo.low { color: #ff5a4a; }
-#weapon .sep { margin: 0 6px; color: #6f8fa8; font-size: 24px; }
-#reserve { font-size: 22px; color: #9fc8e8; }
-#reload { display: none; color: #ffd23a; letter-spacing: 3px; font-size: 13px; }
+#weapon .sep { margin: 0 6px; color: #6f8fa8; font-size: 1.7em; }
+#reserve { font-size: 1.6em; color: #9fc8e8; }
+#reload { display: none; color: #ffd23a; letter-spacing: 3px; font-size: 0.9em; }
 
-#top { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 28px; font: 12px var(--font-main); letter-spacing: 3px; color: #9fc8e8; text-shadow: 0 0 4px #000; }
+#top { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 28px; font: 0.85em var(--font-main); letter-spacing: 3px; color: #b4d4ec; text-shadow: 0 0 4px #000; }
 #top b { color: #fff; }
-#objective { position: absolute; top: 44px; left: 16px; display: none; box-sizing: border-box; max-width: min(320px, calc(100vw - 32px)); padding: 6px 10px 7px; font: 11px var(--font-main); letter-spacing: 2px; color: #ffd23a; text-shadow: 0 0 4px #000; background: rgba(11, 17, 24, 0.55); border-left: 2px solid #ffd23a; }
+/* active objective: framed facility panel top-left, ochre head over the top rule, cold white detail, numbers in the number face */
+#objective { position: absolute; top: max(16px, 2.4vh); left: max(16px, 1.8vw); display: none; box-sizing: border-box; width: max-content; max-width: min(26em, calc(100vw - 32px)); padding: 0.55em 0.9em 0.65em; font: 600 1.1em var(--font-main); letter-spacing: 0.14em; color: #ffd23a; text-shadow: 0 1px 2px #000; background: rgba(8, 12, 17, 0.8); border: 1px solid rgba(234, 246, 250, 0.14); border-top: 1px solid rgba(255, 210, 58, 0.7); }
 #objective.in { animation: obj-in 0.35s ease-out; }
-#obj-detail { margin-top: 4px; font-size: 13px; letter-spacing: 1px; line-height: 1.5; color: #eaf6fa; }
+#obj-detail { margin-top: 0.35em; font-size: 0.95em; font-weight: 500; letter-spacing: 0.04em; line-height: 1.45; color: #eaf6fa; }
 #obj-detail:empty, #obj-prog:empty { display: none; }
-#obj-detail kbd { display: inline-block; min-width: 1.2em; padding: 0 5px; font: 700 11px var(--font-main); letter-spacing: 0; text-align: center; color: #ffd23a; background: rgba(255, 210, 58, 0.1); border: 1px solid rgba(255, 210, 58, 0.6); border-radius: 2px; }
-#prompt { position: absolute; left: 0; top: 0; display: none; padding: 5px 12px; font: 13px var(--font-main); letter-spacing: 2px; color: #eaf6fa; text-shadow: 0 0 4px #000; background: rgba(11, 17, 24, 0.6); border: 1px solid rgba(255, 210, 58, 0.35); white-space: nowrap; }
-#prompt kbd { display: inline-block; min-width: 1.4em; padding: 1px 6px; font: 700 13px var(--font-main); text-align: center; color: #ffd23a; background: rgba(255, 210, 58, 0.12); border: 1px solid rgba(255, 210, 58, 0.7); border-radius: 2px; }
-#obj-prog { margin-top: 3px; color: #fff; font-family: var(--font-num); }
+#obj-detail kbd { display: inline-block; min-width: 1.4em; padding: 0 0.35em; font: 700 0.85em var(--font-main); letter-spacing: 0; text-align: center; color: #ffd23a; background: rgba(255, 210, 58, 0.1); border: 1px solid rgba(255, 210, 58, 0.6); border-radius: 2px; }
+#prompt { position: absolute; left: 0; top: 0; display: none; padding: 0.35em 0.85em; font: 1em var(--font-main); letter-spacing: 2px; color: #eaf6fa; text-shadow: 0 0 4px #000; background: rgba(11, 17, 24, 0.6); border: 1px solid rgba(255, 210, 58, 0.35); white-space: nowrap; }
+#prompt kbd { display: inline-block; min-width: 1.4em; padding: 1px 0.4em; font: 700 1em var(--font-main); text-align: center; color: #ffd23a; background: rgba(255, 210, 58, 0.12); border: 1px solid rgba(255, 210, 58, 0.7); border-radius: 2px; }
+#obj-prog { margin-top: 0.3em; font-size: 1.1em; color: #fff; font-family: var(--font-num); }
+/* objective pin (hud.js #pin, target: Mission.pinTarget): an ochre diamond on the objective with the distance under it;
+   clamped to the screen edge (.off) with a chevron pointing at it. Gone under the pause menu. */
+#pin { position: absolute; left: 0; top: 0; width: 0; height: 0; font-size: 1.15em; opacity: 0; }
+body.paused #pin { visibility: hidden; }
+#pin .mark { position: absolute; left: -0.45em; top: -0.45em; width: 0.9em; height: 0.9em; border: 2px solid #ffd23a; background: rgba(8, 12, 17, 0.55); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6); transform: rotate(45deg); }
+#pin .dist { position: absolute; left: 0; top: 0.85em; transform: translateX(-50%); padding: 0.1em 0.4em; font: 0.85em var(--font-num); letter-spacing: 0.08em; white-space: nowrap; color: #eaf6fa; text-shadow: 0 1px 2px #000; background: rgba(8, 12, 17, 0.6); }
+#pin .arrow { display: none; position: absolute; left: 0; top: 0; width: 0; height: 0; }
+#pin .arrow::before { content: ''; position: absolute; left: 0.95em; top: -0.5em; width: 0; height: 0; border-top: 0.5em solid transparent; border-bottom: 0.5em solid transparent; border-left: 1.2em solid #ffd23a; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); } /* solid triangle pointing at the target (rotated by hud.js) */
+#pin.off .arrow { display: block; }
+#pin.tag-up .dist { top: auto; bottom: 0.85em; }
+#pin.off .mark { background: rgba(8, 12, 17, 0.75); }
 @keyframes obj-in { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { #objective.in { animation: none; } }
 
@@ -187,24 +202,24 @@ html body.title #overlay { opacity: 1; } /* index.html keeps it transparent unti
 #boss .legs i { display: inline-block; width: 12px; height: 6px; margin-right: 4px; background: #ff2bd6; box-shadow: 0 0 6px #ff2bd6; }
 #boss .legs i.gone { background: #3a2a30; box-shadow: none; }
 #boss .state { color: #ff6af0; }
-#toast { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font: 700 16px var(--font-main); letter-spacing: 3px; color: #7fe8ff; text-shadow: 0 0 8px rgba(56, 216, 255, 0.7); opacity: 0; }
+#toast { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font: 700 1.15em var(--font-main); letter-spacing: 3px; color: #7fe8ff; text-shadow: 0 0 8px rgba(56, 216, 255, 0.7); opacity: 0; }
 /* STEM-00 log: terminal readout panel. Header strip (::before, time from data-t), scanlines + corner brackets (backgrounds), cursor (::after); the typed text stays the element's only text node */
-#log { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); box-sizing: border-box; width: max-content; max-width: min(760px, calc(100vw - 32px)); padding: 0 14px 9px; font: 15px ui-monospace, Consolas, 'DejaVu Sans Mono', monospace; letter-spacing: 1px; line-height: 1.4; color: #ffb347; text-shadow: 0 0 6px rgba(255, 179, 71, 0.45), 0 0 2px #000; white-space: pre-wrap; opacity: 0; border: 1px solid rgba(255, 179, 71, 0.22);
+#log { position: absolute; left: 50%; bottom: max(112px, 13vh); transform: translateX(-50%); box-sizing: border-box; width: max-content; max-width: min(64em, calc(100vw - 32px)); padding: 0 1em 0.65em; font: 1.3em ui-monospace, Consolas, 'DejaVu Sans Mono', monospace; letter-spacing: 0.06em; line-height: 1.4; color: #ffbe5c; text-shadow: 0 0 5px rgba(255, 179, 71, 0.35), 0 1px 2px #000; white-space: pre-wrap; opacity: 0; border: 1px solid rgba(255, 179, 71, 0.22);
   background:
     linear-gradient(#ffb347, #ffb347) 0 0 / 10px 1px no-repeat, linear-gradient(#ffb347, #ffb347) 0 0 / 1px 10px no-repeat,
     linear-gradient(#ffb347, #ffb347) 100% 0 / 10px 1px no-repeat, linear-gradient(#ffb347, #ffb347) 100% 0 / 1px 10px no-repeat,
     linear-gradient(#ffb347, #ffb347) 0 100% / 10px 1px no-repeat, linear-gradient(#ffb347, #ffb347) 0 100% / 1px 10px no-repeat,
     linear-gradient(#ffb347, #ffb347) 100% 100% / 10px 1px no-repeat, linear-gradient(#ffb347, #ffb347) 100% 100% / 1px 10px no-repeat,
-    repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0) 2px, rgba(0, 0, 0, 0.3) 3px, rgba(0, 0, 0, 0.3) 4px), rgba(11, 17, 24, 0.78); }
-#log::before { content: 'STEM-00 // LOG  T+' attr(data-t); display: block; margin: 0 -14px 7px; padding: 3px 14px; font-size: 10px; letter-spacing: 3px; color: rgba(255, 179, 71, 0.6); text-shadow: none; border-bottom: 1px solid rgba(255, 179, 71, 0.22); background: rgba(255, 179, 71, 0.06); }
+    repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0) 2px, rgba(0, 0, 0, 0.22) 3px, rgba(0, 0, 0, 0.22) 4px), rgba(8, 12, 17, 0.85); }
+#log::before { content: 'STEM-00 // LOG  T+' attr(data-t); display: block; margin: 0 -1em 0.5em; padding: 0.25em 1em; font-size: 0.62em; letter-spacing: 0.3em; color: rgba(255, 179, 71, 0.7); text-shadow: none; border-bottom: 1px solid rgba(255, 179, 71, 0.22); background: rgba(255, 179, 71, 0.06); }
 #log::after { content: '_'; animation: log-cursor 1s steps(1) infinite; }
 #log.glitch-a { animation: log-glitch-a 0.22s steps(1); }
 #log.glitch-b { animation: log-glitch-b 0.22s steps(1); }
 /* the HiveMind announcer (log.line voice): cold PA, centred, wide tracking, cyan rules above and below, no amber, no cursor */
-#log.announcer { bottom: auto; top: 18%; text-align: center; padding: 10px 22px; font-size: 19px; letter-spacing: 5px; color: #eaf6fa; text-shadow: 0 0 10px rgba(63, 224, 255, 0.8), 0 0 2px #000; border: 0; border-top: 1px solid #3fe0ff; border-bottom: 1px solid #3fe0ff; background: linear-gradient(to right, rgba(11, 17, 24, 0), rgba(11, 17, 24, 0.75) 15%, rgba(11, 17, 24, 0.75) 85%, rgba(11, 17, 24, 0)); }
-#log.announcer::before { content: 'PRIORITY BROADCAST'; margin: 0 0 6px; padding: 0; font-size: 10px; letter-spacing: 6px; color: #3fe0ff; border: 0; background: none; }
+#log.announcer { bottom: auto; top: 18%; text-align: center; padding: 0.55em 1.4em; font-size: 1.45em; letter-spacing: 0.26em; color: #eaf6fa; text-shadow: 0 0 10px rgba(63, 224, 255, 0.8), 0 0 2px #000; border: 0; border-top: 1px solid #3fe0ff; border-bottom: 1px solid #3fe0ff; background: linear-gradient(to right, rgba(11, 17, 24, 0), rgba(11, 17, 24, 0.75) 15%, rgba(11, 17, 24, 0.75) 85%, rgba(11, 17, 24, 0)); }
+#log.announcer::before { content: 'PRIORITY BROADCAST'; margin: 0 0 0.4em; padding: 0; font-size: 0.55em; letter-spacing: 0.5em; color: #3fe0ff; border: 0; background: none; }
 #log.announcer::after { content: none; }
-@media (max-width: 600px) { #log { font-size: 13px; letter-spacing: 0.5px; bottom: 96px; } #log.announcer { font-size: 15px; letter-spacing: 3px; } }
+@media (max-width: 600px) { #log { font-size: 1em; letter-spacing: 0.5px; bottom: 96px; } #log.announcer { font-size: 1.1em; letter-spacing: 3px; } }
 @keyframes log-glitch-a { 0% { translate: -3px 0; opacity: 0.5; } 25% { translate: 2px 0; opacity: 1; } 50% { translate: 0; opacity: 0.4; } 75% { translate: 1px 0; opacity: 1; } }
 @keyframes log-glitch-b { 0% { translate: -3px 0; opacity: 0.5; } 25% { translate: 2px 0; opacity: 1; } 50% { translate: 0; opacity: 0.4; } 75% { translate: 1px 0; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { #log.glitch-a, #log.glitch-b, #log::after { animation: none; } }
@@ -236,7 +251,7 @@ html body.title #overlay { opacity: 1; } /* index.html keeps it transparent unti
 @keyframes summary-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes summary-row { from { opacity: 0; } to { opacity: 1; } }
 #boot .skip { position: absolute; right: 24px; top: 20px; font-size: 12px; letter-spacing: 3px; color: rgba(234, 246, 250, 0.5); text-transform: uppercase; }
-#weapon .slots { display: flex; gap: 8px; justify-content: flex-end; font-size: 11px; color: #4f6f88; margin-top: 2px; }
+#weapon .slots { display: flex; gap: 0.6em; justify-content: flex-end; font-size: 0.8em; color: #5f7f98; margin-top: 2px; }
 #weapon .slots .on { color: #7fe8ff; text-shadow: 0 0 6px rgba(56, 216, 255, 0.6); }
 #numbers .dmg.weak { color: #ff6af0; font-size: 22px; text-shadow: 0 0 6px rgba(255, 43, 214, 0.9), 0 0 3px #000; }
 

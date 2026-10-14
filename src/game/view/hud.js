@@ -13,6 +13,8 @@ const LOW_AMMO = 0.25;
 // circumference of the charge ring's circle (r = 28 in index.html)
 const RING = 2 * Math.PI * 28;
 const AR_LABEL = { perfect: 'PERFECT', good: 'GOOD' };
+// objective pin: px kept clear of the screen edge when clamped; m over `near` (Mission.pinTarget) to fade fully in; fade speed (1/s)
+const PIN = { edge: 56, fade: 4, rate: 8 };
 function changed(el, key, value) {
   let last = LAST.get(el);
   if (!last) LAST.set(el, (last = {}));
@@ -64,6 +66,13 @@ export class Hud {
     this.el.block = $('blockmark');
     this.el.scope = $('scope');
     this.el.lock = $('lockmark');
+    const pin = $('pin');
+    this.el.pin = { root: pin, arrow: pin.querySelector('.arrow'), dist: pin.querySelector('.dist') };
+    this.pinO = 0; // pin opacity, eased
+    this.pinStale = true; // pin keep-out boxes need measuring (#measurePin)
+    addEventListener('resize', () => (this.pinStale = true));
+    this.el.log = $('log');
+    this.el.status = $('status');
     this.el.boss = { root: $('boss'), name: $('boss-name'), fill: $('boss-fill'), legs: $('boss-legs'), state: $('boss-state') };
     this.hitTime = 0;
     this.hitMax = 1;
@@ -76,7 +85,8 @@ export class Hud {
   // Per-scene reset; the zone label shows the level's title (outdoors) or INTERIOR.
   reset(level) {
     this.zoneName = level?.title ?? level?.name?.toUpperCase() ?? '';
-    this.hitTime = this.dmgTime = this.toastTime = 0;
+    this.hitTime = this.dmgTime = this.toastTime = this.pinO = 0;
+    this.pinStale = true;
     this.bossLegs = null;
     this.el.boss.root.classList.remove('on');
   }
@@ -102,6 +112,7 @@ export class Hud {
   #objective(p, scheme) {
     const e = this.el;
     css(e.objective, 'display', p ? 'block' : 'none');
+    if (changed(e.objective, 'pinShown', !!p)) this.pinStale = true;
     css(e.killsWrap, 'display', p ? 'none' : ''); // the kill counter stays for scenes without objectives
     if (!p) return;
     text(e.objHead, p.head);
@@ -115,6 +126,7 @@ export class Hud {
     });
     e.objDetail.replaceChildren(...nodes);
     if (changed(e.objective, 'key', p.key)) {
+      this.pinStale = true; // the panel's size changed
       e.objective.classList.remove('in');
       void e.objective.offsetWidth;
       e.objective.classList.add('in');
@@ -136,6 +148,71 @@ export class Hud {
     const k = document.createElement('kbd');
     k.textContent = inputName('interact', scheme);
     e.replaceChildren(k, ` ${p.label}`);
+  }
+
+  // Objective pin (Mission.pinTarget): diamond + horizontal distance projected on the target; off screen or behind the
+  // camera it sticks to the screen edge with an arrow toward it. Fades in / out (near the target, objective without a place).
+  // Keeps its last place while fading out after the objective ends. The clamp keeps out of the bottom HUD band (log, weapon,
+  // status) and the objective panel: boxes measured by #measurePin when stale (resize, objective / weapon change), never per frame.
+  #pin(t, from, camera, dt) {
+    const e = this.el.pin;
+    let want = 0;
+    let d = 0;
+    if (t) {
+      d = Math.hypot(t.x - from.x, t.z - from.z);
+      want = Math.min(1, Math.max(0, (d - t.near) / PIN.fade));
+    }
+    this.pinO += (want - this.pinO) * Math.min(1, dt * PIN.rate);
+    if (this.pinO < 0.01) this.pinO = 0;
+    css(e.root, 'opacity', this.pinO.toFixed(2));
+    if (!t || this.pinO === 0) return;
+    if (this.pinStale) this.#measurePin();
+    const b = this.pinBox;
+    _p.set(t.x, t.y, t.z).project(camera);
+    const behind = _p.z > 1; // projected through the camera: x / y come out mirrored
+    const W = innerWidth / 2;
+    const H = innerHeight / 2;
+    let x = (behind ? -_p.x : _p.x) * W;
+    let y = (behind ? _p.y : -_p.y) * H; // screen offset from the centre, y down
+    const lx = W - b.edge; // left / right / top limit
+    const ly = H - b.edge;
+    const by = H - b.bottom; // bottom limit: above the bottom HUD band
+    const off = behind || Math.abs(x) > lx || y < -ly || y > by;
+    let down = false;
+    if (off) {
+      if (Math.abs(x) < 1 && Math.abs(y) < 1) y = 1; // dead behind: point down
+      const s = Math.max(Math.abs(x) / lx, y < 0 ? -y / ly : y / by);
+      x /= s;
+      y /= s;
+      css(e.arrow, 'transform', `rotate(${Math.atan2(y, x).toFixed(2)}rad)`);
+      down = y > 0.6 * Math.hypot(x, y); // the arrow points down, where the distance tag sits: the tag moves above
+      // clamped into the objective panel's corner: slide along the edge it sits on, past the panel
+      if (W + x < b.objRight && H + y < b.objBottom) {
+        if (x <= -lx + 1) y = b.objBottom - H;
+        else x = b.objRight - W;
+      }
+    }
+    e.root.classList.toggle('off', off);
+    e.root.classList.toggle('tag-up', down);
+    css(e.root, 'transform', `translate(${(W + x).toFixed(0)}px, ${(H + y).toFixed(0)}px)`);
+    text(e.dist, `${Math.round(d)} M`);
+  }
+
+  // Pin keep-out boxes in px, from the HUD elements' layout boxes (offset*: no transforms, so the panels' slide-in doesn't skew
+  // them). `pad` = the pin's own reach (diamond, distance tag, arrow) in its em. The log's band is kept from a non-announcer
+  // measure (the announcer moves the element to the top).
+  #measurePin() {
+    const e = this.el;
+    const em = parseFloat(getComputedStyle(e.pin.root).fontSize) || 16;
+    const pad = 2.2 * em;
+    const H = innerHeight;
+    const top = (el) => (el.offsetHeight ? el.offsetTop : H); // hidden element: no band
+    if (!e.log.classList.contains('announcer')) this.logTop = top(e.log);
+    const band = H - Math.min(this.logTop ?? H * 0.75, top(e.weapon), top(e.status));
+    const o = e.objective;
+    const shown = o.offsetHeight > 0;
+    this.pinBox = { edge: Math.max(PIN.edge, pad), bottom: band + pad, objRight: shown ? o.offsetLeft + o.offsetWidth + pad : 0, objBottom: shown ? o.offsetTop + o.offsetHeight + pad : 0 };
+    this.pinStale = false;
   }
 
   #boss(b) {
@@ -173,7 +250,8 @@ export class Hud {
     css(this.el.dmgDir, 'transform', `translate(-50%, -50%) rotate(${-rel}rad)`);
   }
 
-  update(dt, { player, weapon, enemies, camRig, world, mission, scheme = 'kbm' }) {
+  // pin: false hides the objective pin (boot intro; the cinematic, title, pause and Workshop hide it with the whole HUD)
+  update(dt, { player, weapon, enemies, camRig, world, mission, scheme = 'kbm', pin = true }) {
     const e = this.el;
     this.#boss(enemies.boss);
     // lock-on marker on the boss while the camera follows it
@@ -256,6 +334,7 @@ export class Hud {
 
     // unarmed: no weapon block, no crosshair (overrides what the lines above set)
     css(e.weapon, 'display', weapon.current ? '' : 'none');
+    if (changed(e.weapon, 'pinShown', !!weapon.current)) this.pinStale = true; // armed: the weapon block joins the pin's keep-out band
     if (!weapon.current) for (const k of ['cross', 'scope', 'charge', 'ar', 'block']) css(e[k], 'opacity', 0);
 
     css(e.shield, 'width', `${player.shields}%`);
@@ -266,6 +345,7 @@ export class Hud {
     text(e.zone, world.isInterior(player.pos) ? 'INTERIOR' : this.zoneName);
     this.#objective(mission.hudPanel(), scheme);
     this.#prompt(mission.interactPrompt(player), scheme, camRig.camera);
+    this.#pin(pin && !player.dead ? mission.pinTarget(player.pos) : null, player.pos, camRig.camera, dt);
 
     this.dmgTime -= dt;
     const lowHp = player.shields <= 0 ? 0.35 + (1 - player.health / 100) * 0.5 : 0;

@@ -127,6 +127,27 @@ Interiors read as a military installation (layered, structural, serviced), never
 - Materials are the level's own (skin wall / roof tones, worn dark metal, near-black, calibration ochre); light is cold cyan or white strips only, no
   extra point lights, no violet or amber. Ochre stays a paint (edges, warnings), never a glow.
 
+## Interiors (`arch.corridor`, `world/interior.js`)
+Dense serviced corridors (reference: an owner-supplied UE5 sci-fi corridor, not in the repo; the rules here win over it). Kept from it: wall bays
+with recesses and vents, a rib frame every 3 m, a ceiling truss with twin ribbed pipes, fluorescent tube fixtures on 45 degree cornices, decked
+floor with a centre grate, steps, hazard trims. Changed for the rule:
+- **Marker lights are cyan, never amber** (amber is STEM-00's light): small dots on the bumper rail, the panel frames, the ribs and the step risers.
+- **Hazard trims are ochre paint**, chipped to dark metal at the edges (`stripe`, 25 cm diagonals), on the bumper rail, the rib bands, the step
+  nosings, the beam undersides and the door columns. Pipe collars are matte ochre, not gold.
+- **Painted plate, not chrome:** plates are mostly dielectric paint (metalness ~0.35) with bare metal only in scratches and bolt heads; pipes are
+  the only bright metal. Metals reflect a generated corridor environment (dark tube, two rows of tubes); the cold white tubes and the point
+  lights are the only light; floors have wet, smoother patches that pick up the tubes.
+- **Detail is texture first:** seams, bolts, vent slots, hatches, grime streaks, anti-slip treads, quilted padding and bar grating are painted
+  normal / roughness maps (world UVs, 1 tile = 2 m); geometry carries the silhouette (frames proud of dark recesses, lattices, louvres, fan
+  shrouds, the leaning upper panels).
+- **Glow without bloom** (post effects are off): tubes are emissive and sit on additive halo cards; brighter fixtures are bigger, not hotter.
+- **No visible tiling:** every bay rolls its panel kind and a one-off (turbine housing, maintenance arm, hoses, crates, console) from a seed;
+  one-offs above the walkway stay over 2.2 m. Fans read as fans: pitched blades, hub, shroud ring and a guard grille, never a solid disc.
+- **The far end reads:** a door end gets a lamp bar and a soft additive light pool on the door and the deck in front of it, plus a brighter
+  point light, so a gate is legible from 24 m.
+- **Rooms the player fights in** use the slim wall (`arch.wall`): the same language flattened into the panelling envelope, so cover, signs
+  and props keep their places; the deep corridor profile is for walkways and set-piece rooms (the Prologue's transit node).
+
 ## 6. Prompt kit (concept art, the book, marketing)
 Style suffix, pasted unchanged:
 > grim industrial military sci-fi, painterly realistic concept art, heavy weathered war machines, worn matte

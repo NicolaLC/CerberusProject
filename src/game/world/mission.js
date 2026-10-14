@@ -12,6 +12,9 @@ import { GUNS } from '../combat/guns.js';
 
 export const TUNING = {
   reach: 2.5, // m, vertical reach of an interact terminal (feet to marker)
+  pinLift: 1.5, // m, the HUD objective pin floats this high over the objective's position / the target enemy's
+  pinNear: 3, // m, the pin is gone within this distance of a place (reach / interact / action)...
+  pinNearEnemy: 8, // m ...and of a destroy target: up close the enemy is the marker
 };
 
 const clock = (s) => {
@@ -24,6 +27,7 @@ export class Mission {
   constructor({ events, enemies, owns = () => true }) {
     Object.assign(this, { events, enemies, owns });
     this.promptAt = { x: 0, y: 0, z: 0 }; // reused by interactPrompt
+    this.pinAt = { x: 0, y: 0, z: 0, near: 0 }; // reused by pinTarget
     this.held = false; // the current objective's condition is met but its `requiresGun` is not owned yet
     this.objectives = []; // records of the objective pieces, in mission order
     this.index = 0; // of `current` (= objectives.length when complete)
@@ -123,6 +127,39 @@ export class Mission {
     const at = this.promptAt;
     [at.x, at.y, at.z] = a ?? [r.pos.x, r.pos.y + 1.3, r.pos.z];
     return { label: r.params.prompt ?? 'INTERACT', at: this.promptAt };
+  }
+
+  // Where the HUD objective pin points (reused object; `near` = distance under which the pin fades out), null when the
+  // current objective has no place: survive, a destroy group with nothing alive, no objective / mission over.
+  // reach / action / interact: the piece position (interact: its `promptAt` when set); destroy: the nearest alive enemy of its group.
+  pinTarget(from) {
+    const r = this.current;
+    if (this.state !== 'active' || !r || r.obj === 'survive') return null;
+    const t = this.pinAt;
+    t.near = TUNING.pinNear;
+    if (r.obj === 'destroy') {
+      let best = Infinity;
+      let hit = null;
+      for (const a of this.enemies.all) {
+        if (!a.alive || !this.#matches(r, a)) continue;
+        const d = (a.pos.x - from.x) ** 2 + (a.pos.z - from.z) ** 2;
+        if (d < best) {
+          best = d;
+          hit = a;
+        }
+      }
+      if (!hit) return null;
+      t.near = TUNING.pinNearEnemy;
+      t.x = hit.pos.x;
+      t.y = hit.pos.y + TUNING.pinLift;
+      t.z = hit.pos.z;
+    } else if (r.obj === 'interact' && r.params.promptAt) [t.x, t.y, t.z] = r.params.promptAt; // array destructuring: no allocation
+    else {
+      t.x = r.pos.x;
+      t.y = r.pos.y + TUNING.pinLift;
+      t.z = r.pos.z;
+    }
+    return t;
   }
 
   // The HUD state line (state, never instructions), null when the level has no objectives.

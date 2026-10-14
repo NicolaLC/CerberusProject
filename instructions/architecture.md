@@ -25,7 +25,7 @@ src/
     registry.js           piece registry: stable string id -> how a piece is built from data (ids: level.md)
     controls.js           BINDINGS table + intents (move, look, aiming, running, firing, slots...)
     settings.js           player settings + start-panel bindings
-    world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), arch.js (arch.* architectural dressing: coves, ribs, panelling, bulkheads, floor channels, coffers, catwalks; level.md), textures.js, pickups.js (pickup.* pieces), encounter.js (marker.* / trigger.* / objective.* / log.line / intro.boot / intro.cinematic pieces: spawn, checkpoints, trigger volumes, reinforcements; workshop.md), mission.js (objective sequencing, `game.mission`; ticks inside encounter)
+    world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), arch.js (arch.* architectural dressing: coves, ribs, panelling, bulkheads, floor channels, coffers, catwalks; level.md), interior.js (`arch.corridor` interior kit: painted normal / roughness maps, corridor env map, the `World.interior` materials; level.md), textures.js, pickups.js (pickup.* pieces), encounter.js (marker.* / trigger.* / objective.* / log.line / intro.boot / intro.cinematic pieces: spawn, checkpoints, trigger volumes, reinforcements; workshop.md), mission.js (objective sequencing, `game.mission`; ticks inside encounter)
     actors/ rig.js (skeleton, animator, IK), parts.js (model building blocks, debris), soldier.js (player model),
             looks.js (trooper / puppet models),
             player.js (motor: intent -> movement, cover, jetpack, vault, health; never touches a mesh), player-view.js (`player.view`: model, rig, skin, animation, root pose; reads the motor's state; the motor forwards `root` / `rigModel` / `skin` / `animator` / `muzzle`),
@@ -34,7 +34,7 @@ src/
             enemies.js (system: builds enemy.* / boss.* pieces, bolts, stands, target cache, squad alerts, `all` = every enemy)
     ai/     cover.js (cover spots from cover boxes, protection test, spot choice + detour route)
     combat/ guns.js (gun table), weapon.js (controller, hitscan, aim probe), ballistics.js (pure shot math)
-    view/   camera.js, fx.js, hud.js, log.js (STEM-00 log lines, `game.log`), boot.js (boot intro overlay + input lock, `game.boot`), cinematic.js (intro cinematic: scripted camera shots, STEM-00's wake, `game.cinematic`), summary.js (mission complete screen, `game.summary`; stats in `game/run-stats.js`, `game.stats`), audio.js (SFX, music; `Audio.ui(kind)` = menu UI sounds, see `ui:sfx`; `Audio.title(on)` = title music, from Shell), juice.js, post.js, shell.js (DOM shell: main menu / pause menu and sub-pages, pointer lock, scene buttons, keyboard / pad navigation, progress save for CONTINUE), menu-scene.js (the title's own 3D set, `MenuScene`)   (presentation only)
+    view/   camera.js, fx.js, hud.js (DOM HUD: objective panel, interact prompt, objective pin), log.js (STEM-00 log lines, `game.log`), boot.js (boot intro overlay + input lock, `game.boot`), cinematic.js (intro cinematic: scripted camera shots, STEM-00's wake, `game.cinematic`), summary.js (mission complete screen, `game.summary`; stats in `game/run-stats.js`, `game.stats`), audio.js (SFX, music; `Audio.ui(kind)` = menu UI sounds, see `ui:sfx`; `Audio.title(on)` = title music, from Shell), juice.js, post.js, shell.js (DOM shell: main menu / pause menu and sub-pages, pointer lock, scene buttons, keyboard / pad navigation, progress save for CONTINUE), menu-scene.js (the title's own 3D set, `MenuScene`)   (presentation only)
 ```
 
 `src/levels/` holds level files (plain JSON, see `level.md`); `scenes.js` lists them, `Game.loadScene(name)` hands one to the systems.
@@ -106,6 +106,7 @@ set, not a level: STEM-00 (Rig + soldier parts, `SEATED` pose in rig.js) seated 
 `panelTexture`, shader windows, about half ruined), Spire Cathedrals, CERBERUS (a quadruped war mech standing on the horizon, three heads = a sensor
 head and two shoulder gun pods, its own haze/rim shader, breathing violet eyes; towers in its sightline are capped), drones from `droneLook` (drone.js) instanced per material, roof dressing from the prop builders (props.js), haze veils,
 smoke, searchlights. About 51 draws and 375k triangles; prefers-reduced-motion stops the camera drift and slows the rest. Menu sounds: `audio.ui(kind)`.
+Cursor: while a controller is the device in use (`input.device === 'pad'`) the shell sets `body.pad` and style.css hides the mouse cursor everywhere (menus, canvas); a real mouse move (> 3 px, menus included) switches back to `kbm` and shows it.
 
 Modes: a system may declare a `group` (`engine.add({ group: 'play' })`); the engine runs it only while `engine.mode` equals it
 (`engine.setMode(name)`, default `'play'`), no group = always. `player`, `weapon`, `playerPose`, `encounter`, `pickups` and `camera`

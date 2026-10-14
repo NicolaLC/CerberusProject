@@ -8,6 +8,7 @@ import { Grid } from './grid.js';
 import { onProblem } from './encounter.js';
 import { PROP_PIECES, propMaterials, animateProps } from './props.js';
 import { ARCH_PIECES } from './arch.js';
+import { INTERIOR_PIECES, interiorMaterials } from './interior.js';
 
 // Static level: axis-aligned boxes only (collision, cover and shadows depend on that).
 // Coordinates: x = east, z = south, y = up. Floor is y = 0.
@@ -102,6 +103,7 @@ export const WORLD_PIECES = {
   },
   ...PROP_PIECES, // set dressing: prop.console, prop.crate, prop.cables, prop.pipes, prop.puppetRack, prop.arm, prop.cradle, prop.bench, prop.hazard, prop.panel (props.js)
   ...ARCH_PIECES, // architectural dressing: arch.cove, arch.rib, arch.panelling, arch.bulkhead, arch.floorChannel, arch.coffers, arch.catwalk (arch.js)
+  ...INTERIOR_PIECES, // interior kit: arch.corridor (interior.js)
 };
 
 const COLLIDER_CELL = 4; // m, grid cell of the collider hash (arena boxes are 1-10 m; bigger spans use several cells)
@@ -162,7 +164,8 @@ export class World {
     this.propMats = gunMaterials();
     this.dressing = propMaterials(); // the prop.* set dressing materials (props.js); panels add theirs to `keep` as they appear
     const dressing = Object.values(this.dressing).filter((m) => m.isMaterial);
-    this.keep = new Set([...Object.values(this.mats), ...Object.values(this.propMats), ...dressing, ...Object.values(this.skins).flatMap((t) => Object.values(t))]); // shared across levels: never disposed with a level
+    this.interior = interiorMaterials(); // the interior kit's materials (interior.js): painted normal / roughness maps, corridor env map
+    this.keep = new Set([...Object.values(this.mats), ...Object.values(this.propMats), ...dressing, ...Object.values(this.interior), ...Object.values(this.skins).flatMap((t) => Object.values(t))]); // shared across levels: never disposed with a level
     this.#buildSky();
     this.#buildLights();
     this.setLightPool(lights);
@@ -340,7 +343,7 @@ export class World {
 
   // Textures of the permanent materials (grid textures, skins, gun props), for an upfront GPU upload (game.js).
   permanentTextures() {
-    return [...new Set([...this.keep].map((m) => m.map).filter(Boolean))];
+    return [...new Set([...this.keep].flatMap((m) => [m.map, m.normalMap, m.roughnessMap]).filter(Boolean))];
   }
 
   // Material of a piece: params.mat names an entry of this.mats, params.faces overrides single box sides. A level with
