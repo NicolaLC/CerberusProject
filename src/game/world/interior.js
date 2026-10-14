@@ -782,7 +782,7 @@ function corridor(p) {
       if (sideW > 0.02) for (const s of [1, -1]) B('hull', sideW, H - R - 0.01, 0.06, s * (ex + sideW / 2), R + 0.01 + (H - R - 0.01) / 2, z);
       const ty = R + dh + 0.92; // the bulkhead's outline top
       if (H - ty > 0.02) B('hull', 2 * ex + 0.02, H - ty, 0.06, 0, ty + (H - ty) / 2, z);
-      for (const s of [1, -1]) B('stripe', 0.12, H - R - 0.4, 0.07, s * (ex + 0.06), R + 0.02 + (H - R - 0.4) / 2, z + 0.01);
+      for (const s of [1, -1]) B('stripe', 0.12, H - R - 0.4, 0.07, s * (ex + 0.07), R + 0.02 + (H - R - 0.4) / 2, z + 0.01); // 1 cm outboard of the side panels' inner edge (flush faces z-fight)
       if (H - ty > 0.2) lamp(2.4, ty + (H - ty) / 2);
       // light pool: a soft wash over the door and the deck in front of it (additive, no light), so the gate reads from the entrance
       B('pool', 2 * ex + 1.2, dh + 1.8, 0.004, 0, R + (dh + 1.8) / 2, z + 0.2);
