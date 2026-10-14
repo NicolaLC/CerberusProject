@@ -122,16 +122,15 @@ const SAMPLES = {
   missionComplete: [missionComplete, 0.7, 0],
   droneLoop: [droneLoop, 0.35, 0], // one looped voice, gain by the nearest alive drone (DRONE_RANGE)
   ambient: [ambientLoop, 0.3, 0], // looped from the first gesture on (mood())
-  music: [combatMusic, 0.35, 0], // looped while fighting (mood())
-  bossMusic: [bossMusic, 0.35, 0], // looped from boss:wake to boss:dead, instead of `music`
+  music: [combatMusic, 0.5, 0], // looped while fighting (mood())
+  bossMusic: [bossMusic, 0.38, 0], // looped from boss:wake to boss:dead, instead of `music`
   menuMusic: [menuMusic, 0.35, 0], // looped while the start / pause panel is up (engine paused)
 };
 // Combat music: fades in on a combat signal (COMBAT_ON) and out `hold` s after the last one, sooner when the fight ends
 // (COMBAT_OFF). While the boss is awake its own track plays instead (crossfaded). The ambience ducks under the music.
-// Fades are time constants (s) for setTargetAtTime. Each track loops at loopEnd, a whole number of bars at 174 BPM: the
-// combat track before its own fade-out (~55 s), the boss track (75 s, no fade) on its last full bar.
-const BAR = (4 * 60) / 174;
-const MUSIC = { hold: 10, fadeIn: 0.5, fadeOut: 1.3, duck: 0.5, loopEnd: { music: 39 * BAR, bossMusic: 54 * BAR } };
+// Fades are time constants (s) for setTargetAtTime. Every track file is a baked seamless loop (its last bar crossfaded
+// into its first, see instructions/sfx-prompts.md), so it loops whole.
+const MUSIC = { hold: 10, fadeIn: 0.5, fadeOut: 1.3, duck: 0.5 };
 const COMBAT_ON = ['bolt:fired', 'player:hurt', 'group:wake', 'encounter:wake', 'boss:wake', 'trooper:flank', 'alarm:on'];
 const COMBAT_OFF = ['arena:clear', 'boss:dead', 'mission:complete', 'mission:failed', 'alarm:clear'];
 // Boot intro sound cues, in s from `intro:start`: the surge, the core right after it; the rise (5 s) ends with the intro.
@@ -579,7 +578,6 @@ export class Audio {
     if (want && !this.tracks[want]) {
       const src = this.#loop(want, 0); // starts silent, faded in below; null until decoded (retried next frame)
       if (!src) return;
-      if (MUSIC.loopEnd[want]) src.loopEnd = MUSIC.loopEnd[want];
       this.tracks[want] = src;
       this.track = undefined; // forces the fade below
     }

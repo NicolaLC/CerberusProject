@@ -611,7 +611,7 @@ loading fails.
   steps), jet whoosh + thump, landing thud, pickup, good-reload click.
 
 **Music (recorded, ElevenLabs Music):** a slow dark ambient title theme (70 BPM) while the start / pause panel is
-up; sci-fi drum and bass (174 BPM) in combat, held 10 s after the last combat event; a heavier boss track from the
+up; an epic orchestral military score (strings, brass, wordless male choir, war drums and distorted guitar, 140 BPM) in combat, held 10 s after the last combat event; a darker, heavier boss track (150 BPM) from the
 boss's wake to its death. Tracks crossfade, the facility ambience ducks under them. There is no voice.
 
 ## 13. Open questions and ideas
