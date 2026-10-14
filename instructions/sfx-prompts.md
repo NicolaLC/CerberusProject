@@ -60,7 +60,7 @@ out. All are peak-normalised to -3 dBFS, except `move` and `slider` at -6 dBFS.
 | `ui-deny.mp3` | disabled / not allowed | 0.3 s | A dull low electrical buzz of a rejected input on an old military terminal, short and flat, no beep, close, dry | recorded |
 | `ui-slider.mp3` | slider / dropdown step | 0.08 s | A tiny crisp detent click of a heavy rotary dial turning one notch on a military control panel, close, dry, no reverb (influence 0.6) | recorded |
 | `ui-start.mp3` | NEW GAME / CONTINUE / scene launch | 1.2 s | A deep powerful power-up thrum of a combat machine's reactor spinning up, rising low hum and air rush, ending in a heavy metal latch clamping shut, ominous industrial sci-fi, close, dry | recorded |
-| `ui-warn.mp3` | overwrite-progress confirm | 0.5 s | A short two-tone warning alert on a grim military console, a high then lower muted buzzy klaxon tone, urgent but restrained, close, dry | recorded |
+| `ui-warn.mp3` | overwrite-progress confirm | 0.5 s | Military console caution alert: two short separate low electronic warning pulses with a brief silence between them, each pulse a soft muffled synthetic tone with a metallic relay click at its start, dark, serious and restrained, like a cockpit caution signal, not a game show buzzer, no horn, no brass, close, dry (0.6 s, influence 0.7). The model gives one hit, not two: the file is the first 0.2 s of the lowest take (energy at 75-80 Hz), played twice 220 ms apart, peak -3 dBFS. Replaced the first take (a high-low buzzy klaxon), which sounded like a clown trumpet. | recorded |
 
 
 
