@@ -268,7 +268,7 @@ const r = await p.evaluate(() => {
     const n = { gates: world.gates.length, cols: world.colliders.length, kids: world.scene.children.length };
     const h = world.spawn({ id: 'kit.gate', pos: [GX, 0, GZ + 8], params: { on: 'trigger:t2' } }, { gizmo: true });
     const I = world.gates.at(-1);
-    ok('gizmo gate: inert, shut, with a ghost of its travel', I.inert && world.react('trigger:t2') === 0 && I.open === 0 && I.mesh.children.length === 1 && I.mesh.children[0].position.y === 4, I.mesh.children.length);
+    ok('gizmo gate: inert, shut, with a ghost of its travel', I.inert && world.react('trigger:t2') === 0 && I.open === 0 && I.mesh.children.filter((c) => c.userData.gizmo).length === 1 && I.mesh.children.find((c) => c.userData.gizmo).position.y === 4, I.mesh.children.length); // the other child: the slab dressing (bands, seams)
     world.despawn(h);
     ok('despawn frees the gate (list, collider, scene)', world.gates.length === n.gates && world.colliders.length === n.cols && world.scene.children.length === n.kids, JSON.stringify([world.gates.length, n.gates, world.colliders.length, n.cols]));
     const rec = (params) => throws(() => gate(params));

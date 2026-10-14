@@ -62,7 +62,8 @@ console.log(r);
 const q = await p.evaluate(async () => {
   const g = window.game;
   const { applyQuality } = await import('/src/game/view/quality.js');
-  const out = {};
+  const { EFFECTS } = await import('/src/game/view/post.js'); // post effects (bloom, grade) are switched off by an owner decision
+  const out = { effects: EFFECTS };
   for (const name of ['low', 'ultra', 'high']) {
     applyQuality(name, g);
     g.engine.step(1 / 60);
@@ -86,8 +87,9 @@ expect('world and hitbox proxies are not drawn', r.proxiesHidden && r.hitMeshesH
 expect('rig proxies stay out of the per-frame matrix updates', r.proxiesFrozen);
 expect('low preset: no MSAA, no bloom, 2048 shadows, 1x', q.low.samples === 0 && !q.low.bloom && q.low.shadow === 2048 && q.low.maxScale <= 1 && q.low.calls > 0);
 expect('ultra preset: supersampled, MSAA >= high (capped by the GPU), 4096 shadows', q.ultra.maxScale > q.high.maxScale && q.ultra.samples >= q.high.samples && q.ultra.shadow === 4096);
-expect('only the scene target is multisampled', Object.values(q).every((v) => v.other === 0));
-expect('high preset restores the defaults', q.high.samples === 4 && q.high.bloom && q.high.shadow === 4096 && q.high.calls > 0);
+const { effects, ...presets } = q;
+expect('only the scene target is multisampled', Object.values(presets).every((v) => v.other === 0));
+expect('high preset restores the defaults (bloom only while post effects are on)', q.high.samples === 4 && q.high.bloom === effects && q.high.shadow === 4096 && q.high.calls > 0);
 expect('no page errors', errors.length === 0);
 await b.close();
 process.exit(fail.length ? 1 : 0);

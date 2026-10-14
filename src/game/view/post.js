@@ -72,7 +72,7 @@ const EXPOSURE = { outside: 1.0, inside: 1.9, rate: 1.2 };
 // Owner decision (2026-10-13): post effects off for now (grain and bloom turned dark rooms to mush). The composer
 // still runs for MSAA, HDR and tone mapping; bloom and the grade pass (vignette, CA, grain, flashes) are skipped.
 // ponytail: one switch, make it a graphics setting if effects come back per user choice.
-const EFFECTS = false;
+export const EFFECTS = false;
 
 export class Post {
   constructor(renderer, scene, camera, events) {

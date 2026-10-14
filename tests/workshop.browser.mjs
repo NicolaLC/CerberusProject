@@ -1056,15 +1056,15 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   const meta = await ev(() => { const g = window.game; return g.registry.ids().map((id) => [id, (g.registry.meta(id).fields ?? []).map((f) => f.key)]); });
   expect('  every registry id has well-formed fields (or none)', await ev(() => window.game.registry.ids().every((id) => (window.game.registry.meta(id).fields ?? []).every((f) => f.key && ['number', 'vec2', 'vec3', 'text', 'bool', 'enum', 'list'].includes(f.type) && (f.type !== 'enum' || f.options)))), JSON.stringify(meta));
   const mid = await ev(() => { const t = T.tool(); const g = window.game; const out = {}; for (const id of ['marker.spawn', 'marker.entry', 'trigger.volume', 'enemy.mover', 'kit.platform', 'pickup.light']) { const i = t.place(id, [-20, 0, 44]); t.select(i); out[id] = [...document.querySelectorAll('#workshop-inspector [data-key]')].map((e) => e.dataset.key).join(','); } for (let k = 0; k < 6; k++) t.undo(); t.select(-1); return out; });
-  expect('  encounter, enemy, kit and pickup pieces show their own fields', mid['trigger.volume'] === 'name,size,event,once,wakeGroup,spawnGroup' && mid['marker.entry'] === 'name,group,enemies' && mid['enemy.mover'] === 'name,group,dormant,to,speed,dropGun,dropAmmo,dropOnce' && mid['marker.spawn'] === 'name' && mid['pickup.light'] === 'name' && mid['kit.platform'].startsWith('name,size,height,stairs,parapets,mat'), JSON.stringify(mid));
+  expect('  encounter, enemy, kit and pickup pieces show their own fields', mid['trigger.volume'] === 'name,size,event,once,wakeGroup,spawnGroup,loadout' && mid['marker.entry'] === 'name,group,enemies' && mid['enemy.mover'] === 'name,group,dormant,armored,to,speed,dropGun,dropAmmo,dropOnce' && mid['marker.spawn'] === 'name' && mid['pickup.light'] === 'name' && mid['kit.platform'].startsWith('name,size,height,stairs,parapets,mat'), JSON.stringify(mid));
   expect('  nothing selected: inspector hidden', await ev(() => document.querySelector('#workshop-inspector').style.display === 'none'));
 
   // type + Enter: doc and scene change, one undo step
   await ev((i) => T.tool().select(i), box);
   const before = await ev(() => ({ doc: T.doc(), undo: T.tool().undoStack.length, h: T.tool().items.length }));
   await typeIn('size', '6, 2, 1.5');
-  const a = await ev((i) => { const t = T.tool(); return { p: t.doc.pieces[i], undo: t.undoStack.length, ok: t.verify().ok, size: t.items[i].thing.objects[0].geometry.parameters, val: document.querySelector('#workshop-inspector [data-key="size"]').value }; }, box);
-  expect('editing size (type + Enter) changes the doc and rebuilds the scene piece, as one command', JSON.stringify(a.p.params.size) === '[6,2,1.5]' && a.undo === before.undo + 1 && a.ok && a.size.width === 6 && a.size.height === 2 && a.size.depth === 1.5, JSON.stringify(a));
+  const a = await ev((i) => { const t = T.tool(); return { p: t.doc.pieces[i], undo: t.undoStack.length, ok: t.verify().ok, size: t.items[i].thing.objects[0].geometry.parameters, col: t.items[i].thing.objects[0].userData.collider?.box.max.y, val: document.querySelector('#workshop-inspector [data-key="size"]').value }; }, box);
+  expect('editing size (type + Enter) changes the doc and rebuilds the scene piece, as one command', JSON.stringify(a.p.params.size) === '[6,2,1.5]' && a.undo === before.undo + 1 && a.ok && a.size.width === 6 && a.size.height === 2.3 && a.col === 2 && a.size.depth === 1.5, JSON.stringify(a)); // a box >= 1.5 m on the floor sinks 0.3 m (mesh only, World.box)
   expect('  the field shows the stored value', a.val === '6, 2, 1.5');
   await p.selectOption(field('mat'), 'high');
   await p.selectOption(field('cover'), '');
