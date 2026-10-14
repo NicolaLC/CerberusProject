@@ -109,6 +109,7 @@ const r = await p.evaluate(() => {
     out.flankerFired = fired;
   }
   out.allInRange = enemies.all.filter((t) => t.kind === 'trooper' && t.alive && t.alerted && t.spot).every((t) => t.spot.pos.distanceTo(player.pos) <= 34.5);
+  out.spotRanges = enemies.all.filter((t) => t.kind === 'trooper' && t.alive && t.alerted && t.spot).map((t) => `${t.state} ${t.spot.pos.distanceTo(player.pos).toFixed(1)} nos ${t.noSight}`);
   return out;
 });
 
@@ -147,6 +148,30 @@ const d = await p.evaluate(() => {
   out.awake = sh.awake && tr.awake && !sh.dormant && !tr.dormant && live.awake && !plain.awake;
   step(8);
   out.fires = fired > 0;
+  // a woken shooter with the player behind a wall stays down (no blind pop-ups), and comes up once the player is in sight
+  for (const e of [tr, live]) e.alive = false;
+  enemies.dirty = true;
+  step(4); // its current exposure ends
+  const wall = g.world.box(2, 0, -9.3, 6, 4, 0.6, g.world.meshes[0].material);
+  wall.updateMatrixWorld();
+  step(1);
+  let ups = 0;
+  let last = sh.state;
+  for (let i = 0; i < 8 * 60; i++) {
+    engine.step(1 / 60);
+    if (last === 'hidden' && sh.state === 'up') ups++;
+    last = sh.state;
+  }
+  out.blindUps = ups;
+  wall.position.y = -50; // out of the way (the collider no longer matters to a sight ray once the mesh moved)
+  wall.updateMatrix();
+  wall.updateMatrixWorld();
+  let rose = false;
+  for (let i = 0; i < 5 * 60; i++) {
+    engine.step(1 / 60);
+    rose ||= sh.state === 'up';
+  }
+  out.upInSight = rose;
   // dormant enemies can die
   const dead = mk('enemy.shooter', 6, { group: 'dz2', dormant: true });
   for (let i = 0; i < 10 && dead.alive; i++) dead.damage(50, dead.pos.clone().setY(1), new dead.pos.constructor(0, 0, 1), 'body');
@@ -166,6 +191,7 @@ expect('dormant: a shooter in range and a trooper in sight stay inert for 15 s',
 expect('dormant: they take damage without waking, nothing fires', d.hit && d.plainNotAwake);
 expect('dormant: wakeGroup wakes the dormant ones (3), not an ordinary puppet', d.woke === 3 && d.awake);
 expect('dormant: the woken shooter / trooper now fire', d.fires);
+expect('shooter: the player behind a wall -> it stays down (no blind pop-ups), in sight -> it comes up', d.blindUps === 0 && d.upInSight);
 expect('dormant: a dormant enemy can be killed', d.dies);
 expect('dormant: without a group it fails validation with a clear message', /dormant/.test(d.noGroup ?? '') && /group/.test(d.noGroup ?? '') && d.okGroup === null && d.okPlain === null);
 console.log(r);

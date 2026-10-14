@@ -438,8 +438,9 @@ down. Destroyed enemies stay destroyed until the page is reloaded.
   (shooter), small violet sensors, bone-and-black bullseye
   on the chest.
 - Static and mover puppets never attack. Each puppet gets 2 random body parts marked as weak spots (x3).
-- **Shooter cycle:** hidden, up, telegraph (visor glow 0.45 s), 3 bolts, hide. Only engages a player within 30 m
-  with line of sight.
+- **Shooter cycle:** hidden, up, 2 to 3 bursts (telegraph: visor glow 0.45 s, then 3 bolts; 0.6 to 1.1 s apart), hide for
+  2 to 3.6 s. Only engages a player within 30 m with line of sight, and only rises when it would see the player: a player
+  in cover gets no blind pop-ups. Losing sight keeps it up 0.8 s more before it ducks.
 - **Bolts:** 34 m/s, 7 damage, collide with the world and the player.
 
 ### 8.2 Troopers
@@ -459,9 +460,11 @@ They are the cover-versus-cover test.
   28 m from the player (34 m when retreating; ideally about 15 m), reachable in a straight line or around its own
   box (one corner waypoint; no general pathfinding). Spots are reserved one trooper each.
 - Low cover: crouch, stand up to shoot. High cover: hide at an end, step 0.8 m out to shoot.
-- If there is no line of sight twice, the spot is marked bad for 6 s and the trooper moves.
-- Relocates when flanked (spot stops protecting), the player comes within 5 m, after 2 to 4 bursts, or below 40%
-  health (retreats farther). Hit while exposed: 50% chance to duck back early. No cover reachable: fights in the
+- Cover cycle: 1.8 to 3.4 s down, then up for 1 to 3 bursts while the player stays in sight. It only comes up when the
+  firing position sees the player; with no line of fire it stays down and looks again; after 3 such looks (or no sight
+  twice on peeking) the spot is marked bad for 6 s and the trooper moves.
+- Relocates when flanked (spot stops protecting), the player comes within 5 m, after 3 to 6 bursts, or below 40%
+  health (retreats farther). Hit after 0.6 s exposed: 35% chance to duck back early. No cover reachable: fights in the
   open.
 - Cover is re-checked continuously, including while running to a spot.
 - Faces narrower than 0.8 m get no spots (wall ends are for peeking, not hiding).

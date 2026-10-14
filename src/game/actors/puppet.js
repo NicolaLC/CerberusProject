@@ -10,6 +10,11 @@ const HIDE = -0.95; // rig lift when retracted behind low cover
 export const HEALTH = { default: 100, shooter: 120 }; // hit points by kind
 const ARMORED = 0x5a6066; // armored puppet: bare dark plate steel, no ochre paint
 export const ENGAGE_RANGE = 30; // m: shooters only pop up and fire at a player this close (with line of sight)
+// Shooter cycle (s): hidden -> up -> (telegraph -> burst) x bursts -> hidden. It only rises when the raised emitter would see the
+// player (no blind pop-ups at a player in cover): hidden, it looks again every `recheck`. Up, it stays for 2-3 bursts with a
+// pause between them; losing sight keeps it up for `lostGrace` before it ducks (hysteresis: no flicker on a peeking player).
+export const SHOOTER = { hide: [2.0, 3.6], recheck: [0.5, 0.9], rise: 0.5, telegraph: 0.45, shots: 3, shotGap: 0.16, bursts: [2, 3], burstGap: [0.6, 1.1], lostGrace: 0.8 };
+const rand = ([a, b]) => a + Math.random() * (b - a);
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
@@ -102,32 +107,27 @@ export class Puppet extends EnemyBody {
     const want = Math.atan2(target.x - this.pos.x, target.z - this.pos.z);
     this.yaw += wrapAngle(want - this.yaw) * damp(4, dt);
 
+    const S = SHOOTER;
     this.timer -= dt;
     switch (this.state) {
       case 'hidden':
         this.lift += (HIDE - this.lift) * damp(8, dt);
-        if (this.timer <= 0 && active) {
+        if (this.timer > 0) break;
+        if (active && this.#hasLOS(target)) {
           this.state = 'up';
-          this.timer = 0.5;
-        }
+          this.timer = S.rise;
+          this.burstsLeft = Math.round(rand(S.bursts));
+        } else this.timer = rand(S.recheck); // no line of fire: stay down, look again shortly
         break;
       case 'up':
         this.lift += (0 - this.lift) * damp(10, dt);
-        if (this.timer <= 0) {
-          if (this.#hasLOS(target)) {
-            this.state = 'telegraph';
-            this.timer = 0.45;
-          } else {
-            this.state = 'hidden';
-            this.timer = 1 + Math.random();
-          }
-        }
+        if (this.timer <= 0) this.#nextBurst(target, active);
         break;
       case 'telegraph':
-        this.visor.emissiveIntensity = VISOR_REST + (0.45 - this.timer) * 18;
+        this.visor.emissiveIntensity = VISOR_REST + (S.telegraph - this.timer) * 18;
         if (this.timer <= 0) {
           this.state = 'fire';
-          this.shotsLeft = 3;
+          this.shotsLeft = S.shots;
           this.timer = 0;
         }
         break;
@@ -135,25 +135,42 @@ export class Puppet extends EnemyBody {
         if (this.timer <= 0) {
           this.#fire(target);
           this.shotsLeft--;
-          this.timer = 0.16;
+          this.timer = S.shotGap;
           if (this.shotsLeft <= 0) {
-            this.state = 'hold';
-            this.timer = 0.6;
             this.visor.emissiveIntensity = VISOR_REST;
+            this.burstsLeft--;
+            this.state = 'up'; // stays up between bursts
+            this.timer = this.burstsLeft > 0 ? rand(S.burstGap) : 0.6; // last burst: a beat before ducking
           }
         }
         break;
-      case 'hold':
-        if (this.timer <= 0) {
-          this.state = 'hidden';
-          this.timer = 1.6 + Math.random() * 1.6;
-        }
+      case 'lost': // up, but the player went out of sight: wait a moment before ducking
+        if (this.timer <= 0) this.#nextBurst(target, active);
         break;
     }
   }
 
+  // Up with nothing to wait for: another burst if any are left and the player is in sight, else a grace pause, else down.
+  #nextBurst(target, active) {
+    const S = SHOOTER;
+    const sees = active && this.#hasLOS(target);
+    if (sees && this.burstsLeft > 0) {
+      this.state = 'telegraph';
+      this.timer = S.telegraph;
+    } else if (!sees && this.burstsLeft > 0 && this.state !== 'lost') {
+      this.state = 'lost';
+      this.timer = S.lostGrace;
+    } else {
+      this.state = 'hidden';
+      this.timer = rand(S.hide);
+    }
+  }
+
+  // Line of sight from the emitter as it is when raised (a hidden shooter checks before rising).
   #hasLOS(target) {
-    return sightRay(this.emitter.getWorldPosition(_u), target, this.ctx.world.meshes);
+    const from = this.emitter.getWorldPosition(_u);
+    from.y -= this.lift;
+    return sightRay(from, target, this.ctx.world.meshes);
   }
 
   #fire(target) {

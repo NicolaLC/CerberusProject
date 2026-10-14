@@ -172,7 +172,10 @@
   trackpad = friction + pull.
 
 ## Puppets (`game/actors/enemies.js`)
-- static 100hp, mover 100hp (rail), shooter 120hp: hidden → up → telegraph (visor glow 0.45s) → 3 bolts → hide.
+- static 100hp, mover 100hp (rail), shooter 120hp: hidden → up → (telegraph (visor glow 0.45s) → 3 bolts) × 2-3 → hide
+  (`SHOOTER` in puppet.js). It only rises when its raised emitter would see the player: a player hiding behind cover gets no
+  blind pop-ups, it stays down and looks again every 0.5-0.9 s. Up, the bursts are 0.6-1.1 s apart; losing sight keeps it up
+  0.8 s more (a peeking player doesn't make it flicker), then 0.6 s after the last burst it hides for 2-3.6 s.
 - Weak spots: 2 random body parts per puppet get a pulsing magenta patch (zone `weak`, ×3 damage).
 - Bolts: 34 m/s, 7 dmg, collide with world and the player capsule.
 - Death breaks the rig parts into debris that fades after 5s. Destroyed puppets stay destroyed until the page
@@ -216,10 +219,12 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
   6-28 m from the player (34 m when retreating: never out of the fight), ideally ~15 m, reachable in a straight line or around the spot's own box (one corner
   waypoint; no general pathfinding, same floor level only). Spots are reserved, one trooper each.
 - Low cover: crouch, stand up to shoot over it. High cover: hide at an end, step 0.8 m out to shoot.
-- Cycle: cover 1-2.2 s → peek → aim (visor flares 0.5 s) → 3-4 bolts → cover. No line of sight twice →
-  mark the spot bad for 6 s and move.
-- Relocate when flanked (spot stops protecting), the player is within 5 m, after 2-4 bursts, or once below
-  40% health (retreat farther). Hit while exposed: 50% chance to duck back early. No cover reachable: fight
+- Cycle (`TUNING` in trooper.js): cover 1.8-3.4 s → peek → aim (visor flares 0.5 s) → 3-4 bolts, 1-3 bursts per peek
+  (0.5-0.9 s re-aim between them, each needs the player still in sight) → cover. It only peeks when the firing position
+  sees the player (`CoverMap.sees`): no line of fire = stay down and look again every 0.6-1.0 s; 3 looks in a row without
+  one (or no sight twice on peeking) → mark the spot bad for 6 s and move. A spot beyond the retreat limit (34 m) is left.
+- Relocate when flanked (spot stops protecting), the player is within 5 m, after 3-6 bursts, or once below
+  40% health (retreat farther). Hit while exposed for at least 0.6 s: 35% chance to duck back early (1.2-2 s). No cover reachable: fight
   in the open and keep looking.
 - No protected spot within 28 m of the player: accept one up to 34 m (the retreat limit) rather than stand in the
   open; later relocations work closer.

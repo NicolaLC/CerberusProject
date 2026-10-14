@@ -8,8 +8,9 @@ import { damp, lerpAngle } from '../../engine/math.js';
 //   idle   -> spot the player (range + line of sight), get shot, or hear a squadmate -> take cover
 //   move   -> run to a cover spot that blocks the player's line of fire (CoverMap)
 //   cover  -> crouch behind low cover / hide behind high cover
-//   peek   -> stand up (low) or step out to the edge (high); no line of sight twice -> relocate
-//   aim    -> telegraph: visor flares, then a 3-4 bolt burst; back to cover
+//   peek   -> stand up (low) or step out to the edge (high), only if the firing position sees the player (else stay down and
+//             look again; no line of fire `blindChecks` times -> relocate)
+//   aim    -> telegraph: visor flares, then a 3-4 bolt burst; 1-3 bursts per peek (the player still in sight), then cover
 // They relocate when the spot stops protecting them (flanked), the player gets close, after a few
 // bursts, or once when badly hurt (retreat). Getting hit while exposed can suppress them back into cover.
 // No cover reachable: they fight in the open and keep looking.
@@ -30,13 +31,19 @@ export const TUNING = {
   engage: 30, // m: shoot within this range
   alertRadius: 22, // squadmates within this range join in
   tooClose: 5, // m: player this close -> leave the spot
-  burstsPerSpot: [2, 4],
-  coverTime: [1.0, 2.2],
+  burstsPerSpot: [3, 6],
+  burstsPerPeek: [1, 3], // bursts fired from one exposure while the player stays in sight
+  burstGap: [0.5, 0.9], // s up between those bursts (re-aims, visor flares again)
+  coverTime: [1.8, 3.4], // s down between exposures
+  recheck: [0.6, 1.0], // s: down with no line of fire from the firing position, look again after this (no blind pop-up)
+  blindChecks: 3, // that many looks in a row without a line of fire -> the spot is bad for 6 s, relocate
   peekTime: 0.4,
   aimTime: 0.5,
   shotGap: 0.14,
   shots: [3, 4],
-  suppressChance: 0.5,
+  suppressChance: 0.35,
+  suppressAfter: 0.6, // s exposed before a hit can make it duck (no flicker: a fresh pop-up commits to its burst)
+  suppressTime: [1.2, 2.0], // s down after ducking from a hit
   retreatAt: 0.4, // health fraction
   spreadBase: 0.3,
   spreadPerMeter: 0.012,
@@ -131,8 +138,8 @@ export class Trooper extends EnemyBody {
   onHit(amount, dir) {
     if (!this.alerted) this.alert();
     // exposed and taking fire: duck back
-    if ((this.state === 'peek' || this.state === 'aim') && this.spot && Math.random() < this.t.suppressChance) {
-      this.#enterCover(0.8 + Math.random() * 0.6);
+    if ((this.state === 'peek' || this.state === 'aim') && this.spot && this.exposed >= this.t.suppressAfter && Math.random() < this.t.suppressChance) {
+      this.#enterCover(rand(this.t.suppressTime));
     }
     if (!this.retreated && this.health < this.maxHealth * this.t.retreatAt) {
       this.retreated = true;
@@ -256,13 +263,23 @@ export class Trooper extends EnemyBody {
           this.#relocate();
           break;
         }
-        if (!this.ctx.cover.protects(this.spot, target) || dist < t.tooClose || this.bursts >= this.burstLimit) {
+        // (the player ran off beyond the retreat limit: the spot is out of the fight, move up)
+        if (!this.ctx.cover.protects(this.spot, target) || dist < t.tooClose || dist > this.ctx.cover.t.maxRange + 6 || this.bursts >= this.burstLimit) {
           this.#relocate();
+          break;
+        }
+        // no line of fire from the firing position (the player is behind cover): stay down and look again, no blind pop-up
+        if (!this.ctx.cover.sees(this.spot, target)) {
+          if (++this.noSight >= t.blindChecks) {
+            this.spot.badUntil = this.ctx.time + 6;
+            this.#relocate();
+          } else this.timer = rand(t.recheck);
           break;
         }
         // pop up / step out
         this.state = 'peek';
         this.timer = t.peekTime;
+        this.volley = randInt(t.burstsPerPeek);
         break;
 
       case 'peek':
@@ -283,8 +300,13 @@ export class Trooper extends EnemyBody {
 
       case 'aim':
         combat = true;
-        this.visor.emissiveIntensity = VISOR_REST + (t.aimTime - Math.max(0, this.timer)) * 16; // telegraph
+        this.visor.emissiveIntensity = VISOR_REST + Math.max(0, t.aimTime - Math.max(0, this.timer)) * 16; // telegraph
         if (this.timer <= 0) {
+          // a follow-up burst needs the player still in sight from the muzzle, else back down
+          if (this.volley > 0 && this.spot && !(live && dist < t.engage && this.#canSee(this.muzzle.getWorldPosition(_v), target))) {
+            this.#enterCover(rand(t.coverTime));
+            break;
+          }
           this.state = 'fire';
           this.shotsLeft = randInt(t.shots);
           this.timer = 0;
@@ -299,8 +321,11 @@ export class Trooper extends EnemyBody {
           if (--this.shotsLeft <= 0) {
             this.visor.emissiveIntensity = VISOR_REST;
             this.bursts++;
-            if (this.spot) this.#enterCover(rand(t.coverTime));
-            else this.#relocate(); // fighting in the open: look for cover again
+            if (!this.spot) this.#relocate(); // fighting in the open: look for cover again
+            else if (--this.volley > 0 && this.bursts < this.burstLimit) {
+              this.state = 'aim'; // stay up: next burst after a short re-aim
+              this.timer = t.aimTime + rand(t.burstGap);
+            } else this.#enterCover(rand(t.coverTime));
           }
         }
         break;
@@ -319,6 +344,7 @@ export class Trooper extends EnemyBody {
 
     // stance: crouched behind low cover except while popping up to shoot
     const exposed = this.state === 'peek' || this.state === 'aim' || this.state === 'fire';
+    this.exposed = exposed ? (this.exposed ?? 0) + dt : 0;
     const crouched = this.spot && this.spot.type === 'low' && !moving && !exposed && this.state !== 'idle';
     this.crouch += ((crouched ? 1 : 0) - this.crouch) * damp(10, dt);
     // high cover: step sideways to the edge while exposed
