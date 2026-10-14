@@ -94,6 +94,8 @@ Title (launch, and QUIT TO MAIN MENU): CONTINUE (only with a save) / NEW GAME (w
 DEVELOPMENT (scene buttons `#scenes`, debug keys) / CREDITS (static HTML in index.html, kept in sync with `credits.md`) / QUIT TO
 DESKTOP (desktop build, bottom-left; Esc / B on the title). Pause (Esc / pad Menu in play): RESUME (`#start`, re-locks the pointer)
 / SETTINGS / QUIT TO MAIN MENU / QUIT TO DESKTOP. Pages are `#overlay .page[data-page]`; items `data-go` (sub-page) or `data-act`.
+Loading screen (`#loading`, `Shell #load`): NEW GAME / CONTINUE / a Development scene show it with the scene title, give it two
+frames to paint, then run the synchronous `loadScene` and start play; menu input is ignored meanwhile. `?debug` loads without it.
 Progress: `cerberus.progress` = { scene, checkpoint } (scenes.js), written when a campaign scene (`CAMPAIGN`) starts and on
 `checkpoint:reached`. CONTINUE restarts the saved scene from its beginning: mission state (objectives, gates, pickups) is not
 saved, so the checkpoint id is recorded but not resumed yet.

@@ -44,12 +44,14 @@ export class Shell {
       b.textContent = level.title ?? key;
       b.addEventListener('click', () => {
         this.#ui('start');
-        host.loadScene(key);
-        const url = new URL(location.href);
-        url.searchParams.set('scene', host.sceneName());
-        history.replaceState(null, '', url);
-        saveProgress(host.sceneName());
-        this.#play(this.padClick);
+        const pad = this.padClick;
+        this.#load(key, () => {
+          const url = new URL(location.href);
+          url.searchParams.set('scene', host.sceneName());
+          history.replaceState(null, '', url);
+          saveProgress(host.sceneName());
+          this.#play(pad);
+        });
       });
       this.sceneButtons.append(b);
     }
@@ -155,13 +157,16 @@ export class Shell {
 
   #act(name, pad) {
     const { host } = this;
+    if (this.loading) return;
     if (name === 'continue') {
       const p = loadProgress();
       if (!p) return this.show('title');
       this.#ui('start');
-      host.loadScene(p.scene); // the scene from its start: mission state is not saved (scenes.js)
-      saveProgress(p.scene);
-      this.#play(pad);
+      this.#load(p.scene, () => {
+        // the scene from its start: mission state is not saved (scenes.js)
+        saveProgress(p.scene);
+        this.#play(pad);
+      });
     } else if (name === 'new') {
       if (loadProgress()) {
         this.#ui('warn');
@@ -170,9 +175,10 @@ export class Shell {
     } else if (name === 'new-confirm') {
       this.#ui('start');
       clearProgress();
-      host.loadScene(CAMPAIGN[0]);
-      saveProgress(CAMPAIGN[0]);
-      this.#play(pad);
+      this.#load(CAMPAIGN[0], () => {
+        saveProgress(CAMPAIGN[0]);
+        this.#play(pad);
+      });
     } else if (name === 'resume') {
       this.#ui('select');
       this.#play(pad);
@@ -187,6 +193,28 @@ export class Shell {
       this.#ui('select');
       window.cerberusDesktop.quit();
     }
+  }
+
+  // Loading screen: a level load is synchronous (build, shader warm-up) and takes a moment, so #loading is shown and
+  // given two frames to paint before host.loadScene(key) blocks, then `then` runs (play) and it hides. Menu input is
+  // ignored meanwhile (this.loading). Pointer lock still works from #play: it is well inside the click's activation window.
+  #load(key, then) {
+    if (this.loading) return;
+    this.loading = true;
+    const el = document.getElementById('loading');
+    el.querySelector('.scene').textContent = SCENES[key]?.title ?? key;
+    el.hidden = false;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        try {
+          this.host.loadScene(key);
+          then();
+        } finally {
+          this.loading = false;
+          el.hidden = true;
+        }
+      }),
+    );
   }
 
   // Starts / resumes play: pointer lock (needs this click / key press), or no lock from a controller or the editor.
