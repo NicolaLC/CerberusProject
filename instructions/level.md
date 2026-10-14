@@ -19,8 +19,9 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
   them); "real" scenes (arena, later the Prologue) use `weathered`. Unknown skin throws.
 - `sky`: a key of `SKIES` (world.js), the outdoor light preset; absent = the default hazy day (arena, Gym, Library, Workshop). `night` (the
   Prologue, art-style.md "Lighting rule: a dark world"): near-black sky with a dim teal horizon, no sun disc, a weak cold key (shadows), a dim cold
-  fill, closer fog, outdoor exposure x1.45. It eases in only while the camera is outdoors (not in an interior zone), so interiors keep their
-  look; the alarm tint mixes from it. Unknown sky throws.
+  fill, closer fog, outdoor exposure x1.45. The sky dome, fog and sun are the preset's from the first frame, indoors too (an open space seen
+  through a door or by a cut camera is never under the day sky); only the hemisphere fill and the outdoor exposure ease in while the camera is
+  outdoors (not in an interior zone), so interiors keep their look; the alarm tint mixes from it. Unknown sky throws.
 - `loadout`: the gun ids (keys of `GUNS`) the player owns at the start, e.g. `["pistol"]`. `[]` = unarmed: no gun, no weapon HUD or crosshair, nothing to fire or aim until a `pickup.gun` or an objective `grantGun` (the Prologue). Absent = all six
   (arena, Gym, Library, Workshop). The pistol is always owned even if left out, except for `[]` (unarmed). The rifle is raised if owned, else the first
   owned gun in `GUN_ORDER`; unowned guns start with a full magazine and an empty reserve. Unknown ids fail `Registry.check`.

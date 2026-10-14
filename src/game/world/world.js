@@ -36,8 +36,9 @@ export const SUN_DIR = new THREE.Vector3(0.45, 0.78, 0.43).normalize();
 // Sky presets (level.md `sky`): the outdoor light of a level that opts in; absent = the default hazy day every other scene keeps.
 // Lore (gdd.md 2): the HiveMind devoured the sunlight, the world is dark. `night`: a near-black sky with a dim teal horizon, no sun disc,
 // a faint cold key from the HiveMind's glow over the city (still the shadow caster), a dim cold fill, closer haze, and a higher outdoor
-// exposure so the arena's own lamps and emissives carry it. Applied only while the camera is outdoors (interiors keep their look:
-// the hemisphere fill is not shadowed by roofs), eased at SKY_RATE per second.
+// exposure so the arena's own lamps and emissives carry it. The sky dome, fog and sun are the preset's from the first frame (an
+// outdoor space seen through a door or by a cut camera is never under the day sky; roofs shade the sun indoors); only the hemisphere
+// fill and the outdoor exposure follow the camera (interiors keep their look: the fill is not shadowed by roofs), eased at SKY_RATE per second.
 export const SKIES = {
   night: { top: '#020406', horizon: '#13262c', ground: '#040607', glow: 0, fog: '#0a1317', fogNear: 20, fogFar: 160, hemi: 0x3e5a6a, hemiGround: 0x0c0f10, hemiI: 0.75, sun: 0x86a6c8, sunI: 0.8, exposure: 1.45 },
 };
@@ -558,7 +559,7 @@ export class World {
     this.outsideExposure = 1; // read by Post: the outdoor exposure target
   }
 
-  // Level `sky` (a key of SKIES, or null): the outdoor preset, eased in while the camera is outside (update). Starts from the day look.
+  // Level `sky` (a key of SKIES, or null): the outdoor preset. Sky dome, fog and sun at once; fill and exposure eased in while the camera is outside (update).
   setSky(name) {
     const s = name == null ? null : SKIES[name];
     if (name != null && !s) throw new Error(`level: unknown sky "${name}" (known: ${Object.keys(SKIES).join(', ')})`);
@@ -571,21 +572,21 @@ export class World {
   #applySky() {
     const D = this.day;
     const N = this.night ?? D;
-    const k = this.night ? this.skyK : 0;
+    const k = this.night ? this.skyK : 0; // fill and exposure: follow the camera
     const L = (a, b) => a + (b - a) * k;
     const u = this.sky.material.uniforms;
-    u.top.value.lerpColors(D.top, N.top, k);
-    u.ground.value.lerpColors(D.ground, N.ground, k);
-    u.glow.value = L(D.glow, N.glow);
-    this.base.horizon.lerpColors(D.horizon, N.horizon, k);
-    this.base.fog.lerpColors(D.fog, N.fog, k);
+    u.top.value.copy(N.top);
+    u.ground.value.copy(N.ground);
+    u.glow.value = N.glow;
+    this.base.horizon.copy(N.horizon);
+    this.base.fog.copy(N.fog);
+    this.base.sun.copy(N.sun);
+    this.sun.intensity = N.sunI;
+    this.scene.fog.near = N.fogNear;
+    this.scene.fog.far = N.fogFar;
     this.base.hemi.lerpColors(D.hemi, N.hemi, k);
     this.base.ground.lerpColors(D.hemiGround, N.hemiGround, k);
-    this.base.sun.lerpColors(D.sun, N.sun, k);
     this.base.hemiI = L(D.hemiI, N.hemiI);
-    this.sun.intensity = L(D.sunI, N.sunI);
-    this.scene.fog.near = L(D.fogNear, N.fogNear);
-    this.scene.fog.far = L(D.fogFar, N.fogFar);
     this.outsideExposure = L(D.exposure, N.exposure);
     this.#applyAlarm(this.alarm.t ?? 0); // the alarm tint mixes from these bases
   }
@@ -615,21 +616,22 @@ export class World {
   #applyAlarm(t) {
     const a = this.alarm;
     const k = a.level * a.strength * (0.85 + 0.15 * Math.sin(t * ALARM.pulse));
-    // under a dark `sky` preset (skyK > 0) the alarm colour is first dimmed to each base colour's brightness: it tints the night,
-    // it does not light a black sky orange (a full-strength amber over #0c171b read as a sunset)
-    const dark = this.night ? this.skyK : 0;
+    // under a dark `sky` preset the alarm colour is first dimmed to each base colour's brightness: it tints the night, it does not
+    // light a black sky orange (a full-strength amber over #0c171b read as a sunset). The fill and the lamps follow skyK (indoors
+    // the alarm keeps its full amber), the sky, fog and sun are always night
     const la = luma(a.color) || 1;
-    const mix = (c, base) => {
+    const mix = (c, base, dark = this.night ? 1 : 0) => {
       _alarm.copy(a.color).multiplyScalar(1 + (Math.min(1, luma(base) / la) - 1) * dark);
       return c.copy(base).lerp(_alarm, k);
     };
     mix(this.scene.fog.color, this.base.fog);
     mix(this.sky.material.uniforms.horizon.value, this.base.horizon);
-    mix(this.hemi.color, this.base.hemi);
-    mix(this.hemi.groundColor, this.base.ground);
+    const fill = this.night ? this.skyK : 0;
+    mix(this.hemi.color, this.base.hemi, fill);
+    mix(this.hemi.groundColor, this.base.ground, fill);
     mix(this.sun.color, this.base.sun);
     this.hemi.intensity = this.base.hemiI * (1 - 0.35 * k);
-    for (const l of this.lights) if (l.userData.base) mix(l.color, l.userData.base);
+    for (const l of this.lights) if (l.userData.base) mix(l.color, l.userData.base, fill);
   }
 
   // focus: where the light pool looks from (the camera position, game.js); optional
