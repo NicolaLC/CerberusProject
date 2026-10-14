@@ -699,7 +699,7 @@ function corridor(p) {
       for (const v of [0.6, 2.95]) B('cyan', 0.02, 0.03, 0.03, X(rd0 + 0.01), ry + v, z + 0.14);
     }
     if (!p.ceiling || ((door || end) && i === n)) continue; // the end wall panel and its lamp take the last beam's place
-    B('frame', W - 0.02, 0.36, rw, 0, H - 0.18, z); // ceiling beam
+    B('frame', W - 0.04, 0.36, rw, 0, H - 0.18, z); // ceiling beam, ends 1 cm inside the ceiling plate's (flush ends z-fight)
     B('stripe', 1.2, 0.02, rw - 0.1, 0, H - 0.37, z); // ochre underside plate
   }
 

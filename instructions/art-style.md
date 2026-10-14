@@ -146,7 +146,7 @@ floor with a centre grate, steps, hazard trims. Changed for the rule:
 - **The far end reads:** a door end gets a lamp bar and a soft additive light pool on the door and the deck in front of it, plus a brighter
   point light, so a gate is legible from 24 m.
 - **Rooms the player fights in** use the slim wall (`arch.wall`): the same language flattened into the panelling envelope, so cover, signs
-  and props keep their places; the deep corridor profile is for walkways and set-piece rooms (the Prologue's transit node).
+  and props keep their places; the deep corridor profile is for walkways and set-piece rooms (the Prologue's transit node and calibration rooms). A room can mix both: a corridor piece for the ceiling, floor and end wall, deep bays only on the walls that are empty, the slim wall where signs, props, doors or cover stand.
 
 ## 6. Prompt kit (concept art, the book, marketing)
 Style suffix, pasted unchanged:
