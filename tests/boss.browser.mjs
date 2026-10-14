@@ -57,8 +57,15 @@ const r = await p.evaluate(async () => {
   out.steps = steps;
   // 4. mortars reach a player hiding behind a wall
   blasts = 0;
+  const far = (x, z) => Math.hypot(boss.pos.x - x, boss.pos.z - z);
   hold(34, -21.4, 14); // south side of the wall at (34, -23)
   out.blastsOnHider = blasts;
+  // 4b. pursuit: it comes for a player standing still across the arena, round the cover (a path over the arena grid),
+  // instead of circling where it stood
+  hold(28, -58, 0.1);
+  const from = far(28, -58);
+  hold(28, -58, 12);
+  out.pursuit = [+from.toFixed(1), +far(28, -58).toFixed(1)];
   // 5. stays in its arena, never inside a wall
   const inArena = (q) => q.x > 25 && q.x < 49.5 && q.z > -61.5 && q.z < -14.5;
   let left = false;
@@ -87,6 +94,10 @@ const r = await p.evaluate(async () => {
   out.down = boss.down > 0;
   out.coreOpen = boss.armor('weak', boss.core);
   out.legsNotTargetable = !enemies.hitMeshes().some((m) => m.userData.part === 0 || m.userData.part === 1);
+  // core open: the standing legs are armored too (sparks, no damage), so the player shoots the core
+  const knee = boss.legs[2].knee;
+  const legHp = boss.legs[2].health;
+  out.legsArmoredOpen = boss.armor('weak', knee) === 0 && boss.armor('limb', boss.hitMeshes.find((m) => m.userData.part === 2 && m !== knee) ?? knee) === 0 && boss.legs[2].health === legHp;
   // the risen core is the first thing a shot from a standing player's eye hits from almost every side (the standing legs
   // can cover it from up to three angles, depending on how it fell); its hitbox follows the mech: the baked glowing parts are frozen proxies that must be
   // refreshed, or they stay where the mech was baked
@@ -102,6 +113,7 @@ const r = await p.evaluate(async () => {
   });
   step(boss.t.downTime + 0.5);
   out.getsBackUp = boss.down <= 0 && boss.height > 2;
+  out.legsHittableUp = boss.armor('weak', knee) === 1;
   // 8. one collapse takes at most coreBite of the core, then the hatch closes and it stands up early
   for (const l of boss.legs.slice(2, 4)) boss.damage(500, l.foot, dir, 'weak', l.knee);
   for (let i = 0; i < 20; i++) boss.damage(100, boss.pos, dir, 'weak', boss.core);
@@ -127,12 +139,15 @@ expect('and the camera comes back to the boss', r.lockReturns < 0.1);
 expect('fires cannon bursts', r.bolts >= 6);
 expect('walks (legs step)', r.steps > 6);
 expect('mortars a player hiding behind a wall', r.blastsOnHider >= 1);
+expect('pursues a player hiding behind a wall (closes in, round the cover)', r.pursuit[0] > 20 && r.pursuit[1] < 15);
 expect('stays in its arena', r.stayedInArena);
 expect('never inside a wall', r.neverInsideWalls);
 expect('hull is armored', r.hullArmor === 0 && r.hullNoDamage && r.coreClosed === 0);
 expect('two legs down: collapsed, core exposed', r.legsLost === 2 && r.down && r.coreOpen === 1 && r.legsNotTargetable);
 expect('down: the risen core is hittable from the ground (half the sides at least)', r.coreShots.filter((x) => x === true).length >= 4);
+expect('core open: the legs take no damage (armored)', r.legsArmoredOpen);
 expect('gets back up after a while', r.getsBackUp);
+expect('  standing again: the legs take damage', r.legsHittableUp);
 expect('one collapse takes at most coreBite of the core, then the hatch closes', r.biteCapped);
 expect('dies when the core is destroyed', r.dies);
 expect('no page errors', errors.length === 0);

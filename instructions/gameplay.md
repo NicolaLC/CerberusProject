@@ -199,7 +199,8 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
   player enters the arena or comes within 28 m with line of sight, or shoots it. Boss bar: core health, leg pips.
 - Armor: the hull, turret and closed shutters take no damage (`armor()` returns 0: sparks only and no decal, since decals
   stay in world space and would hang in the air once the mech moves; the crosshair
-  doesn't turn red; `weapon:armored` is emitted but nothing shows a hint). Legs take damage (limb ×0.8), the glowing knee joints are weak spots (×3).
+  doesn't turn red; `weapon:armored` is emitted but nothing shows a hint). Legs take damage (limb ×0.8), the glowing knee joints are weak spots (×3),
+  except while the core is open (`coreOpen`: collapsed, hatch up): then the legs are armored too, so the collapse is the time to shoot the core.
   Legs have 160 HP; a broken leg falls off and the body tilts toward the gap; it slows 12% per lost leg.
 - Every second leg lost (and the 5th) collapses it for 7 s (forever with none left): the shutters open and the
   core (900 HP, weak ×3) rises 1.2 m out of the hatch, 30% bigger (`coreRise`), so it can be shot from the ground. Destroying the core kills it.
@@ -208,7 +209,11 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
 - Attacks: cannon bursts (0.7 s eye charge, 6 bolts × 9 dmg, cooldown 2.2-3.4 s, needs line of sight);
   plasma mortar every 6-8.5 s (×1.8 faster while the player is in cover) lobbed at the player's position with a ground
   ring telegraph, 3.6 m blast, 34 dmg; stomp when the player is within 6.5 m (0.75 s rear-up, 7 m blast, 24 dmg).
-- Movement: keeps 11-20 m, circles the player, turns round when blocked; collision radius 4.2 m (the whole leg
+- Movement: pursues. In sight and 8-15 m away it circles the player, drifting in; out of sight (behind cover), farther than 15 m
+  or charging it walks at them on a path round the cover (`nav`: a 0.5 m grid over the arena, free where the collision circle
+  fits, breadth-first every 0.4 s, heading for the path cell 2 m on). Charge (`rush`): every 7-11 s, in sight and over 7 m off,
+  it rushes in at ×2 speed until 5 m away (max 4 s), where the stomp takes over. Circling uses local steering (`steer`: probes
+  3.5 m ahead over a fan of angles, keeps its detour side); no progress for 0.8 s flips the detour side. Collision radius 4.2 m (the whole leg
   span, so legs don't reach into walls), walks over low cover, not through walls. A foot whose spot is behind or on
   a wall is pulled in toward the body. Legs: tripod gait, IK (femur 2.4, tibia 3.8, knees up), a foot steps when 1.3 m from home.
 

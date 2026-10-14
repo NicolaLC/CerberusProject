@@ -26,7 +26,13 @@ export const TUNING = {
   coreRise: 1.2, // m the core rises out of its hatch while down, clear of the hull rim from the ground
   speed: 2.4, // m/s, minus legSlow per lost leg
   legSlow: 0.12,
-  range: [11, 20], // keeps this distance to the player
+  range: [8, 15], // keeps this distance to the player while it sees them; out of sight it walks at them (pursuit)
+  rush: { every: [7, 11], speed: 2.0, until: 5, time: 4 }, // charge: every few s (in sight, farther than `until`) it rushes the
+  // player at speed x `speed` for up to `time` s or until `until` m away, where the stomp takes over
+  steer: { look: 3.5, fan: [0, 0.45, 0.9, 1.35, 1.9, 2.5], stuck: 0.8 }, // obstacle avoidance: probe `look` m ahead along the wish
+  // turned by each fan angle (both sides, the last detour side first); no progress for `stuck` s flips the detour side
+  nav: { cell: 0.5, every: 0.4, ahead: 4 }, // pursuit pathing: a grid of `cell` m over the arena (free = the collision circle fits),
+  // breadth-first search every `every` s, the boss heads for the path cell `ahead` cells on
   radius: 4.2, // collision: the whole leg span, not just the hull (legs must not reach into walls)
   wakeRange: 28,
   burst: { charge: 0.7, shots: 6, gap: 0.11, cooldown: [2.2, 3.4], spread: 0.025, damage: 9 },
@@ -74,6 +80,10 @@ export class SpiderMech {
     this.vel = new THREE.Vector3();
     this.strafe = 1;
     this.strafeTimer = 4;
+    this.detour = 1; // side the steering tries first (+1 left / -1 right)
+    this.stuck = 0;
+    this.rushTimer = 6; // s to the next charge
+    this.rushing = 0; // s left in a charge
     this.flash = 0;
     this.time = 0;
     this.gun = { state: 'idle', timer: 2, shots: 0 };
@@ -304,12 +314,18 @@ export class SpiderMech {
     return n;
   }
 
-  // Damage multiplier for a hit on this object: the hull and closed core shrug shots off.
+  // Core open: collapsed with the hatch up (its bite not spent, or no legs left).
+  get coreOpen() {
+    return this.down > 0 && (this.bite > 0 || this.down === Infinity);
+  }
+
+  // Damage multiplier for a hit on this object: the hull and closed core shrug shots off; while the core is open the legs
+  // do too (sparks, weapon:armored), so the collapse is the moment to shoot the core.
   armor(zone, object) {
     const p = object.userData.part;
     if (p === 'hull') return 0;
-    if (p === 'core') return this.down > 0 && (this.bite > 0 || this.down === Infinity) ? 1 : 0;
-    return 1;
+    if (p === 'core') return this.coreOpen ? 1 : 0;
+    return this.coreOpen ? 0 : 1;
   }
 
   // Returns true if this hit destroyed it.
@@ -525,16 +541,43 @@ export class SpiderMech {
     const dz = player.pos.z - this.pos.z;
     const dist = Math.hypot(dx, dz) || 1;
     const [near, far] = this.t.range;
+    const R = this.t.rush;
+    if ((this.seeTimer = (this.seeTimer ?? 0) - dt) <= 0) {
+      this.seeTimer = 0.25; // a raycast four times a second is plenty for steering
+      this.seen = this.#sees(player);
+    }
+    const sees = this.seen;
     this.strafeTimer -= dt;
     if (this.strafeTimer <= 0) {
       this.strafe = -this.strafe;
       this.strafeTimer = 4 + Math.random() * 3;
     }
-    // close in, back off, otherwise circle the player
-    const radial = dist > far ? 1 : dist < near ? -1 : 0;
-    _w.set((dx / dist) * radial - (dz / dist) * this.strafe * 0.7, 0, (dz / dist) * radial + (dx / dist) * this.strafe * 0.7);
+    // charge: in sight and not yet close, every few seconds it rushes in (the stomp follows at the end)
+    this.rushTimer -= dt;
+    if (this.rushing > 0) {
+      this.rushing -= dt;
+      if (dist < R.until) this.rushing = 0;
+    } else if (this.rushTimer <= 0 && sees && dist > R.until + 2) {
+      this.rushing = R.time;
+      this.rushTimer = R.every[0] + Math.random() * (R.every[1] - R.every[0]);
+    }
+    // pursue: rushing, or the player out of sight (behind cover) or too far -> walk at them; too close -> back off;
+    // else circle them, drifting in
+    const pursue = this.rushing > 0 || !sees || dist > far;
+    const radial = pursue ? 1 : dist < near ? -1 : 0.25;
+    const circle = pursue ? 0 : 0.7;
+    _w.set((dx / dist) * radial - (dz / dist) * this.strafe * circle, 0, (dz / dist) * radial + (dx / dist) * this.strafe * circle);
     if (_w.lengthSq() > 1) _w.normalize();
-    const speed = this.t.speed * (1 - this.legsLost * this.t.legSlow);
+    // pursuit goes round the cover on a path; circling only needs the local steering
+    if (pursue) {
+      if ((this.navTimer = (this.navTimer ?? 0) - dt) <= 0) {
+        this.navTimer = this.t.nav.every;
+        this.waypoint = this.#path(player.pos, this.waypoint ?? new THREE.Vector3());
+      }
+      if (this.waypoint) _w.set(this.waypoint.x - this.pos.x, 0, this.waypoint.z - this.pos.z).normalize();
+    }
+    if (!pursue || !this.waypoint) this.#steer(_w); // a path is already clear
+    const speed = this.t.speed * (1 - this.legsLost * this.t.legSlow) * (this.rushing > 0 ? R.speed : 1);
     const k = damp(2, dt);
     this.vel.x += (_w.x * speed - this.vel.x) * k;
     this.vel.z += (_w.z * speed - this.vel.z) * k;
@@ -544,10 +587,121 @@ export class SpiderMech {
     const A = this.arena;
     this.pos.x = THREE.MathUtils.clamp(this.pos.x, A.minX + this.t.radius, A.maxX - this.t.radius);
     this.pos.z = THREE.MathUtils.clamp(this.pos.z, A.minZ + this.t.radius, A.maxZ - this.t.radius);
-    // blocked: turn around
+    // blocked (little progress for a while): detour the other way round, circle the other way
     if (before.distanceTo(this.pos) < this.vel.length() * dt * 0.3 && this.vel.lengthSq() > 0.5) {
-      this.strafe = -this.strafe;
-      this.strafeTimer = 3;
+      if ((this.stuck += dt) > this.t.steer.stuck) {
+        this.stuck = 0;
+        this.detour = -this.detour;
+        this.strafe = -this.strafe;
+        this.strafeTimer = 3;
+      }
+    } else this.stuck = Math.max(0, this.stuck - dt);
+  }
+
+  // Pursuit path: breadth-first over the arena grid (built once, on first use: the colliders don't move) from the boss's cell,
+  // to the reachable cell nearest `goal`; returns `out` set to the path cell `ahead` cells on, or null (already as near as it gets).
+  #path(goal, out) {
+    const N = this.#navGrid();
+    const { x0, z0, nx, nz, cell, free, prev, queue } = N;
+    const at = (x, z) => {
+      const i = Math.round((x - x0) / cell);
+      const k = Math.round((z - z0) / cell);
+      return THREE.MathUtils.clamp(k, 0, nz - 1) * nx + THREE.MathUtils.clamp(i, 0, nx - 1);
+    };
+    const start = at(this.pos.x, this.pos.z);
+    prev.fill(-2);
+    prev[start] = -1;
+    queue[0] = start;
+    let head = 0;
+    let tail = 1;
+    let best = start;
+    let bestD = Infinity;
+    while (head < tail) {
+      const c = queue[head++];
+      const cx = c % nx;
+      const cz = (c - cx) / nx;
+      const d = (x0 + cx * cell - goal.x) ** 2 + (z0 + cz * cell - goal.z) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = c;
+      }
+      for (let oz = -1; oz <= 1; oz++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          const x = cx + ox;
+          const z = cz + oz;
+          if ((!ox && !oz) || x < 0 || z < 0 || x >= nx || z >= nz) continue;
+          const n = z * nx + x;
+          if (prev[n] !== -2 || !free[n]) continue;
+          if (ox && oz && (!free[cz * nx + x] || !free[z * nx + cx])) continue; // no corner cutting
+          prev[n] = c;
+          queue[tail++] = n;
+        }
+      }
+    }
+    if (best === start) return null;
+    // walk back from the best cell to the one `ahead` steps from the start
+    let len = 0;
+    for (let c = best; c !== start; c = prev[c]) len++;
+    let c = best;
+    for (let k = len - Math.min(len, this.t.nav.ahead); k > 0; k--) c = prev[c];
+    const cx = c % nx;
+    return out.set(x0 + cx * cell, this.pos.y, z0 + ((c - cx) / nx) * cell);
+  }
+
+  #navGrid() {
+    if (this.nav) return this.nav;
+    const A = this.arena;
+    const r = this.t.radius;
+    const cell = this.t.nav.cell;
+    const x0 = A.minX + r;
+    const z0 = A.minZ + r;
+    const nx = Math.max(1, Math.floor((A.maxX - r - x0) / cell) + 1);
+    const nz = Math.max(1, Math.floor((A.maxZ - r - z0) / cell) + 1);
+    const free = new Uint8Array(nx * nz);
+    const feet = this.pos.y;
+    const fit = (r + 0.05) ** 2; // the collision circle and a hair: a squeeze the circle can't pass is no passage
+    for (let k = 0; k < nz; k++) {
+      for (let i = 0; i < nx; i++) {
+        const x = x0 + i * cell;
+        const z = z0 + k * cell;
+        let ok = 1;
+        for (const { box: b } of this.ctx.world.nearColliders(x - r, z - r, x + r, z + r)) {
+          if (b.max.y <= feet + 1.3 || b.min.y >= feet + 2.4) continue; // low cover is walked over, like collideCircle
+          const ddx = x - Math.max(b.min.x, Math.min(x, b.max.x));
+          const ddz = z - Math.max(b.min.z, Math.min(z, b.max.z));
+          if (ddx * ddx + ddz * ddz < fit) {
+            ok = 0;
+            break;
+          }
+        }
+        free[k * nx + i] = ok;
+      }
+    }
+    const n = nx * nz;
+    this.nav = { x0, z0, nx, nz, cell, free, prev: new Int32Array(n), queue: new Int32Array(n) };
+    return this.nav;
+  }
+
+  // Obstacle avoidance: turns the wish `w` (xz, length = throttle) to the nearest fan angle whose path `look` m ahead is clear
+  // of walls and high cover (low cover is walked over) and stays in the arena; the detour side is tried first. None clear: unchanged
+  // (the stuck check flips the side).
+  #steer(w) {
+    const len = Math.hypot(w.x, w.z);
+    if (len < 1e-3) return;
+    const S = this.t.steer;
+    const A = this.arena;
+    const r = this.t.radius - 0.1; // just inside the collision circle: the start never overlaps what it is pressed against
+    const base = Math.atan2(w.x, w.z);
+    for (const a of S.fan) {
+      for (const side of a ? [this.detour, -this.detour] : [1]) {
+        const ang = base + a * side;
+        _c.set(this.pos.x + Math.sin(ang) * S.look, this.pos.y, this.pos.z + Math.cos(ang) * S.look);
+        if (_c.x < A.minX + this.t.radius || _c.x > A.maxX - this.t.radius || _c.z < A.minZ + this.t.radius || _c.z > A.maxZ - this.t.radius) continue;
+        if (!this.ctx.world.segmentClear(this.pos, _c, r, 1.3, 2.4)) continue;
+        if (a) this.detour = side; // keep going round the same way
+        w.set(Math.sin(ang) * len, 0, Math.cos(ang) * len);
+        return;
+      }
     }
   }
 

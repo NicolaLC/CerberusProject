@@ -113,7 +113,7 @@ Enemies:
 | Puppet shooter | engages within 30 (LOS) | fixed post behind low cover, 0.8 behind its face | pops up 0.95 | `puppet.js:ENGAGE_RANGE`, `HIDE`, `enemies.js:SPAWNS` |
 | Trooper | notices 32, shoots within 30, squad alert 22 | cover 6-28 from the player, ideal 15, retreat 34; leaves a spot when the player is within 5; runs <= 22, flanker <= 30 | aim error +-(0.15 + 0.006 x dist) per axis, bolts 34 m/s | `trooper.js:TUNING`, `cover.js:TUNING` |
 | Drone | wakes at 36 (LOS) | circles at 9-18, flight 3.5-5 above ground, speed 5.5 | hits from above: angle 12-30 deg | `drone.js:TUNING` |
-| Spider mech | wakes in arena or within 28 (LOS) | keeps 11-20; mortar min 8, stomp within 6.5 (7 blast) | cannon, mortar 3.6 blast | `spider.js:TUNING` |
+| Spider mech | wakes in arena or within 28 (LOS) | circles at 8-15 in sight, else pursues on a path; charges to 5; mortar min 8, stomp within 6.5 (7 blast) | cannon, mortar 3.6 blast | `spider.js:TUNING` |
 
 Encounter sizes (proposed from the above):
 - **Close 6-15 m**: pistol/MG ideal; the trooper's minimum is 6 (it relocates under 5), mortar min 8, stomp 6.5. Troopers pick no cover spot closer than 6. Rooms: ~8 x 8 to 15 x 15.

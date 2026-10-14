@@ -494,7 +494,7 @@ with line of sight, or shoots it. On wake: toast "(warning sign) SX-6 TARANTULA"
 | Part | Rule |
 |---|---|
 | Hull, turret, closed shutters | Take no damage (sparks; the crosshair does not turn red). Block the railgun line |
-| Legs (6) | 160 HP each, limb x0.8; glowing knee joints are weak spots (x3). A broken leg falls off, the body tilts toward the gap, speed drops 12% per lost leg (base 2.4 m/s) |
+| Legs (6) | 160 HP each, limb x0.8; glowing knee joints are weak spots (x3); armored while the core is open. A broken leg falls off, the body tilts toward the gap, speed drops 12% per lost leg (base 2.4 m/s) |
 | Core | 900 HP, weak x3. Reachable only when the mech is collapsed (shutters open, the core rises out of the hatch). One collapse takes at most 34% of it, then the hatch closes and the mech stands up (no cap once every leg is gone). Destroying it kills the mech |
 
 **Phases (driven by leg loss):**
@@ -510,7 +510,8 @@ with line of sight, or shoots it. On wake: toast "(warning sign) SX-6 TARANTULA"
 | Plasma mortar | Ground ring at the player's position, 1.5 s flight | Every 6 to 8.5 s (x1.8 faster while the player is in cover; min range 8 m), 3.6 m blast, 34 damage |
 | Stomp | 0.75 s rear-up | When the player is within 6.5 m; 7 m blast, 24 damage, cooldown 3 s |
 
-**Movement:** keeps 11 to 20 m from the player and circles, turns round when blocked; collision radius 4.2 m (the
+**Movement:** hunts the player. In sight at 8 to 15 m it circles, drifting in; out of sight or farther it walks at them on a
+path round the cover; every 7 to 11 s it charges in at double speed to stomp range; collision radius 4.2 m (the
 whole leg span); walks over low cover, not through walls. Legs walk a tripod gait with IK.
 
 **Camera lock-on:** while the boss is awake, alive and within 40 m, the camera drifts toward it when the player is
