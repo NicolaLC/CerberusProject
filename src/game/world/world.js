@@ -161,6 +161,7 @@ export class World {
     this.labels = []; // env.label meshes: own geometry, material and canvas texture each
     this.props = []; // prop.gun display models, prop.arm / prop.cradle rigs and the props' hidden colliders: own geometry, shared materials
     this.consoles = []; // prop.console positions (Vector3), for the audio's console hum; cleared with the level
+    this.supplies = []; // supply.ammo / supply.repair use spots (Object3D, userData.supply; also in props), read by Pickups; cleared with the level
     this.gates = []; // kit.gate records (addGate): { mesh, col, y0, h, dir, time, on, open, opening, inert }
     this.gizmoMode = false; // set while spawn() builds a gizmo piece (editor, Library): a gate is inert and shows its travel
     this.registry = null; // of the loaded level, for spawn()
@@ -245,7 +246,7 @@ export class World {
     }
     this.batches = [];
     this.gridDirty = true;
-    for (const list of [this.props, this.consoles, this.gates, this.staticMeshes, this.colliders, this.meshes, this.coverMeshes, this.interiorZones, this.flickerLights, this.lights, this.labels]) list.length = 0;
+    for (const list of [this.props, this.consoles, this.supplies, this.gates, this.staticMeshes, this.colliders, this.meshes, this.coverMeshes, this.interiorZones, this.flickerLights, this.lights, this.labels]) list.length = 0;
     this.named.clear();
   }
 
@@ -275,7 +276,7 @@ export class World {
     const drop = (list, of = (x) => x) => {
       for (let i = list.length - 1; i >= 0; i--) if (gone.has(of(list[i]))) list.splice(i, 1);
     };
-    for (const list of [this.staticMeshes, this.meshes, this.coverMeshes, this.lights, this.labels, this.props]) drop(list);
+    for (const list of [this.staticMeshes, this.meshes, this.coverMeshes, this.lights, this.labels, this.props, this.supplies]) drop(list);
     drop(this.gates, (g) => g.mesh);
     drop(this.colliders, (c) => c.mesh);
     this.gridDirty = true;

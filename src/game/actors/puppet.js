@@ -8,6 +8,7 @@ import { damp, wrapAngle } from '../../engine/math.js';
 
 const HIDE = -0.95; // rig lift when retracted behind low cover
 export const HEALTH = { default: 100, shooter: 120 }; // hit points by kind
+const ARMORED = 0x5a6066; // armored puppet: bare dark plate steel, no ochre paint
 export const ENGAGE_RANGE = 30; // m: shooters only pop up and fire at a player this close (with line of sight)
 
 const _v = new THREE.Vector3();
@@ -22,8 +23,9 @@ export class Puppet extends EnemyBody {
       pos: def.pos,
       yaw: def.yaw ?? 0,
       health: def.kind === 'shooter' ? HEALTH.shooter : HEALTH.default,
-      mats: puppetMaterials(def.kind === 'shooter' ? 0x8a6a24 : 0xc9a640), // shooters: a darker ochre
+      mats: def.armored ? puppetMaterials(ARMORED, true) : puppetMaterials(def.kind === 'shooter' ? 0x8a6a24 : 0xc9a640), // shooters: a darker ochre
     });
+    this.armored = !!def.armored; // `armored` param: plate steel, only heavy rounds (GUNS ammo 'heavy') hurt it
     buildPuppet(this.rig, this.mats, this.visor);
     this.home = this.pos.clone();
     this.to = def.to ? new THREE.Vector3(...def.to) : null;
@@ -40,6 +42,11 @@ export class Puppet extends EnemyBody {
     // post + base: instanced across all puppets (Enemies.stands), slot = this.index
     this.index = ctx.takeStand();
     this.finishBody();
+  }
+
+  // Damage multiplier (weapon.js): an armored puppet shrugs off everything but heavy rounds (sparks, weapon:armored); others take all.
+  armor(zone, object, gun) {
+    return !this.armored || gun?.ammo === 'heavy' ? 1 : 0;
   }
 
   // Spawn groups (enemies.js wakeGroup): only a dormant puppet takes part. `awake` stays false for ordinary puppets

@@ -251,7 +251,7 @@ export class Hud {
   }
 
   // pin: false hides the objective pin (boot intro; the cinematic, title, pause and Workshop hide it with the whole HUD)
-  update(dt, { player, weapon, enemies, camRig, world, mission, scheme = 'kbm', pin = true }) {
+  update(dt, { player, weapon, enemies, camRig, world, mission, pickups = null, scheme = 'kbm', pin = true }) {
     const e = this.el;
     this.#boss(enemies.boss);
     // lock-on marker on the boss while the camera follows it
@@ -344,7 +344,7 @@ export class Hud {
     text(e.kills, `${enemies.kills} / ${enemies.all.length}`);
     text(e.zone, world.isInterior(player.pos) ? 'INTERIOR' : this.zoneName);
     this.#objective(mission.hudPanel(), scheme);
-    this.#prompt(mission.interactPrompt(player), scheme, camRig.camera);
+    this.#prompt(mission.interactPrompt(player) ?? pickups?.supplyPrompt(player) ?? null, scheme, camRig.camera); // an objective terminal, else a supply point
     this.#pin(pin && !player.dead ? mission.pinTarget(player.pos) : null, player.pos, camRig.camera, dt);
 
     this.dmgTime -= dt;

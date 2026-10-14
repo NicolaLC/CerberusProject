@@ -112,9 +112,9 @@ export class Game {
       },
     }).listen(events);
     events.on('puppet:down', (p) => {
-      pickups.drop(p.pos);
       if (p.dropGun) pickups.dropGun(p.pos, p.dropGun, weapon.owned); // enemy params dropGun / dropAmmo / dropOnce
     });
+    events.on('encounter:loadout', (guns) => weapon.setLoadout(guns)); // trigger.volume `loadout`: loaners taken back
     events.on('mission:grant', ({ gun, ammo }) => {
       weapon.grant(gun, { ammo }); // emits weapon:discovered the first time (toast, discovered:<gun> log line)
       weapon.switchTo(gun);
@@ -205,7 +205,7 @@ export class Game {
     engine.add({ name: 'playerPose', phase: 'late', group: 'play', update: () => player.view.pose() });
     engine.add({ name: 'enemyAnim', phase: 'late', update: (dt) => enemies.animate(dt, camera) });
     engine.add({ name: 'encounter', group: 'play', update: (dt) => encounter.update(dt, player, controls.pressed('interact')) });
-    engine.add({ name: 'pickups', group: 'play', update: (dt) => pickups.update(dt, player, weapon) });
+    engine.add({ name: 'pickups', group: 'play', update: (dt) => pickups.update(dt, player, weapon, controls.pressed('interact')) });
     // intro cinematic: drives camRig.script before the camera runs; skip = a fire / jump / interact press (only a skippable piece)
     engine.add({
       name: 'cinematic',
@@ -263,7 +263,7 @@ export class Game {
       name: 'hud',
       phase: 'present',
       update: (dt) => {
-        hud.update(dt, { player, weapon, enemies, camRig, world, mission, scheme: controls.scheme, pin: !boot.active && !cinematic.active });
+        hud.update(dt, { player, weapon, enemies, camRig, world, mission, pickups, scheme: controls.scheme, pin: !boot.active && !cinematic.active });
       },
     });
     engine.add({ name: 'log', phase: 'present', update: (dt) => log.update(dt) });

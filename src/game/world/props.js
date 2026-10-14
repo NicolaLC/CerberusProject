@@ -106,6 +106,10 @@ export function propMaterials() {
     stencil: new THREE.MeshStandardMaterial({ map: stencilTexture('CAL-STORE 00'), roughness: 0.85, metalness: 0.2 }),
     hazard: new THREE.MeshStandardMaterial({ map: hazardTexture(), roughness: 0.9, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: -2 }),
     screen: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x3fe0ff, emissiveMap: screenTexture(), emissiveIntensity: 1.3, roughness: 0.35 }),
+    // ammo-class glows (the ammo cases' colours, pickups.js): light cyan, heavy amber; repair cold white. Racks and supply points only.
+    glowLight: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x38d8ff, emissiveIntensity: 1.6 }), // low enough to keep the hue (3 reads white)
+    glowHeavy: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffa11c, emissiveIntensity: 2 }),
+    glowWhite: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xeaf6fa, emissiveIntensity: 2.2 }),
     panels: new Map(), // text -> material
   };
 }
@@ -372,7 +376,158 @@ function cradleFrame(M, phase) {
   return parts;
 }
 
+// ---- weapon racks and supply points (gameplay props: the pickups system reads world.supplies) ----
+export const SUPPLY = { reach: 1.4, front: 0.95, cooldown: 1.2 }; // m from the use spot in front, m the spot sits out from pos, s between uses
+const AMMO_CLASSES = ['light', 'heavy', 'all'];
+const glowOf = (M, ammo) => (ammo === 'heavy' ? M.glowHeavy : ammo === 'light' ? M.glowLight : M.glowWhite);
+
+// One ammo case on a shelf (the pickups' look: light = small, one band; heavy = taller, two bands), bottom at y.
+function ammoCase(M, ammo, x, y, z) {
+  const heavy = ammo === 'heavy';
+  const [w, h, d] = heavy ? [0.3, 0.34, 0.3] : [0.34, 0.2, 0.22];
+  const out = [bx(M.dark, w, h, d, x, y + h / 2, z)];
+  for (const dy of heavy ? [-0.08, 0.08] : [0]) out.push(bx(glowOf(M, ammo), w + 0.02, 0.05, d + 0.02, x, y + h / 2 + dy, z));
+  return out;
+}
+
+// Supply cabinet shell (front +Z, back against a wall): plinth, body, ochre edges, header with a stencil plate, status screen, class band.
+function supplyCabinet(world, M, text, glow) {
+  const plate = panelMaterial(world, text);
+  const pw = 1.0;
+  const ph = Math.min(0.26, pw * plate.userData.aspect);
+  const label = plane(plate, pw, ph);
+  label.position.set(0, 2.24, 0.275);
+  const scr = plane(M.screen, 0.46, 0.26, 1, 0.4, 0.3);
+  scr.position.set(0.28, 1.62, 0.29);
+  return [
+    bx(M.dark, 1.36, 0.12, 0.66, 0, 0.06, -0.05), // plinth
+    bx(M.metal, 1.3, 2.0, 0.6, 0, 1.1, -0.05), // body
+    bx(M.dark, 1.36, 0.32, 0.16, 0, 2.24, 0.185), // header, 1.5 cm proud of the body front (flush fronts z-fight)
+    label,
+    bx(M.ochre, 0.06, 1.86, 0.01, 0.6, 1.08, 0.255), // ochre edges, 0.5 cm proud of the body
+    bx(M.ochre, 0.06, 1.86, 0.01, -0.6, 1.08, 0.255),
+    bx(M.dark, 0.56, 0.36, 0.02, 0.28, 1.62, 0.26), // screen bezel
+    scr,
+    bx(glow, 1.08, 0.05, 0.02, 0, 1.98, 0.27), // class band under the header
+    bx(M.dark, 0.36, 0.5, 0.02, -0.33, 1.55, 0.26), // vent
+  ];
+}
+
+// The use spot: a hidden record the pickups system reads (Pickups.update: prompt, interact). Kept in world.props: freed and sector-tagged with them.
+function supplyRecord(world, d, kind, extra) {
+  const y = d.yaw ?? 0;
+  const root = new THREE.Object3D();
+  root.position.set(d.pos[0] + Math.sin(y) * SUPPLY.front, d.pos[1], d.pos[2] + Math.cos(y) * SUPPLY.front);
+  root.userData.supply = { kind, at: new THREE.Vector3(d.pos[0], d.pos[1] + 1.9, d.pos[2]), cool: 0, ...extra };
+  world.scene.add(root);
+  world.props.push(root);
+  world.supplies.push(root);
+  return root;
+}
+
+const RACK = { slot: 0.95, shelf: 0.95 }; // m per gun slot, shelf top
+
 export const PROP_PIECES = {
+  // Weapon rack: a low cabinet whose top is the shelf the guns lie on (place `pickup.gun` with `rack: true` on it, y = pos.y + 0.95,
+  // yaw = the rack's yaw + 90 degrees so the barrel runs along it), a back board with pegs and a glowing class band along the shelf
+  // edge: `ammo` 'light' (cyan) / 'heavy' (amber), the colours of the ammo cases. `slots` (3, 1..6): 0.95 m each. Front +Z at yaw 0.
+  // Collision: the cabinet (slots x 0.95 + 0.3) x 0.5, 0.95 high, not cover. `yaw` in quarter turns.
+  'prop.gunRack': {
+    example: { params: { slots: 3, ammo: 'light' } },
+    label: 'GUN RACK shelf for pickup.gun (rack: true), cyan / amber class band',
+    fields: [{ key: 'slots', type: 'number', min: 1 }, { key: 'ammo', type: 'enum', options: ['light', 'heavy'] }],
+    build(world, d) {
+      const id = 'prop.gunRack';
+      const q = quarters(id, d.yaw);
+      const p = d.params ?? {};
+      const n = count(id, p, 'slots', 3, 1, 6);
+      const ammo = p.ammo ?? 'light';
+      if (ammo !== 'light' && ammo !== 'heavy') fail(id, `"ammo" must be light or heavy, got ${JSON.stringify(ammo)}`);
+      const M = world.dressing;
+      const w = n * RACK.slot + 0.3;
+      const parts = [
+        bx(M.dark, w + 0.04, 0.1, 0.54, 0, 0.05, 0), // plinth
+        bx(M.metal, w, RACK.shelf - 0.15, 0.5, 0, 0.1 + (RACK.shelf - 0.15) / 2, 0), // cabinet
+        bx(M.dark, w + 0.02, 0.05, 0.52, 0, RACK.shelf - 0.025, 0), // shelf plate, 1 cm over the cabinet's sides
+        bx(glowOf(M, ammo), w - 0.1, 0.04, 0.02, 0, RACK.shelf - 0.11, 0.255), // class band under the shelf edge
+        bx(M.dark, w, 1.3, 0.06, 0, RACK.shelf + 0.65, -0.28), // back board
+        bx(M.ochre, w + 0.04, 0.06, 0.07, 0, RACK.shelf + 1.33, -0.265), // top rail, 1 cm inside the uprights' backs
+      ];
+      for (const s of [1, -1]) parts.push(bx(M.metal, 0.08, RACK.shelf + 1.35, 0.1, s * (w / 2 + 0.04), (RACK.shelf + 1.35) / 2, -0.26)); // uprights
+      for (let i = 0; i < n; i++) {
+        const x = -w / 2 + 0.15 + (i + 0.5) * RACK.slot;
+        for (const dx of [-0.25, 0.25]) parts.push(bx(M.metal, 0.04, 0.04, 0.14, x + dx, RACK.shelf + 0.55, -0.18)); // pegs
+        parts.push(bx(glowOf(M, ammo), 0.3, 0.02, 0.01, x, RACK.shelf + 1.12, -0.245)); // slot marker on the board
+      }
+      const meshes = bake(world, d, parts, { yaw: q * Math.PI / 2 });
+      collider(world, d, q, { x: 0, z: 0, w: w + 0.04, d: 0.54 }, RACK.shelf);
+      return meshes;
+    },
+  },
+
+  // Ammo supply point (gameplay, campaign rule: ammo only comes from supply points): a cabinet with a shelf of ammo cases; standing
+  // in front and pressing interact refills the owned guns of `ammo` ('all' (default: light and heavy) / 'light' / 'heavy') to their
+  // max reserve (Pickups.update; toast + pickup sound). `prompt` (HUD text after the key cap, default by class). Unlimited uses.
+  // Front +Z at yaw 0, back to a wall. Collision 1.36 x 0.8, 2.4 high, not cover. `yaw` in quarter turns.
+  'supply.ammo': {
+    example: { params: { ammo: 'all' } },
+    label: `AMMO SUPPLY interact: refills owned guns to max | ${SUPPLY.reach} m`,
+    fields: [{ key: 'ammo', type: 'enum', options: AMMO_CLASSES }, { key: 'prompt', type: 'text', optional: true }],
+    build(world, d) {
+      const id = 'supply.ammo';
+      const q = quarters(id, d.yaw);
+      const p = d.params ?? {};
+      const ammo = p.ammo ?? 'all';
+      if (!AMMO_CLASSES.includes(ammo)) fail(id, `"ammo" must be one of ${AMMO_CLASSES.join(', ')}, got ${JSON.stringify(ammo)}`);
+      if (p.prompt != null && typeof p.prompt !== 'string') fail(id, '"prompt" must be text');
+      const M = world.dressing;
+      const text = { all: 'AMMUNITION', light: 'LIGHT ROUNDS', heavy: 'HEAVY ROUNDS' }[ammo];
+      const parts = supplyCabinet(world, M, text, glowOf(M, ammo));
+      parts.push(bx(M.metal, 1.16, 0.05, 0.36, 0, 0.82, 0.42), bx(M.dark, 0.05, 0.3, 0.3, -0.5, 0.66, 0.4), bx(M.dark, 0.05, 0.3, 0.3, 0.5, 0.66, 0.4)); // shelf on brackets
+      const cases = ammo === 'all' ? ['light', 'heavy', 'light'] : [ammo, ammo, ammo];
+      cases.forEach((c, i) => parts.push(...ammoCase(M, c, (i - 1) * 0.38, 0.845, 0.42)));
+      const meshes = bake(world, d, parts, { yaw: q * Math.PI / 2 });
+      collider(world, d, q, { x: 0, z: 0.05, w: 1.36, d: 0.8 }, 2.4);
+      const rec = supplyRecord(world, d, 'ammo', { ammo: ammo === 'all' ? ['light', 'heavy'] : [ammo], prompt: p.prompt ?? `RESUPPLY ${text}` });
+      return [...meshes, rec];
+    },
+  },
+
+  // Repair station (campaign rule: health only comes back at repair stations, besides the slow regeneration): a cabinet with a
+  // service arm and umbilicals; interact restores health and shields to full (Pickups.update). `prompt` (default REPAIR). Unlimited
+  // uses. Front +Z at yaw 0, back to a wall. Collision 1.36 x 0.8, 2.4 high, not cover. `yaw` in quarter turns.
+  'supply.repair': {
+    example: { params: {} },
+    label: `REPAIR STATION interact: full health and shields | ${SUPPLY.reach} m`,
+    fields: [{ key: 'prompt', type: 'text', optional: true }],
+    build(world, d) {
+      const id = 'supply.repair';
+      const q = quarters(id, d.yaw);
+      const p = d.params ?? {};
+      if (p.prompt != null && typeof p.prompt !== 'string') fail(id, '"prompt" must be text');
+      const M = world.dressing;
+      const parts = supplyCabinet(world, M, 'REPAIR', M.glowWhite);
+      parts.push(
+        bx(M.metal, 0.12, 0.12, 0.5, 0, 1.25, 0.5), // service arm out of the cabinet
+        bx(M.ochre, 0.3, 0.14, 0.16, 0, 1.18, 0.78), // tool head
+        cyl(M.metal, 0.02, 0.02, 0.22, -0.08, 1.02, 0.8, 0, 0, 0, 6), // probes
+        cyl(M.metal, 0.02, 0.02, 0.22, 0.08, 1.02, 0.8, 0, 0, 0, 6),
+        bx(M.glowWhite, 0.2, 0.02, 0.02, 0, 1.18, 0.865), // its lamp
+        bx(M.dark, 0.9, 0.06, 0.3, 0, 0.5, 0.4), // footplate
+      );
+      for (const x of [-0.45, 0.45]) { // umbilicals hanging from the header in a sag
+        const pts = [[x, 2.08, 0.3], [x * 1.05, 1.5, 0.45], [x * 0.9, 1.05, 0.42], [x * 0.7, 0.75, 0.3]].map((v) => new THREE.Vector3(...v));
+        const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, 0.035, 6), M.dark);
+        tube.userData.own = true;
+        parts.push(tube);
+      }
+      const meshes = bake(world, d, parts, { yaw: q * Math.PI / 2 });
+      collider(world, d, q, { x: 0, z: 0.05, w: 1.36, d: 0.8 }, 2.4);
+      const rec = supplyRecord(world, d, 'repair', { prompt: p.prompt ?? 'REPAIR' });
+      return [...meshes, rec];
+    },
+  },
+
   // Diagnostic console: pedestal + angled screen with a scrolling cyan readout, facing +Z at yaw 0. Collision: the pedestal
   // (0.8 x 0.6, 1.35 high), not cover. No params.
   'prop.console': {

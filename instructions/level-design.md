@@ -37,6 +37,8 @@ Text the player reads goes in quotes, exactly as shown in game (narrative.md rul
 | `NEEDS <gun>` | goal only completes if the gun is owned | `requiresGun` |
 | `SKIP IF [vol]` / `SKIP IF OWNED <gun>` | optional goal | `skipOn` / `skipIfOwned` |
 | `LOG "> TEXT"` | STEM-00 line at this beat | `log.line` (`on` = the beat's event) |
+| `LOADOUT <guns> ON [vol]` | take back every other gun when the player enters | `trigger.volume` with `loadout` |
+| `GOAL action fire <light\|heavy> "TEXT"` | fire a gun of that ammo class | `objective.action` `fire` + `ammo` |
 | `SAY "TEXT"` | announcer line | `log.line` with `voice: announcer` |
 | `ALARM on` / `ALARM off` | alarm lighting from / to this beat | `env.alarm` `on` / `off` |
 | `OPEN [gate]` | a sealed gate opens when the beat is done | `kit.gate` `on: objective:<id>:done` |
@@ -96,6 +98,14 @@ LOG   "> MOTION UNRESTRICTED. NO ONE OBJECTS."  ON [bay-exit]
 
 ## 2. Calibrate
 GOAL  destroy count 3 "CALIBRATION TARGETS"   -- as built: the bay's CALIBRATION 01-06 (c1-move .. c6-transfer, orders 10-17) before [leave-bay] (20); no yard puppets
+
+## 2.5 Weapons range   -- west of C6: in through [range-gate], out through [range-exit-gate] onto the hall landing
+GOAL  action fire light "WEAPONS RANGE: LIGHT ROUNDS"   -- racks: light (KR-7, KM-90, KB-3, cyan) / heavy (KS-5, KX-9, amber), supply crates beside them
+LOG   "> RANGE: LIVE. CLASS LIGHT: KR-7, KM-90, KB-3. ROUNDS: COMMON."
+GOAL  action fire heavy "WEAPONS RANGE: HEAVY ROUNDS"   -- armored puppets only yield to heavy rounds
+LOG   "> CLASS HEAVY: KS-5, KX-9. ROUNDS: SCARCE. FUNCTION: BREAK ARMOR."
+LOADOUT pistol  ON [range-return]                       -- trigger.volume loadout: the range guns stay behind
+LOG   "> RANGE ARMS: RECALLED. KP-12: RETAINED. ROUNDS: UNLIMITED."  ON [range-return]
 
 ## 3. Purge starts
 GOAL  wait CUT purge-cut "PURGE INITIATED"

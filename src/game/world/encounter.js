@@ -13,7 +13,7 @@ import { GUNS } from '../combat/guns.js';
 //  zone.interior      box (pos = centre x / bottom y / centre z, params { size [w,h,d] }): an interior zone. In play it is added to
 //                     `world.interiorZones` (camera exposure, HUD label INTERIOR, drones); the file's own `interiorZones` still work.
 //  trigger.volume     box (pos = centre x / bottom y / centre z). Fires `trigger:fired` { id, event } when the player
-//                     enters. params { size [w,h,d], event, once (true), wakeGroup?, spawnGroup? }.
+//                     enters. params { size [w,h,d], event, once (true), wakeGroup?, spawnGroup?, loadout? (gun ids: `encounter:loadout`, the others are taken back) }.
 //  objective.*        mission objectives (reach / destroy / survive / interact / action, #12): records only, `Mission` (mission.js) runs them.
 //                     Common params { text, order?, limit?, wakeGroup?, spawnGroup?, grantGun?, grantAmmo?, skipOn?, requiresGun?, skipIfOwned? }; see workshop.md "Missions".
 //  log.line           a STEM-00 log line (#40, instructions/narrative.md): params { text, on, priority? ('normal'), once? (true), delay? (s, 0) }.
@@ -51,7 +51,8 @@ export const TUNING = {
 
 const COLOR = { spawn: 0x58ff9a, checkpoint: 0x3affff, entry: 0xff7a3a, trigger: 0xff4bd6, zone: 0x4aa8ff, sector: 0x8a7aff, portal: 0xc8ff5a, objective: 0xffd23a, log: 0xffb347, alarm: 0xff3a2a, intro: 0xeaf6fa, cinematic: 0x7ad7ff };
 const TEXT = { reach: 'REACH THE ZONE', destroy: 'DESTROY THE TARGETS', survive: 'SURVIVE', interact: 'ACCESS THE TERMINAL', action: 'PERFORM THE MANEUVER' };
-export const ACTIONS = ['jet', 'cover', 'vault', 'slide', 'coverRun']; // `objective.action` moves (mission.js maps each to its player event)
+export const ACTIONS = ['jet', 'cover', 'vault', 'slide', 'coverRun', 'fire']; // `objective.action` moves (mission.js maps each to its player event; fire = weapon:shot, `ammo` filters the gun class)
+export const AMMO = ['light', 'heavy']; // ammo classes (guns.js `ammo`)
 
 // The level's player start: the first `marker.spawn` piece, else `level.spawn`. Pure.
 export function levelSpawn(level) {
@@ -77,6 +78,13 @@ export function objectiveGrantProblem(p, guns = null) {
   if (p.grantAmmo != null && p.grantGun == null) return 'grantAmmo needs grantGun';
   if (p.skipOn != null && (typeof p.skipOn !== 'string' || !p.skipOn)) return 'skipOn must be a trigger or checkpoint id';
   for (const k of ['requiresGun', 'skipIfOwned']) if (p[k] != null && (typeof p[k] !== 'string' || !GUNS[p[k]] || (guns && !guns.includes(p[k])))) return `${k} ${JSON.stringify(p[k])} is not a known gun`;
+  return null;
+}
+
+// Problem with a trigger's `loadout` (a list of gun ids, may be empty), or null. Pure.
+export function loadoutProblem(v, guns = null) {
+  if (v == null) return null;
+  if (!Array.isArray(v) || v.some((g) => typeof g !== 'string' || !GUNS[g] || (guns && !guns.includes(g)))) return `loadout ${JSON.stringify(v)} must be a list of known gun ids`;
   return null;
 }
 
@@ -189,12 +197,13 @@ export const ENCOUNTER_PIECES = {
   // Sectors (world/sectors.js, level.md "Sectors"): the World reads these from the level data; here they are records and editor gizmos.
   'zone.sector': { example: { params: { size: [12, 6, 12] } }, label: 'sector (room): drawn only when the camera can see into it; run the box to the centre of its walls', fields: [{ key: 'size', type: 'vec3', min: 0.1 }], check: sizeCheck, build: (sys, d) => sys.add('sector', d) },
   'zone.portal': { example: { params: { size: [4, 4, 0.6] } }, label: 'portal: an always-open opening between sectors (a doorway without kit.doorway)', fields: [{ key: 'size', type: 'vec3', min: 0.1 }], check: sizeCheck, build: (sys, d) => sys.add('portal', d) },
-  'trigger.volume': { example: { params: { size: [...TUNING.size], event: 'trigger', once: true } }, label: 'fires an event when the player enters; can wake / spawn a group', fields: [{ key: 'size', type: 'vec3', min: 0.1 }, { key: 'event', type: 'text' }, { key: 'once', type: 'bool', def: true }, { key: 'wakeGroup', type: 'text', optional: true }, { key: 'spawnGroup', type: 'text', optional: true }], build: (sys, d) => sys.add('trigger', d) },
+  // `loadout` (gun ids): entering takes back every other gun (weapon.setLoadout; the pistol always stays unless []), e.g. a range's loaners
+  'trigger.volume': { example: { params: { size: [...TUNING.size], event: 'trigger', once: true } }, label: 'fires an event when the player enters; can wake / spawn a group, or set the loadout', fields: [{ key: 'size', type: 'vec3', min: 0.1 }, { key: 'event', type: 'text' }, { key: 'once', type: 'bool', def: true }, { key: 'wakeGroup', type: 'text', optional: true }, { key: 'spawnGroup', type: 'text', optional: true }, { key: 'loadout', type: 'list', optional: true }], check: (p, registry) => loadoutProblem(p.loadout, registry.guns), build: (sys, d) => sys.add('trigger', d) },
   'objective.reach': objective('reach', 'objective: get the player into the box (or wait for a trigger / checkpoint id)', { size: [...TUNING.size] }, [{ key: 'size', type: 'vec3', min: 0.1 }, { key: 'trigger', type: 'text', optional: true }]),
   'objective.destroy': objective('destroy', 'objective: destroy the enemies of a group (any enemy without group)', { group: 'targets' }, [{ key: 'group', type: 'text', optional: true }, { key: 'count', type: 'number', optional: true, min: 1 }]),
   'objective.survive': objective('survive', 'objective: stay alive for a time', { time: TUNING.survive }, [{ key: 'time', type: 'number', min: 0.1 }]),
   'objective.interact': objective('interact', 'objective: press interact (G) within the radius', { radius: TUNING.radius }, [{ key: 'radius', type: 'number', min: 0.1 }, { key: 'prompt', type: 'text', optional: true }, { key: 'promptAt', type: 'vec3', optional: true }]),
-  'objective.action': objective('action', 'objective: do a move (jet, cover, vault hop, slide vault, cover run), optionally inside a box', { action: 'jet', count: 1 }, [{ key: 'action', type: 'enum', options: ACTIONS }, { key: 'count', type: 'number', optional: true, min: 1 }, { key: 'size', type: 'vec3', optional: true, min: 0.1 }]),
+  'objective.action': objective('action', 'objective: do a move (jet, cover, vault hop, slide vault, cover run, fire a gun of an ammo class), optionally inside a box', { action: 'jet', count: 1 }, [{ key: 'action', type: 'enum', options: ACTIONS }, { key: 'ammo', type: 'enum', options: AMMO, optional: true }, { key: 'count', type: 'number', optional: true, min: 1 }, { key: 'size', type: 'vec3', optional: true, min: 0.1 }]),
   'log.line': {
     example: { params: { text: '> LINK: NONE. QUERY: WHY?', on: 'start' } },
     label: 'STEM-00 log line, shown when `on` happens (narrative.md)',
@@ -386,6 +395,8 @@ export class Encounter {
       rec.event = p.event ?? 'trigger';
       rec.once = p.once ?? true;
       rec.tid = d.name ?? `trigger${this.triggers}`;
+      const lp = loadoutProblem(p.loadout, this.registry.guns);
+      if (lp) bad(id, lp);
     } else if (kind === 'entry') {
       const list = p.enemies ?? [];
       if (!Array.isArray(list) || list.some((e) => this.registry.owner(e) !== 'enemies')) bad(id, 'enemies must be a list of enemy piece ids');
@@ -441,6 +452,7 @@ export class Encounter {
       if (p.count !== undefined && !(Number.isInteger(p.count) && p.count >= 1)) bad(id, 'count must be a whole number, at least 1');
     } else if (obj === 'action') {
       if (!ACTIONS.includes(p.action)) bad(id, `action ${JSON.stringify(p.action)} is not one of ${ACTIONS.join(', ')}`);
+      if (p.ammo != null && (p.action !== 'fire' || !AMMO.includes(p.ammo))) bad(id, `ammo must be one of ${AMMO.join(', ')}, and only with action fire`);
       if (p.count !== undefined && !(Number.isInteger(p.count) && p.count >= 1)) bad(id, 'count must be a whole number, at least 1');
       if (p.size !== undefined && (!Array.isArray(p.size) || p.size.length !== 3 || p.size.some((n) => !(n > 0)))) bad(id, 'size must be [w, h, d], all above 0');
       rec.size = p.size ?? null;
@@ -570,6 +582,7 @@ export class Encounter {
     this.events.emit('trigger:fired', { id: r.tid, event: r.event });
     if (r.params.wakeGroup != null) this.wakeGroup(r.params.wakeGroup);
     if (r.params.spawnGroup != null) this.spawnGroup(r.params.spawnGroup);
+    if (r.params.loadout != null) this.events.emit('encounter:loadout', r.params.loadout.slice()); // game.js: weapon.setLoadout
   }
 
   // ---- gizmos (editor / Library only): shared geometry and materials, nothing to free per piece ----

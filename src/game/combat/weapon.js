@@ -143,7 +143,7 @@ export class Weapon {
     }
     const enemy = final?.object.userData.enemy;
     // armored parts (the mech's hull) read as cover, not as a target
-    if (enemy && enemy.alive && (!enemy.armor || enemy.armor(final.object.userData.zone, final.object) > 0)) {
+    if (enemy && enemy.alive && (!enemy.armor || enemy.armor(final.object.userData.zone, final.object, this.t) > 0)) {
       a.enemy = true;
       a.weak = final.object.userData.zone === 'weak';
     }
@@ -171,6 +171,21 @@ export class Weapon {
     return parts ? `${type.toUpperCase()} AMMO${parts}` : '';
   }
 
+  // A supply point (supply.ammo): every owned, non-infinite gun of the `types` ammo classes gets its reserve topped up to max.
+  // Returns a short label ('AMMO RESUPPLIED  +n AR ...'), or '' when all were full.
+  refill(types) {
+    let parts = '';
+    for (const id of GUN_ORDER) {
+      const g = GUNS[id];
+      if (!types.includes(g.ammo) || g.infinite || !this.owned.has(id)) continue;
+      const s = this.state[id];
+      const got = Math.max(0, g.maxReserve - s.reserve);
+      s.reserve += got;
+      if (got > 0) parts += `  +${got} ${g.short}`;
+    }
+    return parts ? `AMMO RESUPPLIED${parts}` : '';
+  }
+
   // Gives the player a gun (pickup.gun) and `ammo` rounds into its reserve, capped at its max. The first time a gun is
   // owned in this level it emits 'weapon:discovered' { gun }. Returns the rounds added.
   grant(id, { ammo = 0 } = {}) {
@@ -183,6 +198,31 @@ export class Weapon {
       this.events.emit('weapon:discovered', { gun: id });
     }
     return got;
+  }
+
+  // Takes back every gun not in `guns` (a trigger.volume `loadout`, e.g. the Prologue range's exit): those guns are unowned
+  // again with a full magazine and an empty reserve (as at a level start), the raised gun switches to the first kept one in
+  // GUN_ORDER (the pistol). `[]` leaves the player unarmed. A gun granted later counts as discovered again (toast).
+  // Returns the guns taken back.
+  setLoadout(guns) {
+    const keep = new Set(guns.length ? ['pistol', ...guns] : []);
+    const taken = [...this.owned].filter((id) => !keep.has(id));
+    for (const id of taken) {
+      this.owned.delete(id);
+      this.state[id] = { ammo: GUNS[id].mag, reserve: 0, boost: false };
+    }
+    if (this.current && !keep.has(this.current)) {
+      const next = GUN_ORDER.find((id) => keep.has(id)) ?? null;
+      this.charging = this.burstLeft = this.reloading = 0;
+      this.active = null;
+      this.pending = null;
+      this.switching = 0;
+      this.current = next; // straight to it: the taken gun is not lowered first
+      this.player.setGun(next);
+      this.rig.zoom = next ? this.t.zoom ?? null : null;
+      this.events.emit('weapon:switch', next);
+    }
+    return taken;
   }
 
   // Next owned gun from `from` in GUN_ORDER, stepping `dir` (+1 / -1). Only called armed (the pistol is always owned then), so it ends.
@@ -479,7 +519,7 @@ export class Weapon {
   // A pierceable hit: a live enemy's part that isn't armored.
   #passes(h) {
     const e = h.object.userData.enemy;
-    return !!e && (!e.armor || e.armor(h.object.userData.zone, h.object) > 0);
+    return !!e && (!e.armor || e.armor(h.object.userData.zone, h.object, this.t) > 0);
   }
 
   #zoneMult(h) {
@@ -490,7 +530,7 @@ export class Weapon {
 
   #hit(hit, toAim, enemy) {
     const t = this.t;
-    const armor = enemy?.armor ? enemy.armor(hit.object.userData.zone, hit.object) : 1;
+    const armor = enemy?.armor ? enemy.armor(hit.object.userData.zone, hit.object, t) : 1; // armor(zone, part, gun def): an armored puppet only yields to heavy rounds
     if (enemy && armor <= 0) {
       // armor: the round glances off (sparks, no damage) and the HUD hints where to shoot
       IMPACT.point = hit.point;

@@ -60,6 +60,15 @@ export class Mission {
         if (++this.progress >= this.target) this.#complete();
       });
     }
+    // objective.action `fire`: a round fired while it is current; with `ammo` ('light' / 'heavy') only from a gun of that ammo class (guns.js)
+    events.on('weapon:shot', (e) => {
+      const r = this.current;
+      if (r?.obj !== 'action' || r.params.action !== 'fire') return;
+      const g = GUNS[e.gun];
+      if (r.params.ammo != null && (g?.ammo !== r.params.ammo || g.infinite)) return;
+      if (r.size && !this.#inside(r)) return;
+      if (++this.progress >= this.target) this.#complete();
+    });
     events.on('group:spawn', (e) => {
       const r = this.current;
       if (r?.obj === 'destroy' && r.params.count == null && (r.params.group == null || r.params.group === e.group)) this.target += e.count;

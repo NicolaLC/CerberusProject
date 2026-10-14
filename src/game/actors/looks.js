@@ -155,9 +155,9 @@ export function buildTrooper(rig, M, visor) {
 // ---------------- training puppet: crash-test mannequin robot on a pneumatic post ----------------
 
 // color: the kind's shell color (calibration-frame ochre targets, darker ochre shooters): matte, scuffed paint.
-export function puppetMaterials(color) {
+export function puppetMaterials(color, armored = false) {
   return {
-    shell: wornMaterial(color, { roughness: 0.88, metalness: 0.08 }), // painted shell
+    shell: armored ? wornMaterial(color, { roughness: 0.5, metalness: 0.6, wear: 'metal' }) : wornMaterial(color, { roughness: 0.88, metalness: 0.08 }), // painted shell (armored: bare plate steel)
     frame: wornMaterial(0x2a2c31, { roughness: 0.55, metalness: 0.5, wear: 'metal' }), // black joints and frame
   };
 }

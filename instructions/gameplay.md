@@ -37,8 +37,13 @@
   in `GUNS`): pickups skip it and it never counts as needing ammo. A pickup refills only its own
   class, each gun by its own `pickup.crate` / `pickup.drop` amounts (AR 96/32, MG 135/45, SR 10/3, RG 8/2...).
   Light is the cyan glow (small case, one band), heavy the orange/amber glow (taller case, two bands, brighter).
-- Cases at fixed `SPOTS` in `game/world/pickups.js` (7 light, 3 heavy: range, interior west, boss arena back) respawn after 15s.
-- Broken puppets drop a clip 45% of the time (25% of drops are heavy; vanishes after 25s, blinks at the end).
+- Loose cases are level data (`pickup.light` / `pickup.heavy` pieces, opt-in per level: the arena keeps its 7 light + 3 heavy) and respawn after 15 s.
+- Enemies drop no ammo (owner, 2026-10-14). An enemy's `dropGun` still leaves that gun.
+- **Supply points** (`supply.ammo`, level.md): interact (G / B) at the cabinet tops the owned guns of its class(es) up to their max reserve, unlimited
+  uses. **Repair stations** (`supply.repair`): interact restores health and shields. Prompt over the cabinet like an objective terminal.
+- **Loaner guns**: a `trigger.volume` with `loadout` takes back every gun not listed (unowned again, full magazine, empty reserve; the raised gun
+  switches straight to the pistol). The Prologue's weapons range lends all five non-pistol guns this way.
+- **Armored targets** (`armored` puppets): only heavy rounds (SR, RG) damage them; light rounds and the pistol spark off.
 - Walk within 1.1m to collect; toast "LIGHT AMMO +n AR ..." / "HEAVY AMMO +n SR ...". If every gun of that class is
   full the pickup stays ("AMMO FULL").
 
