@@ -320,7 +320,8 @@ const rooms = await p.evaluate(() => {
   out.droneHidden = drone.awake;
   T.key('KeyL');
   T.bolts = 0;
-  T.hold(0, 26, 6);
+  // it strafes round the room and fires only with a clear line (cover sits between): wait for the first burst, up to 30 s
+  for (let s = 0; s < 30 && !T.bolts; s++) T.hold(0, 26, 1);
   out.droneAwake = drone.awake;
   out.droneFire = T.bolts;
   // spider: dormant in the corridor (> 28 m, no line of sight), wakes the moment the player is in the arena
