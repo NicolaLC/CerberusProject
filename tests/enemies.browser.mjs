@@ -194,6 +194,67 @@ expect('dormant: the woken shooter / trooper now fire', d.fires);
 expect('shooter: the player behind a wall -> it stays down (no blind pop-ups), in sight -> it comes up', d.blindUps === 0 && d.upInSight);
 expect('dormant: a dormant enemy can be killed', d.dies);
 expect('dormant: without a group it fails validation with a clear message', /dormant/.test(d.noGroup ?? '') && /group/.test(d.noGroup ?? '') && d.okGroup === null && d.okPlain === null);
+
+// plated trooper (armored: true): light rounds and the pistol do x0.25 on the body, heavy rounds and the weak spot full. Real shots
+// through the weapon, measured against an ordinary trooper hit in the same spot from the same distance.
+const a = await p.evaluate(() => {
+  const { engine, enemies, player, camRig, weapon } = window.game;
+  const events = engine.events;
+  const keys = engine.input.keys;
+  const step = (n = 1) => { for (let i = 0; i < n; i++) engine.step(1 / 60); };
+  const out = {};
+  for (const e of enemies.all) e.alive = false;
+  enemies.dirty = true;
+  player.respawn();
+  player.shields = player.health = 1e6;
+  for (const id of ['rifle', 'sniper']) weapon.grant(id, { ammo: 40 });
+  let armoredEvents = 0;
+  events.on('weapon:armored', () => armoredEvents++);
+  const test = (gun, armored, weak) => {
+    weapon.switchTo(gun);
+    step(60);
+    const tr = enemies.spawn({ id: 'enemy.trooper', pos: [2, 0, -15.3], params: { group: 'pl', dormant: true, armored } });
+    step(2);
+    player.pos.set(2, 0, -15.3 + 8);
+    const aim = weak ? tr.weakSpots[0].getWorldPosition(player.pos.clone()) : tr.rig.bones.Spine2.getWorldPosition(player.pos.clone());
+    keys.add('Mouse2');
+    for (let i = 0; i < 60; i++) {
+      const c = camRig.camera.position;
+      camRig.yaw = Math.atan2(-(aim.x - c.x), -(aim.z - c.z));
+      camRig.pitch = Math.atan2(aim.y - c.y, Math.hypot(aim.x - c.x, aim.z - c.z));
+      step();
+    }
+    const hp = tr.health;
+    const ev = armoredEvents;
+    weapon.cooldown = 0;
+    keys.add('Mouse0'); engine.input.pressed.add('Mouse0'); step(); keys.delete('Mouse0');
+    step(2);
+    keys.delete('Mouse2');
+    const res = { dmg: hp - tr.health, sparks: armoredEvents - ev };
+    tr.alive = false;
+    enemies.dirty = true;
+    step(2);
+    return res;
+  };
+  for (const gun of ['pistol', 'rifle', 'sniper']) {
+    const plain = test(gun, false, false);
+    const plated = test(gun, true, false);
+    out[gun] = { plain: plain.dmg, plated: plated.dmg, ratio: plated.dmg / plain.dmg, sparks: plated.sparks, plainSparks: plain.sparks };
+  }
+  const weakPlated = test('pistol', true, true); // (the weak spot sits on a random body part: no matching plain shot to compare with)
+  out.weak = { plated: weakPlated.dmg, sparks: weakPlated.sparks, expected: out.pistol.plain * weapon.t.weakMult };
+  const tr = enemies.spawn({ id: 'enemy.trooper', pos: [0, 0, 0], params: { armored: true } });
+  out.zoneMults = { limb: tr.armor('limb', null, { ammo: 'light' }), head: tr.armor('head', null, { ammo: 'light' }), heavy: tr.armor('torso', null, { ammo: 'heavy' }), weak: tr.armor('weak', null, { ammo: 'light' }) };
+  tr.alive = false;
+  return out;
+});
+console.log(a);
+const near = (x, y) => Math.abs(x - y) < 0.02;
+expect('plated trooper: pistol body hit does x0.25', a.pistol.plain > 0 && near(a.pistol.ratio, 0.25) && a.pistol.sparks === 1 && a.pistol.plainSparks === 0);
+expect('plated trooper: rifle body hit does x0.25 (sparks too)', a.rifle.plain > 0 && near(a.rifle.ratio, 0.25) && a.rifle.sparks >= 1);
+expect('plated trooper: the Farsight does full damage, no sparks', a.sniper.plain > 0 && near(a.sniper.ratio, 1) && a.sniper.sparks === 0);
+expect('plated trooper: the weak spot takes full damage from the pistol', a.weak.plated > 0 && near(a.weak.plated, a.weak.expected) && a.weak.sparks === 0);
+expect('plated trooper: head and limbs x0.25 for light rounds, heavy full, weak spot full', a.zoneMults.limb === 0.25 && a.zoneMults.head === 0.25 && a.zoneMults.heavy === 1 && a.zoneMults.weak === 1);
 console.log(r);
 expect('destroyed puppet stays destroyed after 15 s', r.stillDead);
 expect('its debris is cleaned up', r.debrisCleared);

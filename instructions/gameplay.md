@@ -49,6 +49,10 @@
 - **Loaner guns**: a `trigger.volume` with `loadout` takes back every gun not listed (unowned again, full magazine, empty reserve; the raised gun
   switches straight to the pistol). The Prologue's weapons range lends all five non-pistol guns this way.
 - **Armored targets** (`armored` puppets): only heavy rounds (SR, RG) damage them; light rounds and the pistol spark off.
+- **Plated troopers** (`armored` trooper, `TUNING.plateMult` 0.25): light rounds and the pistol do x0.25 on head, torso and limbs
+  (a hit still hurts, but emits `weapon:impact` sparks and `weapon:armored`: `Weapon.#hit` does that for any `armor()` below 1);
+  heavy rounds full; the glowing weak spot is never plated (every gun, full `weakMult`). `armor(zone, part, gun)` gets the gun def
+  from weapon.js (also in the aim probe and the pierce check).
 - Walk within 1.1m to collect; toast "LIGHT AMMO +n AR ..." / "HEAVY AMMO +n SR ...". If every gun of that class is
   full the pickup stays ("AMMO FULL").
 
@@ -199,7 +203,8 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
   player enters the arena or comes within 28 m with line of sight, or shoots it. Boss bar: core health, leg pips.
 - Armor: the hull, turret and closed shutters take no damage (`armor()` returns 0: sparks only and no decal, since decals
   stay in world space and would hang in the air once the mech moves; the crosshair
-  doesn't turn red; `weapon:armored` is emitted but nothing shows a hint). Legs take damage (limb ×0.8), the glowing knee joints are weak spots (×3),
+  doesn't turn red; `weapon:armored` is emitted but nothing shows a hint). Legs take damage (limb ×0.8), the glowing knee joints are weak spots (×3), but plate greaves cut light rounds and the pistol
+  to ×0.3 on any leg, knees included (`GREAVES` in spider.js; heavy rounds full),
   except while the core is open (`coreOpen`: collapsed, hatch up): then the legs are armored too, so the collapse is the time to shoot the core.
   Legs have 160 HP; a broken leg falls off and the body tilts toward the gap; it slows 12% per lost leg.
 - Every second leg lost (and the 5th) collapses it for 7 s (forever with none left): the shutters open and the

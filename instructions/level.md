@@ -75,7 +75,7 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `kit.pillar` | world | 1.2 x 1.2 x 2.8 high cover; `mat` (`high`) |
 | `kit.platform` | world | solid deck, `size [w,d]` (8 x 8), `height` (1.6), `stairs?` `'n'\|'s'\|'e'\|'w'` (attached outside that side, `stairsWidth` 4), `parapets?` `true` or a list of sides (low 1.1 x 0.6, open at the stairs), `mat`, `coverMat` (parapets) |
 | `enemy.static` / `enemy.mover` / `enemy.shooter` | enemies | puppets on a stand. `yaw?`; mover: `to [x,y,z]`, `speed`; static / mover `armored?` (bare dark plate steel: only heavy rounds hurt it, light rounds and the pistol spark off, `weapon:armored`) |
-| `enemy.trooper` | enemies | cover-using soldier. `yaw?` |
+| `enemy.trooper` | enemies | cover-using soldier. `yaw?`, `armored?` (plated: bare dark plate steel, bigger pauldrons and chest plate; light rounds and the pistol do x0.25 with sparks and `weapon:armored`, heavy rounds and the weak spot full damage) |
 | `enemy.drone` | enemies | `pos` = the ground under it |
 | `boss.spider` | enemies | `yaw?`, `arena: { minX, maxX, minZ, maxZ }` (the boss stays inside; wakes when the player enters) |
 | `pickup.light` / `pickup.heavy` | pickups | respawning ammo crate of that class |

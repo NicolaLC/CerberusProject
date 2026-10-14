@@ -45,6 +45,7 @@ const HIPS = [[1.25, 1.2], [1.45, 0], [1.25, -1.2]]; // [|x|, z] on the hull, fr
 const REST = [[3.8, 3.1], [4.4, 0], [3.8, -3.1]]; // foot rest offsets in the body's space (legs splayed wide)
 // rim sensor clusters: [angle around the rim (0 = front), height on the band, cluster radius, lenses]
 const SENSORS = [[0.08, 0.0, 0.1, 3], [-0.14, -0.01, 0.085, 3], [0.27, 0.01, 0.075, 3], [-0.33, 0.0, 0.065, 2], [0.45, -0.01, 0.055, 2], [-0.55, 0.01, 0.045, 2]];
+const GREAVES = 0.3; // leg damage factor of light rounds and the pistol (plate greaves); heavy rounds x1
 const GUN_SIDE = 2.95; // m from the muzzle to each gun pod, sideways
 
 const _v = new THREE.Vector3();
@@ -320,12 +321,14 @@ export class SpiderMech {
   }
 
   // Damage multiplier for a hit on this object: the hull and closed core shrug shots off; while the core is open the legs
-  // do too (sparks, weapon:armored), so the collapse is the moment to shoot the core.
-  armor(zone, object) {
+  // do too (sparks, weapon:armored), so the collapse is the moment to shoot the core. Plate greaves: light rounds and the
+  // pistol (GUNS ammo not 'heavy') do GREAVES to a leg, knees included; heavy rounds full.
+  armor(zone, object, gun) {
     const p = object.userData.part;
     if (p === 'hull') return 0;
     if (p === 'core') return this.coreOpen ? 1 : 0;
-    return this.coreOpen ? 0 : 1;
+    if (this.coreOpen) return 0;
+    return gun?.ammo === 'heavy' ? 1 : GREAVES;
   }
 
   // Returns true if this hit destroyed it.

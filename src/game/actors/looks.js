@@ -12,16 +12,20 @@ const SIDES = [['Left', 1], ['Right', -1]];
 
 // ---------------- trooper: HiveMind assault robot (gunmetal frame, dark metal armor, worn ochre livery) ----------------
 
-export function trooperMaterials() {
+// armored: the plated trooper (trooper.js `armored`): bare dark plate steel instead of the ochre livery.
+export function trooperMaterials(armored = false) {
   return {
     frame: wornMaterial(0x24272d, { roughness: 0.55, metalness: 0.55, wear: 'metal' }), // dark gunmetal frame, joints, pistons
     armor: wornMaterial(0x3a3d40, { roughness: 0.6, metalness: 0.45, wear: 'metal' }), // dark metal armor plates
-    plate: wornMaterial(0xc9a23a, { roughness: 0.85, metalness: 0.15 }), // matte ochre livery, chipped (also the rifle's furniture)
+    plate: armored
+      ? wornMaterial(0x50565c, { roughness: 0.5, metalness: 0.6, wear: 'metal' }) // bare plate steel, no livery (also the rifle's furniture)
+      : wornMaterial(0xc9a23a, { roughness: 0.85, metalness: 0.15 }), // matte ochre livery, chipped (also the rifle's furniture)
   };
 }
 
 // visor: the glowing material (optics, LEDs) that flares as the trooper aims.
-export function buildTrooper(rig, M, visor) {
+// armored: bigger pauldrons and a thick chest plate (same materials: no extra draw calls).
+export function buildTrooper(rig, M, visor, armored = false) {
   const L = (bone, ...children) => rig.attach(bone, look(...children));
 
   L(
@@ -59,6 +63,7 @@ export function buildTrooper(rig, M, visor) {
     rb(visor, 0.08, 0.012, 0.006, 0.003, 0, 0.03, 0.165),
     rb(M.armor, 0.32, 0.07, 0.22, 0.025, 0, 0.27, -0.01), // collar
     rb(M.armor, 0.4, 0.28, 0.07, 0.03, 0, 0.12, -0.14), // back plate
+    ...(armored ? [rb(M.armor, 0.46, 0.3, 0.07, 0.03, 0, 0.13, 0.17, -0.08)] : []), // plated: thick chest plate over the breastplate
   );
   // back: power pack with twin exhausts and a stub antenna
   rig.attach(
@@ -105,6 +110,7 @@ export function buildTrooper(rig, M, visor) {
       cap(M.frame, 0.052, 0.18, 0, -0.15, 0),
       rb(M.armor, 0.19, 0.13, 0.24, 0.05, 0.05 * s, 0.01, 0, 0, 0, 0.35 * s), // pauldron
       rb(M.plate, 0.2, 0.025, 0.25, 0.01, 0.055 * s, 0.07, 0, 0, 0, 0.35 * s), // ochre rim
+      ...(armored ? [rb(M.armor, 0.27, 0.16, 0.3, 0.06, 0.07 * s, 0.04, 0, 0, 0, 0.35 * s)] : []), // plated: oversized pauldron
       rb(M.armor, 0.11, 0.1, 0.12, 0.03, 0.02 * s, -0.17, 0), // bicep plate
       cyl(M.frame, 0.045, 0.045, 0.1, 0, -0.29, 0, 0, 0, R), // elbow joint
     );

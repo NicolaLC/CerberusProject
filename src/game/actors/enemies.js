@@ -26,7 +26,7 @@ const GROUP = { key: 'group', type: 'text', optional: true };
 // `dormant` (every enemy): never wakes itself (no sight, hearing, arena entry or damage wake; a shooter never pops up or
 // fires) but still takes hits and dies; only wakeGroup(its group) wakes it. Needs a group, or it could never wake.
 const DORMANT = { key: 'dormant', type: 'bool', def: false };
-const ARMORED = { key: 'armored', type: 'bool', def: false }; // puppets: only heavy rounds hurt it (puppet.js armor)
+const ARMORED = { key: 'armored', type: 'bool', def: false }; // puppets: only heavy rounds hurt it (puppet.js armor); trooper: light rounds do x0.25 (trooper.js armor)
 const dormantCheck = (p) => (p.dormant && (typeof p.group !== 'string' || !p.group) ? 'is dormant but has no group: nothing could ever wake it (set "group")' : null);
 // `dropGun` (every enemy): the gun id it leaves on the floor when destroyed (a pickup, Pickups.dropGun), unless the player owns it already.
 // `dropAmmo`: rounds in that pickup (default the gun's drop size). `dropOnce` (true): only the first destroyed enemy of the level drops that gun.
@@ -47,7 +47,7 @@ export const ENEMY_PIECES = {
   'enemy.mover': { stand: true, example: { params: { speed: 0 } }, label: `HP ${HEALTH.default} | slides on a rail`, check: enemyCheck, fields: [GROUP, DORMANT, ARMORED, { key: 'to', type: 'vec3', optional: true }, { key: 'speed', type: 'number', min: 0 }, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('mover', d)) },
   'enemy.shooter': { stand: true, example: { params: {} }, label: `HP ${HEALTH.shooter} | pops up and fires within ${ENGAGE_RANGE} m`, check: enemyCheck, fields: [GROUP, DORMANT, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('shooter', d)) },
   // moves between cover and shoots back
-  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m`, check: enemyCheck, fields: [GROUP, DORMANT, ...DROP], build: (sys, d) => new Trooper(sys.ctx, def('trooper', d)) },
+  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m`, check: enemyCheck, fields: [GROUP, DORMANT, ARMORED, ...DROP], build: (sys, d) => new Trooper(sys.ctx, def('trooper', d)) },
   // hovers and strafes, short bursts
   'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m`, check: enemyCheck, fields: [GROUP, DORMANT, ...DROP], build: (sys, d) => new Drone(sys.ctx, def('drone', d)) },
   // miniboss

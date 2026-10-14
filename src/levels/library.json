@@ -20,6 +20,8 @@
     {"id":"env.label","pos":[-4,0,29.2],"params":{"text":"enemy.shooter\nHP 120 | pops up and fires within 30 m","size":0.22,"flat":true}},
     {"id":"enemy.trooper","name":"ex:enemy.trooper","pos":[6,0,26]},
     {"id":"env.label","pos":[6,0,29.2],"params":{"text":"enemy.trooper\nHP 150 | notices 32 m, shoots 30 m","size":0.22,"flat":true}},
+    {"id":"enemy.trooper","name":"ex:enemy.trooper.armored","pos":[-30,0,26],"params":{"armored":true}},
+    {"id":"env.label","pos":[-30,0,29.2],"params":{"text":"enemy.trooper (armored)\nlight rounds x0.25, heavy full, weak spot full","size":0.22,"flat":true}},
     {"id":"enemy.drone","name":"ex:enemy.drone","pos":[14,0,26]},
     {"id":"env.label","pos":[14,0,29.2],"params":{"text":"enemy.drone\nHP 55 | wakes at 36 m, hovers 3.5-5 m","size":0.22,"flat":true}},
     {"id":"boss.spider","name":"ex:boss.spider","pos":[28,0,22],"params":{"arena":{"minX":19,"maxX":37,"minZ":10,"maxZ":34}}},

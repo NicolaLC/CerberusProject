@@ -540,14 +540,15 @@ export class Weapon {
   #hit(hit, toAim, enemy) {
     const t = this.t;
     const armor = enemy?.armor ? enemy.armor(hit.object.userData.zone, hit.object, t) : 1; // armor(zone, part, gun def): an armored puppet only yields to heavy rounds
-    if (enemy && armor <= 0) {
-      // armor: the round glances off (sparks, no damage) and the HUD hints where to shoot
+    if (enemy && armor < 1) {
+      // armor: the round glances off (sparks) and the HUD hints where to shoot; a partial multiplier (plate) still hurts
       IMPACT.point = hit.point;
       IMPACT.normal.copy(toAim).negate();
       IMPACT.decal = false; // decals live in world space: on a walking boss they'd hang in the air where it was
       this.events.emit('weapon:impact', IMPACT);
       this.events.emit('weapon:armored', enemy);
-    } else if (enemy) {
+    }
+    if (enemy && armor > 0) {
       const zone = hit.object.userData.zone;
       const boost = this.boosted ? ACTIVE.boostMult : 1;
       const mult = boost * this.#zoneMult(hit);
@@ -560,7 +561,7 @@ export class Weapon {
       HIT.weak = zone === 'weak';
       HIT.crit = zone === 'head' || HIT.weak;
       this.events.emit('weapon:hit', HIT);
-    } else {
+    } else if (!enemy) {
       IMPACT.point = hit.point;
       if (hit.face) IMPACT.normal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
       else IMPACT.normal.copy(_back.copy(toAim).negate());

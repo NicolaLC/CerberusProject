@@ -27,6 +27,7 @@ export const TUNING = {
   flankRun: 5.4, // flankers sprint
   flankTravel: 30, // m: how far a flanker will go
   accel: 10,
+  plateMult: 0.25, // plated trooper: damage factor of light rounds and the pistol on plate (heavy rounds and the weak spot: x1)
   sight: 32, // m: notice the player within this range with line of sight
   engage: 30, // m: shoot within this range
   alertRadius: 22, // squadmates within this range join in
@@ -65,11 +66,12 @@ export class Trooper extends EnemyBody {
       pos: def.pos,
       yaw: def.yaw ?? 0,
       health: TUNING.health,
-      mats: trooperMaterials(),
+      mats: trooperMaterials(!!def.armored),
       armed: true,
       weakSpots: 1,
     });
-    buildTrooper(this.rig, this.mats, this.visor);
+    this.armored = !!def.armored; // `armored` param: plated, light rounds / pistol do TUNING.plateMult (weak spot excepted)
+    buildTrooper(this.rig, this.mats, this.visor, this.armored);
     this.t = TUNING;
     this.vel = new THREE.Vector3();
     this.offset = new THREE.Vector3(); // peek step, applied to the visual position
@@ -111,6 +113,12 @@ export class Trooper extends EnemyBody {
   // Spawn groups (enemies.js wakeGroup): awake = alerted.
   get awake() {
     return this.alerted;
+  }
+
+  // Damage multiplier (weapon.js): plate turns light rounds and the pistol (GUNS ammo not 'heavy') to plateMult, with sparks
+  // and weapon:armored; heavy rounds and the glowing weak spot take full damage.
+  armor(zone, object, gun) {
+    return !this.armored || zone === 'weak' || gun?.ammo === 'heavy' ? 1 : this.t.plateMult;
   }
 
   wake() {

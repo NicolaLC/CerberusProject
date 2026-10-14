@@ -113,7 +113,13 @@ const r = await p.evaluate(async () => {
   });
   step(boss.t.downTime + 0.5);
   out.getsBackUp = boss.down <= 0 && boss.height > 2;
-  out.legsHittableUp = boss.armor('weak', knee) === 1;
+  const light = { ammo: 'light' };
+  const heavy = { ammo: 'heavy' };
+  const legPart = boss.hitMeshes.find((m) => m.userData.part === 2 && m !== knee) ?? knee;
+  out.legsHittableUp = boss.armor('weak', knee, heavy) === 1 && boss.armor('limb', legPart, heavy) === 1;
+  // plate greaves: light rounds and the pistol do x0.3 to a leg (knee included), heavy rounds full; hull and core unchanged
+  out.greaves = boss.armor('weak', knee, light) === 0.3 && boss.armor('limb', legPart, light) === 0.3 && boss.armor('limb', legPart) === 0.3;
+  out.hullHeavy = boss.armor('torso', hull, heavy) === 0 && boss.armor('weak', boss.core, heavy) === 0;
   // 8. one collapse takes at most coreBite of the core, then the hatch closes and it stands up early
   for (const l of boss.legs.slice(2, 4)) boss.damage(500, l.foot, dir, 'weak', l.knee);
   for (let i = 0; i < 20; i++) boss.damage(100, boss.pos, dir, 'weak', boss.core);
@@ -147,7 +153,9 @@ expect('two legs down: collapsed, core exposed', r.legsLost === 2 && r.down && r
 expect('down: the risen core is hittable from the ground (half the sides at least)', r.coreShots.filter((x) => x === true).length >= 4);
 expect('core open: the legs take no damage (armored)', r.legsArmoredOpen);
 expect('gets back up after a while', r.getsBackUp);
-expect('  standing again: the legs take damage', r.legsHittableUp);
+expect('  standing again: the legs take damage from heavy rounds', r.legsHittableUp);
+expect('  plate greaves: light rounds and the pistol do x0.3 to a leg, knee included', r.greaves);
+expect('  heavy rounds do not pierce the hull or the closed core', r.hullHeavy);
 expect('one collapse takes at most coreBite of the core, then the hatch closes', r.biteCapped);
 expect('dies when the core is destroyed', r.dies);
 expect('no page errors', errors.length === 0);
