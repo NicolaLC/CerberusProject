@@ -3,6 +3,7 @@
 // and a death respawns at the last checkpoint. Pure level data, headless stepping; the stats come from real shots and a real reload.
 // Needs the dev server: `bun run dev`, then `node tests/prologue-exit.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
+import { prologueHelpers } from './prologue-helpers.mjs';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
 const url = new URL(BASE);
@@ -11,7 +12,7 @@ const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftsha
 const fail = [];
 const expect = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` ${extra}`}`); if (!ok) fail.push(name); };
 
-// A fresh page on the prologue (intro seen), stepped by hand, past the boot intro.
+// A fresh page on the prologue (intro seen), stepped by hand, past the intro.
 async function open() {
   const p = await b.newPage({ viewport: { width: 960, height: 540 } });
   const errors = [];
@@ -37,39 +38,16 @@ async function open() {
     T.mortal = false;
     T.step = (s) => { for (let i = 0; i < Math.round(s * 60); i++) { if (!T.mortal) g.player.health = 100; engine.step(1 / 60); } };
     T.press = (code) => { engine.input.keys.add(code); engine.input.pressed.add(code); T.step(1 / 60); engine.input.keys.delete(code); };
-    T.go = (x, z, s = 0.1) => { g.player.pos.set(x, 0, z); g.player.vel?.set(0, 0, 0); T.step(s); };
-    T.cur = () => g.mission.current?.oid ?? g.mission.state;
-    T.group = (n) => g.enemies.all.filter((e) => e.squad === `purge-${n}`);
-    T.passives = () => g.enemies.all.filter((e) => e.squad == null && e.alive);
-    T.kill = (e) => {
-      if (e.legs) {
-        const dir = new e.pos.constructor(0, 0, -1);
-        for (const l of e.legs) e.damage(500, l.foot, dir, 'weak', l.knee);
-        for (let i = 0; i < 30 && e.alive; i++) e.damage(100, e.pos, dir, 'weak', e.core);
-      } else for (let i = 0; i < 80 && e.alive; i++) e.damage(100, e.pos.clone().setY(1), new e.pos.constructor(0, 0, -1), 'body');
-    };
-    T.killGroup = (n) => T.group(n).forEach(T.kill);
     T.gate = () => g.world.gates.find((x) => x.on === 'objective:purge-boss:done');
-    // yard -> hall -> armoury (G takes the Warden) -> troopers -> drones -> the arena gate: the spider is awake
-    T.toBoss = ({ rifle = true } = {}) => {
-      T.go(0, 29.5);
-      T.passives().slice(0, 3).forEach(T.kill);
-      T.step(4.3);
-      T.killGroup(1); T.step(0.2);
-      T.killGroup(2); T.step(0.2);
-      if (rifle) { T.go(-21.5, -37); T.press('KeyG'); T.step(0.2); } else T.go(2, -28, 0.3);
-      T.step(5.2);
-      for (const n of [3, 4, 5]) { T.killGroup(n); T.step(0.2); }
-      if (rifle) T.go(39.75, -17, 0.3);
-    };
     engine.events.on('mission:complete', () => T.complete++);
     engine.events.on('mission:failed', () => T.failed++);
-    engine.events.on('gate:open', () => T.opened++);
-    T.step(1 / 60);
-    T.press('Mouse0');
-    T.step(0.5);
-    T.press('Mouse0'); // skip the intro
-    T.step(0.7);
+    engine.events.on('gate:open', (e) => e.on === 'objective:purge-boss:done' && T.opened++); // the exit gate only (the chain opens many)
+  });
+  await p.evaluate(prologueHelpers);
+  await p.evaluate(() => {
+    // the whole chain up to the spider (awake after the boss cut); rifle false: pistol only, the armoury skipped (the late step halts it)
+    T.toBoss = ({ rifle = true } = {}) => T.advanceTo(rifle ? 'purge-boss' : 'armoury-late', { rifle, rack: rifle });
+    T.skipIntro();
   });
   return { p, errors };
 }
@@ -82,12 +60,12 @@ async function open() {
     const { world, player, camRig, engine } = g;
     const out = {};
     const G = T.gate();
-    out.piece = { found: !!G, shut: G?.open === 0, collider: G && world.colliders.includes(G.col), box: G && [G.col.box.min.x, G.col.box.max.x, G.col.box.min.y, G.col.box.max.y], pieces: ['kit.doorway', 'kit.gate'].map((id) => g.level.pieces.filter((q) => q.id === id).length) };
+    out.piece = { found: !!G, shut: G?.open === 0, collider: G && world.colliders.includes(G.col), box: G && [G.col.box.min.x, G.col.box.max.x, G.col.box.min.y, G.col.box.max.y], doorway: g.level.pieces.some((q) => q.id === 'kit.doorway' && q.pos[0] === G?.mesh.position.x && Math.abs(q.pos[2] - G?.mesh.position.z) < 0.01) };
     T.toBoss();
     out.boss = { cur: T.cur(), awake: g.enemies.boss?.awake, open: G.open, opening: G.opening, events: T.opened };
     // walk at the shut gate: face north (-Z, yaw 0) and hold forward from inside the arena
     const walk = (z0, frames) => {
-      player.pos.set(39.75, 0, z0);
+      player.pos.set(30, 0, z0);
       camRig.yaw = 0; // forward is -Z
       camRig.pitch = 0;
       engine.input.keys.add('KeyW');
@@ -97,7 +75,7 @@ async function open() {
       return +minZ.toFixed(2);
     };
     out.walkShut = walk(-59, 120);
-    out.sightShut = !world.segmentClear(player.pos.clone().set(39.75, 0, -60), player.pos.clone().set(39.75, 0, -66), 0.3);
+    out.sightShut = !world.segmentClear(player.pos.clone().set(30, 0, -60), player.pos.clone().set(30, 0, -66), 0.3);
     // the spider falls: the objective is done, the gate opens (about 1.5 s), the alarm ends
     T.kill(g.enemies.boss);
     T.step(0.1);
@@ -110,7 +88,7 @@ async function open() {
     out.exitState = { cur: T.cur(), z: player.pos.z, state: g.mission.state };
     return out;
   });
-  expect('the arena has a doorway in its north wall and the exit gate, shut with a collider', r.piece.found && r.piece.shut && r.piece.collider && r.piece.pieces.join() === '1,1' && r.piece.box[2] === 0 && r.piece.box[3] === 4, JSON.stringify(r.piece));
+  expect('the arena has a doorway in its north wall and the exit gate, shut with a collider', r.piece.found && r.piece.shut && r.piece.collider && r.piece.doorway && r.piece.box[2] === 0 && r.piece.box[3] === 4, JSON.stringify(r.piece));
   expect('the gate stays shut through the whole purge and while the spider fights (no event)', r.boss.cur === 'purge-boss' && r.boss.awake === true && r.boss.open === 0 && !r.boss.opening && r.boss.events === 0, JSON.stringify(r.boss));
   expect('  shut: walking forward stops at the slab (z stays south of the wall) and it blocks sight', r.walkShut > -62.2 && r.sightShut, JSON.stringify([r.walkShut, r.sightShut]));
   expect('the moment the spider dies the gate starts to open (one gate:open), mid-way after 0.6 s', r.fell.opening && r.fell.events === 1 && r.fell.open < 0.2 && r.half > 0.3 && r.half < 0.9, JSON.stringify([r.fell, r.half]));
@@ -129,18 +107,17 @@ async function open() {
     // pistol only, nothing picked up: the chain halts before the arena gate, wherever the player stands
     T.toBoss({ rifle: false });
     out.pistol = { cur: T.cur(), owned: [...g.weapon.owned].join() };
-    T.go(39.75, -17, 0.3);
-    T.go(39.75, -75, 0.3); // even standing on the node (put there by hand)
+    T.go(26.5, -52, 0.3);
+    T.go(30, -75, 0.3); // even standing on the node (put there by hand)
     out.pistolAtNode = { cur: T.cur(), state: g.mission.state, complete: T.complete };
-    // the Warden from the rack: the chain goes on; the spider, the gate
-    T.go(-21.5, -37, 0.2); T.press('KeyG'); T.step(0.2);
-    T.go(39.75, -17, 0.3);
-    T.kill(g.enemies.boss);
+    // the Warden from the rack: the chain goes on; the boss cut, the spider, the gate
+    T.finish();
+    T.advanceTo('exit');
     T.step(2);
     out.exit = { cur: T.cur(), hud: g.mission.hudText(), pos: g.mission.current.pos.toArray(), params: g.mission.current.params };
     // requiresGun on the exit itself: with the Warden gone from the inventory (a test hand) standing in the node does not end it
     g.weapon.owned.delete('rifle');
-    T.go(39.75, -75, 0.3);
+    T.go(30, -75, 0.3);
     out.noGun = { state: g.mission.state, held: g.mission.held, hud: g.mission.hudText(), complete: T.complete };
     g.weapon.grant('rifle', { ammo: 10 });
     T.step(0.1);
@@ -169,9 +146,9 @@ async function open() {
       camRig.pitch = Math.atan2(pt.y - c.y, Math.hypot(pt.x - c.x, pt.z - c.z));
     };
     const shoot = (bone) => {
-      const target = T.passives()[0];
+      const target = T.group('calib').find((e) => e.alive);
       const pt = target.rig.bones[bone].getWorldPosition(target.pos.clone());
-      player.pos.set(target.pos.x, 0, target.pos.z + 7);
+      player.pos.set(target.pos.x, 0, target.pos.z - 7); // the calibration targets face south
       keys.add('Mouse2');
       for (let i = 0; i < 70; i++) { aimAt(pt); T.step(1 / 60); }
       const before = stats.shots;
@@ -181,7 +158,7 @@ async function open() {
       keys.delete('Mouse2');
       return stats.shots - before;
     };
-    T.go(0, 29.5); // out of the bay: the first objective
+    T.advanceTo('c2-aim'); // the bench's KP-12 in hand, the three calibration targets
     out.fired = [shoot('Spine2'), shoot('Head')];
     // a miss: the sky
     camRig.pitch = 1.2;
@@ -198,9 +175,9 @@ async function open() {
     out.mid = stats.snapshot();
     out.reachedMs = Math.round(stats.time);
     // through to the end with the Warden
-    T.toBoss();
-    T.kill(g.enemies.boss); T.step(2);
-    T.go(39.75, -75, 0.3);
+    T.advanceTo('exit');
+    T.step(2);
+    T.finish();
     out.complete = { state: g.mission.state, n: T.complete, scale: engine.timeScale, shown: !document.getElementById('summary').hidden };
     T.step(1.2); // slow motion (real time 2.2 s before the report)
     out.slow = { scale: engine.timeScale, shown: !document.getElementById('summary').hidden, locked: g.controls.locked };
@@ -260,7 +237,7 @@ async function open() {
     out.enterAfter = restarts;
     return out;
   });
-  expect('RESTART: ignored for the first second, then reloads the scene: fresh run (objective 1, pistol only, spawn, gate shut, stats zero), screen emptied, slow-down gone', r2.early.restarts === 0 && r2.early.open && r2.after.restarts === 1 && !r2.after.open && r2.after.hidden && r2.after.children === 0 && r2.after.scale === 1 && r2.after.cur === 'leave-bay' && r2.after.stats.shots === 0 && r2.after.stats.time < 1 && r2.after.owned === 'pistol' && r2.after.pos.join() === '0,2,45' && r2.after.gate === '0' && r2.after.scene === 'prologue', JSON.stringify([r2.early, r2.after]));
+  expect('RESTART: ignored for the first second, then reloads the scene: fresh run (objective 1, unarmed, spawn, every gate shut, stats zero), screen emptied, slow-down gone', r2.early.restarts === 0 && r2.early.open && r2.after.restarts === 1 && !r2.after.open && r2.after.hidden && r2.after.children === 0 && r2.after.scale === 1 && r2.after.cur === 'c1-move' && r2.after.stats.shots === 0 && r2.after.stats.time < 1 && r2.after.owned === '' && r2.after.pos.join() === '0,2,45' && /^0(,0)*$/.test(r2.after.gate) && r2.after.scene === 'prologue', JSON.stringify([r2.early, r2.after]));
   expect('  its key listener is removed with the screen', r2.enterAfter === 1, r2.enterAfter);
   expect('no page errors after the restart', errors.length === 0, errors.join(' | '));
   await p.close();
@@ -276,14 +253,14 @@ async function open() {
     g.loadScene = (n) => { restarts++; return load(n); };
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Enter' }));
     const closed = restarts;
-    T.toBoss(); T.kill(g.enemies.boss); T.step(2);
-    T.go(39.75, -75, 0.3);
+    T.advanceTo('exit'); T.step(2);
+    T.finish();
     T.step(3.5);
     const open = g.summary.open;
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Enter' }));
     return { closed, open, restarts, cur: T.cur() };
   });
-  expect('Enter restarts from the open screen only', r.closed === 0 && r.open && r.restarts === 1 && r.cur === 'leave-bay', JSON.stringify(r));
+  expect('Enter restarts from the open screen only', r.closed === 0 && r.open && r.restarts === 1 && r.cur === 'c1-move', JSON.stringify(r));
   expect('no page errors', errors.length === 0, errors.join(' | '));
   await p.close();
 }
@@ -297,14 +274,14 @@ async function open() {
     const out = {};
     const live = (s) => { T.mortal = true; T.step(s); T.mortal = false; };
     // before any checkpoint: the level spawn
-    T.go(0, 30);
+    T.go(-2, 42);
     player.damage(1000);
     out.dead = player.dead;
     live(3.5);
     out.spawn = { dead: player.dead, pos: player.pos.toArray().map((n) => Math.round(n)), hp: player.health };
     // checkpoints on the way: hall, then hall-east (the last one wins)
     const toasts = [];
-    T.go(0, 20); out.cpYard = g.encounter.checkpoint?.id;
+    T.go(-8, 40); out.cpC2 = g.encounter.checkpoint?.id;
     T.go(-9, -36); out.cpHall = g.encounter.checkpoint?.id;
     T.go(16, -33); out.cpEast = g.encounter.checkpoint?.id;
     out.toast = document.getElementById('toast').textContent;
@@ -321,7 +298,7 @@ async function open() {
     return out;
   });
   expect('before any checkpoint a death respawns at the level spawn', r.dead && !r.spawn.dead && r.spawn.pos.join() === '0,2,45' && r.spawn.hp === 100, JSON.stringify(r.spawn));
-  expect('checkpoints record in order; the last reached is the one that counts', r.cpYard === 'cp-yard' && r.cpHall === 'cp-hall' && r.cpEast === 'cp-hall-east', JSON.stringify([r.cpYard, r.cpHall, r.cpEast]));
+  expect('checkpoints record in order (C2, hall, hall-east); the last reached is the one that counts', r.cpC2 === 'cp-c2' && r.cpHall === 'cp-hall' && r.cpEast === 'cp-hall-east', JSON.stringify([r.cpC2, r.cpHall, r.cpEast]));
   expect('  dead for the 3 s respawn delay, then back at cp-hall-east facing its yaw with full health; enemies and the mission untouched', r.stillDead && !r.respawn.dead && r.respawn.pos[0] === 16 && r.respawn.pos[2] === -33 && Math.abs(r.respawn.yaw - 3.14) < 0.02 && r.respawn.hp === 100 && r.respawn.cur && r.respawn.kills && r.state === 'active', JSON.stringify(r.respawn));
   expect('no page errors', errors.length === 0, errors.join(' | '));
   await p.close();
