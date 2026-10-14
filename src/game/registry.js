@@ -17,8 +17,10 @@ export class Registry {
   #entries = new Map(); // id -> { owner, build, meta }
 
   // guns: the gun ids a level's `loadout` may name (game.js passes GUN_ORDER; null = only the shape is checked).
-  constructor({ guns = null } = {}) {
+  // scenes: the scene names a level's `next` may name (game.js passes the keys of SCENES; null = only the shape is checked).
+  constructor({ guns = null, scenes = null } = {}) {
     this.guns = guns;
+    this.scenes = scenes;
   }
 
   // Registers every entry of `table` for the system called `owner` ('world' | 'enemies' | 'pickups').
@@ -78,6 +80,12 @@ export class Registry {
         if (typeof g !== 'string' || (this.guns && !this.guns.includes(g))) throw new Error(`level: "loadout" has unknown gun ${JSON.stringify(g)}${this.guns ? ` (known: ${this.guns.join(', ')})` : ''}`);
       }
     }
+    // level chaining (level.md): `next` = the scene that follows when the mission completes, `debrief` = show the report first (true)
+    if (level.next != null && (typeof level.next !== 'string' || (this.scenes && !this.scenes.includes(level.next)))) {
+      throw new Error(`level: "next" is ${JSON.stringify(level.next)}, expected a scene name${this.scenes ? ` (${this.scenes.join(', ')})` : ''}`);
+    }
+    if (level.debrief != null && typeof level.debrief !== 'boolean') throw new Error('level: "debrief" must be true or false');
+    if (level.debrief === false && level.next == null) throw new Error('level: "debrief": false needs a "next" scene (nothing would follow the mission)');
     level.pieces.forEach((p, i) => {
       if (!this.has(p.id)) throw new Error(`level: piece #${i} has unknown id "${p.id}"`);
       if (!Array.isArray(p.pos) || p.pos.length !== 3 || p.pos.some((n) => typeof n !== 'number')) {

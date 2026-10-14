@@ -63,7 +63,7 @@ export class Mission {
     // objective.action `fire`: a round fired while it is current; with `ammo` ('light' / 'heavy') only from a gun of that ammo class (guns.js)
     events.on('weapon:shot', (e) => {
       const r = this.current;
-      if (r?.obj !== 'action' || r.params.action !== 'fire') return;
+      if (e.scripted || r?.obj !== 'action' || r.params.action !== 'fire') return; // a cut's scripted round does not count
       const g = GUNS[e.gun];
       if (r.params.ammo != null && (g?.ammo !== r.params.ammo || g.infinite)) return;
       if (r.size && !this.#inside(r)) return;

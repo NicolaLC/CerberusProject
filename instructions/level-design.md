@@ -80,8 +80,14 @@ CAM   ...  3.2 s  CUE pen-gate  WAKE purge-1                         -- the gate
 | `LEAP <group> -> (x, y, z)` on a CAM line | the shot's `leap` { group, to, time?, peak? }: the boss of that group jumps there on an arc |
 | `RECALL <group> -> ...` on a CAM line | the shot's `recall` { group, path }: its troopers / drones stop fighting, run the path and are removed at its end |
 | `WAKE <group>` on a CAM line | the shot's `wakeGroup` |
+| `STEM path (x, y, z) -> ...` on a CAM line | the shot's `stem.path`: STEM-00's feet walk (run above 6 m/s) from where they are through the points over the shot's time; it stands at the end. `place` is the cut's start, `stem` moves it from there |
+| `STEM face (x, y, z)` / `STEM aim` | `stem.face` (turn toward the point) / `stem.aim` (aiming pose, gun raised toward `face`) |
+| `STEM fire <group> [every 0.45]` | `stem.fire` { group, interval }: STEM-00 shoots the group's members one by one (real shots and kills, no ammo); the survivors die at the cut's end or on a skip |
+| `STEM fall (x, y, z) ...` | `stem.path` + `stem.fall: true`: the falling pose along the path (a 300 m drop is one far point); the player stays frozen there after the cut: end the level with `NEXT` |
+| `FADE 0..1` on a CAM line | the shot's `fade`: a black screen easing from the previous shot's value; `FADE 1` on the last shot hands over to the next scene |
 | `GOAL wait CUT` | `objective.reach` with `trigger: <cut name>`: the chain waits for the cut's end |
-A skip still fires every CUE / WAKE not reached. The camera path must stay clear of walls (no collision on scripted shots).
+A skip still fires every CUE / WAKE not reached, and runs every `STEM` end state (position at the last path point, `fire` groups dead).
+Chaining scenes (level.md "Level chaining"): `NEXT <scene>` [`NO DEBRIEF`] in the header of a sheet sets the level's `next` / `debrief: false`; a cut that ends black (`FADE 1`, `stem.fall`) followed by `GOAL wait CUT` completes the mission and fades straight into the next scene. The camera path must stay clear of walls (no collision on scripted shots).
 
 ## 5. Example: the Prologue (`prologue.json`, as built)
 ```

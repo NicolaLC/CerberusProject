@@ -34,7 +34,7 @@ src/
             enemies.js (system: builds enemy.* / boss.* pieces, bolts, stands, target cache, squad alerts, `all` = every enemy)
     ai/     cover.js (cover spots from cover boxes, protection test, spot choice + detour route)
     combat/ guns.js (gun table), weapon.js (controller, hitscan, aim probe), ballistics.js (pure shot math)
-    view/   camera.js, fx.js, hud.js (DOM HUD: objective panel, interact prompt, objective pin), log.js (STEM-00 log lines, `game.log`), boot.js (boot intro overlay + input lock, `game.boot`), cinematic.js (intro cinematic: scripted camera shots, STEM-00's wake, `game.cinematic`), summary.js (mission complete screen, `game.summary`; stats in `game/run-stats.js`, `game.stats`), audio.js (SFX, music; `Audio.ui(kind)` = menu UI sounds, see `ui:sfx`; `Audio.title(on)` = title music, from Shell), juice.js, post.js, shell.js (DOM shell: main menu / pause menu and sub-pages, pointer lock, scene buttons, keyboard / pad navigation, progress save for CONTINUE), menu-scene.js (the title's own 3D set, `MenuScene`), skyline.js (city material and glow points shared by the title and `env.backdrop`)   (presentation only)
+    view/   camera.js, fx.js, hud.js (DOM HUD: objective panel, interact prompt, objective pin), log.js (STEM-00 log lines, `game.log`), boot.js (boot intro overlay + input lock, `game.boot`), cinematic.js (intro cinematic and mid-level cuts: scripted camera shots, STEM-00's wake and acting, `game.cinematic`), fade.js (black overlay `#fade`, `game.fade`: a cut's per-shot `fade`, the level chain), summary.js (mission complete screen, `game.summary`; stats in `game/run-stats.js`, `game.stats`), audio.js (SFX, music; `Audio.ui(kind)` = menu UI sounds, see `ui:sfx`; `Audio.title(on)` = title music, from Shell), juice.js, post.js, shell.js (DOM shell: main menu / pause menu and sub-pages, pointer lock, scene buttons, keyboard / pad navigation, progress save for CONTINUE), menu-scene.js (the title's own 3D set, `MenuScene`), skyline.js (city material and glow points shared by the title and `env.backdrop`)   (presentation only)
 ```
 
 `src/levels/` holds level files (plain JSON, see `level.md`); `scenes.js` lists them, `Game.loadScene(name)` hands one to the systems.
@@ -80,7 +80,7 @@ the only thing three.js recompiles shaders for, so they come from a fixed pool o
 | phase | systems | dt |
 |---|---|---|
 | pre | controls (+ hitstop time scale, aim assist, look, shoulder, debug keys), stats toggle | real |
-| simulate (substeps ≤ 20 ms) | player → weapon → enemies → encounter (+ mission) → pickups | scaled |
+| simulate (substeps ≤ 20 ms) | cutActing (a cut's STEM-00 acting, `Cinematic.act`) → player → weapon → enemies → encounter (+ mission) → pickups | scaled |
 | late | cinematic (intro: sets `camRig.script`; group `play`) → camera → aimProbe (what the crosshair is on) | scaled (shake uses real) |
 | present | fx → world (lights, sun, player visibility, sector cull: camera layers, build ahead, free behind; enemies' dormant cull) → hud → log → boot (intro overlay, input lock; group `play`) → audio (MG spin) | scaled |
 | render | post (exposure, grade, bloom) | real |
@@ -120,7 +120,7 @@ A new gameplay system gets `group: 'play'`; enemies are the other half (`enemies
 Payload objects marked * are reused: copy what you keep. `src/types.js` holds JSDoc typedefs for these payloads and the engine `System` shape (editor hints only, keep in sync).
 | event | payload | listeners |
 |---|---|---|
-| `weapon:shot` | *{ from, to, dir, right, heavy, gun, flash, mag } | fx (tracer, flash, casing), audio |
+| `weapon:shot` | *{ from, to, dir, right, heavy, gun, flash, mag, scripted } (scripted: a cut's round, `Weapon.shotAt`; stats and objectives skip it) | fx (tracer, flash, casing), audio |
 | `weapon:hit` | *{ point, normal, dir, zone, amount, crit, weak, killed, distance } | fx, hud hitmarker, juice, audio |
 | `weapon:impact` | *{ point, normal } | fx |
 | `weapon:reload` | 'start' \| 'done' \| 'good' \| 'perfect' \| 'jam' | audio, juice |
@@ -154,7 +154,7 @@ Payload objects marked * are reused: copy what you keep. `src/types.js` holds JS
 | `intro:done` | { skipped } (the boot intro ended or was skipped; Boot) | encounter (`log.line` `on: intro:done`) |
 | `cinematic:start` | { shots, wake, skippable } (a played level's `intro.cinematic`, first play frame; Encounter) | cinematic (`Cinematic.start`) |
 | `cinematic:wake` | – (STEM-00's power surge at `wake.at`; emitted at the end instead if the cinematic is skipped before it; Cinematic) | encounter (`on: cinematic:wake`: a `prop.cradle` `releaseOn`, log lines, gates, alarms) |
-| `cinematic:done` | { skipped } (the intro cinematic ended; Cinematic) | encounter (`on: cinematic:done`: an `intro.boot` `after`, log lines, gates, alarms) |
+| `cinematic:done` | { skipped } (the intro cinematic ended; a cut adds `cut: true, id`; Cinematic) | encounter (`on: cinematic:done`: an `intro.boot` `after`, log lines, gates, alarms) |
 | `ui:type` | { end } (typed text advanced this frame: boot intro, STEM-00 log; `end` = a line just finished; one per frame) | audio (terminal tick, throttled 25 ms) |
 | `ui:sfx` | { kind } (`move` / `select` / `back` / `open` / `deny` / `slider` / `start` / `warn`; any non-shell code wanting a menu sound) | audio (`Audio.ui(kind)`: the `ui-<kind>` sample if present, else synth; own UI bus, ignores pause / slow-mo; no-op before `init()`; `move` ≥ 40 ms apart, `slider` ≥ 30 ms) |
 | `mission:complete` / `mission:failed` | { total } / { index, id, reason } | hud toast, run stats (freeze), summary (mission complete screen) |

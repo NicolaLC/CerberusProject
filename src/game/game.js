@@ -16,6 +16,7 @@ import { Hud } from './view/hud.js';
 import { Log } from './view/log.js';
 import { Boot } from './view/boot.js';
 import { Cinematic } from './view/cinematic.js';
+import { Fade } from './view/fade.js';
 import { Summary } from './view/summary.js';
 import { Audio } from './view/audio.js';
 import { Post } from './view/post.js';
@@ -51,7 +52,7 @@ export class Game {
     this.debug = debug;
 
     // ---- level + piece registry: every system builds its part of the level from data ----
-    const registry = new Registry({ guns: GUN_ORDER }).register('world', WORLD_PIECES).register('enemies', ENEMY_PIECES).register('pickups', PICKUP_PIECES).register('encounter', ENCOUNTER_PIECES);
+    const registry = new Registry({ guns: GUN_ORDER, scenes: Object.keys(SCENES) }).register('world', WORLD_PIECES).register('enemies', ENEMY_PIECES).register('pickups', PICKUP_PIECES).register('encounter', ENCOUNTER_PIECES);
     this.registry = registry;
     const first = resolveScene(sceneName);
 
@@ -74,7 +75,8 @@ export class Game {
     const audio = new Audio(weapon, camera, world, enemies).listen(events);
     const post = new Post(renderer, scene, camera, events);
     const boot = new Boot({ controls, post, camRig }).listen(events);
-    const cinematic = new Cinematic({ camRig, controls, post, player }).listen(events);
+    const fade = new Fade(); // black overlay: a cut's per-shot `fade`, the level chain's fade-out
+    const cinematic = new Cinematic({ camRig, controls, post, player, weapon, enemies, fade }).listen(events);
     // No HUD while the intro plays: from the cinematic until control returns (the boot it hands over to, or its own end).
     const hudEl = document.getElementById('hud');
     const hideHud = (on) => hudEl.classList.toggle('cine', on);
@@ -99,7 +101,10 @@ export class Game {
       stats,
       juice,
       controls,
-      title: () => this.level?.title ?? this.sceneName ?? '',
+      fade,
+      title: () => this.activeLevel?.title ?? this.sceneName ?? '',
+      next: () => ({ scene: this.activeLevel?.next ?? null, debrief: this.activeLevel?.debrief !== false }), // level chaining (level.md)
+      advance: (scene) => this.#advance(scene),
       release: () => {
         this.padPlay = true; // keep running without the lock
         if (input.locked) document.exitPointerLock();
@@ -149,7 +154,7 @@ export class Game {
       return false;
     };
     addEventListener('pointerdown', () => audio.init()); // resumes audio started from a controller
-    Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, mission, weapon, fx, hud, log, boot, cinematic, audio, post, juice, stats, summary, settings });
+    Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, mission, weapon, fx, hud, log, boot, cinematic, fade, audio, post, juice, stats, summary, settings });
 
     // skeleton debug overlay (H): the player's helper is permanent, the enemies' come and go with the level
     this.skeletons = false;
@@ -191,6 +196,8 @@ export class Game {
     });
     // The Workshop editor owns input and the camera: it switches the engine to mode 'edit', so the 'play' group (player,
     // weapon, pickups, encounter, camera rig) stands still. Systems that do something else while editing (world) branch inside.
+    // a cut's STEM-00 acting (view/cinematic.js): writes the scripted player's state before the player poses from it
+    engine.add({ name: 'cutActing', group: 'play', update: (dt) => cinematic.act(dt) });
     engine.add({
       name: 'player',
       group: 'play',
@@ -275,7 +282,8 @@ export class Game {
       update: (dt) => boot.update(dt, boot.active && (controls.actions.pressed('fire') || controls.actions.pressed('jump') || controls.actions.pressed('interact'))),
     });
     // mission complete screen: real time (the game is in slow motion behind it); a pad A press restarts, keys are its own listener
-    engine.add({ name: 'summary', phase: 'present', update: (dt, e) => summary.update(e.realDt, summary.open && controls.pressed('restart')) });
+    engine.add({ name: 'summary', phase: 'present', update: (dt, e) => summary.update(e.realDt, summary.open && controls.pressed('restart'), summary.open && controls.pressed('retry')) });
+    engine.add({ name: 'fade', phase: 'present', update: (dt, e) => fade.update(e.realDt) });
     engine.add({
       name: 'audio',
       phase: 'present',
@@ -363,7 +371,7 @@ export class Game {
   // the level the systems were just loaded with (loadScene, and the Workshop's play in place).
   // `spawn` defaults to the level's own (levelSpawn: a `marker.spawn` piece, else `level.spawn`).
   resetRun(level, spawn = levelSpawn(level)) {
-    const { player, camRig, weapon, fx, hud, log, boot, cinematic, juice, stats, summary } = this;
+    const { player, camRig, weapon, fx, hud, log, boot, cinematic, fade, juice, stats, summary } = this;
     player.place(spawn);
     camRig.reset(player.facing);
     weapon.reset(level.loadout);
@@ -372,6 +380,7 @@ export class Game {
     log.reset();
     boot.reset();
     cinematic.reset();
+    fade.reset();
     this.enemies.holdFire = false;
     const hudEl = document.getElementById('hud');
     hudEl.classList.remove('cine');
@@ -379,6 +388,20 @@ export class Game {
     juice.reset();
     stats.reset();
     summary.reset();
+  }
+
+  // The level in play: the Workshop's play copy while it plays in place, else the scene's own (`next` / `debrief` / `title` read it).
+  get activeLevel() {
+    return (this.tool?.playing && this.tool.playLevel) || this.level;
+  }
+
+  // Level chaining (level.md `next`): load the next scene of the campaign and record it as the progress (main menu CONTINUE).
+  // Called from a timer, never inside a frame.
+  #advance(scene) {
+    this.loadScene(scene);
+    saveProgress(this.sceneName);
+    this.padPlay = false;
+    this.engine.input.lock();
   }
 
   // Skeleton debug helpers of the enemies that exist now (H shows them); dropHelpers frees them (before the enemies go).

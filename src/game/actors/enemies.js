@@ -283,6 +283,21 @@ export class Enemies {
     for (const e of this.all) if (e.squad === group && e.alive && e.recall) e.recall(pts);
   }
 
+  // A cut's scripted kills (view/cinematic.js, a shot's `stem.fire`). liveOf(group): the members still alive, in file order.
+  // scriptKill(actor): destroys one through its normal death (debris, kill event and count, objectives); `holdFire` does not stop it.
+  liveOf(group) {
+    return this.all.filter((e) => e.squad === group && e.alive);
+  }
+
+  scriptKill(actor, from) {
+    if (!actor.alive) return false;
+    const point = actor.pos.clone().setY(actor.pos.y + 1); // (rare: allocation is fine)
+    const dir = new THREE.Vector3().subVectors(point, from).setY(0);
+    if (dir.lengthSq() < 1e-6) dir.set(0, 0, -1);
+    dir.normalize();
+    return actor.damage(1e6, point, dir, 'body');
+  }
+
   settle() {
     for (const e of this.all) e.settle?.();
     for (const e of this.all.filter((a) => a.alive && a.recallPath)) this.despawn(e);

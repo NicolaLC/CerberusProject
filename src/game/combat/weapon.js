@@ -26,7 +26,7 @@ const _probeDir = new THREE.Vector3();
 const _passed = [];
 const _bestHit = [];
 // payloads are reused: listeners must copy what they keep
-const SHOT = { from: _muz, to: new THREE.Vector3(), dir: _toAim, right: null, heavy: false, beam: false, gun: '', flash: 1, mag: 1 };
+const SHOT = { from: _muz, to: new THREE.Vector3(), dir: _toAim, right: null, heavy: false, beam: false, gun: '', flash: 1, mag: 1, scripted: false }; // scripted: a cut's round (shotAt): stats and objectives ignore it
 const HIT = { point: null, normal: new THREE.Vector3(), dir: _toAim, zone: '', amount: 0, crit: false, weak: false, killed: false, distance: 0 };
 const IMPACT = { point: null, normal: new THREE.Vector3(), decal: true }; // decal: false on a moving enemy's armor
 
@@ -456,6 +456,34 @@ export class Weapon {
     }
   }
 
+  // A scripted round for a cut (view/cinematic.js, a shot's `stem.fire`): the raised gun fires at `to` from its muzzle with the real
+  // shot event (tracer, muzzle flash, casing, sound, visual kick) plus a spark where it lands. No ammo, no input, no spread, no hit:
+  // the cut kills the target itself (Enemies.scriptKill). `weapon:shot.scripted` is true so run stats and `objective.action fire` skip it.
+  shotAt(to) {
+    const t = this.t;
+    if (this.player.muzzle) this.player.muzzle.getWorldPosition(_muz);
+    else this.player.chest(_muz);
+    _toAim.subVectors(to, _muz);
+    const dist = _toAim.length();
+    if (dist < 1e-3) return;
+    _toAim.divideScalar(dist);
+    this.player.notifyShot();
+    SHOT.to.copy(to);
+    SHOT.right = this.rig.right;
+    SHOT.heavy = this.current === 'mg';
+    SHOT.gun = this.current ?? 'pistol';
+    SHOT.flash = t.flash;
+    SHOT.beam = !!t.beam;
+    SHOT.mag = 1;
+    SHOT.scripted = true;
+    this.events.emit('weapon:shot', SHOT);
+    this.player.kick(t.kick);
+    IMPACT.point = to;
+    IMPACT.normal.copy(_toAim).negate();
+    IMPACT.decal = false;
+    this.events.emit('weapon:impact', IMPACT);
+  }
+
   #fire() {
     const t = this.t;
     this.ammo--;
@@ -513,6 +541,7 @@ export class Weapon {
     SHOT.flash = t.flash;
     SHOT.beam = !!t.beam;
     SHOT.mag = this.ammo / t.mag;
+    SHOT.scripted = false;
     this.events.emit('weapon:shot', SHOT);
     const r = t.recoil;
     recoilKick(r, this.burst++, _kick, this.rng.next(), this.rng.next());

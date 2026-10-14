@@ -22,11 +22,12 @@ import { GUNS } from '../combat/guns.js';
 //  intro.boot         the boot intro (#13): params { lines: [diagnostic strings], duration? (s, 12, max 20), skippable? (true), after? (an `on` form, 'start'), pov? (false: true | { release, timeout, blend }, first-person hold, CameraRig.holdPov) }. When `after` happens (the first play frame by default)
 //                     it emits `intro:start` { lines, duration, skippable }; the Boot view (view/boot.js) covers the screen, locks the input and
 //                     emits `intro:done` { skipped } when it ends. The first one in the file plays. Inert in the editor and the Library (gizmo only).
-//  intro.cinematic    the intro cinematic (STEM-00 wakes up): params { shots: [{ from, to?, look, lookTo?, time, ease?, fov?, shake? }], wake? { at, rise, shake },
+//  intro.cinematic    the intro cinematic (STEM-00 wakes up): params { shots: [{ from, to?, look, lookTo?, time, ease?, fov?, shake?, fade? }], wake? { at, rise, shake },
 //                     skippable? (false) }. At the first play frame it emits `cinematic:start` { shots, wake, skippable }; the Cinematic view
 //                     (view/cinematic.js) drives the camera and STEM-00's wake, locks the input and emits `cinematic:done` { skipped }. An `intro.boot`
 //                     with `after: 'cinematic:done'` then starts. The first one in the file plays. Inert in the editor and the Library (gizmo: the camera path).
-//  cinematic.cut      a mid-level cut: params { on (an `on` form), shots (as intro.cinematic, plus per shot `cue?` and `wakeGroup?`), place? { pos, yaw? },
+//  cinematic.cut      a mid-level cut: params { on (an `on` form), shots (as intro.cinematic, plus per shot `cue?`, `wakeGroup?`, `leap?`, `recall?`, `fade?` (0..1 black overlay)
+//                     and `stem?` { path?, face?, aim?, fire? { group, interval? }, fall? }: STEM-00 acts, view/cinematic.js), place? { pos, yaw? },
 //                     skippable? (true) }. When `on` happens it emits `cinematic:start` { shots, skippable, cut: true, id (name), place } at the next update
 //                     and `cut:<name>`; each shot start (or a skip past it) fires `cue:<id>` and wakes `wakeGroup`; the end fires `cut:<name>:done`.
 //                     Once per run. Inert in the editor and the Library (gizmo: the camera path, like intro.cinematic).
@@ -149,10 +150,28 @@ export function introBootProblem(p) {
 export const CINEMATIC = { max: 30 }; // s, longest `intro.cinematic` (all shots)
 export const EASES = ['linear', 'inOut'];
 
-// Problem with an `intro.cinematic`'s params, or null. Registry.check runs it on every level (meta `check`); Encounter.add throws it. Pure.
-export function cinematicProblem(p) {
+// Problem with a shot's `stem` (STEM-00 acting, view/cinematic.js), or null. Pure.
+function stemProblem(st) {
   const vec = (v) => Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === 'number' && Number.isFinite(n));
-  if (!Array.isArray(p.shots) || !p.shots.length) return 'shots must be a non-empty list of { from, to?, look, lookTo?, time, ease?, fov?, shake? }';
+  const shape = 'stem must be { path?: [[x, y, z], ...], face?: [x, y, z], aim?: bool, fire?: { group, interval? }, fall?: bool }';
+  if (!st || typeof st !== 'object' || Array.isArray(st)) return shape;
+  for (const k of Object.keys(st)) if (!['path', 'face', 'aim', 'fire', 'fall'].includes(k)) return `stem has an unknown key "${k}" (${shape})`;
+  if (st.path != null && !(Array.isArray(st.path) && st.path.length && st.path.every(vec))) return 'stem.path must be a non-empty list of [x, y, z]';
+  if (st.face != null && !vec(st.face)) return 'stem.face must be [x, y, z]';
+  for (const k of ['aim', 'fall']) if (st[k] != null && typeof st[k] !== 'boolean') return `stem.${k} must be true or false`;
+  if (st.fall && st.path == null) return 'stem.fall needs a stem.path (the way down)';
+  const f = st.fire;
+  if (f != null) {
+    if (typeof f !== 'object' || Array.isArray(f) || !(typeof f.group === 'string' && /^[^:\s]+$/.test(f.group))) return 'stem.fire must be { group, interval? } (group: an enemy group name)';
+    if (f.interval != null && !(typeof f.interval === 'number' && f.interval >= 0.05 && f.interval <= 10)) return 'stem.fire.interval must be a number from 0.05 to 10 (seconds)';
+  }
+  return null;
+}
+
+// Problem with an `intro.cinematic`'s params, or null. Registry.check runs it on every level (meta `check`); Encounter.add throws it. Pure.
+export function cinematicProblem(p, cut = false) {
+  const vec = (v) => Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === 'number' && Number.isFinite(n));
+  if (!Array.isArray(p.shots) || !p.shots.length) return 'shots must be a non-empty list of { from, to?, look, lookTo?, time, ease?, fov?, shake?, fade?, stem? }';
   let total = 0;
   for (const [i, s] of p.shots.entries()) {
     if (!s || typeof s !== 'object') return `shot ${i}: must be an object`;
@@ -166,6 +185,11 @@ export function cinematicProblem(p) {
     const name = (v) => typeof v === 'string' && /^[^:\s]+$/.test(v);
     if (s.leap != null && (typeof s.leap !== 'object' || !name(s.leap.group) || !vec(s.leap.to) || (s.leap.time != null && !(s.leap.time > 0)) || (s.leap.peak != null && !(s.leap.peak >= 0)))) return `shot ${i}: leap must be { group, to: [x, y, z], time?, peak? }`;
     if (s.recall != null && (typeof s.recall !== 'object' || !name(s.recall.group) || !Array.isArray(s.recall.path) || !s.recall.path.length || !s.recall.path.every(vec))) return `shot ${i}: recall must be { group, path: [[x, y, z], ...] }`;
+    if (s.fade != null && !(typeof s.fade === 'number' && s.fade >= 0 && s.fade <= 1)) return `shot ${i}: fade must be a number from 0 (clear) to 1 (black)`;
+    if (s.stem != null) {
+      const bad = cut ? stemProblem(s.stem) : 'stem is for cinematic.cut only';
+      if (bad) return `shot ${i}: ${bad}`;
+    }
     total += s.time;
   }
   if (total > CINEMATIC.max) return `shots last ${total} s, at most ${CINEMATIC.max}`;
@@ -183,7 +207,7 @@ export function cinematicProblem(p) {
 // Problem with a `cinematic.cut`'s params, or null: the shots (cinematicProblem, no wake), `on` (an `on` form), `place?` { pos, yaw? }. Pure.
 export function cutProblem(p, guns = null) {
   if (p.wake != null) return 'wake is for intro.cinematic only';
-  const shots = cinematicProblem(p);
+  const shots = cinematicProblem(p, true);
   if (shots) return shots;
   const on = onProblem(p.on, 'on', guns);
   if (on) return on;
