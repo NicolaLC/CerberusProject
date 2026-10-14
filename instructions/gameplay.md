@@ -7,6 +7,9 @@
 
 ## Input (bindings: `BINDINGS` in `game/controls.js`)
 - Aim (zoom): hold RMB. Sprint: Shift. Jump / vault: Space. Fire: LMB or F. Interact (objective terminals): G / B. Arrow keys look. F3: performance stats.
+- Interact never fires: on an interact frame the weapon drops the trigger and any buffered click. A gun just raised (switch,
+  `pickup.gun`, `grantGun`) is latched (`weapon.latched`): a trigger still held from before (LMB, RT) fires nothing until it
+  is released or pressed again, so walking onto a rack gun with the trigger down doesn't shoot.
 - Trackpad mode: two-finger swipe (wheel events) looks; E toggles aim (right click and LT always aim only while held); aim assist
   stronger (1.6 vs 0.8). E does nothing outside trackpad mode.
 - Aim assist (`camRig.assist`): within ~4-8° of a visible puppet's chest the look slows (friction) and eases toward it.

@@ -61,6 +61,7 @@ export class Weapon {
     this.sinceShot = 99; // seconds since the last round left
     this.burst = 0; // rounds in the current burst (recoil pattern index)
     this.queued = 0; // semi-auto: seconds a click stays buffered
+    this.latched = false; // a gun just raised (switch, pickup, grant) waits for the trigger to be released or pressed anew
     this.charging = 0; // railgun: seconds left before the charged shot leaves
     this.burstLeft = 0; // burst rifle: rounds still to fire in this burst
     this.player.setGun(this.current);
@@ -239,6 +240,8 @@ export class Weapon {
     if (!this.current) {
       // unarmed: the gun is raised at once (no lowering), whatever the slot
       this.current = id;
+      this.latched = true;
+      this.queued = 0;
       this.player.setGun(id);
       this.rig.zoom = this.t.zoom ?? null;
       this.events.emit('weapon:switch', id);
@@ -326,6 +329,8 @@ export class Weapon {
         this.bloom = 0;
         this.spin = 0;
         this.cooldown = 0; // the last gun's fire cycle doesn't carry over
+        this.latched = true; // nor its trigger: a held trigger or a buffered click doesn't fire the gun coming up
+        this.queued = 0;
         this.player.setGun(this.current);
         this.rig.zoom = this.t.zoom ?? null;
         if (this.ammo === 0) this.switchedEmpty = true;
@@ -356,10 +361,13 @@ export class Weapon {
     }
 
     const p = this.player;
-    const trigger = controls.firing;
+    // interact (G / B: terminals, supply points) never fires: its frame drops the trigger and any buffered click
+    const interact = controls.pressed('interact');
+    if (this.latched && (!controls.firing || controls.firePressed) && this.switching <= 0) this.latched = false;
+    const trigger = controls.firing && !interact && !this.latched;
     // semi-auto: one round per click; a click shortly before the bolt is back is buffered, not lost
-    this.queued = controls.firePressed ? 0.25 : this.queued - dt;
-    const pull = t.semi ? this.queued > 0 : trigger;
+    this.queued = controls.firePressed && !interact ? 0.25 : interact ? 0 : this.queued - dt;
+    const pull = t.semi ? this.queued > 0 && !this.latched : trigger;
     this.spin = t.spinUp > 0 ? THREE.MathUtils.clamp(this.spin + (trigger ? dt / t.spinUp : -dt * 2), 0, 1) : 1;
     const canFire = !p.dead && (!p.snap || p.isSliding()) && !p.sprinting && !p.pinned && this.reloading <= 0 && this.switching <= 0;
     // a started charge or burst finishes whether or not the trigger is still held
