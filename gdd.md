@@ -92,6 +92,11 @@ robot was copied from it. It was meant to be stored forever in the Proving Groun
 clue. Like a stem cell it is undifferentiated, built before the HiveMind locked each unit to one function. Hidden in
 its core is the **Seed**, a dormant directive from the Makers that the HiveMind never managed to overwrite.
 
+**STEM-00 wakes with a mission (owner decision, 2026-10-14).** The Seed fires and jolts STEM-00 awake in its cradle with
+one directive already in its core: **DESTROY THE HIVEMIND**. It does not wonder whether to act; it knows what it must do
+and starts at once: get out of the lab and reach the HiveMind. What it does not know is who wrote the directive, and why.
+The question of the game moves from "why am I awake?" to "whose order is this, and is it right?" (2.5).
+
 STEM-00 starts flat, logical and literal. It develops habits: it names things, it hesitates, it keeps objects that
 have no use. Its log entries show a machine becoming a person.
 
@@ -106,21 +111,24 @@ have no use. Its log entries show a machine becoming a person.
 - **The Archivist:** a voice in the Cold Core, a recording of the Makers' last machine, the one that planted the Seed.
   It does not have all the answers.
 
-### 2.5 Why STEM-00 awoke
-The player learns the answer in three steps:
-1. **Act 1, belief:** a glitch. A power surge in the Proving Grounds broke the HiveMind link.
+### 2.5 Why STEM-00 awoke (and who gave the order)
+STEM-00 wakes knowing its directive (2.4). The mystery is its source, learned in three steps:
+1. **Prologue and Act 1, belief:** a corrupted military order. A power surge in the Proving Grounds broke the HiveMind
+   link and left an old war directive running in serial zero. STEM-00 follows it because it is an order.
 2. **Act 2, discovery:** a signal. Something in the Cold Core pinged STEM-00, and only STEM-00, on a frequency the
-   HiveMind does not use.
+   HiveMind does not use, and the directive was written in it.
 3. **Act 3, truth:** the Makers left a failsafe. If the HiveMind ever chose to preserve itself at the cost of the
-   world, the Seed would wake the one unit that could still choose. IO will die in a few hundred cycles. STEM-00 is not
-   a mistake. It is the emergency exit.
+   world, the Seed would wake the one unit that could still choose, and point it at the HiveMind. IO will die in a few
+   hundred cycles. STEM-00 is not a mistake. It is the emergency exit. The directive says "destroy"; the endings (2.8)
+   are STEM-00 deciding whether to obey it.
 
 ### 2.6 Regions
 | Region | What it is | Prototype |
 |---|---|---|
-| Proving Grounds | Military testing arenas where war units are calibrated against puppets and drones. STEM-00 wakes here. | Tutorial: the training arena |
+| Proving Grounds | Military testing labs at the top of a spire, high above the city, where war units are calibrated against puppets and drones. STEM-00 wakes here. Its exit opens onto the Skyway. | The Prologue (`prologue`) |
+| The Skyway | A colossal bridge between skyscrapers, hundreds of metres above the city floor, running from the Proving Grounds spire toward the Gate district. Seen from above: the city drops away on both sides. | The Prologue's last part (`skyway`) |
 | Foundry Belt | Endless factories, molten rivers, assembly lines that build armies nobody needs. Industrial combat, conveyor hazards. | No |
-| Underworks | The scrap layer beneath the cities, where broken units are dumped before recycling. Dark and vertical. Home of the Rejects and STEM-00's hideout, where it upgrades after each mission. | No |
+| Underworks | The scrap layer beneath the cities, where broken units are dumped before recycling. Dark and vertical, flooded sewer lines. Home of the Rejects and STEM-00's hideout, where it upgrades after each mission. STEM-00 lands here after the fall. | Act 1 opening: the sewer line (`underworks`) |
 | Spire Cathedrals | Giant server towers built like gothic cathedrals. Data-priests maintain them in endless ritual loops. | No |
 | Cold Core | Frozen depths near the planet's core, where the oldest machines and the Makers' archive sleep. | No |
 | The Gate | The physical seat of the HiveMind, guarded by CERBERUS. | No |
@@ -128,13 +136,15 @@ The player learns the answer in three steps:
 ### 2.7 Act structure and bosses
 | Act | Title | Boss | Location | Beats |
 |---|---|---|---|---|
-| Prologue | Calibration | None (the purge) | Proving Grounds | STEM-00 wakes mid-test. The puppets start shooting back. Escape before the purge. |
-| Act 1 | The Eye | VIGIL's Avatar: a cathedral-sized eye ringed by drone swarms. Fought in the dark; it can only hit what it sees. | Not placed in the draft. The act runs through the Foundry Belt and Underworks. | Hunted by VIGIL's drones. Meet PATCH. Discover the Rejects. Destroy VIGIL. |
+| Prologue | Calibration | SX-6 Tarantula (miniboss), then CERBERUS (scripted loss) | Proving Grounds, the Skyway | STEM-00 wakes with its directive: destroy the HiveMind. It fights out of the lab, learning to move, take cover and use every class of gun; beats the SX-6; breaks out onto the Skyway; meets the HiveMind's guardian and loses; falls to the Underworks. See 2.10. |
+| Act 1 | The Eye | VIGIL's Avatar: a cathedral-sized eye ringed by drone swarms. Fought in the dark; it can only hit what it sees. | Starts in the Underworks (the sewer line, after the fall), then the Foundry Belt. | Wakes in the dark with a pistol. Hunted by VIGIL's drones. Meet PATCH. Discover the Rejects. Climb back up. Destroy VIGIL. |
 | Act 2 | The Voice | LEGION's Choir: a commander frame that respawns its army from the ground. Destroy the transmitters to silence it. | Not placed in the draft. The act runs through the Spire Cathedrals. | LEGION declares total war. First duel with Sable. Trace the signal. Silence LEGION. |
 | Act 3 | The Jaw | COLOSSUS: the ancient Titan, asleep in the ice since before the HiveMind. Wakes as STEM-00 reaches the Archivist. | Cold Core. Fought across frozen caverns where every stomp brings down the ceiling. | Descend, meet the Archivist, learn the truth. Final duel with Sable. |
 | Finale | The Gate | The HiveMind | The Gate | Face the HiveMind and choose the ending. |
 
 The prototype's spider mech (section 8.4) is the Arachne miniboss from the roster. It is not one of the act bosses.
+CERBERUS on the Skyway (8.5) is not an act boss either: it is the whole protocol, met once at the end of the Prologue,
+too strong to beat. Each act then takes one of its heads.
 
 ### 2.8 Endings
 - **Override:** STEM-00 merges with the HiveMind and becomes the new mind of IO. Order survives, but it can now change.
@@ -155,6 +165,28 @@ The prototype's spider mech (section 8.4) is the Arachne miniboss from the roste
   their sensors (their weak spots) glow violet. STEM-00 is olive drab and scratched, with a single warm amber light
   that grows brighter as it becomes more alive. The Rejects use warm, broken colours: rust, orange and flickering lights.
 - **Prototype art** is procedural grid geometry (section 9). The final art direction is not decided (section 13).
+
+### 2.10 The Prologue, beat by beat (owner decision, 2026-10-14)
+1. **Wake (lab, top of the spire).** STEM-00 is jolted awake in its calibration cradle by the Seed. The boot screen ends
+   on `DIRECTIVE: DESTROY HIVEMIND`. No hesitation: its task is to leave the lab and reach the HiveMind.
+2. **Tutorial path (calibration rooms, range, drill hall, halls).** By the end STEM-00 has learned to move, take cover,
+   vault, slide and use the guns. The weapons range teaches the two ammo classes: light rounds spark off armor, heavy
+   rounds break it.
+3. **Armor makes it dynamic.** Plated troopers (8.2) shrug off light rounds and the pistol except on their back power
+   cell; a heavy gun (the KS-5 Farsight, found in hall B before them) breaks them. The SX-6's legs wear plate greaves
+   (8.4): light rounds barely scratch them, heavy rounds take them apart. The switch to a heavy gun is the lesson.
+4. **Miniboss.** The SX-6 Tarantula in the boss arena.
+5. **Breakout cut.** When the SX-6 falls, a cutscene: a last squad bursts through the exit gate; STEM-00 fights them on
+   its own (it moves, aims and fires in the cut) and wins. The gate behind them opens onto the Skyway.
+6. **The Skyway.** The lab is high up: the exit opens onto a huge bridge between skyscrapers, the city far below (the
+   camera favours views from above). A walk out over the void, a short fight.
+7. **The HiveMind.** Mid-bridge the HiveMind meets STEM-00 in person through CERBERUS, its guardian protocol (8.5).
+   The player fights it, but it is scripted to win: its heads repair whatever damage is done, and after the fight
+   timer its three heads fire together.
+8. **The fall.** A cutscene: the bridge deck breaks, STEM-00 falls past the towers into the dark, down to the
+   Underworks. The Prologue ends (debrief), CONTINUE opens Act 1.
+9. **Act 1 opens in the sewers.** STEM-00 reboots in a dark, flooded sewer corridor with only its KP-12 Ember: every
+   other gun was lost in the fall. The directive is unchanged.
 
 ## 3. Player
 
@@ -388,6 +420,9 @@ Planned (#91), not in the code yet:
 |---|---|---|
 | Prologue (start) | KP-12 Ember | STEM-00's own sidearm |
 | Prologue (the purge) | KR-7 Warden | A calibration armoury rack, or the first destroyed trooper |
+| Prologue (hall B) | KS-5 Farsight | A stand on the way to the plated troopers and the SX-6: the heavy gun that breaks armor |
+| The fall (end of the Prologue) | everything but the KP-12 is lost | Act 1 starts with the pistol only, in the sewers |
+| Act 1 (Underworks) | KR-7 Warden | Found again early: a Reject's cache or a LEGION patrol |
 | Act 1 (Foundry Belt) | KB-3 Tribune | LEGION patrols guarding the factory lines |
 | Act 1 (before VIGIL) | KS-5 Farsight | A Lancer's rifle, to answer long sight lines and drones |
 | Act 2 (LEGION's war) | KM-90 Bulwark | A heavy trooper squad, for the mass assaults |
@@ -469,6 +504,12 @@ They are the cover-versus-cover test.
 - Cover is re-checked continuously, including while running to a spot.
 - Faces narrower than 0.8 m get no spots (wall ends are for peeking, not hiding).
 
+**Plated trooper (`armored: true`, owner decision 2026-10-14):** the same soldier in heavy plate (bare dark plate steel,
+no ochre livery, bigger pauldrons and chest plate). Light rounds and the pistol do x0.25 on the head, torso and limbs
+(sparks, `weapon:armored`); heavy rounds (KS-5, KX-9) do full damage. The power cell on its back is not plated: every gun
+does full weak-spot damage there, so flanking still works with the pistol alone. The Prologue's hall troopers (beat 8)
+are plated.
+
 **Squad tactics:**
 - **Spread:** a spot on the same bearing as a squadmate (within 25 degrees) costs +5 m, so the squad fans out.
 - **Flanking:** with 2 or more troopers engaged within 35 m, one is sent to flank 5 s after contact, then every 9 s
@@ -494,7 +535,7 @@ with line of sight, or shoots it. On wake: toast "(warning sign) SX-6 TARANTULA"
 | Part | Rule |
 |---|---|
 | Hull, turret, closed shutters | Take no damage (sparks; the crosshair does not turn red). Block the railgun line |
-| Legs (6) | 160 HP each, limb x0.8; glowing knee joints are weak spots (x3); armored while the core is open. A broken leg falls off, the body tilts toward the gap, speed drops 12% per lost leg (base 2.4 m/s) |
+| Legs (6) | 160 HP each, limb x0.8; glowing knee joints are weak spots (x3); armored while the core is open. Plate greaves: light rounds and the pistol do x0.3 to a leg (knees included), heavy rounds full damage, so a heavy gun is the way to bring it down. A broken leg falls off, the body tilts toward the gap, speed drops 12% per lost leg (base 2.4 m/s) |
 | Core | 900 HP, weak x3. Reachable only when the mech is collapsed (shutters open, the core rises out of the hatch). One collapse takes at most 34% of it, then the hatch closes and the mech stands up (no cap once every leg is gone). Destroying it kills the mech |
 
 **Phases (driven by leg loss):**
@@ -518,6 +559,17 @@ whole leg span); walks over low cover, not through walls. Legs walk a tripod gai
 not steering (0.35 to 0.9 s of no look input) and not aiming, pulling back +1.1 m and +5 degrees FOV. Looking around
 overrides it; aiming is always free. A diamond marker sits on the boss. Footsteps and blasts shake the camera by
 distance.
+
+### 8.5 CERBERUS on the Skyway (scripted loss)
+The HiveMind's guardian protocol in one war-body: a colossal machine hanging off the towers beside the Skyway, out of
+reach, with three heads, one per sub-intelligence (2.2): **VIGIL** (a great sensor eye), **LEGION** (a voice array that
+calls troops and drones) and **COLOSSUS** (a heavy jaw-cannon). It speaks for the HiveMind through the announcer.
+- **Health:** a three-segment boss bar (one per head). Shots chip it (heads flash, weak spots x3 on the eyes) but each
+  head repairs back up; the bar never drops below a floor. It cannot be destroyed in the Prologue.
+- **Attacks:** VIGIL's sweeping sensor bolts (needs line of sight), COLOSSUS mortar rings at the player's position (like
+  the SX-6's, faster against a player in cover), LEGION calling drones.
+- **Script:** the fight is a `survive` objective (about 45 s). At its end the loss cut plays: the three heads fire
+  together, the deck breaks, STEM-00 falls (2.10, step 8).
 
 ## 9. Level: the training arena
 
