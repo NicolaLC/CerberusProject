@@ -393,7 +393,11 @@ export class Encounter {
         this.world.interiorZones.push(rec.box);
       }
     }
-    if (kind === 'sector' || kind === 'portal') rec.size = p.size;
+    if (kind === 'sector' || kind === 'portal') {
+      const problem = sizeCheck(p);
+      if (problem) bad(id, problem);
+      rec.size = p.size;
+    }
     if (kind === 'trigger') {
       const size = p.size ?? TUNING.size;
       if (!Array.isArray(size) || size.length !== 3 || size.some((n) => !(n > 0))) bad(id, 'size must be [w, h, d], all above 0');
