@@ -140,6 +140,18 @@ export class Trooper extends EnemyBody {
     }
   }
 
+  // Recalled (a cut shot's `recall`, Enemies.recall): drop the fight and run along `path` (Vector3 list); `recalled` once at its end
+  // (Enemies then removes it). No firing, no cover.
+  recall(path) {
+    if (!this.alive) return;
+    this.ctx.cover.release(this.spot, this);
+    this.spot = null;
+    this.dormant = false;
+    this.state = 'recall';
+    this.recallPath = path.slice();
+    this.visor.emissiveIntensity = VISOR_REST;
+  }
+
   onDeath() {
     this.ctx.cover.release(this.spot, this);
     this.spot = null;
@@ -206,6 +218,26 @@ export class Trooper extends EnemyBody {
         this.vel.x += (_d.x - this.vel.x) * k;
         this.vel.z += (_d.z - this.vel.z) * k;
         if (this.timer <= 0) this.#relocate(); // stuck for too long: pick something else
+        break;
+      }
+
+      case 'recall': {
+        moving = true;
+        const goal = this.recallPath[0];
+        if (!goal) {
+          this.recalled = true;
+          break;
+        }
+        _d.subVectors(goal, this.pos).setY(0);
+        const left = _d.length();
+        if (left < 0.8) {
+          this.recallPath.shift();
+          break;
+        }
+        _d.divideScalar(left).multiplyScalar(this.t.flankRun);
+        const k = damp(t.accel, dt);
+        this.vel.x += (_d.x - this.vel.x) * k;
+        this.vel.z += (_d.z - this.vel.z) * k;
         break;
       }
 

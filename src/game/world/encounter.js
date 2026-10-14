@@ -163,6 +163,9 @@ export function cinematicProblem(p) {
     if (s.fov != null && !(typeof s.fov === 'number' && s.fov >= 10 && s.fov <= 120)) return `shot ${i}: fov must be a number from 10 to 120 (degrees)`;
     if (s.shake != null && !(typeof s.shake === 'number' && s.shake >= 0 && s.shake <= 1)) return `shot ${i}: shake must be a number from 0 to 1`;
     for (const k of ['cue', 'wakeGroup']) if (s[k] != null && !(typeof s[k] === 'string' && /^[^:\s]+$/.test(s[k]))) return `shot ${i}: ${k} must be a name (no spaces or colons)`;
+    const name = (v) => typeof v === 'string' && /^[^:\s]+$/.test(v);
+    if (s.leap != null && (typeof s.leap !== 'object' || !name(s.leap.group) || !vec(s.leap.to) || (s.leap.time != null && !(s.leap.time > 0)) || (s.leap.peak != null && !(s.leap.peak >= 0)))) return `shot ${i}: leap must be { group, to: [x, y, z], time?, peak? }`;
+    if (s.recall != null && (typeof s.recall !== 'object' || !name(s.recall.group) || !Array.isArray(s.recall.path) || !s.recall.path.length || !s.recall.path.every(vec))) return `shot ${i}: recall must be { group, path: [[x, y, z], ...] }`;
     total += s.time;
   }
   if (total > CINEMATIC.max) return `shots last ${total} s, at most ${CINEMATIC.max}`;
@@ -281,7 +284,11 @@ export class Encounter {
       if (e.id == null) return; // the intro's shots carry no cues
       if (e.shot.cue != null) this.#log(`cue:${e.shot.cue}`);
       if (e.shot.wakeGroup != null) this.wakeGroup(e.shot.wakeGroup);
+      const lp = e.shot.leap;
+      if (lp) this.enemies.leap(lp.group, lp.to, { time: lp.time, peak: lp.peak });
+      if (e.shot.recall) this.enemies.recall(e.shot.recall.group, e.shot.recall.path);
     });
+    events.on('cinematic:done', (e) => e?.cut && this.enemies.settle()); // played or skipped, a cut leaves the same state: leaps landed, recalled enemies gone
     events.on('mission:complete', () => this.#log('mission:complete'));
     events.on('cinematic:start', (e) => (this.cutting = !!e?.cut)); // a cut is not a quiet moment: STEM-00's lines wait it out
     events.on('cinematic:done', () => (this.cutting = false));

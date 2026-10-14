@@ -417,10 +417,46 @@ export class SpiderMech {
     for (const o of this.orbs) o.obj.visible = o.ring.visible = false;
   }
 
+  // Scripted leap (a cut shot's `leap`, encounter.js): flies on an arc from where it stands to `to` in `time` s (`peak` m over the
+  // straight line), legs tucked under the hull, and lands with a slam (shake and dust, no damage). Ignores the arena bounds on the
+  // way; `to` should be inside them. settle() lands it at once (a skipped cut).
+  leap(to, { time = 1.8, peak = 9 } = {}) {
+    if (!this.alive) return;
+    this.jump = { from: this.pos.clone(), to: new THREE.Vector3(...to), t: 0, time, peak };
+    this.yaw = Math.atan2(to[0] - this.pos.x, to[2] - this.pos.z);
+    this.vel.set(0, 0, 0);
+  }
+
+  settle() {
+    if (this.jump) this.jump.t = this.jump.time;
+  }
+
+  #leapStep(dt) {
+    const j = this.jump;
+    j.t = Math.min(j.time, j.t + dt);
+    const u = j.t / j.time;
+    this.pos.lerpVectors(j.from, j.to, u);
+    this.pos.y += j.peak * 4 * u * (1 - u);
+    this.height += (this.t.height - 0.6 - this.height) * damp(6, dt); // legs drawn in
+    if (u < 1) return;
+    this.jump = null;
+    this.pos.copy(j.to);
+    BLAST.point.copy(this.pos);
+    BLAST.radius = this.t.stomp.radius;
+    BLAST.kind = 'stomp';
+    this.ctx.events.emit('blast', BLAST); // landing slam: dust, shake, sound (no damage)
+    for (const l of this.legs) if (l.alive) l.stepT = -1;
+  }
+
   update(dt, player) {
     this.time += dt;
     this.#updateDebris(dt);
     if (!this.alive) return;
+    if (this.jump) {
+      this.#leapStep(dt);
+      this.#pose(dt);
+      return;
+    }
 
     // wake when the player comes into the arena (or close with line of sight)
     if (!this.awake && !this.dormant && !player.dead) {
@@ -675,7 +711,10 @@ export class SpiderMech {
       _c.set(this.pos.x, this.pos.y, this.pos.z);
       for (let f = 0.8; f > 0.2 && !world.segmentClear(_c, home, 0.3, 1.3, 3); f -= 0.2) home.lerpVectors(_c, home, f / (f + 0.2));
       home.y = world.groundAt(home.x, home.z, this.pos.y + 1.5);
-      if (l.stepT < 0) {
+      if (this.jump) {
+        l.stepT = -1;
+        l.foot.set(home.x, this.pos.y + 0.4, home.z); // in the air: feet tucked under the body (a planted foot would stretch the leg)
+      } else if (l.stepT < 0) {
         const far = Math.hypot(home.x - l.foot.x, home.z - l.foot.z) > (this.down > 0 ? 3 : LEG.step);
         if (far && (stepping < 0 || stepping === l.group) && dt > 0) {
           l.stepT = 0;

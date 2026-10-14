@@ -211,10 +211,11 @@ export const KIT_PIECES = {
   // Opens once per run; a restart, a scene load and the editor's play / edit rebuild it shut. In the editor and the Library it is inert and
   // draws a ghost of the space it slides into (sliding up needs a lintel at least `height` tall above it: wallHeight >= 2 * height).
   // closeOn (optional, an `on` form): after it happened the gate shuts again for good once the player is through (World.addGate).
+  // shutOn (optional, an `on` form): after it happened the open gate shuts for good wherever the player is (still never on an enemy).
   'kit.gate': {
     example: { params: { on: 'trigger:gate', width: 4, height: 4 } },
     label: 'GATE 4.0 × 4.0, opens on an event',
-    fields: [{ key: 'on', type: 'text' }, { key: 'closeOn', type: 'text', optional: true }, { key: 'width', type: 'number', min: 0.1 }, { key: 'height', type: 'number', min: 0.1 }, { key: 'thickness', type: 'number', min: 0.05 }, { key: 'slide', type: 'enum', options: ['up', 'down'], optional: true }, { key: 'time', type: 'number', min: 0.1, optional: true }, MAT],
+    fields: [{ key: 'on', type: 'text' }, { key: 'closeOn', type: 'text', optional: true }, { key: 'shutOn', type: 'text', optional: true }, { key: 'width', type: 'number', min: 0.1 }, { key: 'height', type: 'number', min: 0.1 }, { key: 'thickness', type: 'number', min: 0.05 }, { key: 'slide', type: 'enum', options: ['up', 'down'], optional: true }, { key: 'time', type: 'number', min: 0.1, optional: true }, MAT],
     check: (p, registry) => gateProblem(p, registry.guns),
     build(world, d) {
       const id = 'kit.gate';
@@ -260,7 +261,7 @@ export const KIT_PIECES = {
         dress.add(seam);
       }
       mesh.add(dress);
-      return world.addGate(mesh, { on: p.on, closeOn: p.closeOn ?? null, height, slide, time, lamps: [lamp], lampOpen: gm.open });
+      return world.addGate(mesh, { on: p.on, closeOn: p.closeOn ?? null, shutOn: p.shutOn ?? null, height, slide, time, lamps: [lamp], lampOpen: gm.open });
     },
   },
 
@@ -397,5 +398,5 @@ export const KIT_PIECES = {
 };
 
 function gateProblem(p, guns) {
-  return onProblem(p.on, 'on', guns) ?? (p.closeOn != null ? onProblem(p.closeOn, 'closeOn', guns) : null) ?? (p.slide != null && p.slide !== 'up' && p.slide !== 'down' ? 'slide must be up or down' : null);
+  return onProblem(p.on, 'on', guns) ?? (p.closeOn != null ? onProblem(p.closeOn, 'closeOn', guns) : null) ?? (p.shutOn != null ? onProblem(p.shutOn, 'shutOn', guns) : null) ?? (p.slide != null && p.slide !== 'up' && p.slide !== 'down' ? 'slide must be up or down' : null);
 }

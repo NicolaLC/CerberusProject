@@ -208,6 +208,14 @@ export class Drone {
     this.awake = true;
   }
 
+  // Recalled (Enemies.recall): flies along `path` (Vector3 list), ignoring the player; `recalled` at its end (Enemies removes it).
+  recall(path) {
+    if (!this.alive) return;
+    this.dormant = false;
+    this.awake = false;
+    this.recallPath = path.slice();
+  }
+
   // Returns true if this hit destroyed it.
   damage(amount, point, dir, zone) {
     if (!this.alive || this.falling) return false;
@@ -262,7 +270,16 @@ export class Drone {
   #move(dt, player, active) {
     const t = this.t;
     _a.set(0, 0, 0);
-    if (active) {
+    if (this.recallPath) {
+      const goal = this.recallPath[0];
+      if (!goal) this.recalled = true;
+      else {
+        _a.subVectors(goal, this.pos).setY(0);
+        const left = _a.length();
+        if (left < 1) this.recallPath.shift();
+        _a.multiplyScalar(t.speed * 1.4 / Math.max(left, 0.01));
+      }
+    } else if (active) {
       const dx = player.pos.x - this.pos.x;
       const dz = player.pos.z - this.pos.z;
       const dist = Math.hypot(dx, dz) || 1;

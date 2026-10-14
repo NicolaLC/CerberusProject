@@ -271,6 +271,23 @@ export class Enemies {
     }
   }
 
+  // Scripted moves (a cinematic.cut shot's `leap` / `recall`, encounter.js). leap: every member of `group` that can (the boss) leaps to
+  // `to` ({ time, peak }). recall: every trooper / drone of `group` stops fighting and runs along `path` ([[x, y, z], ...]); at its
+  // end it is removed (not a kill). settle(): what a cut started ends now (a skip, or the cut's end): leaps land, recalled ones go.
+  leap(group, to, opts) {
+    for (const e of this.all) if (e.squad === group && e.alive && e.leap) e.leap(to, opts);
+  }
+
+  recall(group, path) {
+    const pts = path.map((p) => new THREE.Vector3(...p));
+    for (const e of this.all) if (e.squad === group && e.alive && e.recall) e.recall(pts);
+  }
+
+  settle() {
+    for (const e of this.all) e.settle?.();
+    for (const e of this.all.filter((a) => a.alive && a.recallPath)) this.despawn(e);
+  }
+
   // Removes and frees one enemy built by spawn() (or by load).
   despawn(actor) {
     const i = this.all.indexOf(actor);
@@ -492,6 +509,7 @@ export class Enemies {
       }
       this.sepReady = false;
       this.#groupWake();
+      for (let i = this.all.length - 1; i >= 0; i--) if (this.all[i].recalled) this.despawn(this.all[i]); // a recall reached its end
     }
 
     const cap = player.dead ? null : player.capsule();

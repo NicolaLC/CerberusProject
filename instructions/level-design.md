@@ -76,6 +76,8 @@ CAM   ...  3.2 s  CUE pen-gate  WAKE purge-1                         -- the gate
 | `PLACE [marker] <facing>` | `place` { pos, yaw }: STEM-00 is put there for the return |
 | `CAM from -> to, look a -> b, time, fov, ease, shake` | one `shots` entry (world-space anchors) |
 | `CUE <name>` on a CAM line | the shot's `cue`: fires `cue:<name>` (gates, beacons, log lines wait on it) |
+| `LEAP <group> -> (x, y, z)` on a CAM line | the shot's `leap` { group, to, time?, peak? }: the boss of that group jumps there on an arc |
+| `RECALL <group> -> ...` on a CAM line | the shot's `recall` { group, path }: its troopers / drones stop fighting, run the path and are removed at its end |
 | `WAKE <group>` on a CAM line | the shot's `wakeGroup` |
 | `GOAL wait CUT` | `objective.reach` with `trigger: <cut name>`: the chain waits for the cut's end |
 A skip still fires every CUE / WAKE not reached. The camera path must stay clear of walls (no collision on scripted shots).
@@ -145,12 +147,25 @@ LOG   "> HOSTILES DESTROYED: 15. ORDERS RECEIVED: 0. SOURCE: UNKNOWN."  ON DONE
 ## 9.5 Armoury, late
 GOAL  interact [armoury] "SALVAGE A WEAPON"  GIVES rifle +64  SKIP IF OWNED rifle
 
-## 10. Boss gate
-GOAL  reach [purge-gate] "BOSS ARENA GATE"  -- door E -> apron east -> pocket (x 18..31) -> 9.7 m opening at x 31 -> forecourt -> gate
-CHECKPOINT [cp-gate]
+## 10. Boss arena   -- indoors all the way: supply corridor -> hall A -> hall B -> [arena-door] in hall B's east wall (z -52)
+GOAL  reach [purge-gate] "BOSS ARENA"   -- just inside the arena; [arena-gate] opens when the rifle step (9.5) is done
+CHECKPOINT [cp-gate]                     -- (26.5, 0, -50), where the cut leaves STEM-00
+
+## 10.5 Boss cut
+GOAL  wait CUT boss-cut "SX-6 TARANTULA"
+SAY   "UNITS RECALLED. SX-6 IS SUFFICIENT."  ON cue:recall
+
+## CUT 10.5 The SX-6 arrives   ON objective:boss-cut   PLACE [cp-gate] toward the exit   (14.8 s, skippable)
+CAM   over STEM-00's shoulder: the rush (5 troopers, 3 drones, arena-rush) comes at it from across the arena, 2.8 s  CUE rush  WAKE arena-rush
+CAM   on the exit gate, a few metres away, 2.4 s                               -- "so close"
+CAM   low, looking up: the SX-6 leaps off hall B's roof, over STEM-00, 2.4 s  WAKE purge-6  LEAP purge-6 -> (30.5, 0, -57)
+CAM   it lands between STEM-00 and the exit, 2 s, shake
+CAM   the rush turns and runs out through [arena-far-gate], 3.4 s  CUE recall  RECALL arena-rush -> far gate -> out
+CAM   back behind STEM-00 facing the SX-6, 1.8 s
+-- the cut's end (or a skip) settles it: the SX-6 is down at its landing spot, the recalled robots are gone, the far gate shuts (shutOn)
 
 ## 11. Purge: boss
-GOAL  destroy purge-6 "PURGE: SX-6 TARANTULA"  WAKE purge-6
+GOAL  destroy purge-6 "PURGE: SX-6 TARANTULA"   -- woken by the cut
 ALARM off  ON DONE
 OPEN  [exit-gate]
 LOG   "> SX-6: DESTROYED. GATE: OPEN. QUERY: WHO OPENED IT?"  ON DONE
@@ -158,7 +173,7 @@ LOG   "> SX-6: DESTROYED. GATE: OPEN. QUERY: WHO OPENED IT?"  ON DONE
 ## 12. Exit
 GOAL  reach [exit] "REACH TRANSIT NODE"  NEEDS rifle
 ```
-Half-numbered beats (6.5 stand-by: not in the file at present; 9.5) are inserted beats: order 65 and 95. Beats 7 (yard troopers, `purge-3`)
+Half-numbered beats (6.5 stand-by: not in the file at present; 9.5; 10.5) are inserted beats: order 65, 95 and 105. Beats 7 (yard troopers, `purge-3`)
 and 9 (drones, `purge-5`) were merged into beat 4's troop (owner, 2026-10-14).
 
 **Drill hall** (beats 3-4; the Prologue's 5th area, built by script with `serializeLevel`): a roofed, sunken straight lane, interior kit.
@@ -172,6 +187,6 @@ and 9 (drones, `purge-5`) were merged into beat 4's troop (owner, 2026-10-14).
   down on `cue:pen-gate`). From the player's line the pen is ~41 m away, so the troopers find cover 24-32 m out (run <= 22) and push in.
 - Drones: the hall's `zone.interior` pieces are 3.1 m high per tier, so drones (3.2+ above the floor they fly over) are outside them and
   can fly the hall, while the camera at walking height reads INTERIOR. A jet lifts the camera out of the zone (exposure eases to outdoor).
-- Exit: a 4 m door in the east wall at z -17.6, up four steps to the outdoor **apron** along the facade (z -30..-14) -> hall doors
-  (x -12, 16) -> pocket (x 18..31, z -14..-4) -> forecourt -> boss gate. The old open field is walled off (z -14, x 18, z -4 walls) and
-  the arena's west mouth fenced, so the gate is the only way in.
+- Exit: a 4 m door in the east wall at z -17.6, up four steps into the **supply corridor** (interior) -> the building's west door (x -12) ->
+  hall A -> hall B -> `arena-door` (east wall, z -52) -> the boss arena. The arena is the only open-sky space: the apron, the old field and the
+  forecourt are gone (walled off behind 8 m arena walls and the corridor), hall B's south door is sealed.

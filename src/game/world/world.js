@@ -309,10 +309,10 @@ export class World {
   // (editor, Library): it stays shut whatever happens and shows a ghost of the space it slides into.
   // closeOn (an `on` form): once it happened, the open gate shuts again for good as soon as the player (and the camera) are past it, on
   // the side away from where the player was when it opened, and no enemy stands in it (checked every frame until then).
-  addGate(mesh, { on, closeOn = null, height, slide, time, lamps = [], lampOpen = null }) {
+  addGate(mesh, { on, closeOn = null, shutOn = null, height, slide, time, lamps = [], lampOpen = null }) {
     const i = this.staticMeshes.indexOf(mesh);
     if (i >= 0) this.staticMeshes.splice(i, 1); // merged batches are static
-    const g = { mesh, col: mesh.userData.collider, y0: mesh.position.y, h: height, dir: slide === 'down' ? -1 : 1, time, on, closeOn, lamps, lampOpen, lampShut: lamps[0]?.material ?? null, open: 0, opening: false, inert: this.gizmoMode, colY: [mesh.userData.collider.box.min.y, mesh.userData.collider.box.max.y], from: 0, closeArmed: false, closing: false, closed: false };
+    const g = { mesh, col: mesh.userData.collider, y0: mesh.position.y, h: height, dir: slide === 'down' ? -1 : 1, time, on, closeOn, shutOn, shut: false, lamps, lampOpen, lampShut: lamps[0]?.material ?? null, open: 0, opening: false, inert: this.gizmoMode, colY: [mesh.userData.collider.box.min.y, mesh.userData.collider.box.max.y], from: 0, closeArmed: false, closing: false, closed: false };
     this.gates.push(g);
     if (g.inert) {
       const { width, height: h, depth } = mesh.geometry.parameters;
@@ -348,6 +348,7 @@ export class World {
     let n = 0;
     for (const g of this.gates) {
       if (!g.inert && g.closeOn != null && g.closeOn === key) g.closeArmed = true;
+      if (!g.inert && g.shutOn != null && g.shutOn === key) g.closeArmed = g.shut = true; // shuts wherever the player is
       if (g.inert || g.opening || g.on !== key) continue;
       g.opening = true;
       for (const l of g.lamps) l.material = g.lampOpen; // status lamp: sealed red -> open cyan
@@ -384,8 +385,8 @@ export class World {
   // A `closeOn` gate may shut: the player and the camera are past it (away from the side it opened toward them) and its shut volume
   // holds no enemy (the player is out of it by then).
   #canClose(g) {
-    if (!this.playerPos || this.#gateSide(g, this.playerPos) * g.from > -GATE_CLOSE.player) return false;
-    if (this.camPos && this.#gateSide(g, this.camPos) * g.from > -GATE_CLOSE.camera) return false;
+    if (!g.shut && (!this.playerPos || this.#gateSide(g, this.playerPos) * g.from > -GATE_CLOSE.player)) return false;
+    if (!g.shut && this.camPos && this.#gateSide(g, this.camPos) * g.from > -GATE_CLOSE.camera) return false;
     _gb.copy(g.col.box);
     _gb.min.y = g.colY[0];
     _gb.max.y = g.colY[1];
