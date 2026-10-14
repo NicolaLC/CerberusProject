@@ -124,8 +124,12 @@ CAM   back behind STEM-00, 1.6 s, control returns
 GOAL  destroy purge-1 "PURGE: DRILL HALL"   -- 4 shooters on posts, 3 troopers + 3 drones from the pen; nobody drops anything
 -- the KR-7 waits on a stand on the landing [landing-rifle], in the path from the range exit to the cut: the first fight has two guns
 
+## 4.5 Supply corridor   -- hall exit -> east 22 m -> north 9 m -> the building's west door; interior kit, two sectors (supply-a / supply-b)
+LOG   "> SUPPLY POINT: STOCKED. ROUNDS, REPAIR. QUERY: STOCKED FOR WHOM?"  ON [supply-in]
+-- supply.ammo (all classes) and supply.repair against the south wall: the only rounds and repairs of the level
+
 ## 5. Purge: hall
-GOAL  destroy purge-2 "PURGE: HALL SHOOTERS"  WAKE purge-2
+GOAL  destroy purge-2 "PURGE: HALL SHOOTERS"  WAKE purge-2   -- detail tells the player to resupply first ({interact})
 LOG   "> TARGETS: ARMED. DIRECTIVE: STILL NONE. QUERY: WHO ARMED THEM?"  ON DONE
 CHECKPOINT [cp-hall], [cp-hall-east]
 

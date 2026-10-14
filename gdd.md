@@ -406,6 +406,10 @@ Planned (#91), not in the code yet:
 - Loose crates are opt-in level data (`pickup.light` / `pickup.heavy`): the arena keeps its 10 fixed spots (yard, west
   platform, range, interior, boss arena gate at (28, -17) and back), respawning after 15 s; the Prologue has none.
 - Enemies never drop ammo (owner decision, October 2026). An enemy may still drop a gun (`dropGun`).
+- **Supply rule (Prologue and campaign):** ammunition and repairs only come from supply zones: an ammo supply point
+  (interact: every owned gun of its class topped up to its max reserve) and a repair station (interact: health and
+  shields back to full), both unlimited. Never from loose pickups or enemy drops. Health and shields still regenerate
+  slowly (6.1). The arena and the Gym rooms may keep loose crates for testing and score play; they are opt-in data.
 - Walk within 1.1 m to collect. Toast: "LIGHT AMMO +n AR ..." or "HEAVY AMMO +n SR ...". If every gun of the class is
   full the pickup stays and "AMMO FULL" shows.
 

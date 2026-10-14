@@ -39,6 +39,8 @@
   Light is the cyan glow (small case, one band), heavy the orange/amber glow (taller case, two bands, brighter).
 - Loose cases are level data (`pickup.light` / `pickup.heavy` pieces, opt-in per level: the arena keeps its 7 light + 3 heavy) and respawn after 15 s.
 - Enemies drop no ammo (owner, 2026-10-14). An enemy's `dropGun` still leaves that gun.
+- **Rule (Prologue / campaign): ammo and repair only come from supply zones** (`supply.ammo`, `supply.repair`), never from loose pickups or
+  enemy drops. Regeneration (Player above) stays. The arena may differ (it keeps its loose crates as opt-in level data).
 - **Supply points** (`supply.ammo`, level.md): interact (G / B) at the cabinet tops the owned guns of its class(es) up to their max reserve, unlimited
   uses. **Repair stations** (`supply.repair`): interact restores health and shields. Prompt over the cabinet like an objective terminal.
 - **Loaner guns**: a `trigger.volume` with `loadout` takes back every gun not listed (unowned again, full magazine, empty reserve; the raised gun
