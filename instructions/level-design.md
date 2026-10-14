@@ -102,9 +102,9 @@ GOAL  interact [c2-arm] "CALIBRATION 02: ARM"  GIVES pistol         -- 10.5: the
 LOG   "> ITEM: KP-12. FUNCTION: CALIBRATION. QUERY: CALIBRATE WHAT?"  ON DISCOVER pistol
 GOAL  destroy calib "CALIBRATION 02: TARGETING"                     -- 11: three static targets (count 3)
 GOAL  reach [c3-jet] "CALIBRATION 03: VERTICAL THRUST"             -- 12: the exit is on a 1.6 m ledge; CHECKPOINT [cp-c4]
-GOAL  action cover "CALIBRATION 04: TAKE COVER"  WAKE calib-shooter -- 13
-GOAL  destroy calib-shooter "CALIBRATION 04: RETURN FIRE"           -- 14
-GOAL  action vault "CALIBRATION 05: VAULT"                          -- 15 (hop)
+GOAL  action cover "CALIBRATION 04: TAKE COVER"                    -- 13: the shooter is in sight but asleep until STEM-00 is in cover
+GOAL  destroy calib-shooter "CALIBRATION 04: RETURN FIRE"  WAKE calib-shooter -- 14
+GOAL  action vault "CALIBRATION 05: VAULT"                          -- 15 (hop); both C5 blocks run wall to wall (ends 15 cm in the walls): no way round
 GOAL  action slide "CALIBRATION 05: SLIDE"                          -- 16 (slide vault)
 GOAL  action coverRun count 2 "CALIBRATION 06: COVER TRANSFER"      -- 17
 
