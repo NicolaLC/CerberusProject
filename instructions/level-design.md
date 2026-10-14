@@ -32,6 +32,7 @@ Text the player reads goes in quotes, exactly as shown in game (narrative.md rul
 | `GOAL survive Ns "TEXT"` | hold out | `objective.survive` |
 | `GOAL interact [spot] "TEXT"` | press G there | `objective.interact` |
 | `WAKE <group>` | dormant group activates with this goal | `wakeGroup` on the goal |
+| `SPAWN <group>` | reinforcements: the group's `marker.entry` points build their enemies, awake | `spawnGroup` on the goal |
 | `GIVES <gun>` (`+N ammo`) | goal hands over a gun | `grantGun` / `grantAmmo` |
 | `NEEDS <gun>` | goal only completes if the gun is owned | `requiresGun` |
 | `SKIP IF [vol]` / `SKIP IF OWNED <gun>` | optional goal | `skipOn` / `skipIfOwned` |
@@ -74,6 +75,7 @@ real cutscene is scheduled).
 ```
 # PROVING GROUNDS  (loadout: pistol, skin: weathered)
 -- map: the arena layout (level.md, Layout), calibration rack [rack] at (0, 1.6, 45) facing north,
+-- the training yard rebuilt as a combat arena (see "Yard layout" below),
 -- transit node behind [exit-gate] in the boss arena's north wall.
 
 ## 0. Boot
@@ -86,16 +88,19 @@ GOAL  reach [leave-bay] "LEAVE CALIBRATION BAY"
 LOG   "> MOTION UNRESTRICTED. NO ONE OBJECTS."  ON [bay-exit]
 
 ## 2. Calibrate
-GOAL  destroy count 3 "CALIBRATION TARGETS"   -- yard puppets, passive
+GOAL  destroy count 3 "CALIBRATION TARGETS"   -- as built: the bay's CALIBRATION 01-06 (c1-move .. c6-transfer, orders 10-17) before [leave-bay] (20); no yard puppets
 
 ## 3. Purge starts
-GOAL  survive 4s "PURGE INITIATED"
+GOAL  survive 15s "PURGE INITIATED"  WAKE purge-1   -- shooters 21-36 m north of the bay exit; low wall 5 m out
 SAY   "CALIBRATION UNIT 00: NONCOMPLIANT. PURGE."
 ALARM on                                       -- off at beat 11 done
-CHECKPOINT [cp-yard]
+CHECKPOINT [cp-yard]                           -- (-42, 0, 25): between the bay gate and the first low wall
+
+## 3.5 Purge: hold
+GOAL  survive 15s "PURGE: HOLD"  SPAWN purge-1 -- two entries of 2 shooters, behind low walls at (-34, -6), (-18, -8)
 
 ## 4. Purge: yard
-GOAL  destroy purge-1 "PURGE: YARD SHOOTERS"  WAKE purge-1
+GOAL  destroy purge-1 "PURGE: YARD SHOOTERS"  WAKE purge-1   -- 8 shooters: gantry, west, centre-west, drill deck
 
 ## 5. Purge: hall
 GOAL  destroy purge-2 "PURGE: HALL SHOOTERS"  WAKE purge-2
@@ -107,23 +112,23 @@ GOAL  interact [armoury] "SALVAGE A WEAPON"  GIVES rifle +64  SKIP IF [armoury-s
 LOG   "> ITEM: KR-7. FUNCTION: KILL. QUERY: WHY DOES IT FEEL HEAVY?"  ON DISCOVER rifle
 
 ## 6.5 Stand by
-GOAL  survive 5s "STAND BY"
+GOAL  survive 5s "STAND BY"   -- not in the file at present
 
 ## 7. Purge: yard troopers
-GOAL  destroy purge-3 "PURGE: YARD TROOPERS"  WAKE purge-3   -- each drops a rifle (fallback)
+GOAL  destroy purge-3 "PURGE: YARD TROOPERS"  WAKE purge-3   -- muster in the east arcade, south-east of the hall doors; each drops a rifle (fallback)
 
 ## 8. Purge: hall troopers
 GOAL  destroy purge-4 "PURGE: HALL TROOPERS"  WAKE purge-4
 
 ## 9. Purge: drones
-GOAL  destroy purge-5 "PURGE: DRONES"  WAKE purge-5
+GOAL  destroy purge-5 "PURGE: DRONES"  WAKE purge-5   -- over the open middle, south of the doors; never under the arcade roof
 LOG   "> HOSTILES DESTROYED: 18. ORDERS RECEIVED: 0. SOURCE: UNKNOWN."  ON DONE
 
 ## 9.5 Armoury, late
 GOAL  interact [armoury] "SALVAGE A WEAPON"  GIVES rifle +64  SKIP IF OWNED rifle
 
 ## 10. Boss gate
-GOAL  reach [purge-gate] "BOSS ARENA GATE"
+GOAL  reach [purge-gate] "BOSS ARENA GATE"  -- door E -> NE corner -> 9.7 m opening at x 31 -> forecourt -> gate
 CHECKPOINT [cp-gate]
 
 ## 11. Purge: boss
@@ -135,4 +140,19 @@ LOG   "> SX-6: DESTROYED. GATE: OPEN. QUERY: WHO OPENED IT?"  ON DONE
 ## 12. Exit
 GOAL  reach [exit] "REACH TRANSIT NODE"  NEEDS rifle
 ```
-Half-numbered beats (6.5, 9.5) are inserted beats: order 65 and 95.
+Half-numbered beats (3.5, 6.5, 9.5) are inserted beats: order 35, 65 and 95.
+
+**Yard layout** (beats 3-10; x -50..31, z -29.7 building facade .. 29.5 bay wall; built by script, `serializeLevel`):
+- Three bands of cover between the bay exit (SW, (-42, 27)) and the hall doors (x -12 and 16 on the facade): low 1.1 x 1.0 walls,
+  high 2.8 x 0.6 walls and 1.2 pillars, 8-14 m apart, gaps >= 1.2 so trooper routes pass. Shooter posts are low walls along X with
+  the shooter 1.3 m north of the centre (they face the player coming from the south). A low wall 8 m out of each hall door.
+- Height: the west **gantry** (8 x 24 at 1.6 along the west wall, stairs at both ends, broken low parapet on its east edge with 3.5 m
+  drop / jet gaps, a range-control console pair) and the centre **drill deck** (10 x 6 at 1.6, stairs north and south, low
+  parapets east / west, the deck shooter's post). Both walked in play (stairs, deck, back down).
+- East **arcade**: a roofed flank lane along the east wall (x 24.7..30.7, z -1.6..29.5, roof 5.0; `arch.corridor` `sides: right`,
+  `floor: false`, its wall-side collider on; posts on the open side; a `zone.interior` so drones stay out). Two low walls inside.
+- Route to the boss gate: the 2.2 m range separator became a 6 m east wall ending at z -4, leaving a 9.7 m opening into the gate
+  **forecourt** (x 31..50, z -14..-4, closed to the south); the boss arena's west mouth is fenced (3.2 m, x 24.3 and z -14), so the
+  gate is the only way in. Lit floor channels flank the hall doors and the gate approach; hazard stripes on both thresholds.
+- Encounter starts keep enemies in front: shooters north of the bay exit, troopers south-east of the doors, drones south of them.
+

@@ -211,8 +211,15 @@ export class Shell {
           then();
         } finally {
           this.loading = false;
-          el.hidden = true;
         }
+        // stays up until play is running and a game frame is drawn (pointer lock lands a frame or more later; until
+        // then the menu would show); 1.5 s at most (a refused lock leaves the pause menu, which is right to show)
+        const t0 = performance.now();
+        const wait = () => {
+          if (!this.host.engine.paused || performance.now() - t0 > 1500) requestAnimationFrame(() => (el.hidden = true));
+          else requestAnimationFrame(wait);
+        };
+        requestAnimationFrame(wait);
       }),
     );
   }

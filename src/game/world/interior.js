@@ -560,9 +560,13 @@ function wallBay(A, o) {
     // hatch: a plate with two handles, a small status screen and a cable conduit running out of it
     wb('hull', 0.08, ph - 0.46, 0.08, py + 0.03, iw * 0.62, zc + iw * 0.17);
     for (const v of [Math.min(0.35, ph / 4), -Math.min(0.3, ph / 4)]) wb('dark', 0.06, 0.06, 0.15, py + v, 0.3, zc + iw * 0.17);
-    wb('dark', 0.06, 0.34, 0.06, py + Math.min(0.25, ph / 5), 0.42, zc - iw * 0.32);
-    wb('screen', 0.01, 0.22, 0.095, py + Math.min(0.25, ph / 5), 0.3, zc - iw * 0.32); // the consoles' scrolling cyan readout
-    C('dark', 0.05 * Math.max(k, 0.6), Math.max(0.2, ph - 0.6), X(0.12), py - 0.15, zc - iw * 0.32, 0, 0, 0, 8);
+    const sy = py + Math.min(0.25, ph / 5); // screen centre
+    wb('dark', 0.06, 0.34, 0.06, sy, 0.42, zc - iw * 0.32); // bezel
+    wb('screen', 0.01, 0.22, 0.095, sy, 0.3, zc - iw * 0.32); // the consoles' scrolling cyan readout
+    // cable conduit out of the bezel's underside down to the sill: never in front of the screen
+    const c0 = y0 + p0 + 0.2;
+    const c1 = sy - 0.17 - 0.01;
+    if (c1 - c0 > 0.1) C('dark', 0.05 * Math.max(k, 0.6), c1 - c0, X(0.12), (c0 + c1) / 2, zc - iw * 0.32, 0, 0, 0, 8);
   }
   for (const e of [1, -1]) for (const v of [y0 + p0 + 0.07, y0 + p1 - 0.09]) B('cyan', 0.02, 0.025, 0.025, X(pd) + s * -0.01, v, zc + e * (len / 2 - 0.3)); // corner markers
 
@@ -988,8 +992,9 @@ export const INTERIOR_PIECES = {
       const [lo, hi] = slim ? [0.12, 0.05] : [0.46, 0.46];
       for (let i = 0; i <= n; i++) {
         const z = L / 2 - Math.min(L - 0.06, Math.max(0.06, i * b)); // pilasters, the end ones inside the run
-        A.B('frame', lo, 2.62, 0.115, lo / 2, 1.31, z); // 2 cm over the panel heads (flush tops z-fight)
-        A.B('frame', hi, H - 2.71, 0.115, hi / 2, 2.62 + (H - 2.71) / 2, z); // stops 1 cm under the cap (flush tops z-fight)
+        // pilasters start 1.5 cm off the wall: their backs and the bays' backs on one plane z-fight where the wall has a gap behind
+        A.B('frame', lo - 0.015, 2.62, 0.115, (lo + 0.015) / 2, 1.31, z); // 2 cm over the panel heads (flush tops z-fight)
+        A.B('frame', hi - 0.015, H - 2.71, 0.115, (hi + 0.015) / 2, 2.62 + (H - 2.71) / 2, z); // stops 1 cm under the cap (flush tops z-fight)
         if (slim) A.B('cyan', 0.02, 0.03, 0.03, lo, 1.8, z);
       }
       for (let i = 0; i < n; i++) wallBay(A, { X, s: -1, zc: L / 2 - (i + 0.5) * b, len: b - 0.06, y0: 0, top: H, cornice: false, slim, rnd, pipe: null, flat: false, props: null, capLen: b });
