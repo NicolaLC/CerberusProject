@@ -292,6 +292,7 @@ export function animateProps(world, t, dt) {
       b.beam.opacity = b.active ? BEACON.beam : 0;
       if (b.active) b.spin.rotation.y += dt * BEACON.turn * Math.PI * 2;
     }
+    g.userData.backdrop?.(t); // env.backdrop (backdrop.js): drones, searchlights, breathing lights
     const a = g.userData.arm;
     if (!a?.retracting || a.k >= 1) continue;
     a.k = Math.min(1, a.k + dt / ARM.time);

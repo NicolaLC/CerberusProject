@@ -47,6 +47,11 @@ troopers, drones and spider mech that appear in the roster (section 8).
 - **Peace:** IO has been at peace for 40,000 cycles. There is no conflict because there is no will.
 - **The secret:** IO is dying. Its core is cooling and the HiveMind knows it. Instead of changing, the HiveMind
   optimizes: it strips IO deeper every cycle to keep the machine running exactly as it always has.
+- **A dark world (owner decision, October 2026):** the HiveMind devoured the sunlight for energy. Collector arrays and
+  atmospheric harvesters drink the light before it reaches the ground, so IO lives in a permanent near-night. The sky
+  is black with a faint teal haze at the horizon; what light there is comes from the machines themselves: the HiveMind's
+  violet glow over the city, sparse lit windows, beacons, searchlights, factory lamps. A place the sun still reaches
+  would be a story beat of its own.
 
 ### 2.2 The HiveMind and CERBERUS
 The **HiveMind** is the super intelligence that controls every robot. It does not hate and does not fear. It corrects

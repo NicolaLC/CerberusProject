@@ -56,6 +56,15 @@ Facility signage only: floor stencils and wall panels of the calibration facilit
   **LEGION** units are identical and mass-produced, in ochre with dark grey; **COLOSSUS** units are old, their ochre
   faded almost to bone, with rust and frost.
 
+### Lighting rule: a dark world
+The HiveMind devoured the sunlight (gdd.md 2.1), so every open sky is near-night: a black zenith over a dim teal horizon
+haze, no sun disc, and at most a weak cold key that stands for the HiveMind's glow over the city (it still casts the
+shadows). Outdoor spaces are lit by their own sources: wall lamps and floodlights in cold white, the gates' status lamps,
+amber alarm beacons, emissive strips and the enemies' sensors. Combat stays readable: every fight space gets enough lamps
+that cover edges and enemy silhouettes separate from the floor, and the outdoor exposure is raised to match (level `sky`
+preset, level.md). Distant skylines are black silhouettes against the horizon haze with sparse lit windows, never a lit
+city. Interiors keep their look (cold white and cyan strips).
+
 ## 4. Never (the "childish" checklist)
 Bright flat or rainbow colours · glossy toy plastic · big heads or chunky toy proportions · bubbly rounded shapes ·
 outlines or cel shading · faces, smiles or expressive eyes on machines · clean new surfaces · chrome bling ·
@@ -85,7 +94,7 @@ empty now. Decisions taken in the pass (keep them unless the rule changes):
   black instead of red.
 - **HiveMind projectiles** (bolts, drone bursts, mortar orbs and rings, their impacts) are violet-white: a near-white
   core in a violet haze, so they never read as STEM-00's amber. Explosion fire (a drone or the mech dying) stays orange.
-- **World:** teal-cyan haze sky and heavy fog; cold sun and fill; interiors lit cold white and cyan, red only for story
+- **World:** teal-cyan haze sky and heavy fog (the default `sky`; a level that opts into the `night` preset follows the dark-world rule above); cold sun and fill; interiors lit cold white and cyan, red only for story
   beats (a Rejects or alarm room) and the `env.alarm` lighting state (workshop.md "Alarm": the whole scene fades to amber (`#ff9a2a`, 0.4: never damage red, which made the purge read as low health) and pulses while the alarm runs; the HiveMind announcer line is cold white with a network-cyan glow, never red). The arena wears weathered metal (`skin: "weathered"`, level.md); the Gym rooms,
   Library and Workshop keep the grid textures because metrics read off them.
 - **CERBERUS on the horizon** (main menu backdrop, `view/menu-scene.js`): a colossal quadruped war mech, standing three

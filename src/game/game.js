@@ -289,7 +289,7 @@ export class Game {
       name: 'post',
       phase: 'render',
       whilePaused: true,
-      update: (realDt) => post.render(realDt, { player, inside: world.isInterior(camera.position) }),
+      update: (realDt) => post.render(realDt, { player, inside: world.isInterior(camera.position), outside: world.outsideExposure }), // a level `sky` preset raises the outdoor exposure
     });
     engine.events.on('engine:systemFailed', ({ name }) => hud.toast(`SYSTEM FAULT: ${name.toUpperCase()}`));
 

@@ -10,6 +10,7 @@ import { Sectors } from './sectors.js';
 import { PROP_PIECES, propMaterials, animateProps } from './props.js';
 import { ARCH_PIECES } from './arch.js';
 import { INTERIOR_PIECES, interiorMaterials } from './interior.js';
+import { buildBackdrop } from './backdrop.js';
 
 // Static level: axis-aligned boxes only (collision, cover and shadows depend on that).
 // Coordinates: x = east, z = south, y = up. Floor is y = 0.
@@ -32,6 +33,15 @@ const LIGHT_PICK = { every: 0.2, move: 2, fade: 0.25, keep: 1.2 };
 export const ALARM = { color: '#ff9a2a', strength: 0.4, rate: 1.6, pulse: 3.2 }; // alarm lighting state: amber warning tint (not red: that reads as low health), 0..1 mix, blend per second, pulse rad/s
 const HAZE = '#4f7b7e'; // horizon and fog: teal-cyan haze, desaturated
 export const SUN_DIR = new THREE.Vector3(0.45, 0.78, 0.43).normalize();
+// Sky presets (level.md `sky`): the outdoor light of a level that opts in; absent = the default hazy day every other scene keeps.
+// Lore (gdd.md 2): the HiveMind devoured the sunlight, the world is dark. `night`: a near-black sky with a dim teal horizon, no sun disc,
+// a faint cold key from the HiveMind's glow over the city (still the shadow caster), a dim cold fill, closer haze, and a higher outdoor
+// exposure so the arena's own lamps and emissives carry it. Applied only while the camera is outdoors (interiors keep their look:
+// the hemisphere fill is not shadowed by roofs), eased at SKY_RATE per second.
+export const SKIES = {
+  night: { top: '#020406', horizon: '#13262c', ground: '#040607', glow: 0, fog: '#0a1317', fogNear: 20, fogFar: 160, hemi: 0x3e5a6a, hemiGround: 0x0c0f10, hemiI: 0.75, sun: 0x86a6c8, sunI: 0.8, exposure: 1.45 },
+};
+const SKY_RATE = 1.2;
 
 // Per-face material array for BoxGeometry (order: +x, -x, +y, -y, +z, -z).
 function faces(def, { px, nx, py, ny, pz, nz } = {}) {
@@ -105,11 +115,18 @@ export const WORLD_PIECES = {
   ...PROP_PIECES, // set dressing: prop.console, prop.crate, prop.cables, prop.pipes, prop.puppetRack, prop.arm, prop.cradle, prop.bench, prop.hazard, prop.panel (props.js)
   ...ARCH_PIECES, // architectural dressing: arch.cove, arch.rib, arch.panelling, arch.bulkhead, arch.floorChannel, arch.coffers, arch.catwalk (arch.js)
   ...INTERIOR_PIECES, // interior kit: arch.corridor (interior.js)
+  // distant city backdrop around an open-sky space (backdrop.js): params seed, towers (70), radius [near, far] (260, 650), drones (7), searchlights (3)
+  'env.backdrop': {
+    example: { params: { towers: 12, radius: [60, 120] } },
+    label: 'BACKDROP distant ruined skyline, drones, searchlights, HiveMind glow; no collision',
+    fields: [{ key: 'seed', type: 'number', min: 0, optional: true }, { key: 'towers', type: 'number', min: 1, optional: true }, { key: 'radius', type: 'vec2', min: 1, optional: true }, { key: 'drones', type: 'number', min: 0, optional: true }, { key: 'searchlights', type: 'number', min: 0, optional: true }],
+    build: (world, d) => buildBackdrop(world, d),
+  },
 };
 
 // Render-only pieces a sectored level builds with their sector instead of at load (sectors.js "Build on approach"): no light records,
 // no cover, nothing another piece refers to by name. meta `defer(params)`. arch.corridor's side / step colliders come with it (not cover).
-for (const id of ['arch.wall', 'arch.corridor', 'arch.ceiling', 'arch.cove', 'arch.panelling', 'arch.floorChannel', 'arch.coffers', 'arch.catwalk', 'arch.bulkhead', 'prop.pipes', 'prop.cables', 'prop.hazard', 'prop.panel']) {
+for (const id of ['env.backdrop', 'arch.wall', 'arch.corridor', 'arch.ceiling', 'arch.cove', 'arch.panelling', 'arch.floorChannel', 'arch.coffers', 'arch.catwalk', 'arch.bulkhead', 'prop.pipes', 'prop.cables', 'prop.hazard', 'prop.panel']) {
   WORLD_PIECES[id] = { ...WORLD_PIECES[id], defer: id === 'arch.corridor' ? (p) => !p.props : () => true };
 }
 const GATE_CLOSE = { player: 1.5, camera: 0.3 }; // m past a gate's plane, on the far side, before a `closeOn` gate shuts behind the player
@@ -485,6 +502,7 @@ export class World {
         horizon: { value: new THREE.Color(HAZE) },
         ground: { value: new THREE.Color('#263033') },
         sunDir: { value: SUN_DIR },
+        glow: { value: 1 }, // the sun's smear (0 under a `night` sky)
       },
       vertexShader: /* glsl */ `
         varying vec3 vDir;
@@ -494,14 +512,14 @@ export class World {
           gl_Position = p.xyww;
         }`,
       fragmentShader: /* glsl */ `
-        uniform vec3 top; uniform vec3 horizon; uniform vec3 ground; uniform vec3 sunDir;
+        uniform vec3 top; uniform vec3 horizon; uniform vec3 ground; uniform vec3 sunDir; uniform float glow;
         varying vec3 vDir;
         void main() {
           vec3 d = normalize(vDir);
           float h = d.y;
           vec3 col = h > 0.0 ? mix(horizon, top, pow(h, 0.55)) : mix(horizon, ground, pow(-h, 0.4));
           float s = max(dot(d, sunDir), 0.0);
-          col += vec3(0.85, 0.95, 0.97) * (pow(s, 400.0) * 5.0 + pow(s, 10.0) * 0.3);
+          col += vec3(0.85, 0.95, 0.97) * (pow(s, 400.0) * 5.0 + pow(s, 10.0) * 0.3) * glow;
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -530,6 +548,44 @@ export class World {
     this.scene.add(sun, sun.target);
     this.sun = sun;
     Object.assign(this.base, { hemi: hemi.color.clone(), ground: hemi.groundColor.clone(), hemiI: hemi.intensity, sun: sun.color.clone() });
+    const u = this.sky.material.uniforms;
+    // the default (day) look, the start of every sky blend
+    this.day = { top: u.top.value.clone(), horizon: this.base.horizon.clone(), ground: u.ground.value.clone(), glow: 1, fog: this.base.fog.clone(), fogNear: this.scene.fog.near, fogFar: this.scene.fog.far, hemi: this.base.hemi.clone(), hemiGround: this.base.ground.clone(), hemiI: hemi.intensity, sun: this.base.sun.clone(), sunI: sun.intensity, exposure: 1 };
+    this.night = null; // the loaded level's sky preset (SKIES), with its colours as THREE.Color
+    this.skyK = 0; // 0 = day look .. 1 = the preset (outdoors)
+    this.outsideExposure = 1; // read by Post: the outdoor exposure target
+  }
+
+  // Level `sky` (a key of SKIES, or null): the outdoor preset, eased in while the camera is outside (update). Starts from the day look.
+  setSky(name) {
+    const s = name == null ? null : SKIES[name];
+    if (name != null && !s) throw new Error(`level: unknown sky "${name}" (known: ${Object.keys(SKIES).join(', ')})`);
+    const c = (v) => new THREE.Color(v);
+    this.night = s && { ...s, top: c(s.top), horizon: c(s.horizon), ground: c(s.ground), fog: c(s.fog), hemi: c(s.hemi), hemiGround: c(s.hemiGround), sun: c(s.sun) };
+    this.skyK = 0;
+    this.#applySky();
+  }
+
+  #applySky() {
+    const D = this.day;
+    const N = this.night ?? D;
+    const k = this.night ? this.skyK : 0;
+    const L = (a, b) => a + (b - a) * k;
+    const u = this.sky.material.uniforms;
+    u.top.value.lerpColors(D.top, N.top, k);
+    u.ground.value.lerpColors(D.ground, N.ground, k);
+    u.glow.value = L(D.glow, N.glow);
+    this.base.horizon.lerpColors(D.horizon, N.horizon, k);
+    this.base.fog.lerpColors(D.fog, N.fog, k);
+    this.base.hemi.lerpColors(D.hemi, N.hemi, k);
+    this.base.ground.lerpColors(D.hemiGround, N.hemiGround, k);
+    this.base.sun.lerpColors(D.sun, N.sun, k);
+    this.base.hemiI = L(D.hemiI, N.hemiI);
+    this.sun.intensity = L(D.sunI, N.sunI);
+    this.scene.fog.near = L(D.fogNear, N.fogNear);
+    this.scene.fog.far = L(D.fogFar, N.fogFar);
+    this.outsideExposure = L(D.exposure, N.exposure);
+    this.#applyAlarm(this.alarm.t ?? 0); // the alarm tint mixes from these bases
   }
 
   // Keep the shadow frustum centered on the player.
@@ -572,6 +628,13 @@ export class World {
     const a = this.alarm;
     const dt = a.t == null ? 0 : Math.min(0.1, Math.max(0, t - a.t));
     a.t = t;
+    if (this.night && focus) {
+      const want = this.isInterior(focus) ? 0 : 1;
+      if (this.skyK !== want) {
+        this.skyK = this.lightSnap ? want : want > this.skyK ? Math.min(want, this.skyK + dt * SKY_RATE) : Math.max(want, this.skyK - dt * SKY_RATE);
+        this.#applySky();
+      }
+    }
     if (a.level !== a.target || a.level > 0) {
       a.level = a.level < a.target ? Math.min(a.target, a.level + dt * ALARM.rate) : Math.max(a.target, a.level - dt * ALARM.rate);
       this.#applyAlarm(t);
@@ -880,6 +943,7 @@ export class World {
     registry.check(level);
     if (level.skin != null && !this.skins[level.skin]) throw new Error(`level: unknown skin "${level.skin}"`);
     this.skin = level.skin ?? null;
+    this.setSky(level.sky ?? null);
     for (const z of level.interiorZones ?? []) this.interiorZones.push(new THREE.Box3(new THREE.Vector3(...z.min), new THREE.Vector3(...z.max)));
     for (const piece of registry.piecesOf(level, 'world')) if (!skip.has(piece)) registry.build('world', this, piece);
   }

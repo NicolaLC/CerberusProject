@@ -125,9 +125,9 @@ export class Post {
     this.composer.setSize(w, h);
   }
 
-  render(dt, { player, inside }) {
+  render(dt, { player, inside, outside = 1 }) {
     // eyes open up indoors, clamp down in the sun
-    this.exposure += ((inside ? EXPOSURE.inside : EXPOSURE.outside) - this.exposure) * (1 - Math.exp(-dt * EXPOSURE.rate));
+    this.exposure += ((inside ? EXPOSURE.inside : EXPOSURE.outside * outside) - this.exposure) * (1 - Math.exp(-dt * EXPOSURE.rate));
     this.renderer.toneMappingExposure = this.exposure * this.boost;
     this.flash = Math.max(0, this.flash - dt * 6);
     this.damage = Math.max(0, this.damage - dt * 2.2);

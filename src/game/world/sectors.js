@@ -333,7 +333,10 @@ export class Sectors {
         }
         h = { piece: null, objects: [...r.value.meshes, ...r.value.colliders] };
       } else h = w.spawn(d);
-      for (const o of h.objects) o.visible = false; // not drawn until merged (they all end up in the batches or as hidden colliders)
+      for (const o of h.objects) {
+        if (o.userData.live) o.layers.mask = s.bit << 1; // its own draws (env.backdrop): stays, drawn with this sector
+        else o.visible = false; // not drawn until merged (they all end up in the batches or as hidden colliders)
+      }
       s.handles.push(h);
       yield;
     }
