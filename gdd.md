@@ -610,7 +610,9 @@ loading fails.
   boss legs and death), zap (enemy bolts, mortar), boss charge (also stomp and wake), thud (puppet down, hurt, boss
   steps), jet whoosh + thump, landing thud, pickup, good-reload click.
 
-There is no music and no voice.
+**Music (recorded, ElevenLabs Music):** a slow dark ambient title theme (70 BPM) while the start / pause panel is
+up; sci-fi drum and bass (174 BPM) in combat, held 10 s after the last combat event; a heavier boss track from the
+boss's wake to its death. Tracks crossfade, the facility ambience ducks under them. There is no voice.
 
 ## 13. Open questions and ideas
 
@@ -632,8 +634,7 @@ document. **Nothing here is decided.**
 - **(gap)** No on-screen cue for an armored hit beyond sparks and a non-red crosshair (`weapon:armored` is emitted,
   nothing listens). Add one, or keep it learn-by-playing per pillar 4: not decided.
 - **(gap)** No flank warning for troopers; deliberate per current HUD rules. Whether to add an audio cue is not decided.
-- **(gap)** Only weapon sounds are recorded; whether to record the rest (hits, enemies, boss, movement), and whether
-  to add music or enemy voice, is not decided.
+- **(gap)** Whether to add enemy voice is not decided.
 - **(gap)** Only one boss, one arena and no progression; there is no win state beyond ARENA CLEAR and no restart
   short of reloading the page (destroyed enemies stay destroyed).
 - **(gap)** Prototype art only. Final art direction is now a rule (`instructions/art-style.md`, applied in #87);

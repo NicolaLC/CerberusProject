@@ -26,6 +26,7 @@ the looping sounds. Add new rows here for the next missing sounds.
 | `reload-jam.mp3` | same | Weapon reload jamming: a magazine grinding and catching in the receiver with a harsh scraping metal crunch and a dull failed clunk, frustrating, close, dry (0.6 s, influence 0.5) |
 | `boss-music.mp3` | boss fight music, boss:wake to boss:dead (crossfades from the combat track) | ElevenLabs Music v2.5, 75 s, instrumental: Intense dark sci-fi boss battle drum and bass at 174 BPM, pounding breakbeats with huge industrial impacts, a menacing growling distorted bass, ominous low synth brass stabs and urgent pulsing arpeggios, heavier and more threatening than regular combat, relentless full energy from start to end with no intro and no outro so it loops cleanly. Looped at 54 bars. |
 | `alarm-siren.mp3` | the old take (a continuous high wail, ~2.7 kHz, no gaps) was too annoying across the long Prologue purge | Seamless loop of a distant low industrial facility alarm: a deep muffled two-tone horn blast, low pitched and soft, followed by a long pause of silence, repeating slowly, heard from far away through thick metal walls, ominous not shrill, no high frequencies, no fast wail, no voices (8 s, influence 0.5, loop; flow `LetqmDVTuXh60AaojYa8`, take 1 of 4) |
+| `menu-music.mp3` | title / pause menu music: its own loop on the title (`Audio.title(on)`, from `Shell`, the game audio silent under it), and while the engine is paused (pause panel, `mood()`), crossfaded with the combat and boss tracks | ElevenLabs Music v2.5, 75 s, instrumental: Slow, vast and ominous dark sci-fi ambient score for the title screen of a grim industrial robot war game, 70 BPM, a lone mechanical soldier watching a ruined machine city at dusk under a colossal three-headed war machine. Deep sustained analog synth drones and sub-bass swells, distant metallic resonances like wind through steel girders, a slow mournful low cello-like synth melody of a few notes, sparse heavy industrial percussion hits far away, faint radio static and servo textures, melancholic and lonely but powerful, restrained, no drums groove, no vocals, constant intensity with no intro and no outro so it loops seamlessly. The take still faded in and out, so the file is baked into a seamless loop: bars 3-19 (70 BPM, bar = 240/70 s), with its last bar crossfaded (equal power) into bar 2, 58.3 s; it loops whole, no `loopEnd`. |
 
 ## Recorded, wired outside the event table
 
@@ -62,16 +63,6 @@ out. All are peak-normalised to -3 dBFS, except `move` and `slider` at -6 dBFS.
 | `ui-warn.mp3` | overwrite-progress confirm | 0.5 s | A short two-tone warning alert on a grim military console, a high then lower muted buzzy klaxon tone, urgent but restrained, close, dry | recorded |
 
 
-## Title music
-
-`menu-music.mp3` (not recorded yet): looped while the title and its sub-pages are up (`Audio.title(on)`, from
-`Shell`), fades in over 1.5 s, out in 0.6 s when play starts; the game's ambience, music and beds are silent under it.
-Globbed, so no code change when the file lands; until then the title is silent (UI sounds still play). Same rules as
-the other music: instrumental, no intro / outro so it loops cleanly; trim to a whole number of bars.
-
-| File | Use | Prompt |
-|---|---|---|
-| `menu-music.mp3` | title screen loop | ElevenLabs Music v2.5, 90 s, instrumental: Slow, vast and ominous dark sci-fi ambient score for the title screen of a grim industrial robot war game, 70 BPM, a lone mechanical soldier watching a ruined machine city at dusk under a colossal three-headed war machine. Deep sustained analog synth drones and sub-bass swells, distant metallic resonances like wind through steel girders, a slow mournful low cello-like synth melody of a few notes, sparse heavy industrial percussion hits far away, faint radio static and servo textures, melancholic and lonely but powerful, restrained, no drums groove, no vocals, constant intensity with no intro and no outro so it loops seamlessly. |
 
 ## Terminal typing (boot intro, STEM-00 log)
 
