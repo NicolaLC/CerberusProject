@@ -12,7 +12,12 @@ import { STORAGE_KEY } from './boot.js';
 //   The surge emits `cinematic:wake` (an `on` form: a prop.cradle's `releaseOn` opens its clamps); a skip before `wake.at` emits it at the end.
 // - Input: `controls.locked` while it plays. The end emits `cinematic:done` { skipped }: an `intro.boot` with `after: cinematic:done`
 //   starts in the same call (its overlay covers the cut back to the gameplay camera). Nothing following: the input is freed.
-// State for tests: `active`, `t`, `duration`, `shot` (index), `woke`.
+// Mid-level cut (`cinematic.cut` piece, `cut: true`): the same shots without the wake (no slump, dark core or exposure surge);
+//   `place` { pos, yaw } puts the player there at its start (respawn: clean slate) and the gameplay camera behind it; skippable as
+//   its piece says (no "seen once" rule). Each shot start emits `cinematic:shot` { id, index, shot } (Encounter runs its `cue` /
+//   `wakeGroup`); a skip emits the shots not reached yet, so what they start still happens. The end emits `cinematic:done`
+//   { skipped, cut: true, id }. Enemies hold their fire while any cinematic runs (game.js sets `enemies.holdFire`).
+// State for tests: `active`, `t`, `duration`, `shot` (index), `woke`, `cut`.
 export const TUNING = {
   fov: 55, // default shot FOV
   dark: 0.22, // exposure factor before the surge (the bay powered down)
@@ -37,6 +42,8 @@ export class Cinematic {
     this.woke = false;
     this.script = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: TUNING.fov };
     this.core = null; // the core's emissive intensity before the cinematic darkened it
+    this.cut = false; // a mid-level cut (no wake)
+    this.id = null; // the cut's name
   }
 
   listen(events) {
@@ -46,18 +53,28 @@ export class Cinematic {
   }
 
   // params are validated by the piece (encounter.js cinematicProblem).
-  start({ shots, wake = {}, skippable = false }) {
+  start({ shots, wake = {}, skippable = false, cut = false, id = null, place = null }) {
     this.reset();
     this.shots = shots;
+    this.cut = cut;
+    this.id = id;
     this.duration = shots.reduce((a, s) => a + s.time, 0);
     this.wake = { at: wake.at ?? 0, rise: wake.rise ?? 2, shake: wake.shake ?? TUNING.shake };
-    this.skippable = skippable && loadJSON(STORAGE_KEY, false) === true; // like the boot: only once the intro was seen
+    this.skippable = cut ? skippable : skippable && loadJSON(STORAGE_KEY, false) === true; // the intro, like the boot: only once seen
     this.active = true;
     this.controls.locked = true;
     this.controls.ease = 0;
-    const mat = this.player.view.soldierMats.core;
-    this.core = mat.emissiveIntensity;
-    mat.emissiveIntensity = 0;
+    if (cut) {
+      this.woke = true; // nothing to wake
+      if (place) {
+        this.player.respawn({ pos: place.pos, yaw: place.yaw ?? this.player.facing });
+        this.camRig.reset(this.player.facing);
+      }
+    } else {
+      const mat = this.player.view.soldierMats.core;
+      this.core = mat.emissiveIntensity;
+      mat.emissiveIntensity = 0;
+    }
     this.camRig.script = this.script;
     this.#apply();
     return this;
@@ -70,6 +87,7 @@ export class Cinematic {
     this.t = 0;
     this.shot = -1;
     this.woke = false;
+    this.cut = false;
   }
 
   update(dt, skipPressed = false) {
@@ -88,6 +106,7 @@ export class Cinematic {
     while (i < this.shots.length - 1 && t >= start + this.shots[i].time) start += this.shots[i++].time;
     const s = this.shots[i];
     if (i !== this.shot) {
+      for (let k = this.shot + 1; k <= i; k++) this.events?.emit('cinematic:shot', { id: this.id, index: k, shot: this.shots[k] });
       this.shot = i;
       if (s.shake) this.camRig.addTrauma(s.shake);
     }
@@ -95,6 +114,7 @@ export class Cinematic {
     lerp3(this.script.pos, s.from, s.to ?? s.from, u);
     lerp3(this.script.look, s.look, s.lookTo ?? s.look, u);
     this.script.fov = s.fov ?? TUNING.fov;
+    if (this.cut) return;
     // wake: the surge, then the core and the body come up
     const w = this.wake;
     const since = t - w.at;
@@ -113,12 +133,14 @@ export class Cinematic {
 
   #release() {
     this.camRig.script = null;
+    if (this.cut) return;
     this.player.view.dormant = 0;
     this.player.view.soldierMats.core.emissiveIntensity = this.core;
     this.post.boost = 1;
   }
 
   #end(skipped) {
+    for (let k = this.shot + 1; k < this.shots.length; k++) this.events?.emit('cinematic:shot', { id: this.id, index: k, shot: this.shots[k] }); // skipped past them
     if (!this.woke) {
       this.woke = true;
       this.events?.emit('cinematic:wake'); // skipped before the surge: what waits for it still happens
@@ -127,6 +149,7 @@ export class Cinematic {
     this.active = false;
     this.controls.locked = false;
     this.controls.ease = 1;
+    if (this.cut) return void this.events?.emit('cinematic:done', { skipped, cut: true, id: this.id });
     this.events?.emit('cinematic:done', { skipped }); // an intro.boot waiting for it locks the input again in this call
     saveJSON(STORAGE_KEY, true); // after the emit: a boot started by it still reads "not seen" on a first run
   }

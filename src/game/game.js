@@ -78,8 +78,18 @@ export class Game {
     // No HUD while the intro plays: from the cinematic until control returns (the boot it hands over to, or its own end).
     const hudEl = document.getElementById('hud');
     const hideHud = (on) => hudEl.classList.toggle('cine', on);
-    events.on('cinematic:start', () => hideHud(true));
-    events.on('cinematic:done', () => queueMicrotask(() => !boot.active && hideHud(false)));
+    // a mid-level cut hides the HUD but the log, so its HiveMind broadcast reads over the shots (inline: the stylesheet's .cine hides all)
+    const hideHudCut = (on) => { for (const el of hudEl.children) if (el.id !== 'log') el.style.visibility = on ? 'hidden' : ''; };
+    events.on('cinematic:start', (e) => {
+      enemies.holdFire = true; // nobody fires while the camera is scripted
+      if (e.cut) hideHudCut(true);
+      else hideHud(true);
+    });
+    events.on('cinematic:done', (e) => {
+      enemies.holdFire = false;
+      if (e?.cut) hideHudCut(false);
+      else queueMicrotask(() => !boot.active && hideHud(false));
+    });
     events.on('intro:done', () => hideHud(false));
     applyQuality(settings.quality, { engine, post, world });
     const juice = new Juice({ camRig, post, fx }).listen(events);
@@ -350,7 +360,10 @@ export class Game {
     log.reset();
     boot.reset();
     cinematic.reset();
-    document.getElementById('hud').classList.remove('cine');
+    this.enemies.holdFire = false;
+    const hudEl = document.getElementById('hud');
+    hudEl.classList.remove('cine');
+    for (const el of hudEl.children) el.style.visibility = ''; // a cut cut short by a reload
     juice.reset();
     stats.reset();
     summary.reset();

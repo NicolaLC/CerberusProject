@@ -45,6 +45,7 @@ export class Mission {
     };
     events.on('trigger:fired', fired);
     events.on('checkpoint:reached', fired);
+    events.on('cinematic:done', (e) => e?.cut && fired({ id: e.id })); // a reach `trigger` may name a cinematic.cut: done when the cut ends (played or skipped)
     events.on('puppet:down', (a) => {
       const r = this.current;
       if (r?.obj === 'destroy' && this.#matches(r, a) && ++this.progress >= this.target) this.#complete();

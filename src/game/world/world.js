@@ -300,7 +300,7 @@ export class World {
   }
 
   // A level event happened (`key` in the `on` forms of encounter.js): gates waiting for it start opening, props with `hideOn` hide,
-  // arms with `retractOn` fold up, cradles with `releaseOn` open. Called by Encounter. Returns how many gates started opening.
+  // arms with `retractOn` fold up, cradles with `releaseOn` open, beacons start / stop on their `on` / `off`. Called by Encounter. Returns how many gates started opening.
   // onArm(pos): called once for each arm that starts folding up (Encounter emits `prop:retract`).
   react(key, onArm) {
     for (const g of this.props) {
@@ -311,6 +311,9 @@ export class World {
         onArm?.(g.position);
       }
       if (g.userData.cradle?.on === key) g.userData.cradle.releasing = true;
+      const bc = g.userData.beacon;
+      if (bc && bc.on === key) bc.active = true;
+      if (bc && bc.off === key) bc.active = false;
     }
     let n = 0;
     for (const g of this.gates) {
@@ -606,19 +609,20 @@ export class World {
     return this.grid.query(x0, z0, x1, z1);
   }
 
-  // Highest walkable top under (x,z) that is at or below maxY. minSize: ignore boxes narrower than that on either
-  // horizontal axis (walls, parapets, posts), for fliers that should keep their height over them.
+  // Highest walkable top under (x,z) that is at or below maxY, at any height (a sunken floor below 0 works: the Prologue's drill
+  // hall); 0 where there is no box at all (the old implicit ground). minSize: ignore boxes narrower than that on either
+  // horizontal axis (walls, parapets, posts), for fliers that should keep their height over them. Parked gates (-1000) never count.
   groundAt(x, z, maxY, radius = 0, minSize = 0) {
-    let g = 0;
+    let g = -Infinity;
     const near = this.nearColliders(x - radius, z - radius, x + radius, z + radius);
     for (let i = 0; i < near.length; i++) {
       const b = near[i].box;
-      if (b.max.y > maxY) continue;
+      if (b.max.y > maxY || b.max.y < -999) continue;
       if (minSize > 0 && (b.max.x - b.min.x < minSize || b.max.z - b.min.z < minSize)) continue;
       if (x < b.min.x - radius || x > b.max.x + radius || z < b.min.z - radius || z > b.max.z + radius) continue;
       if (b.max.y > g) g = b.max.y;
     }
-    return g;
+    return g === -Infinity ? 0 : g;
   }
 
   // Pushes a standing body (feet at pos.y, radius r, height h) out of every collider it overlaps.

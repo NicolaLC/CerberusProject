@@ -26,6 +26,10 @@ import { GUNS } from '../combat/guns.js';
 //                     skippable? (false) }. At the first play frame it emits `cinematic:start` { shots, wake, skippable }; the Cinematic view
 //                     (view/cinematic.js) drives the camera and STEM-00's wake, locks the input and emits `cinematic:done` { skipped }. An `intro.boot`
 //                     with `after: 'cinematic:done'` then starts. The first one in the file plays. Inert in the editor and the Library (gizmo: the camera path).
+//  cinematic.cut      a mid-level cut: params { on (an `on` form), shots (as intro.cinematic, plus per shot `cue?` and `wakeGroup?`), place? { pos, yaw? },
+//                     skippable? (true) }. When `on` happens it emits `cinematic:start` { shots, skippable, cut: true, id (name), place } at the next update
+//                     and `cut:<name>`; each shot start (or a skip past it) fires `cue:<id>` and wakes `wakeGroup`; the end fires `cut:<name>:done`.
+//                     Once per run. Inert in the editor and the Library (gizmo: the camera path, like intro.cinematic).
 //  env.alarm          the alarm lighting state (#14, workshop.md "Alarm"): params { on, off?, duration?, color? ('#ff9a2a'), strength? (0.4), siren? (true) }.
 //                     When `on` happens (same forms as log.line) it emits `alarm:on` { id, color, strength, siren }: World tints the light toward `color`
 //                     and pulses it (world.setAlarm), Audio loops a synthesized siren. Ends at `off`, after `duration` s, or when the level unloads (`alarm:off` / `alarm:clear`).
@@ -76,8 +80,9 @@ export function objectiveGrantProblem(p, guns = null) {
 }
 
 // `log.line` `on` forms: start | intro:done | cinematic:wake | cinematic:done | mission:complete | trigger:<id> | checkpoint:<id> | objective:<id> | objective:<id>:done | discovered:<gun>
-const LOG_ON = /^(start|intro:done|cinematic:(wake|done)|mission:complete|(trigger|checkpoint|discovered):[^:]+|objective:[^:]+(:done)?)$/;
-const ON_FORMS = 'start, intro:done, cinematic:wake, cinematic:done, mission:complete, trigger:<id>, checkpoint:<id>, objective:<id>, objective:<id>:done, discovered:<gun>';
+// | cut:<name> / cut:<name>:done (a `cinematic.cut` starts / ends) | cue:<id> (a cut's shot with `cue` starts, or is skipped past)
+const LOG_ON = /^(start|intro:done|cinematic:(wake|done)|mission:complete|(trigger|checkpoint|discovered|cue):[^:]+|(objective|cut):[^:]+(:done)?)$/;
+const ON_FORMS = 'start, intro:done, cinematic:wake, cinematic:done, mission:complete, trigger:<id>, checkpoint:<id>, objective:<id>, objective:<id>:done, discovered:<gun>, cut:<name>, cut:<name>:done, cue:<id>';
 
 // Problem with an `on` value (the forms above) of a piece param, or null. `key` names the param in the message. `guns` checks `discovered:<gun>`. Pure.
 // Shared by every piece that reacts to a level event: log.line, env.alarm, kit.gate (`on`), prop.gun (`hideOn`), prop.arm (`retractOn`), prop.cradle (`releaseOn`).
@@ -148,6 +153,7 @@ export function cinematicProblem(p) {
     if (s.ease != null && !EASES.includes(s.ease)) return `shot ${i}: ease must be one of ${EASES.join(', ')}`;
     if (s.fov != null && !(typeof s.fov === 'number' && s.fov >= 10 && s.fov <= 120)) return `shot ${i}: fov must be a number from 10 to 120 (degrees)`;
     if (s.shake != null && !(typeof s.shake === 'number' && s.shake >= 0 && s.shake <= 1)) return `shot ${i}: shake must be a number from 0 to 1`;
+    for (const k of ['cue', 'wakeGroup']) if (s[k] != null && !(typeof s[k] === 'string' && /^[^:\s]+$/.test(s[k]))) return `shot ${i}: ${k} must be a name (no spaces or colons)`;
     total += s.time;
   }
   if (total > CINEMATIC.max) return `shots last ${total} s, at most ${CINEMATIC.max}`;
@@ -159,6 +165,18 @@ export function cinematicProblem(p) {
     if (w.shake != null && !(typeof w.shake === 'number' && w.shake >= 0 && w.shake <= 1)) return 'wake.shake must be a number from 0 to 1';
   }
   if (p.skippable != null && typeof p.skippable !== 'boolean') return 'skippable must be true or false';
+  return null;
+}
+
+// Problem with a `cinematic.cut`'s params, or null: the shots (cinematicProblem, no wake), `on` (an `on` form), `place?` { pos, yaw? }. Pure.
+export function cutProblem(p, guns = null) {
+  if (p.wake != null) return 'wake is for intro.cinematic only';
+  const shots = cinematicProblem(p);
+  if (shots) return shots;
+  const on = onProblem(p.on, 'on', guns);
+  if (on) return on;
+  const pl = p.place;
+  if (pl != null && (typeof pl !== 'object' || !Array.isArray(pl.pos) || pl.pos.length !== 3 || !pl.pos.every(Number.isFinite) || (pl.yaw != null && !Number.isFinite(pl.yaw)))) return 'place must be { pos: [x, y, z], yaw? }';
   return null;
 }
 
@@ -201,6 +219,15 @@ export const ENCOUNTER_PIECES = {
     check: (p) => cinematicProblem(p),
     build: (sys, d) => sys.add('cinematic', d),
   },
+  // Mid-level cut: when `on` happens the shots play (camera only, no wake), `place` puts the player at its start; shots may carry
+  // `cue` (fires `cue:<id>`: gates, beacons, log lines...) and `wakeGroup` (wakes that group) when they start. Enemies hold fire.
+  'cinematic.cut': {
+    example: { params: { on: 'start', shots: [{ from: [-4, 3, 6], look: [0, 1.5, 0], time: 2 }, { from: [4, 2.5, 5], look: [0, 1.5, -6], time: 2, cue: 'go' }], skippable: true } },
+    label: `mid-level cut: scripted camera shots when \`on\` happens; locks input, enemies hold fire (max ${CINEMATIC.max} s)`,
+    fields: [{ key: 'on', type: 'text' }, { key: 'skippable', type: 'bool', def: true }],
+    check: (p, registry) => cutProblem(p, registry.guns),
+    build: (sys, d) => sys.add('cinematic', d, 'cut'),
+  },
 };
 
 const _right = new THREE.Vector3();
@@ -221,6 +248,8 @@ export class Encounter {
     this.intro = null; // the level's intro.boot record (the first one); it starts when its `after` key happens (default 'start')
     this.introPending = null; // the intro.boot record that starts at the first play frame
     this.cinePending = null; // the intro.cinematic record that starts at the first play frame
+    this.cutPending = null; // a cinematic.cut record whose `on` happened: it starts at the next update
+    this.cutting = false; // a cut is playing (no STEM-00 line starts meanwhile)
     this.alarmQueue = []; // env.alarm records whose `on` / `off` happened, handled at the next update: { rec, on }
     this.alarms = []; // env.alarm records running: { rec, t } (t = s left, Infinity without duration)
     // requests from outside (the mission, tests); the stored fns are permanent
@@ -234,8 +263,15 @@ export class Encounter {
     events.on('weapon:discovered', (e) => this.#log(`discovered:${e.gun}`));
     events.on('intro:done', () => this.#log('intro:done'));
     events.on('cinematic:wake', () => this.#log('cinematic:wake'));
-    events.on('cinematic:done', () => this.#log('cinematic:done'));
+    events.on('cinematic:done', (e) => this.#log(e?.cut ? `cut:${e.id}:done` : 'cinematic:done'));
+    events.on('cinematic:shot', (e) => {
+      if (e.id == null) return; // the intro's shots carry no cues
+      if (e.shot.cue != null) this.#log(`cue:${e.shot.cue}`);
+      if (e.shot.wakeGroup != null) this.wakeGroup(e.shot.wakeGroup);
+    });
     events.on('mission:complete', () => this.#log('mission:complete'));
+    events.on('cinematic:start', (e) => (this.cutting = !!e?.cut)); // a cut is not a quiet moment: STEM-00's lines wait it out
+    events.on('cinematic:done', () => (this.cutting = false));
     events.on('weapon:shot', () => (this.calm = 0));
     events.on('player:hurt', () => (this.calm = 0));
   }
@@ -249,6 +285,10 @@ export class Encounter {
       else this.#introStart(this.intro); // now: its overlay covers whatever ended (the cinematic's last frame)
     }
     for (const r of this.items) {
+      if (r.kind === 'cinematic' && r.cut && !r.inert && !r.fired && r.params.on === key) {
+        r.fired = true;
+        this.cutPending = r;
+      }
       if (r.kind !== 'log' || r.inert || r.params.on !== key || (r.once && r.fired)) continue;
       r.fired = true;
       this.lines.push({ t: r.params.delay ?? 0, rec: r });
@@ -268,7 +308,7 @@ export class Encounter {
     this.unload();
     for (const d of this.registry.piecesOf(level, 'encounter')) this.registry.build('encounter', this, d);
     this.intro = this.items.find((r) => r.kind === 'intro' && !r.inert) ?? null;
-    this.cinePending = this.items.find((r) => r.kind === 'cinematic' && !r.inert) ?? null; // starts at the first update, after the reset
+    this.cinePending = this.items.find((r) => r.kind === 'cinematic' && !r.cut && !r.inert) ?? null; // starts at the first update, after the reset
     this.#log('start'); // shown from the first update, after the run reset (resetRun clears the Log view)
     this.mission?.start(this.items.filter((r) => r.kind === 'objective' && !r.inert));
     return this;
@@ -284,7 +324,8 @@ export class Encounter {
     this.alarmQueue.length = 0;
     this.alarms.length = 0;
     this.events.emit('alarm:clear');
-    this.intro = this.introPending = this.cinePending = null;
+    this.intro = this.introPending = this.cinePending = this.cutPending = null;
+    this.cutting = false;
     this.calm = TUNING.calm;
     this.checkpoint = this.cpRec = null;
     this.triggers = 0;
@@ -311,6 +352,7 @@ export class Encounter {
     if (this.intro === rec) this.intro = null;
     if (this.introPending === rec) this.introPending = null;
     if (this.cinePending === rec) this.cinePending = null;
+    if (this.cutPending === rec) this.cutPending = null;
     this.#dropZone(rec);
     this.#dropGizmo(rec);
     if (this.cpRec === rec) this.checkpoint = this.cpRec = null;
@@ -359,8 +401,9 @@ export class Encounter {
       if (problem) bad(id, problem);
     }
     if (kind === 'cinematic') {
-      const problem = cinematicProblem(p);
+      const problem = obj === 'cut' ? cutProblem(p, this.registry.guns) : cinematicProblem(p);
       if (problem) bad(id, problem);
+      rec.cut = obj === 'cut';
     }
     if (kind === 'trigger') this.triggers++;
     if (this.gizmoMode) {
@@ -440,12 +483,20 @@ export class Encounter {
       this.#introStart(this.introPending);
       this.introPending = null;
     }
+    if (this.cutPending) {
+      const r = this.cutPending;
+      const p = r.params;
+      const id = r.name ?? 'cut';
+      this.cutPending = null;
+      this.events.emit('cinematic:start', { shots: p.shots, skippable: p.skippable ?? true, cut: true, id, place: p.place ?? null });
+      this.#log(`cut:${id}`);
+    }
     this.#alarms(dt);
     if (!player.dead && this.items.length) this.#scan(player);
     this.mission?.update(dt, player, interact);
     // log lines: you either fight or read, so they wait while an awake enemy is near, and for TUNING.calm s after any shot or hit
     const r2 = TUNING.combatRange ** 2;
-    if (this.enemies.all.some((a) => a.alive && a.awake && a.pos.distanceToSquared(player.pos) < r2)) this.calm = 0;
+    if (this.cutting || this.enemies.all.some((a) => a.alive && a.awake && a.pos.distanceToSquared(player.pos) < r2)) this.calm = 0;
     else this.calm += dt;
     if (!this.lines.length) return;
     const calm = this.calm >= TUNING.calm;

@@ -60,16 +60,23 @@ Rules:
 - Log lines: at most about 70 characters, voice of the act (narrative.md).
 - A Mermaid flow of the beats can be generated back from the JSON to compare with the sheet.
 
-## 4. Cutscenes (future)
-Written in the sheet as a shot list, so they can be designed before the engine supports them:
+## 4. Cutscenes (`cinematic.cut`)
+Written in the sheet as a shot list; it compiles to one `cinematic.cut` piece (workshop.md "Mid-level cut"): camera only, input locked,
+enemies hold fire, HUD hidden but the log, skippable.
 ```
-## CUT 2. The spider wakes
-CAM   [cam-gate] -> [cam-boss], 3 s, slow push
-SAY   "..."
-HOLD  1 s, control returns
+## CUT 3. Purge: the troop comes out   ON objective:purge-start   PLACE [cp-yard] north
+CAM   (x, y, z) -> (x, y, z), look (x, y, z), 2.6 s, fov 42, inOut   -- the beacon
+CAM   ...  3.2 s  CUE pen-gate  WAKE purge-1                         -- the gate drops, they come
 ```
-`cam-*` are points placed on the map. Needs a camera-path piece and a no-control state (not built; add when the first
-real cutscene is scheduled).
+| Verb | Compiles to |
+|---|---|
+| `CUT n. title ON <event>` | `cinematic.cut` named by the slug, `on` = the event (an `on` form) |
+| `PLACE [marker] <facing>` | `place` { pos, yaw }: STEM-00 is put there for the return |
+| `CAM from -> to, look a -> b, time, fov, ease, shake` | one `shots` entry (world-space anchors) |
+| `CUE <name>` on a CAM line | the shot's `cue`: fires `cue:<name>` (gates, beacons, log lines wait on it) |
+| `WAKE <group>` on a CAM line | the shot's `wakeGroup` |
+| `GOAL wait CUT` | `objective.reach` with `trigger: <cut name>`: the chain waits for the cut's end |
+A skip still fires every CUE / WAKE not reached. The camera path must stay clear of walls (no collision on scripted shots).
 
 ## 5. Example: the Prologue (`prologue.json`, as built)
 ```
@@ -91,16 +98,20 @@ LOG   "> MOTION UNRESTRICTED. NO ONE OBJECTS."  ON [bay-exit]
 GOAL  destroy count 3 "CALIBRATION TARGETS"   -- as built: the bay's CALIBRATION 01-06 (c1-move .. c6-transfer, orders 10-17) before [leave-bay] (20); no yard puppets
 
 ## 3. Purge starts
-GOAL  survive 15s "PURGE INITIATED"  WAKE purge-1   -- shooters 21-36 m north of the bay exit; low wall 5 m out
+GOAL  wait CUT purge-cut "PURGE INITIATED"
 SAY   "CALIBRATION UNIT 00: NONCOMPLIANT. PURGE."
-ALARM on                                       -- off at beat 11 done
-CHECKPOINT [cp-yard]                           -- (-42, 0, 25): between the bay gate and the first low wall
+ALARM on                                       -- off at beat 11 done; the three beacons turn from here
+CHECKPOINT [cp-yard]                           -- (-46.5, -0.8, 17.4): where the cut puts STEM-00
 
-## 3.5 Purge: hold
-GOAL  survive 15s "PURGE: HOLD"  SPAWN purge-1 -- two entries of 2 shooters, behind low walls at (-34, -6), (-18, -8)
+## CUT 3. Purge: the troop comes out   ON objective:purge-start   PLACE [cp-yard] north   (13 s, skippable)
+CAM   beacon over the bay door, 2.6 s, fov 42                     -- the broadcast reads over it
+CAM   above the landing, down the hall, 3 s
+CAM   at the pen gate, 3.2 s  CUE pen-gate  WAKE purge-1          -- the gate drops into the floor, the troop comes out
+CAM   over the west cover as they advance, 2.6 s
+CAM   back behind STEM-00, 1.6 s, control returns
 
-## 4. Purge: yard
-GOAL  destroy purge-1 "PURGE: YARD SHOOTERS"  WAKE purge-1   -- 8 shooters: gantry, west, centre-west, drill deck
+## 4. Purge: drill hall
+GOAL  destroy purge-1 "PURGE: DRILL HALL"   -- 4 shooters on posts, 3 troopers + 3 drones from the pen; troopers drop a rifle (fallback)
 
 ## 5. Purge: hall
 GOAL  destroy purge-2 "PURGE: HALL SHOOTERS"  WAKE purge-2
@@ -111,24 +122,16 @@ CHECKPOINT [cp-hall], [cp-hall-east]
 GOAL  interact [armoury] "SALVAGE A WEAPON"  GIVES rifle +64  SKIP IF [armoury-skip]
 LOG   "> ITEM: KR-7. FUNCTION: KILL. QUERY: WHY DOES IT FEEL HEAVY?"  ON DISCOVER rifle
 
-## 6.5 Stand by
-GOAL  survive 5s "STAND BY"   -- not in the file at present
-
-## 7. Purge: yard troopers
-GOAL  destroy purge-3 "PURGE: YARD TROOPERS"  WAKE purge-3   -- muster in the east arcade, south-east of the hall doors; each drops a rifle (fallback)
-
 ## 8. Purge: hall troopers
 GOAL  destroy purge-4 "PURGE: HALL TROOPERS"  WAKE purge-4
+LOG   "> HOSTILES DESTROYED: 15. ORDERS RECEIVED: 0. SOURCE: UNKNOWN."  ON DONE
 
-## 9. Purge: drones
-GOAL  destroy purge-5 "PURGE: DRONES"  WAKE purge-5   -- over the open middle, south of the doors; never under the arcade roof
-LOG   "> HOSTILES DESTROYED: 18. ORDERS RECEIVED: 0. SOURCE: UNKNOWN."  ON DONE
 
 ## 9.5 Armoury, late
 GOAL  interact [armoury] "SALVAGE A WEAPON"  GIVES rifle +64  SKIP IF OWNED rifle
 
 ## 10. Boss gate
-GOAL  reach [purge-gate] "BOSS ARENA GATE"  -- door E -> NE corner -> 9.7 m opening at x 31 -> forecourt -> gate
+GOAL  reach [purge-gate] "BOSS ARENA GATE"  -- door E -> apron east -> pocket (x 18..31) -> 9.7 m opening at x 31 -> forecourt -> gate
 CHECKPOINT [cp-gate]
 
 ## 11. Purge: boss
@@ -140,19 +143,20 @@ LOG   "> SX-6: DESTROYED. GATE: OPEN. QUERY: WHO OPENED IT?"  ON DONE
 ## 12. Exit
 GOAL  reach [exit] "REACH TRANSIT NODE"  NEEDS rifle
 ```
-Half-numbered beats (3.5, 6.5, 9.5) are inserted beats: order 35, 65 and 95.
+Half-numbered beats (6.5 stand-by: not in the file at present; 9.5) are inserted beats: order 65 and 95. Beats 7 (yard troopers, `purge-3`)
+and 9 (drones, `purge-5`) were merged into beat 4's troop (owner, 2026-10-14).
 
-**Yard layout** (beats 3-10; x -50..31, z -29.7 building facade .. 29.5 bay wall; built by script, `serializeLevel`):
-- Three bands of cover between the bay exit (SW, (-42, 27)) and the hall doors (x -12 and 16 on the facade): low 1.1 x 1.0 walls,
-  high 2.8 x 0.6 walls and 1.2 pillars, 8-14 m apart, gaps >= 1.2 so trooper routes pass. Shooter posts are low walls along X with
-  the shooter 1.3 m north of the centre (they face the player coming from the south). A low wall 8 m out of each hall door.
-- Height: the west **gantry** (8 x 24 at 1.6 along the west wall, stairs at both ends, broken low parapet on its east edge with 3.5 m
-  drop / jet gaps, a range-control console pair) and the centre **drill deck** (10 x 6 at 1.6, stairs north and south, low
-  parapets east / west, the deck shooter's post). Both walked in play (stairs, deck, back down).
-- East **arcade**: a roofed flank lane along the east wall (x 24.7..30.7, z -1.6..29.5, roof 5.0; `arch.corridor` `sides: right`,
-  `floor: false`, its wall-side collider on; posts on the open side; a `zone.interior` so drones stay out). Two low walls inside.
-- Route to the boss gate: the 2.2 m range separator became a 6 m east wall ending at z -4, leaving a 9.7 m opening into the gate
-  **forecourt** (x 31..50, z -14..-4, closed to the south); the boss arena's west mouth is fenced (3.2 m, x 24.3 and z -14), so the
-  gate is the only way in. Lit floor channels flank the hall doors and the gate approach; hazard stripes on both thresholds.
-- Encounter starts keep enemies in front: shooters north of the bay exit, troopers south-east of the doors, drones south of them.
-
+**Drill hall** (beats 3-4; the Prologue's 5th area, built by script with `serializeLevel`): a roofed, sunken straight lane, interior kit.
+- Lane x -50..-32 (18 wide), from the bay gate (z 29.5) to the pen gate (z -20.5): 50 m. Landing y 0 (z 29.5..23.5, low parapets beside
+  8 m stairs) -> upper tier y -0.8 (z 23.5..13.5: the player's line, two low walls at z 16) -> full-width stairs -> lower tier y -1.6
+  (z 13.5..-20.5) where the troop fights. Roof 7.4 (9 m over the lower tier), cold-white lights, three amber `prop.beacon`s
+  (over the bay door, either side of the pen gate). Floors below 0 rely on `World.groundAt` taking any height.
+- Cover lines across the lower tier (metrics.md: low 1.1 x 1.0, high 2.8 x 0.6, gaps 2 m): z 7 three low walls; z -2 two high walls with a
+  centre low post at -5; z -12 two low posts; a low post by the gate at -17.5. Shooters sit 1.3 m north of their posts.
+- The pen (x -46..-36, z -26.5..-20.8, floor -1.6, roofed) holds the troopers and drones behind `pen-gate` (`kit.gate`, 5 x 6, slides
+  down on `cue:pen-gate`). From the player's line the pen is ~41 m away, so the troopers find cover 24-32 m out (run <= 22) and push in.
+- Drones: the hall's `zone.interior` pieces are 3.1 m high per tier, so drones (3.2+ above the floor they fly over) are outside them and
+  can fly the hall, while the camera at walking height reads INTERIOR. A jet lifts the camera out of the zone (exposure eases to outdoor).
+- Exit: a 4 m door in the east wall at z -17.6, up four steps to the outdoor **apron** along the facade (z -30..-14) -> hall doors
+  (x -12, 16) -> pocket (x 18..31, z -14..-4) -> forecourt -> boss gate. The old open field is walled off (z -14, x 18, z -4 walls) and
+  the arena's west mouth fenced, so the gate is the only way in.

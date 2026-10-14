@@ -85,6 +85,7 @@ export class Enemies {
     this._engaged = [];
     this.player = null; // set on update
     this.frozen = false; // Gym AI room (K): enemies stop thinking and moving, bolts in flight still fly
+    this.holdFire = false; // a cinematic runs (game.js): enemies move and aim but fire nothing and hurt nobody
     this.kills = 0;
     this.time = 0;
     this.woken = new Set(); // groups already woken (this level)
@@ -337,7 +338,7 @@ export class Enemies {
   // Damages the player from a point (direction for the HUD indicator) and announces it.
   hurtPlayer(amount, from) {
     const p = this.player;
-    if (!p || p.dead) return;
+    if (!p || p.dead || this.holdFire) return;
     HURT.amount = p.damage(amount);
     HURT.dir.subVectors(p.pos, from).setY(0);
     if (HURT.dir.lengthSq() < 1e-6) HURT.dir.set(0, 0, 1);
@@ -346,6 +347,7 @@ export class Enemies {
   }
 
   spawnBolt(from, dir, damage = BOLT.damage) {
+    if (this.holdFire) return;
     const b = this.boltPool.acquire();
     b.obj.position.copy(from);
     b.obj.lookAt(_v.copy(from).add(dir));

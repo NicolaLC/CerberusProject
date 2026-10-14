@@ -11,10 +11,11 @@ import { onProblem } from './encounter.js';
 // Each piece is first merged to one mesh per material (mergeGroup), so a piece spawned alone (editor, Library) is cheap too.
 // Collision is an invisible axis-aligned box (World.box, hidden, kept in world.props so unload frees it): pieces with one
 // take `yaw` in quarter turns only (kit.js `quarters`); purely decorative ones take any yaw.
-// At yaw 0 a piece's front faces +Z and its length runs along +X (like kit.*). Only prop.arm and prop.cradle move (world.props, animateProps).
+// At yaw 0 a piece's front faces +Z and its length runs along +X (like kit.*). Only prop.arm, prop.cradle and prop.beacon move (world.props, animateProps).
 
 const OCHRE = '#c9a23a';
 const ARM = { mount: 5.85, upper: 1.4, fore: 1.2, time: 2, rest: [0.9, -0.5], folded: [1.55, -2.8] }; // m, s, [shoulder, elbow] rad
+const BEACON = { color: 0xff9a2a, lamp: [0, 0.32, 0.42], turn: 0.9, spread: 0.55, reach: 3.2, beam: 0.03 }; // alarm amber (env.alarm), rev/s, beam cone m, opacity
 const CRATE = { small: [0.8, 0.8, 0.8], medium: [1.6, 1.1, 1.1], large: [1.6, 1.6, 1.6] }; // [w, h, d]; medium = low cover (metrics.md 3)
 const SCREEN = { rows: 32, rate: 5 }; // readout rows in the texture, rows scrolled per second
 // prop.cradle release: per moving part, s after the event it starts and s it takes (all done in CRADLE.time)
@@ -280,6 +281,12 @@ export function animateProps(world, t, dt) {
     if (c?.releasing && c.t < CRADLE.time) {
       c.t = Math.min(CRADLE.time, c.t + dt);
       for (const m of c.parts) setCradlePart(m, c.t);
+    }
+    const b = g.userData.beacon;
+    if (b) {
+      b.lens.material.emissiveIntensity = b.active ? 2.4 + 1.2 * Math.max(0, Math.sin(t * 9)) : 0;
+      b.beam.opacity = b.active ? BEACON.beam : 0;
+      if (b.active) b.spin.rotation.y += dt * BEACON.turn * Math.PI * 2;
     }
     const a = g.userData.arm;
     if (!a?.retracting || a.k >= 1) continue;
@@ -705,6 +712,57 @@ export const PROP_PIECES = {
       const face = plane(mat, w, h);
       face.position.set(0, h / 2 + 0.04, 0.042);
       return bake(world, d, [bx(world.dressing.metal, w + 0.08, h + 0.08, 0.04, 0, h / 2 + 0.04, 0.02), face]);
+    },
+  },
+
+  // Rotating alarm beacon on a wall bracket: pos = the bracket's foot on the wall face, out toward +Z at yaw 0, the lamp
+  // ~0.4 m out and 0.3 m up. `on?` (an `on` form; absent = always running): from then the amber lens glows and pulses and a
+  // reflector inside turns two light beams round (BEACON.turn rev/s); `off?` (an `on` form) stops it. Dark and still before.
+  // The beams are additive cones (no point light: pair it with the level's own lights / env.alarm). No collision, any yaw.
+  'prop.beacon': {
+    example: { params: {} },
+    label: 'ALARM BEACON rotating amber lamp on a wall bracket, runs from an event',
+    fields: [{ key: 'on', type: 'text', optional: true }, { key: 'off', type: 'text', optional: true }],
+    check: (p, registry) => (p.on == null ? null : onProblem(p.on, 'on', registry.guns)) ?? (p.off == null ? null : onProblem(p.off, 'off', registry.guns)),
+    build(world, d) {
+      const id = 'prop.beacon';
+      const p = d.params ?? {};
+      for (const k of ['on', 'off']) {
+        const problem = p[k] == null ? null : onProblem(p[k], k, world.registry?.guns);
+        if (problem) fail(id, problem);
+      }
+      const M = world.dressing;
+      const [lx, ly, lz] = BEACON.lamp;
+      const meshes = bake(world, d, [
+        bx(M.metal, 0.34, 0.42, 0.04, 0, 0.21, 0.02), // wall plate
+        bx(M.dark, 0.1, 0.1, lz - 0.02, 0, 0.12, lz / 2 + 0.02), // arm
+        bx(M.dark, 0.08, ly - 0.06, 0.08, 0, (ly - 0.06) / 2 + 0.06, lz), // post under the lamp
+        cyl(M.metal, 0.17, 0.19, 0.08, lx, ly - 0.12, lz, 0, 0, 0, 16), // base ring
+        cyl(M.metal, 0.08, 0.15, 0.06, lx, ly + 0.17, lz, 0, 0, 0, 16), // cap
+        ...[0, 1, 2, 3].map((i) => bx(M.dark, 0.025, 0.26, 0.025, lx + Math.cos(i * Math.PI / 2 + 0.785) * 0.16, ly + 0.01, lz + Math.sin(i * Math.PI / 2 + 0.785) * 0.16)), // cage bars
+      ], { shadow: false });
+      // moving / glowing parts: own geometry and materials (freed with the level), never batched
+      const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.24, 20), new THREE.MeshStandardMaterial({ color: 0x5a3a10, emissive: BEACON.color, emissiveIntensity: 0, roughness: 0.3, transparent: true, opacity: 0.85 }));
+      const spin = new THREE.Group();
+      const reflector = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.18, 0.02), new THREE.MeshStandardMaterial({ color: 0x9a9a9a, metalness: 0.9, roughness: 0.25 }));
+      const beamGeo = new THREE.ConeGeometry(BEACON.spread, BEACON.reach, 18, 1, true).translate(0, -BEACON.reach / 2, 0).rotateZ(Math.PI / 2); // apex at the lamp, opening along +X
+      const beamMat = new THREE.MeshBasicMaterial({ color: BEACON.color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+      const beamA = new THREE.Mesh(beamGeo, beamMat);
+      const beamB = new THREE.Mesh(beamGeo.clone(), beamMat);
+      beamB.rotation.y = Math.PI;
+      spin.add(reflector, beamA, beamB);
+      const root = new THREE.Group();
+      root.position.set(...d.pos);
+      root.rotation.y = d.yaw ?? 0;
+      const head = new THREE.Group();
+      head.position.set(lx, ly, lz);
+      head.add(lens, spin);
+      root.add(head);
+      root.traverse((o) => o.isMesh && (o.castShadow = false));
+      root.userData.beacon = { on: p.on ?? null, off: p.off ?? null, active: p.on == null, spin, lens, beam: beamMat, t: 0 };
+      world.scene.add(root);
+      world.props.push(root);
+      return [...meshes, root];
     },
   },
 };
