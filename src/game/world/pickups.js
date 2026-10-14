@@ -120,7 +120,7 @@ export class Pickups {
     ring.scale.setScalar(1.5);
     ring.visible = !rack; // the rack's class band marks it
     this.scene.add(model, ring);
-    const item = { pos: new THREE.Vector3(...pos), model, ring, gunModel, gun, ammo: ammo ?? GUNS[gun].pickup?.crate ?? 0, crate: false, active: true };
+    const item = { pos: new THREE.Vector3(...pos), model, ring, gunModel, gun, ammo: ammo ?? GUNS[gun].pickup?.crate ?? 0, crate: false, active: true, trial: rack };
     this.items.push(item);
     return item;
   }
@@ -244,7 +244,7 @@ export class Pickups {
       }
       this.events.emit('pickup:collected', `${GUNS[it.gun].short} AMMO  +${got}`);
     } else {
-      weapon.grant(it.gun, { ammo: it.ammo });
+      weapon.grant(it.gun, { ammo: it.ammo, trial: it.trial });
       weapon.switchTo(it.gun);
     }
     this.#remove(i);

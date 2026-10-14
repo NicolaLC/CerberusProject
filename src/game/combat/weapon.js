@@ -187,15 +187,16 @@ export class Weapon {
   }
 
   // Gives the player a gun (pickup.gun) and `ammo` rounds into its reserve, capped at its max. The first time a gun is
-  // owned in this level it emits 'weapon:discovered' { gun }. Returns the rounds added.
-  grant(id, { ammo = 0 } = {}) {
+  // owned in this level it emits 'weapon:discovered' { gun, trial }. `trial`: a range rack's gun, lent for the range only
+  // (taken back at its exit): toast and sound still play, but it is no discovery for the level (no discovered:<gun>). Returns the rounds added.
+  grant(id, { ammo = 0, trial = false } = {}) {
     const g = GUNS[id];
     const s = this.state[id];
     const got = g.infinite ? 0 : Math.max(0, Math.min(ammo, g.maxReserve - s.reserve));
     s.reserve += got;
     if (!this.owned.has(id)) {
       this.owned.add(id);
-      this.events.emit('weapon:discovered', { gun: id });
+      this.events.emit('weapon:discovered', { gun: id, trial });
     }
     return got;
   }

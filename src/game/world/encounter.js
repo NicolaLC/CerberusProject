@@ -276,7 +276,7 @@ export class Encounter {
     events.on('checkpoint:reached', (e) => this.#log(`checkpoint:${e.id}`));
     events.on('mission:objective', (e) => this.#log(`objective:${e.id}`));
     events.on('mission:objective:done', (e) => this.#log(`objective:${e.id}:done`));
-    events.on('weapon:discovered', (e) => this.#log(`discovered:${e.gun}`));
+    events.on('weapon:discovered', (e) => !e.trial && this.#log(`discovered:${e.gun}`)); // a rack's trial gun is no discovery
     events.on('intro:done', () => this.#log('intro:done'));
     events.on('cinematic:wake', () => this.#log('cinematic:wake'));
     events.on('cinematic:done', (e) => this.#log(e?.cut ? `cut:${e.id}:done` : 'cinematic:done'));
