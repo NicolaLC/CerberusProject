@@ -152,8 +152,8 @@ floor with a centre grate, steps, hazard trims. Changed for the rule:
 - **Glow without bloom** (post effects are off): tubes are emissive and sit on additive halo cards; brighter fixtures are bigger, not hotter.
 - **No visible tiling:** every bay rolls its panel kind and a one-off (turbine housing, maintenance arm, hoses, crates, console) from a seed;
   one-offs above the walkway stay over 2.2 m. Fans read as fans: pitched blades, hub, shroud ring and a guard grille, never a solid disc.
-- **The far end reads:** a door end gets a lamp bar and a soft additive light pool on the door and the deck in front of it, plus a brighter
-  point light, so a gate is legible from 24 m.
+- **The far end reads:** a door end gets a lamp bar and a soft additive light pool on the deck in front of the door, plus a brighter
+  point light, so a gate is legible from 24 m. Never an additive card across a doorway: with the gate open it hangs in the opening as a foggy halo.
 - **Rooms the player fights in** use the slim wall (`arch.wall`): the same language flattened into the panelling envelope, so cover, signs
   and props keep their places; the deep corridor profile is for walkways and set-piece rooms (the Prologue's transit node and calibration rooms). A room can mix both: a corridor piece for the ceiling, floor and end wall, deep bays only on the walls that are empty, the slim wall where signs, props, doors or cover stand.
 

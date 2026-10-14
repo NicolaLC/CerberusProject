@@ -784,8 +784,8 @@ function corridor(p) {
       if (H - ty > 0.02) B('hull', 2 * ex + 0.02, H - ty, 0.06, 0, ty + (H - ty) / 2, z);
       for (const s of [1, -1]) B('stripe', 0.12, H - R - 0.4, 0.07, s * (ex + 0.07), R + 0.02 + (H - R - 0.4) / 2, z + 0.01); // 1 cm outboard of the side panels' inner edge (flush faces z-fight)
       if (H - ty > 0.2) lamp(2.4, ty + (H - ty) / 2);
-      // light pool: a soft wash over the door and the deck in front of it (additive, no light), so the gate reads from the entrance
-      B('pool', 2 * ex + 1.2, dh + 1.8, 0.004, 0, R + (dh + 1.8) / 2, z + 0.2);
+      // light pool: a soft wash on the deck in front of the door (additive, no light), so the gate reads from the entrance. None over
+      // the door itself: a card across the opening hangs in the doorway as a foggy halo once the gate is open
       B('pool', 3.4, 0.004, 3.0, 0, R + 0.045, z + 1.6);
     } else {
       B('hull', W - 0.02, H - R - 0.01, 0.06, 0, R + 0.01 + (H - R - 0.01) / 2, z);
