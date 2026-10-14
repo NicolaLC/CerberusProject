@@ -42,6 +42,8 @@ export const SKIES = {
   night: { top: '#020406', horizon: '#13262c', ground: '#040607', glow: 0, fog: '#0a1317', fogNear: 20, fogFar: 160, hemi: 0x3e5a6a, hemiGround: 0x0c0f10, hemiI: 0.75, sun: 0x86a6c8, sunI: 0.8, exposure: 1.45 },
 };
 const SKY_RATE = 1.2;
+const _alarm = new THREE.Color();
+const luma = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
 
 // Per-face material array for BoxGeometry (order: +x, -x, +y, -y, +z, -z).
 function faces(def, { px, nx, py, ny, pz, nz } = {}) {
@@ -613,7 +615,14 @@ export class World {
   #applyAlarm(t) {
     const a = this.alarm;
     const k = a.level * a.strength * (0.85 + 0.15 * Math.sin(t * ALARM.pulse));
-    const mix = (c, base) => c.copy(base).lerp(a.color, k);
+    // under a dark `sky` preset (skyK > 0) the alarm colour is first dimmed to each base colour's brightness: it tints the night,
+    // it does not light a black sky orange (a full-strength amber over #0c171b read as a sunset)
+    const dark = this.night ? this.skyK : 0;
+    const la = luma(a.color) || 1;
+    const mix = (c, base) => {
+      _alarm.copy(a.color).multiplyScalar(1 + (Math.min(1, luma(base) / la) - 1) * dark);
+      return c.copy(base).lerp(_alarm, k);
+    };
     mix(this.scene.fog.color, this.base.fog);
     mix(this.sky.material.uniforms.horizon.value, this.base.horizon);
     mix(this.hemi.color, this.base.hemi);
