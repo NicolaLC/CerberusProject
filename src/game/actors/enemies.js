@@ -425,6 +425,24 @@ export class Enemies {
     }
   }
 
+  // Dormant (never woken) and in a sector the camera cannot see into (world/sectors.js; never in a level without sectors): such an
+  // enemy skips its AI update and its pose, and is not drawn (cull). It still takes hits and wakes with its group.
+  #asleep(p) {
+    return p.dormant && p.alive && !this.world.sectors.visibleAt(p.pos);
+  }
+
+  // After the world's sector visibility (game.js, present phase): hides the sleeping enemies, shows them again when they wake, die or
+  // come into sight. Only touches what it hid itself.
+  cull() {
+    for (const p of this.all) {
+      const top = p.group ?? p.root;
+      const hide = this.#asleep(p);
+      if (hide === !!p.culled) continue;
+      p.culled = hide;
+      top.visible = !hide;
+    }
+  }
+
   // Poses every living humanoid once per frame (late phase) with the dt of the whole frame, after the substeps moved the
   // bodies (think() only fills `animState`). Rigs beyond the far LOD or outside the view pose every SLOW_EVERY-th frame
   // (staggered by list index, dt accumulated) without terrain foot IK. Weak spots (raycast targets, frozen proxies)
@@ -438,6 +456,8 @@ export class Enemies {
     for (let i = 0; i < list.length; i++) {
       const p = list[i];
       if (!p.alive || !p.animator) continue;
+      if (p.posed && this.#asleep(p)) continue; // dormant out of sight: its pose waits (see cull)
+      p.posed = true;
       p.animDt += dt;
       _sphere.center.copy(p.pos).y += 1;
       const slow = p.skin.far || !_frustum.intersectsSphere(_sphere);
@@ -463,7 +483,11 @@ export class Enemies {
       for (const e of this.all) if (e.alive && e.kind === 'trooper') _sep.insert(e, e.pos.x, e.pos.z, e.pos.x, e.pos.z);
       this.sepReady = true;
       // `hostile` (Library wake key): this exhibit sees the real player even in a demo level
-      for (const p of this.all) p.update(dt, p.hostile ? player : target);
+      for (const p of this.all) {
+        if (p.ticked && this.#asleep(p)) continue; // a dormant enemy out of sight thinks nothing (only wakeGroup wakes it)
+        p.update(dt, p.hostile ? player : target);
+        p.ticked = true;
+      }
       this.sepReady = false;
       this.#groupWake();
     }

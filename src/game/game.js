@@ -143,6 +143,11 @@ export class Game {
       const near = Math.max(0, 1 - st.point.distanceTo(player.pos) / 14);
       if (near > 0) input.rumble(near * 0.35, 0, 70);
     });
+    // a gate closing behind the player (kit.gate closeOn) waits while an enemy stands in it
+    world.blocked = (box) => {
+      for (const e of enemies.all) if (e.alive && box.distanceToPoint(e.pos) < 1.2) return true;
+      return false;
+    };
     addEventListener('pointerdown', () => audio.init()); // resumes audio started from a controller
     Object.assign(this, { world, controls, camRig, player, enemies, pickups, encounter, mission, weapon, fx, hud, log, boot, cinematic, audio, post, juice, stats, summary, settings });
 
@@ -233,6 +238,8 @@ export class Game {
         world.update(engine.time, camera.position); // the light pool picks the lights nearest the camera
         world.setScheme(controls.scheme);
         world.updateSun(this.editing ? camera.position : player.pos); // the editor's shadow window follows its camera
+        world.cull(camera, player.pos, this.editing); // sectored levels: draw / build the rooms the camera can see into (sectors.js)
+        enemies.cull(); // dormant enemies in rooms out of sight are not drawn
         // hide the player model when the camera is pushed into it or held at the eye (the boot intro's POV hold)
         player.view.root.visible = !this.editing && (!!camRig.script || (camRig.povW < camRig.t.pov.hide && camera.position.distanceTo(camRig.pivot) > 0.45));
       },
@@ -308,6 +315,7 @@ export class Game {
     world.load(level, this.registry);
     enemies.load(level);
     pickups.load(level);
+    for (const it of pickups.items) for (const o of [it.model, it.ring]) world.sectors.tag(o); // drawn with their sector
     encounter.load(level);
     this.resetRun(level);
     this.tool = level.tool ? new TOOLS[level.tool](this, level) : null;
@@ -339,12 +347,16 @@ export class Game {
       if (!o.visible) hidden.push(o);
     });
     for (const o of hidden) o.visible = true;
+    const warm = this.world.sectors.active ? this.world.warmMeshes() : []; // every permanent world material: a sector built later compiles nothing
+    for (const m of warm) engine.scene.add(m);
     const skins = enemies.all.map((e) => e.skin).filter(Boolean);
     const far = skins.map((k) => k.far);
     for (const k of skins) k.setFar(true);
     engine.renderer.compile(engine.scene, engine.camera);
     skins.forEach((k, i) => k.setFar(far[i]));
     for (const o of hidden) o.visible = false;
+    for (const m of warm) m.removeFromParent();
+    warm[0]?.geometry.dispose();
   }
 
   // Player at the level's spawn with full health, camera / weapon / fx / hud / juice reset: the start of a run on

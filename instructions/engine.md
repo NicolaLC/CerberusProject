@@ -48,6 +48,17 @@ repeats every caster). Budget: ≤ 140 calls per frame at the spawn view, ≤ 25
   goes to the chunk of its world bbox centre), frustum-culled by three; one shadow-only mesh per chunk
   (`batches.shadows`). The level cost scales with what is in view, not with level size.
   Changing a level material (e.g. flickering strip) still works: the merged mesh shares the material object.
+  `mergeStatic(meshes, parent, groupOf)`: `groupOf(mesh)` keys groups that never share a merged mesh (a sectored level: the sector mask, level.md
+  "Sectors"); each output mesh carries `userData.group`; chunking is decided per group. `mergeStaticSteps` is the same as a generator (time-sliced).
+  Rig shadow / far-LOD buckets are concatenated into typed arrays (`concat`): an element-by-element push was ~40% of a Prologue load.
+- **Sectors** (level.md "Sectors"): a sectored level draws only the rooms the camera can see into (portal culling, three.js layers: colour and
+  shadow pass both). Prologue, measured on an Intel MTL iGPU (Vulkan ANGLE, 1280x720; GPU ms by timer query are noisy on a shared machine):
+  calibration rooms 105-272 draws / 256-648k tris / 6-15.5 GPU ms -> 71-95 draws / 46-118k tris / 4.2-4.9 ms; drill hall 151-208 draws /
+  461-573k tris / 10-15 ms -> 85-149 / 119-164k / 5.5-7.5 ms (fresh gates, `sector-measure` views); loadScene 1.37 s -> 0.54 s (world 344 -> 120 ms,
+  enemy rigs 970 -> 370 ms), JS heap 404 -> 386 MB, level batches at load 17 -> 7.5 MB.
+  All gates open at once (never in the Prologue: its doors close behind the player) can cost more draws than one merged chunk (up to +75 in
+  a view seeing six rooms): every visible sector repeats its materials. Static shadow map: not cached (the sun's map follows the player in 2 m
+  snaps and three has one depth map per light; the level's shadow pass is ~6-10 draws per view).
 - `RigidSkin(root, skeleton, { exclude })`: every mesh on a rig's bones → one SkinnedMesh per material,
   vertices fully weighted to their bone. Bound at the current pose. Adding/removing parts later needs
   `skin.rebuild()` (puppet weak spots do this on respawn). Culling uses one padded sphere per rig.

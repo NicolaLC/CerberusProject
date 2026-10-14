@@ -235,41 +235,66 @@ const _c = new THREE.Vector3();
 
 // Merges static meshes (world space) into one mesh per material per chunk under `parent`. Sources become proxies.
 // Returns the colour meshes; `.shadows` holds the shadow-only mesh of each chunk.
-export function mergeStatic(meshes, parent) {
-  const chunks = new Map();
-  const centres = meshes.map((m) => {
+// groupOf(mesh) (optional): a key (e.g. a sector mask, game/world/sectors.js); meshes of different keys never share a merged mesh,
+// every output mesh carries `userData.group` = its key, and chunking is decided per group. Without it: one group (key null).
+export function mergeStatic(meshes, parent, groupOf = null) {
+  const steps = mergeStaticSteps(meshes, parent, groupOf);
+  let r = steps.next();
+  while (!r.done) r = steps.next();
+  return r.value;
+}
+
+// The same as a generator that yields after every source mesh collected and every merged mesh built (time-sliced building:
+// the caller runs it a few ms per frame); its return value is mergeStatic's. Output meshes are added to `parent` as they are built.
+export function* mergeStaticSteps(meshes, parent, groupOf = null) {
+  const groups = new Map(); // key -> { list: [[mesh, centre]], chunks: Map }
+  for (const m of meshes) {
     m.updateWorldMatrix(true, false);
     if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
-    return _box.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld).getCenter(new THREE.Vector3());
-  });
-  _box.makeEmpty().setFromPoints(centres).getSize(_c);
-  const single = Math.max(_c.x, _c.z) < CHUNK_MIN_EXTENT;
-  for (const [i, m] of meshes.entries()) {
-    const key = single ? '' : `${Math.floor(centres[i].x / CHUNK)}|${Math.floor(centres[i].z / CHUNK)}`;
-    let buckets = chunks.get(key);
-    if (!buckets) chunks.set(key, (buckets = new Map()));
-    collect(buckets, m, m.matrixWorld);
-    hideAsProxy(m);
+    const key = groupOf ? groupOf(m) : null;
+    let g = groups.get(key);
+    if (!g) groups.set(key, (g = { list: [], chunks: new Map() }));
+    g.list.push([m, _box.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld).getCenter(new THREE.Vector3())]);
+  }
+  for (const g of groups.values()) {
+    _box.makeEmpty();
+    for (const [, c] of g.list) _box.expandByPoint(c);
+    _box.getSize(_c);
+    const single = Math.max(_c.x, _c.z) < CHUNK_MIN_EXTENT;
+    for (const [m, c] of g.list) {
+      const key = single ? '' : `${Math.floor(c.x / CHUNK)}|${Math.floor(c.z / CHUNK)}`;
+      let buckets = g.chunks.get(key);
+      if (!buckets) g.chunks.set(key, (buckets = new Map()));
+      collect(buckets, m, m.matrixWorld);
+      hideAsProxy(m);
+      yield;
+    }
   }
   const out = [];
   out.shadows = [];
-  for (const buckets of chunks.values()) {
-    for (const b of buckets.values()) {
-      const mesh = new THREE.Mesh(toGeometry(b), b.material);
-      mesh.castShadow = false; // the shadow-only mesh below casts for all of them
-      mesh.receiveShadow = b.receiveShadow;
-      mesh.matrixAutoUpdate = false;
-      mesh.raycast = noRaycast;
-      mesh.userData.batch = true;
-      parent.add(mesh);
-      out.push(mesh);
-    }
-    const sb = shadowBucket(buckets);
-    if (sb) {
-      const shadow = shadowOnly(new THREE.Mesh(toGeometry(sb), SHADOW_MAT));
-      shadow.matrixAutoUpdate = false;
-      parent.add(shadow);
-      out.shadows.push(shadow);
+  for (const [key, g] of groups) {
+    for (const buckets of g.chunks.values()) {
+      for (const b of buckets.values()) {
+        const mesh = new THREE.Mesh(toGeometry(b), b.material);
+        mesh.castShadow = false; // the shadow-only mesh below casts for all of them
+        mesh.receiveShadow = b.receiveShadow;
+        mesh.matrixAutoUpdate = false;
+        mesh.raycast = noRaycast;
+        mesh.userData.batch = true;
+        mesh.userData.group = key;
+        parent.add(mesh);
+        out.push(mesh);
+        yield;
+      }
+      const sb = shadowBucket(buckets);
+      if (sb) {
+        const shadow = shadowOnly(new THREE.Mesh(toGeometry(sb), SHADOW_MAT));
+        shadow.matrixAutoUpdate = false;
+        shadow.userData.group = key;
+        parent.add(shadow);
+        out.shadows.push(shadow);
+        yield;
+      }
     }
   }
   return out;

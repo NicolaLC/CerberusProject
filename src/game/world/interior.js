@@ -889,10 +889,62 @@ function ceiling(c) {
 }
 
 const SIDES = ['both', 'left', 'right', 'none'];
+const CORRIDOR_CHUNK = 250; // parts per step of a time-sliced corridor build (~2 ms)
 function flag(id, p, key, def) {
   const v = p[key] ?? def;
   if (typeof v !== 'boolean') fail(id, `"${key}" must be true or false, got ${JSON.stringify(v)}`);
   return v;
+}
+
+// arch.corridor as a generator (sectors.js builds a deferred one a few ms per frame): bakes `chunk` parts at a time and yields each
+// chunk's meshes; returns { meshes, colliders } (everything it added to the scene). The registry's build drains it in one go.
+function* corridorSteps(world, d, chunk = CORRIDOR_CHUNK) {
+  const id = 'arch.corridor';
+  const p = d.params ?? {};
+  const q = quarters(id, d.yaw);
+  const c = {
+    L: num(id, p, 'length', 24, 2),
+    W: num(id, p, 'width', 6, 3),
+    H: num(id, p, 'height', 5, 4.2),
+    bayLen: num(id, p, 'bay', 3, 1.5),
+    steps: num(id, p, 'steps', 0, 0, true),
+    rise: num(id, p, 'rise', 0.25, 0.05),
+    run: num(id, p, 'run', 0.6, 0.3),
+    stepAt: num(id, p, 'stepAt', 4, 0),
+    door: p.door ?? null,
+    end: flag(id, p, 'end', false),
+    sides: p.sides ?? 'both',
+    ceiling: flag(id, p, 'ceiling', true),
+    floor: flag(id, p, 'floor', true),
+    props: flag(id, p, 'props', false),
+    seed: num(id, p, 'seed', 1, 0, true),
+  };
+  const collide = flag(id, p, 'collide', true);
+  if (!SIDES.includes(c.sides)) fail(id, `"sides" must be one of ${SIDES.join(', ')}, got ${JSON.stringify(c.sides)}`);
+  if (c.rise > 0.45) fail(id, `"rise" ${c.rise} is above the step height 0.45`);
+  if (c.steps && c.stepAt + c.steps * c.run > c.L - 0.5) fail(id, `steps end past the corridor (stepAt + steps x run must be <= length - 0.5)`);
+  if (c.door && (!Array.isArray(c.door) || c.door.length !== 2 || c.door.some((v) => typeof v !== 'number' || !(v > 0)))) fail(id, `"door" must be [w, h] > 0`);
+  const { parts, props } = corridor(c);
+  const meshes = [];
+  for (let i = 0; i < parts.length; i += chunk) {
+    const out = build(world, d, q, chunk < parts.length ? parts.slice(i, i + chunk) : parts);
+    meshes.push(...out);
+    yield out;
+  }
+  meshes.push(...build(world, d, q, [], null, props));
+  const colliders = [];
+  if (collide) for (const s of { both: [1, -1], right: [1], left: [-1], none: [] }[c.sides]) colliders.push(collider(world, d, q, { x: s * (c.W / 2 - P.dressing / 2), z: -c.L / 2, w: P.dressing, d: c.L }, c.H));
+  for (let k = 1; k <= c.steps; k++) {
+    const s0 = c.stepAt + (k - 1) * c.run;
+    colliders.push(collider(world, d, q, { x: 0, z: -(s0 + c.L) / 2, w: c.W, d: c.L - s0 }, k * c.rise));
+  }
+  return { meshes, colliders };
+}
+
+function drain(steps) {
+  let r = steps.next();
+  while (!r.done) r = steps.next();
+  return r.value;
 }
 
 export const INTERIOR_PIECES = {
@@ -923,41 +975,8 @@ export const INTERIOR_PIECES = {
       { key: 'collide', type: 'bool', def: true },
       { key: 'seed', type: 'number', min: 0, optional: true },
     ],
-    build(world, d) {
-      const id = 'arch.corridor';
-      const p = d.params ?? {};
-      const q = quarters(id, d.yaw);
-      const c = {
-        L: num(id, p, 'length', 24, 2),
-        W: num(id, p, 'width', 6, 3),
-        H: num(id, p, 'height', 5, 4.2),
-        bayLen: num(id, p, 'bay', 3, 1.5),
-        steps: num(id, p, 'steps', 0, 0, true),
-        rise: num(id, p, 'rise', 0.25, 0.05),
-        run: num(id, p, 'run', 0.6, 0.3),
-        stepAt: num(id, p, 'stepAt', 4, 0),
-        door: p.door ?? null,
-        end: flag(id, p, 'end', false),
-        sides: p.sides ?? 'both',
-        ceiling: flag(id, p, 'ceiling', true),
-        floor: flag(id, p, 'floor', true),
-        props: flag(id, p, 'props', false),
-        seed: num(id, p, 'seed', 1, 0, true),
-      };
-      const collide = flag(id, p, 'collide', true);
-      if (!SIDES.includes(c.sides)) fail(id, `"sides" must be one of ${SIDES.join(', ')}, got ${JSON.stringify(c.sides)}`);
-      if (c.rise > 0.45) fail(id, `"rise" ${c.rise} is above the step height 0.45`);
-      if (c.steps && c.stepAt + c.steps * c.run > c.L - 0.5) fail(id, `steps end past the corridor (stepAt + steps x run must be <= length - 0.5)`);
-      if (c.door && (!Array.isArray(c.door) || c.door.length !== 2 || c.door.some((v) => typeof v !== 'number' || !(v > 0)))) fail(id, `"door" must be [w, h] > 0`);
-      const { parts, props } = corridor(c);
-      const meshes = build(world, d, q, parts, null, props);
-      if (collide) for (const s of { both: [1, -1], right: [1], left: [-1], none: [] }[c.sides]) collider(world, d, q, { x: s * (c.W / 2 - P.dressing / 2), z: -c.L / 2, w: P.dressing, d: c.L }, c.H);
-      for (let k = 1; k <= c.steps; k++) {
-        const s0 = c.stepAt + (k - 1) * c.run;
-        collider(world, d, q, { x: 0, z: -(s0 + c.L) / 2, w: c.W, d: c.L - s0 }, k * c.rise);
-      }
-      return meshes;
-    },
+    steps: corridorSteps,
+    build: (world, d) => drain(corridorSteps(world, d, Infinity)).meshes,
   },
 
   // One wall of the interior kit, for rooms: like arch.panelling (pos = bottom centre on the wall face, `length` along X, the room

@@ -14,11 +14,11 @@ export const round = (v) => Math.round(v * 1e4) / 1e4 + 0; // + 0: no -0
 export const xyz = (p) => (Array.isArray(p) ? [p[0], p[1] ?? 0, p[2]] : [p.x, p.y ?? 0, p.z]);
 
 // How a piece turns: 'quarter' kit.* and arch.* (axis-aligned, yaw in 90 degree steps: kit.js throws otherwise), 'box' env.box /
-// env.strip / trigger.volume / zone.interior / objective.reach (builders ignore yaw: a quarter turn swaps width and depth), 'label' (yaw is a param), 'none' (lights),
+// env.strip / trigger.volume / zone.interior / zone.sector / zone.portal / objective.reach (builders ignore yaw: a quarter turn swaps width and depth), 'label' (yaw is a param), 'none' (lights),
 // 'free' everything else (enemies, pickups, props: 15 degree steps).
 export function rotationKind(id) {
   if (id.startsWith('kit.') || id.startsWith('arch.') || id === 'prop.console' || id === 'prop.crate' || id === 'prop.puppetRack' || id === 'prop.cradle' || id === 'prop.bench') return 'quarter'; // props with a collision box
-  if (id === 'env.box' || id === 'env.strip' || id === 'trigger.volume' || id === 'zone.interior' || id === 'objective.reach') return 'box';
+  if (id === 'env.box' || id === 'env.strip' || id === 'trigger.volume' || id === 'zone.interior' || id === 'zone.sector' || id === 'zone.portal' || id === 'objective.reach') return 'box';
   if (id === 'env.label') return 'label';
   if (id === 'light.point') return 'none';
   return 'free';

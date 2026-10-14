@@ -58,7 +58,7 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `kit.floor` | world | `size [w,d]` (4 x 4), `thickness` (0.2), `flush?` (top at `pos.y`, hangs below), `mat` |
 | `kit.wall` | world | `length` (4), `height` (7, min 2.0), `thickness` (0.5), `mat`. Cover `wall` |
 | `kit.doorway` | world | wall segment with a lintel: opening `width` (4, clamped up to 2.0) and `height` (4, clamped up to 1.8), `length` (width + 6; each wall end >= 0.9), `wallHeight` (7), `thickness`, `mat`. Opening centered on `pos` |
-| `kit.gate` | world | a sealed gate for a `kit.doorway` (same `pos` / `yaw`): `on` (required, an `on` form: `objective:<id>:done`, `trigger:<id>`, `checkpoint:<id>`, `discovered:<gun>`, `start`, `mission:complete`...), `width` (4, up to 2.0), `height` (4, up to 1.8), `thickness` (0.3), `slide` (`up` into the lintel, or `down` into the floor), `time` (1.2 s), `mat` (`high`). A slab with collision, bullets and sight blocked until `on` happens (once per run), then it slides open (`gate:open` { on }) and its collider is parked. Not merged into the static batches. Looks like a door (dark metal, ochre chevron bands, seams, frame trim sized for a 0.5 wall, lamp red -> cyan on open; art-style.md). Inert in the editor and the Library (ghost of its travel). Details: workshop.md "Gates" |
+| `kit.gate` | world | a sealed gate for a `kit.doorway` (same `pos` / `yaw`): `closeOn?` (an `on` form: after it, the gate shuts again for good once the player is through; workshop.md "Gates"), `on` (required, an `on` form: `objective:<id>:done`, `trigger:<id>`, `checkpoint:<id>`, `discovered:<gun>`, `start`, `mission:complete`...), `width` (4, up to 2.0), `height` (4, up to 1.8), `thickness` (0.3), `slide` (`up` into the lintel, or `down` into the floor), `time` (1.2 s), `mat` (`high`). A slab with collision, bullets and sight blocked until `on` happens (once per run), then it slides open (`gate:open` { on }) and its collider is parked. Not merged into the static batches. Looks like a door (dark metal, ochre chevron bands, seams, frame trim sized for a 0.5 wall, lamp red -> cyan on open; art-style.md). Inert in the editor and the Library (ghost of its travel). Details: workshop.md "Gates" |
 | `kit.stairs` | world | `width` (4), `height` (target top, 1.6), `rise` (0.4; above 0.45 throws), `run` (1.0, min 0.6), `mat`. Climbs toward -Z at yaw 0; `pos` = footprint center. Real rise = height / ceil(height / rise) |
 | `kit.ramp` | world | stairs with a fine rise (the code has no slopes: `groundAt` reads box tops): `width`, `height` (1.6), `length` (8, horizontal), `rise` (0.1, max 0.25), `mat` |
 | `kit.cover.low` | world | 1.1 high, 1.0 thick; `length` (3, min 1.6, below throws), `mat` (`low`) |
@@ -75,6 +75,8 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
 | `marker.checkpoint` | encounter | respawn point after a death once the player has been within 2 m; `name` shows up in `checkpoint:reached` |
 | `marker.entry` | encounter | reinforcement entry: `group` (string), `enemies` (list of `enemy.*` / `boss.*` ids) built here when `group` is spawned |
 | `zone.interior` | encounter | `size [w,h,d]` (8,4,8). `pos` = centre x / bottom y / centre z. An interior zone (camera exposure, HUD INTERIOR, drones); logic only in play, the Workshop draws a gizmo |
+| `zone.sector` | encounter | `size [w,h,d]`, `name`. A sector (room) of the level: see "Sectors" below. Logic only; the Workshop draws a gizmo |
+| `zone.portal` | encounter | `size [w,h,d]` (world axes, any yaw ignored). An always-open opening between sectors that is not a `kit.doorway` (a door cut in plain boxes): see "Sectors" |
 | `trigger.volume` | encounter | `size [w,h,d]` (4,3,4), `event` ('trigger'), `once` (true), `wakeGroup?`, `spawnGroup?`. `pos` = centre x / bottom y / centre z. Fires `trigger:fired { id, event }` when the player enters (`id` = `name`, else `trigger<n>`) |
 | `objective.reach` | encounter | mission objective: `size [w,h,d]` (4,3,4), `trigger?` (a `trigger:fired` / `checkpoint:reached` id that completes it instead of the box). `pos` = centre x / bottom y / centre z |
 | `objective.destroy` | encounter | mission objective: `group?` (enemy squad; absent = any enemy), `count?` (absent = all matching alive when it becomes current, plus reinforcements) |
@@ -123,6 +125,29 @@ Every entry has `example` and `label` (enemies, pickups, `kit.*`, `env.*`, `ligh
 (`tool: library`, gym.md); `tests/library.browser.mjs` spawns every id from its example.
 
 Interior zones (camera exposure) are `zone.interior` pieces. The top-level `interiorZones: [{ min, max }]` of older files (arena) is still read by `World`; the Workshop converts it to pieces on open. Dropped clips are runtime, not data.
+
+## Sectors (`src/game/world/sectors.js`)
+Rooms are drawn only when the camera can see into them, built when the player comes near and freed when far behind. Opt in per level: a level
+without `zone.sector` pieces builds everything at load and draws exactly as before (one implicit sector, chunking unchanged).
+- **Data**: `zone.sector` boxes (pos = centre x / bottom y / centre z). **Run each box to the centre line of its walls** (adjacent rooms touch on the
+  shared wall's centre, an exterior wall's outer face is outside the box) and from below the floor into the roof slab. Space in no box is OUTSIDE.
+  Portals: every `kit.doorway` (gated by the `kit.gate` on the same pos: open while opening / open / closing) and `zone.portal` boxes (always open).
+  A portal joins the sectors 0.3 m off its two faces along its thin axis. At most 29 sectors (three.js layers).
+- **Drawn**: roots = the sectors of the camera and of the player; then portal culling: through every open portal whose screen rectangle overlaps the
+  rectangle its sector is seen through (narrowing door after door). Static batches are merged per material per **sector mask** (every box a mesh reaches
+  into, plus OUTSIDE when a point off one of its faces is in no box: exterior walls, roofs) and put on three.js layers (0 = always, 1 = OUTSIDE,
+  i + 2 = sector i); the camera's layers = 0 + the visible set, so the colour and the shadow pass skip hidden rooms with no per-object work. Props,
+  labels, gate dressing and lamps, level pickups are tagged the same way at load (raycast targets stay on layer 0); a shut gate slab is shown while
+  one of its rooms is. Dormant enemies in hidden sectors are hidden and asleep (enemies.js `cull`). No occlusion inside a sector.
+- **Built on approach**: pieces whose registry meta `defer(params)` is true (render-only: `arch.*` dressing, `arch.corridor` without `props`,
+  `prop.pipes` / `cables` / `hazard` / `panel`) and whose pos lies in exactly one sector box are built with their sector, not at load. Load builds the
+  spawn's sector and its neighbours; then each frame up to 3 ms of building goes to sectors one portal from a root (shut gates count: the next rooms
+  are ready before their gate opens; `arch.corridor` builds in 250-part steps, `meta.steps`), and the merged sources are dropped (the level data
+  rebuilds them). A visible sector not built yet is built at once (never missing). A sector more than 2 portals away, or cut off by a gate closed
+  for good (`kit.gate` `closeOn`), is freed (batches, pieces, their colliders). Everything else (colliders, cover, lights, enemies) is built at load.
+  The shader warm-up compiles every permanent material (`World.warmMeshes`), so a late sector compiles nothing.
+- The Prologue: 10 sectors (`c1`..`c6`, `drill-hall`, `pen`, `building`, `transit`), three `zone.portal` (hall exit, the building's two doors); the
+  apron, field, forecourt and boss arena are OUTSIDE (the open-topped arena is seen over its walls). Edited by script (`serializeLevel`).
 
 ## Save and load (`src/game/workshop/io.js`, #72)
 The editor (#70) calls four functions plus `levelNames()`; the level is the plain object of the format above.

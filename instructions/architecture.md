@@ -25,7 +25,7 @@ src/
     registry.js           piece registry: stable string id -> how a piece is built from data (ids: level.md)
     controls.js           BINDINGS table + intents (move, look, aiming, running, firing, slots...)
     settings.js           player settings + start-panel bindings
-    world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), arch.js (arch.* architectural dressing: coves, ribs, panelling, bulkheads, floor channels, coffers, catwalks; level.md), interior.js (`arch.corridor` interior kit: painted normal / roughness maps, corridor env map, the `World.interior` materials; level.md), textures.js, pickups.js (pickup.* pieces), encounter.js (marker.* / trigger.* / objective.* / log.line / intro.boot / intro.cinematic pieces: spawn, checkpoints, trigger volumes, reinforcements; workshop.md), mission.js (objective sequencing, `game.mission`; ticks inside encounter)
+    world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), arch.js (arch.* architectural dressing: coves, ribs, panelling, bulkheads, floor channels, coffers, catwalks; level.md), interior.js (`arch.corridor` interior kit: painted normal / roughness maps, corridor env map, the `World.interior` materials; level.md), sectors.js (`World.sectors`: rooms drawn / built / freed by portal visibility; level.md "Sectors"), textures.js, pickups.js (pickup.* pieces), encounter.js (marker.* / trigger.* / objective.* / log.line / intro.boot / intro.cinematic pieces: spawn, checkpoints, trigger volumes, reinforcements; workshop.md), mission.js (objective sequencing, `game.mission`; ticks inside encounter)
     actors/ rig.js (skeleton, animator, IK), parts.js (model building blocks, debris), soldier.js (player model),
             looks.js (trooper / puppet models),
             player.js (motor: intent -> movement, cover, jetpack, vault, health; never touches a mesh), player-view.js (`player.view`: model, rig, skin, animation, root pose; reads the motor's state; the motor forwards `root` / `rigModel` / `skin` / `animator` / `muzzle`),
@@ -82,7 +82,7 @@ the only thing three.js recompiles shaders for, so they come from a fixed pool o
 | pre | controls (+ hitstop time scale, aim assist, look, shoulder, debug keys), stats toggle | real |
 | simulate (substeps ≤ 20 ms) | player → weapon → enemies → encounter (+ mission) → pickups | scaled |
 | late | cinematic (intro: sets `camRig.script`; group `play`) → camera → aimProbe (what the crosshair is on) | scaled (shake uses real) |
-| present | fx → world (lights, sun, player visibility) → hud → log → boot (intro overlay, input lock; group `play`) → audio (MG spin) | scaled |
+| present | fx → world (lights, sun, player visibility, sector cull: camera layers, build ahead, free behind; enemies' dormant cull) → hud → log → boot (intro overlay, input lock; group `play`) → audio (MG spin) | scaled |
 | render | post (exposure, grade, bloom) | real |
 
 Paused (pause menu): only `whilePaused` systems run (controls, stats, camera, post).

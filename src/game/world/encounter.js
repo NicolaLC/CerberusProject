@@ -49,7 +49,7 @@ export const TUNING = {
   calm: 3, // s without combat (no awake enemy in range, no shot fired, no hit taken) before a log line may play
 };
 
-const COLOR = { spawn: 0x58ff9a, checkpoint: 0x3affff, entry: 0xff7a3a, trigger: 0xff4bd6, zone: 0x4aa8ff, objective: 0xffd23a, log: 0xffb347, alarm: 0xff3a2a, intro: 0xeaf6fa, cinematic: 0x7ad7ff };
+const COLOR = { spawn: 0x58ff9a, checkpoint: 0x3affff, entry: 0xff7a3a, trigger: 0xff4bd6, zone: 0x4aa8ff, sector: 0x8a7aff, portal: 0xc8ff5a, objective: 0xffd23a, log: 0xffb347, alarm: 0xff3a2a, intro: 0xeaf6fa, cinematic: 0x7ad7ff };
 const TEXT = { reach: 'REACH THE ZONE', destroy: 'DESTROY THE TARGETS', survive: 'SURVIVE', interact: 'ACCESS THE TERMINAL', action: 'PERFORM THE MANEUVER' };
 export const ACTIONS = ['jet', 'cover', 'vault', 'slide', 'coverRun']; // `objective.action` moves (mission.js maps each to its player event)
 
@@ -63,6 +63,7 @@ const bad = (id, msg) => {
   throw new Error(`${id}: ${msg}`);
 };
 const entry = (sys, d) => sys.add('entry', d);
+const sizeCheck = (p) => (Array.isArray(p.size) && p.size.length === 3 && p.size.every((n) => typeof n === 'number' && n > 0) ? null : 'size must be [w, h, d], all above 0');
 const common = [{ key: 'text', type: 'text' }, { key: 'detail', type: 'text', optional: true }, { key: 'order', type: 'number', optional: true }, { key: 'limit', type: 'number', optional: true, min: 0.1 }, { key: 'wakeGroup', type: 'text', optional: true }, { key: 'spawnGroup', type: 'text', optional: true },
   { key: 'grantGun', type: 'enum', options: Object.keys(GUNS), optional: true }, { key: 'grantAmmo', type: 'number', optional: true, min: 0 }, { key: 'skipOn', type: 'text', optional: true },
   { key: 'requiresGun', type: 'enum', options: Object.keys(GUNS), optional: true }, { key: 'skipIfOwned', type: 'enum', options: Object.keys(GUNS), optional: true }];
@@ -185,6 +186,9 @@ export const ENCOUNTER_PIECES = {
   'marker.checkpoint': { example: { params: {} }, label: `respawn point after a death, ${TUNING.checkpointRadius} m reach`, build: (sys, d) => sys.add('checkpoint', d) },
   'marker.entry': { example: { params: { group: 'reinforce', enemies: ['enemy.trooper', 'enemy.trooper'] } }, label: 'reinforcement entry: spawns its listed enemies for its group', fields: [{ key: 'group', type: 'text' }, { key: 'enemies', type: 'list' }], build: entry },
   'zone.interior': { example: { params: { size: [...TUNING.zone] } }, label: 'interior zone: camera exposure up, HUD reads INTERIOR', fields: [{ key: 'size', type: 'vec3', min: 0.1 }], build: (sys, d) => sys.add('zone', d) },
+  // Sectors (world/sectors.js, level.md "Sectors"): the World reads these from the level data; here they are records and editor gizmos.
+  'zone.sector': { example: { params: { size: [12, 6, 12] } }, label: 'sector (room): drawn only when the camera can see into it; run the box to the centre of its walls', fields: [{ key: 'size', type: 'vec3', min: 0.1 }], check: sizeCheck, build: (sys, d) => sys.add('sector', d) },
+  'zone.portal': { example: { params: { size: [4, 4, 0.6] } }, label: 'portal: an always-open opening between sectors (a doorway without kit.doorway)', fields: [{ key: 'size', type: 'vec3', min: 0.1 }], check: sizeCheck, build: (sys, d) => sys.add('portal', d) },
   'trigger.volume': { example: { params: { size: [...TUNING.size], event: 'trigger', once: true } }, label: 'fires an event when the player enters; can wake / spawn a group', fields: [{ key: 'size', type: 'vec3', min: 0.1 }, { key: 'event', type: 'text' }, { key: 'once', type: 'bool', def: true }, { key: 'wakeGroup', type: 'text', optional: true }, { key: 'spawnGroup', type: 'text', optional: true }], build: (sys, d) => sys.add('trigger', d) },
   'objective.reach': objective('reach', 'objective: get the player into the box (or wait for a trigger / checkpoint id)', { size: [...TUNING.size] }, [{ key: 'size', type: 'vec3', min: 0.1 }, { key: 'trigger', type: 'text', optional: true }]),
   'objective.destroy': objective('destroy', 'objective: destroy the enemies of a group (any enemy without group)', { group: 'targets' }, [{ key: 'group', type: 'text', optional: true }, { key: 'count', type: 'number', optional: true, min: 1 }]),
@@ -373,6 +377,7 @@ export class Encounter {
         this.world.interiorZones.push(rec.box);
       }
     }
+    if (kind === 'sector' || kind === 'portal') rec.size = p.size;
     if (kind === 'trigger') {
       const size = p.size ?? TUNING.size;
       if (!Array.isArray(size) || size.length !== 3 || size.some((n) => !(n > 0))) bad(id, 'size must be [w, h, d], all above 0');
@@ -614,7 +619,7 @@ export class Encounter {
     const m = mat[r.kind];
     const g = new THREE.Group();
     g.position.copy(r.pos);
-    g.rotation.y = r.kind === 'trigger' || r.kind === 'zone' || r.kind === 'cinematic' || r.obj === 'reach' || r.obj === 'action' ? 0 : r.yaw;
+    g.rotation.y = r.kind === 'trigger' || r.kind === 'zone' || r.kind === 'sector' || r.kind === 'portal' || r.kind === 'cinematic' || r.obj === 'reach' || r.obj === 'action' ? 0 : r.yaw;
     const part = (geo, mat, pos, scale) => {
       const o = geo === G.edges ? new THREE.LineSegments(geo, mat) : new THREE.Mesh(geo, mat);
       o.position.set(...pos);
@@ -628,7 +633,7 @@ export class Encounter {
       part(G.box, m.fill, pos, scale);
       part(G.edges, m.line, pos, scale);
     };
-    if (r.kind === 'trigger' || r.kind === 'zone' || r.obj === 'reach') {
+    if (r.kind === 'trigger' || r.kind === 'zone' || r.kind === 'sector' || r.kind === 'portal' || r.obj === 'reach') {
       const [w, h, d] = r.size;
       solidBox([0, h / 2, 0], [w, h, d]);
     } else if (r.obj === 'action') {

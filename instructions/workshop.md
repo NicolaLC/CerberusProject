@@ -27,7 +27,7 @@ other level is inert (`tool.editing === false`).
 - Rotation (`rotationKind`, `fitYaw`, `turned` are exported pure functions):
   - `kit.*`, `arch.*` and the props with collision (`prop.console`, `prop.crate`, `prop.puppetRack`): 90 degree steps on `yaw`. A free yaw given to `place` is fitted to 90 (kit.js / props.js throw otherwise). Other `prop.*`: 15 degree steps.
   - `env.box`, `env.strip`: 90 degree steps swap width and depth (and turn `faces`); no `yaw` is stored (builders ignore it).
-  - `trigger.volume`, `objective.reach`: like `env.box` (a quarter turn swaps width and depth of `size`). `marker.*`: 15 degree steps on `yaw`.
+  - `trigger.volume`, `zone.interior`, `zone.sector`, `zone.portal`, `objective.reach`: like `env.box` (a quarter turn swaps width and depth of `size`). `marker.*`: 15 degree steps on `yaw`.
   - `env.label`: 15 degree steps on `params.yaw`. `light.point`: does not turn.
   - enemies, pickups, `prop.gun`: 15 degree steps on `yaw`.
 - A mover's rail (`params.to`) and a boss arena (`params.arena`) move with the piece (`prop.cables` `to` is an offset: it moves by itself).
@@ -122,6 +122,8 @@ in the inspector (see Panels and helpers) or with `setParams`.
 | `marker.entry` | `group`, `enemies: [enemy.* ids]` | orange pad, arrow, one block per listed enemy |
 | `zone.interior` | `size [w,h,d]` (8,4,8). `pos` = centre x / bottom y / centre z. **An interior zone** (below) | blue translucent box |
 | `trigger.volume` | `size [w,h,d]` (4,3,4), `event` ('trigger'), `once` (true), `wakeGroup?`, `spawnGroup?`. `pos` = centre x / bottom y / centre z | magenta translucent box |
+| `zone.sector` | `size [w,h,d]`, `name` = sector name. **A sector (room)**: drawn, built and freed as a unit (level.md "Sectors") | violet translucent box |
+| `zone.portal` | `size [w,h,d]` (world axes). An always-open opening between sectors that is not a `kit.doorway` (level.md "Sectors") | lime translucent box |
 - **Gizmos** exist only in edit mode: `Encounter.spawn(data, { gizmo: true })` builds them (shared permanent geometry / materials, nothing to
   free per piece) and marks the record inert. In play (and in any normal level) `Encounter.load(level)` builds logic only: no objects, no
   colliders (`encounter.items[i].gizmo === null`). Not raycast by weapons; the editor picks them by bounds. A trigger volume is picked only
@@ -130,7 +132,7 @@ in the inspector (see Panels and helpers) or with `setParams`.
   member is awake (trooper alerted, drone / boss awake; `group:wake { group }` once per group), or on `wakeGroup(group)`. Only actors with
   `wake()` take part (trooper, drone, boss, dormant puppets); other puppets are always on and never count as awake.
   `params.dropGun` (every enemy; gun id) / `dropAmmo?` (rounds in the pickup, default the gun's `pickup.drop`) / `dropOnce?` (true): when it is destroyed it leaves that gun on the floor as a bare `pickup.gun` (`Pickups.dropGun`, wired in `game.js` on `puppet:down`), **unless the player already owns the gun**. With `dropOnce` only the first death of the level drops it (the set of dropped guns is cleared with the level), so a squad all carrying `dropGun: 'rifle'` yields one Warden; `dropOnce: false` drops on every death while the gun is not owned. Validation (meta `check`, `dropProblem`): known gun, `dropAmmo` >= 0, `dropAmmo` / `dropOnce` need `dropGun`. Inspector fields: dropGun, dropAmmo, dropOnce. Test: `tests/loadout.browser.mjs` section 5.
-  `params.dormant: true` (every enemy, needs a `group`, else `Registry.check` errors): never wakes itself (no sight, hearing, arena entry or damage wake; a shooter never pops up or fires), still takes hits and dies; only `wakeGroup` / `encounter:wake` wakes it, then it behaves normally. Restart and reload rebuild it from the level data. The editor's enemies are frozen, so nothing wakes in edit mode.
+  `params.dormant: true` (every enemy, needs a `group`, else `Registry.check` errors): never wakes itself (no sight, hearing, arena entry or damage wake; a shooter never pops up or fires), still takes hits and dies; only `wakeGroup` / `encounter:wake` wakes it, then it behaves normally. Restart and reload rebuild it from the level data. The editor's enemies are frozen, so nothing wakes in edit mode. In a sectored level (level.md "Sectors") a dormant enemy whose sector is out of sight skips its AI update and pose and is not drawn (`Enemies.cull`); it still takes hits and wakes with its group.
 - **Triggers**: fire on the frame the player's feet enter the box (starting inside counts); `once: true` fires one time per run. Fire =
   `events.emit('trigger:fired', { id, event })` with `id` = the piece `name`, else `trigger<n>` (n = order among triggers in the file),
   then `wakeGroup` / `spawnGroup`.
@@ -255,6 +257,15 @@ Suites `tests/prologue-warden.browser.mjs` (fresh pistol-only run, armoury take,
 - **Gizmo** (`world.spawn(data, { gizmo: true })`, used by the editor and the Library): the gate stays shut whatever happens and a translucent cyan ghost shows the space it slides into. Despawn frees it with the handle.
 - **Validation**: meta `check` (`onProblem`, shared with `log.line` / `env.alarm`) rejects a missing or malformed `on`, an unknown gun in `discovered:<gun>` and a bad `slide`; the builder rejects `time` at or below 0.
 - `prop.gun` `hideOn` (same forms) hides the model when it happens; the Prologue rack uses `objective:armoury:done`.
+- **`closeOn`** (optional, same forms): one-way progression. Once it happened, the gate (opened) shuts again **for good** as soon as the player is
+  >= 1.5 m past its plane and the camera >= 0.3 m past it, on the side away from where the player stood when it started opening, and no enemy stands
+  in its shut volume (`world.blocked`, set by Game; checked every frame until then, so it never closes on anyone). It slides back over `time`, its
+  collider and raycast entry come back, the lamp turns red; `gate.closed` then blocks its portal, so the sectors behind are freed (level.md "Sectors").
+  No sound (gates have none for opening either). Validation: `closeOn` an `on` form (`gateProblem`). Inert gates (editor, Library) never close.
+- **Prologue one-way doors** (`closeOn`): `c1-gate` `checkpoint:cp-c2`, `c2-gate` `objective:c3-jet`, `c3-gate` `checkpoint:cp-c4`, `c4-gate`
+  `objective:c5-hop`, `c5-gate` `objective:c6-transfer`, `bay-gate` `cut:purge-cut` (the calibration bay is sealed behind STEM-00 when the purge cut
+  starts; the cut places it in the hall). Never closed: `pen-gate`, `exit-gate`, and the hall / apron / building openings (the armoury, the late armoury
+  and every purge stage need them). Every checkpoint after a closed door is on its far side (`cp-c2`, `cp-c4`, `cp-yard`...).
 - Tests: `tests/kit.browser.mjs` (shut / half open / open, collision, ground, inert gizmo, despawn, validation, `hideOn`), `tests/prologue-exit.browser.mjs` (the Prologue's exit).
 
 ## Boot intro (#13)

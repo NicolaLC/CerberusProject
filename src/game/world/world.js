@@ -5,7 +5,8 @@ import { disposeTree } from '../../engine/dispose.js';
 import { GUNS, gunMaterials } from '../combat/guns.js';
 import { KIT_PIECES, MAT } from './kit.js';
 import { Grid } from './grid.js';
-import { onProblem } from './encounter.js';
+import { onProblem, levelSpawn } from './encounter.js';
+import { Sectors } from './sectors.js';
 import { PROP_PIECES, propMaterials, animateProps } from './props.js';
 import { ARCH_PIECES } from './arch.js';
 import { INTERIOR_PIECES, interiorMaterials } from './interior.js';
@@ -106,6 +107,14 @@ export const WORLD_PIECES = {
   ...INTERIOR_PIECES, // interior kit: arch.corridor (interior.js)
 };
 
+// Render-only pieces a sectored level builds with their sector instead of at load (sectors.js "Build on approach"): no light records,
+// no cover, nothing another piece refers to by name. meta `defer(params)`. arch.corridor's side / step colliders come with it (not cover).
+for (const id of ['arch.wall', 'arch.corridor', 'arch.ceiling', 'arch.cove', 'arch.panelling', 'arch.floorChannel', 'arch.coffers', 'arch.catwalk', 'arch.bulkhead', 'prop.pipes', 'prop.cables', 'prop.hazard', 'prop.panel']) {
+  WORLD_PIECES[id] = { ...WORLD_PIECES[id], defer: id === 'arch.corridor' ? (p) => !p.props : () => true };
+}
+const GATE_CLOSE = { player: 1.5, camera: 0.3 }; // m past a gate's plane, on the far side, before a `closeOn` gate shuts behind the player
+const _gb = new THREE.Box3();
+
 const COLLIDER_CELL = 4; // m, grid cell of the collider hash (arena boxes are 1-10 m; bigger spans use several cells)
 let _t0 = 0;
 let _t1 = 1;
@@ -156,6 +165,10 @@ export class World {
     this.gizmoMode = false; // set while spawn() builds a gizmo piece (editor, Library): a gate is inert and shows its travel
     this.registry = null; // of the loaded level, for spawn()
     this.batches = [];
+    this.sectors = new Sectors(this); // sectored levels: what is drawn / built / freed per room (sectors.js)
+    this.playerPos = null; // the player and camera positions of the last cull (gates closing behind the player)
+    this.camPos = null;
+    this.blocked = null; // (box) -> true while an enemy stands in it (set by Game): a gate never shuts on one
 
     this.mats = this.#makeMaterials();
     this.skins = this.#makeSkins();
@@ -194,15 +207,29 @@ export class World {
   load(level, registry) {
     this.unload();
     this.registry = registry;
-    this.#buildLevel(level, registry);
-    // ~60 boxes x up to 6 face materials -> one draw per material per 64 m chunk, one chunk for small levels (+ one shadow draw per chunk)
-    this.batches = mergeStatic(this.staticMeshes, this.scene);
+    const S = this.sectors;
+    S.setup(level, registry); // zone.sector / portals; render-only pieces inside one sector wait for it
+    this.#buildLevel(level, registry, S.deferred);
+    // ~60 boxes x up to 6 face materials -> one draw per material per 64 m chunk, one chunk for small levels (+ one shadow draw per chunk);
+    // a sectored level: per material per sector mask (then chunked) so rooms out of sight are not drawn
+    this.batches = mergeStatic(this.staticMeshes, this.scene, S.active ? (m) => S.maskOf(m) : null);
+    if (S.active) {
+      S.layer(this.batches);
+      for (const o of [...this.props, ...this.labels]) S.tag(o);
+      for (const g of this.gates) {
+        S.tag(g.mesh); // the slab is a raycast target: only its dressing is tagged
+        for (const l of g.lamps) S.tag(l);
+      }
+    }
+    S.linkGates(this.gates);
+    S.buildStart(levelSpawn(level).pos);
     this.lightSnap = true; // the level opens lit, no fade-in
     return this;
   }
 
   // Removes and frees the level: proxies and merged batches (geometry, own material clones), point lights.
   unload() {
+    this.sectors.clear();
     for (const m of this.staticMeshes) disposeTree(m, { keep: this.keep });
     for (const m of [...this.batches, ...(this.batches.shadows ?? [])]) disposeTree(m, { keep: this.keep });
     for (const l of this.lights.slice()) this.releaseLight(l);
@@ -279,10 +306,12 @@ export class World {
   // A sliding gate (kit.gate): `mesh` is the box kit.js just built through box(). It leaves the static batches (it moves) but keeps its
   // collider and raycast entry; `react('<on form>')` starts it opening. opts: { on, height, slide: 'up' | 'down', time, lamps (status lamp meshes), lampOpen (their material once open) }. Inert in gizmo mode
   // (editor, Library): it stays shut whatever happens and shows a ghost of the space it slides into.
-  addGate(mesh, { on, height, slide, time, lamps = [], lampOpen = null }) {
+  // closeOn (an `on` form): once it happened, the open gate shuts again for good as soon as the player (and the camera) are past it, on
+  // the side away from where the player was when it opened, and no enemy stands in it (checked every frame until then).
+  addGate(mesh, { on, closeOn = null, height, slide, time, lamps = [], lampOpen = null }) {
     const i = this.staticMeshes.indexOf(mesh);
     if (i >= 0) this.staticMeshes.splice(i, 1); // merged batches are static
-    const g = { mesh, col: mesh.userData.collider, y0: mesh.position.y, h: height, dir: slide === 'down' ? -1 : 1, time, on, lamps, lampOpen, open: 0, opening: false, inert: this.gizmoMode };
+    const g = { mesh, col: mesh.userData.collider, y0: mesh.position.y, h: height, dir: slide === 'down' ? -1 : 1, time, on, closeOn, lamps, lampOpen, lampShut: lamps[0]?.material ?? null, open: 0, opening: false, inert: this.gizmoMode, colY: [mesh.userData.collider.box.min.y, mesh.userData.collider.box.max.y], from: 0, closeArmed: false, closing: false, closed: false };
     this.gates.push(g);
     if (g.inert) {
       const { width, height: h, depth } = mesh.geometry.parameters;
@@ -317,6 +346,7 @@ export class World {
     }
     let n = 0;
     for (const g of this.gates) {
+      if (!g.inert && g.closeOn != null && g.closeOn === key) g.closeArmed = true;
       if (g.inert || g.opening || g.on !== key) continue;
       g.opening = true;
       for (const l of g.lamps) l.material = g.lampOpen; // status lamp: sealed red -> open cyan
@@ -339,9 +369,48 @@ export class World {
       const k = this.meshes.indexOf(m);
       if (k >= 0) this.meshes.splice(k, 1);
     } else {
-      b.min.y = g.y0 - g.h / 2 + dy;
-      b.max.y = g.y0 + g.h / 2 + dy;
+      b.min.y = g.colY[0] + dy; // the shut collider moved (the mesh may be sunk into the floor: World.box)
+      b.max.y = g.colY[1] + dy;
     }
+  }
+
+  // Signed distance of a point from a gate's plane (along the gate's thin axis).
+  #gateSide(g, p) {
+    const b = g.col.box;
+    return b.max.x - b.min.x < b.max.z - b.min.z ? p.x - g.mesh.position.x : p.z - g.mesh.position.z;
+  }
+
+  // A `closeOn` gate may shut: the player and the camera are past it (away from the side it opened toward them) and its shut volume
+  // holds no enemy (the player is out of it by then).
+  #canClose(g) {
+    if (!this.playerPos || this.#gateSide(g, this.playerPos) * g.from > -GATE_CLOSE.player) return false;
+    if (this.camPos && this.#gateSide(g, this.camPos) * g.from > -GATE_CLOSE.camera) return false;
+    _gb.copy(g.col.box);
+    _gb.min.y = g.colY[0];
+    _gb.max.y = g.colY[1];
+    return !this.blocked?.(_gb);
+  }
+
+  // Per frame after update (game.js): sector visibility, building and freeing for the camera and the player (sectors.js); `all`: the
+  // Workshop editor, everything drawn. Remembers both positions for the gates closing behind the player.
+  cull(camera, playerPos, all = false) {
+    this.playerPos = playerPos;
+    this.camPos = camera.position;
+    if (!this.sectors.active) return;
+    if (all) this.sectors.showAll(camera);
+    else this.sectors.update(camera, playerPos);
+  }
+
+  // One small mesh per permanent material, for the shader warm-up (game.js): pieces a sectored level builds later still find
+  // their programs compiled. The caller adds them to the scene for the compile and disposes the geometry after.
+  warmMeshes() {
+    const geo = new THREE.BoxGeometry(0.01, 0.01, 0.01);
+    return [...this.keep].map((m) => {
+      const mesh = new THREE.Mesh(geo, m);
+      mesh.receiveShadow = true;
+      mesh.position.set(0, -500, 0);
+      return mesh;
+    });
   }
 
   // Textures of the permanent materials (grid textures, skins, gun props), for an upfront GPU upload (game.js).
@@ -507,9 +576,22 @@ export class World {
     }
     animateProps(this, t, dt);
     for (const g of this.gates) {
-      if (!g.opening || g.open >= 1) continue;
-      const k = Math.min(1, g.open + dt / g.time);
-      this.#moveGate(g, k);
+      if (g.inert || !g.opening || g.closed) continue;
+      if (!g.from && this.playerPos) g.from = Math.sign(this.#gateSide(g, this.playerPos)) || 1; // the side it opened in front of
+      if (g.closing) {
+        const k = Math.max(0, g.open - dt / g.time);
+        this.#moveGate(g, k);
+        if (k <= 0) {
+          g.closing = false;
+          g.closed = true; // for good: the portal stays shut, the rooms behind can be freed (sectors.js)
+        }
+      } else if (g.open < 1) this.#moveGate(g, Math.min(1, g.open + dt / g.time));
+      else if (g.closeArmed && !g.closed && this.#canClose(g)) {
+        g.closing = true;
+        g.mesh.visible = true;
+        if (!this.meshes.includes(g.mesh)) this.meshes.push(g.mesh);
+        for (const l of g.lamps) l.material = g.lampShut; // status lamp back to sealed
+      }
     }
     for (const f of this.flickerLights) {
       const n = Math.sin(t * 23.0 + f.seed) * Math.sin(t * 7.3 + f.seed * 2.0);
@@ -792,11 +874,11 @@ export class World {
     }
   }
 
-  #buildLevel(level, registry) {
+  #buildLevel(level, registry, skip) {
     registry.check(level);
     if (level.skin != null && !this.skins[level.skin]) throw new Error(`level: unknown skin "${level.skin}"`);
     this.skin = level.skin ?? null;
     for (const z of level.interiorZones ?? []) this.interiorZones.push(new THREE.Box3(new THREE.Vector3(...z.min), new THREE.Vector3(...z.max)));
-    for (const piece of registry.piecesOf(level, 'world')) registry.build('world', this, piece);
+    for (const piece of registry.piecesOf(level, 'world')) if (!skip.has(piece)) registry.build('world', this, piece);
   }
 }
