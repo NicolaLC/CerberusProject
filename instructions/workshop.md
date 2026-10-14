@@ -94,7 +94,7 @@ the mode is `'play'` (`game.editing` false) and the player, weapon, pickups and 
   - Fields by piece: `env.box` size, mat, cover, collide, shadow; `env.strip` size, mat; `env.label` text, size, flat; `light.point` color, intensity, distance;
     `prop.gun` gun, hideOn; every `kit.*` its size params + mat (`kit.platform`: size, height, stairs, parapets, mat, coverMat); enemies `group`, `dormant` (`enemy.mover` also `to`, `speed`);
     `marker.entry` group, enemies (comma list); `zone.interior` size; `trigger.volume` size, event, once, wakeGroup, spawnGroup; `objective.*` text, detail, order, limit, wakeGroup, spawnGroup + their own (Missions). `pickup.gun` gun, ammo; `log.line` text, on, priority, once, delay (Log lines); `intro.boot` lines (separated by `|`), duration, skippable, after (Boot intro); `intro.cinematic` skippable only (its `shots` / `wake` are edited in the file, Intro cinematic). Markers (`marker.spawn`, `marker.checkpoint`), ammo pickups and `boss.spider`'s arena have only `name` / `group`.
-  - Not in the UI: `faces`, `ownMaterial`, `flicker`, `env.label` colors, `boss.spider` arena, `kit.*` `yaw` (use R).
+  - Not in the UI: `faces`, `ownMaterial`, `flicker`, `env.label` colors, `boss.spider` / `boss.cerberus` arena, `enemy.drone` bounds, `kit.*` `yaw` (use R).
 - **Selection**: a `Box3Helper` tinted by cover class (wall white, high blue, low orange, none yellow) and the status
   panel (right): count, snap, undo / redo depth, the piece's id, pos, yaw, size and cover flags.
 - All helpers, panels, listeners, the HUD state and every piece handle are freed in `dispose()`.

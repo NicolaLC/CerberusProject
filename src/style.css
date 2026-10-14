@@ -193,7 +193,7 @@ html body.title #overlay { opacity: 1; } /* index.html keeps it transparent unti
 
 #death { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; font: 700 22px var(--font-main); letter-spacing: 6px; color: #ff6a5a; background: rgba(60, 0, 0, 0.35); pointer-events: none; }
 
-/* boss bar: core health, one pip per leg, state */
+/* boss bar: core health, one pip per leg, state (or one bar per head: .seg) */
 #boss { position: absolute; left: 50%; top: 64px; width: min(460px, 70vw); transform: translateX(-50%); font: 700 12px var(--font-main); letter-spacing: 3px; color: #ffb48a; text-align: center; opacity: 0; transition: opacity 0.4s; }
 #boss.on { opacity: 1; }
 #boss .bar { height: 8px; margin: 4px 0; background: rgba(40, 10, 0, 0.6); border: 1px solid #ff7a3a; }
@@ -202,6 +202,14 @@ html body.title #overlay { opacity: 1; } /* index.html keeps it transparent unti
 #boss .legs i { display: inline-block; width: 12px; height: 6px; margin-right: 4px; background: #ff2bd6; box-shadow: 0 0 6px #ff2bd6; }
 #boss .legs i.gone { background: #3a2a30; box-shadow: none; }
 #boss .state { color: #ff6af0; }
+/* a boss with segments (CERBERUS): one bar per head instead of the core bar and the leg pips; the tick marks the floor it never drops below */
+#boss .segs { display: none; gap: 6px; margin: 4px 0 2px; }
+#boss.seg .segs { display: flex; margin-bottom: 18px; }
+#boss.seg .bar, #boss.seg .legs { display: none; }
+#boss .segs i { position: relative; flex: 1; height: 8px; background: rgba(40, 10, 0, 0.6); border: 1px solid #ff7a3a; font-style: normal; }
+#boss .segs b { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #ff5a1a, #ffb04a); box-shadow: 0 0 8px rgba(255, 110, 40, 0.8); }
+#boss .segs i::after { content: ''; position: absolute; left: var(--floor); top: -2px; bottom: -2px; width: 1px; background: #ff6af0; }
+#boss .segs u { position: absolute; left: 0; right: 0; top: 11px; text-decoration: none; font-size: 9px; letter-spacing: 2px; color: #ffb48a; }
 #toast { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font: 700 1.15em var(--font-main); letter-spacing: 3px; color: #7fe8ff; text-shadow: 0 0 8px rgba(56, 216, 255, 0.7); opacity: 0; }
 /* STEM-00 log: terminal readout panel. Header strip (::before, time from data-t), scanlines + corner brackets (backgrounds), cursor (::after); the typed text stays the element's only text node */
 #log { position: absolute; left: 50%; bottom: max(112px, 13vh); transform: translateX(-50%); box-sizing: border-box; width: max-content; max-width: min(64em, calc(100vw - 32px)); padding: 0 1em 0.65em; font: 1.3em ui-monospace, Consolas, 'DejaVu Sans Mono', monospace; letter-spacing: 0.06em; line-height: 1.4; color: #ffbe5c; text-shadow: 0 0 5px rgba(255, 179, 71, 0.35), 0 1px 2px #000; white-space: pre-wrap; opacity: 0; border: 1px solid rgba(255, 179, 71, 0.22);

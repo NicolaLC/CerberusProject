@@ -4,6 +4,7 @@ import { segSegDist } from '../../engine/math.js';
 import { Puppet, HEALTH, ENGAGE_RANGE } from './puppet.js';
 import { Trooper, TUNING as TROOPER } from './trooper.js';
 import { SpiderMech, TUNING as SPIDER } from './spider.js';
+import { Cerberus, TUNING as CERBERUS } from './cerberus.js';
 import { Drone, TUNING as DRONE } from './drone.js';
 import { CoverMap } from '../ai/cover.js';
 import { Grid } from '../world/grid.js';
@@ -19,7 +20,7 @@ import { GUNS } from '../combat/guns.js';
 
 // Enemy pieces (registry ids, a public contract: instructions/level.md). Data: { id, pos, yaw?, params? }.
 // The spawn list lives in the level file; builders run against this system and return the actor.
-// params (all enemies): group (spawn group name, see wakeGroup), dormant (bool, needs a group: only wakeGroup wakes it); mover { to: [x, y, z], speed }, drone: pos = the ground under it, boss.spider { arena: { minX, maxX, minZ, maxZ } }.
+// params (all enemies): group (spawn group name, see wakeGroup), dormant (bool, needs a group: only wakeGroup wakes it); mover { to: [x, y, z], speed }, drone: pos = the ground under it, boss.spider { arena: { minX, maxX, minZ, maxZ } }, boss.cerberus { arena, floor (0..1, the share of each head's health it never drops below), repair (of a head's health per second) }.
 // `stand`: puppets on a pneumatic stand (one instanced base + post each).
 // Inspector fields (level.md, piece meta): every enemy takes a spawn group.
 const GROUP = { key: 'group', type: 'text', optional: true };
@@ -51,6 +52,9 @@ export const ENEMY_PIECES = {
   // hovers and strafes, short bursts
   'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m`, check: enemyCheck, fields: [GROUP, DORMANT, ...DROP], build: (sys, d) => new Drone(sys.ctx, def('drone', d)) },
   // miniboss
+  // CERBERUS (the Prologue's scripted loss): three heads, never destroyed, never counted (`unkillable`: kills / arena:clear / destroy objectives skip it).
+  // `arena` (not in the inspector, like the spider's): where the player can be; wakes when they enter it, or by wakeGroup.
+  'boss.cerberus': { example: { params: {} }, label: `3 heads x ${CERBERUS.head} HP | never destroyed, repairs to full above ${Math.round(CERBERUS.floor * 100)}%, hull is armor`, check: enemyCheck, fields: [GROUP, DORMANT, { key: 'floor', type: 'number', min: 0, max: 1, optional: true }, { key: 'repair', type: 'number', min: 0, optional: true }], build: (sys, d) => new Cerberus(sys.ctx, def('boss', d)) },
   'boss.spider': { example: { params: {} }, label: `HP ${SPIDER.core} core | wakes at ${SPIDER.wakeRange} m or in its arena`, check: enemyCheck, fields: [GROUP, DORMANT, ...DROP], build: (sys, d) => new SpiderMech(sys.ctx, def('boss', d)) },
 };
 
@@ -104,6 +108,8 @@ export class Enemies {
       get player() { return self.player; },
       get time() { return self.time; },
       get all() { return self.all; },
+      get holdFire() { return self.holdFire; },
+      spawn: (data) => this.spawn(data),
       spawnBolt: (from, dir, damage) => this.spawnBolt(from, dir, damage),
       hurtPlayer: (amount, from) => this.hurtPlayer(amount, from),
       alertNear: (from, radius) => this.alertNear(from, radius),
@@ -193,7 +199,14 @@ export class Enemies {
     this.kills++;
     this.dirty = true;
     this.events.emit('puppet:down', actor);
-    if (this.kills === this.all.length) this.events.emit('arena:clear');
+    if (this.kills === this.killable) this.events.emit('arena:clear');
+  }
+
+  // Enemies that can be destroyed (everything but `unkillable` ones, i.e. CERBERUS): what `kills` is counted against.
+  get killable() {
+    let n = 0;
+    for (const e of this.all) if (!e.unkillable) n++;
+    return n;
   }
 
   // Tool APIs (Workshop, Gym): the boss the HUD bar and camera follow, the AI freeze (K in the Gym AI room: enemies stop
@@ -263,6 +276,19 @@ export class Enemies {
       this.events.emit('group:wake', { group });
     }
     return n;
+  }
+
+  // A level with several bosses (the SX-6, then CERBERUS): the bar and the camera follow the one that is engaged. Only moves on
+  // when the current one is not (asleep, or dead and gone), so a boss set by hand (Library, Workshop) stays.
+  #followBoss() {
+    const b = this.boss;
+    if (b && b.awake && (b.alive || b.debris.length > 0)) return;
+    for (const e of this.all) {
+      if (e !== b && e.kind === 'boss' && e.awake && (e.alive || e.debris.length > 0)) {
+        this.boss = e;
+        return;
+      }
+    }
   }
 
   #groupWake() {
@@ -509,6 +535,7 @@ export class Enemies {
       }
       this.sepReady = false;
       this.#groupWake();
+      this.#followBoss();
       for (let i = this.all.length - 1; i >= 0; i--) if (this.all[i].recalled) this.despawn(this.all[i]); // a recall reached its end
     }
 

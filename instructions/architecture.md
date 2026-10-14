@@ -30,7 +30,7 @@ src/
             looks.js (trooper / puppet models),
             player.js (motor: intent -> movement, cover, jetpack, vault, health; never touches a mesh), player-view.js (`player.view`: model, rig, skin, animation, root pose; reads the motor's state; the motor forwards `root` / `rigModel` / `skin` / `animator` / `muzzle`),
             enemy.js (shared enemy body: hit zones, weak spots, flash, debris death; `sightRay` line of sight for every type),
-            puppet.js (training puppets), trooper.js (cover-using soldiers), drone.js, spider.js (miniboss),
+            puppet.js (training puppets), trooper.js (cover-using soldiers), drone.js, spider.js (miniboss), cerberus.js (CERBERUS: three heads, never destroyed, `unkillable`),
             enemies.js (system: builds enemy.* / boss.* pieces, bolts, stands, target cache, squad alerts, `all` = every enemy)
     ai/     cover.js (cover spots from cover boxes, protection test, spot choice + detour route)
     combat/ guns.js (gun table), weapon.js (controller, hitscan, aim probe), ballistics.js (pure shot math)
