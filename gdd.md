@@ -397,16 +397,15 @@ Planned (#91), not in the code yet:
 |---|---|---|
 | Used by | AR, MG, BR | Sniper, railgun |
 | Crate refill | AR 96, MG 135, BR 72 | SR 10, RG 8 |
-| Drop refill | AR 32, MG 45, BR 24 | SR 3, RG 2 |
-| Fixed crates | 7 | 3 (range, interior, boss arena back) |
+| Drop refill (a gun dropped by an enemy, `dropGun`) | AR 32, MG 45, BR 24 | SR 3, RG 2 |
+| Fixed crates (arena) | 7 | 3 (range, interior, boss arena back) |
 
 - A pickup refills only its own class, each gun by its own amount, capped at that gun's max reserve.
 - The pistol's reserve is infinite (6.5), so pickups skip it: an empty pistol never stops "AMMO FULL".
 - Only guns the player owns are refilled (6.5).
-- Crates sit at 10 fixed spots (yard, west platform, range, interior, boss arena gate at (28, -17) and back), respawn
-  after 15 s.
-- Destroyed puppets drop a clip 45% of the time; 25% of drops are heavy. A drop vanishes after 25 s and blinks for
-  the last 4 s.
+- Loose crates are opt-in level data (`pickup.light` / `pickup.heavy`): the arena keeps its 10 fixed spots (yard, west
+  platform, range, interior, boss arena gate at (28, -17) and back), respawning after 15 s; the Prologue has none.
+- Enemies never drop ammo (owner decision, October 2026). An enemy may still drop a gun (`dropGun`).
 - Walk within 1.1 m to collect. Toast: "LIGHT AMMO +n AR ..." or "HEAVY AMMO +n SR ...". If every gun of the class is
   full the pickup stays and "AMMO FULL" shows.
 
