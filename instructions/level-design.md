@@ -44,7 +44,8 @@ Text the player reads goes in quotes, exactly as shown in game (narrative.md rul
 | `OPEN [gate]` | a sealed gate opens when the beat is done | `kit.gate` `on: objective:<id>:done` |
 | `CHECKPOINT [name]` | respawn point that matters here | `marker.checkpoint` |
 | `INTRO "line" / "line"` | boot screen at play start | `intro.boot` |
-| `CUT` ... | cutscene shot list (not supported yet, see section 4) | -- |
+| `GOAL action <move> "TEXT"` (`count N`) | do a move (cover, vault, slide, coverRun, jet), in the goal's box when it has one | `objective.action` |
+| `CUT` ... | cutscene shot list (section 4) | `cinematic.cut` |
 
 Rules:
 - Goal `order` = beat number x 10 (beat 3 = 30), so a beat can be inserted later (35) without renumbering.
@@ -84,22 +85,28 @@ A skip still fires every CUE / WAKE not reached. The camera path must stay clear
 
 ## 5. Example: the Prologue (`prologue.json`, as built)
 ```
-# PROVING GROUNDS  (loadout: pistol, skin: weathered)
--- map: the arena layout (level.md, Layout), calibration rack [rack] at (0, 1.6, 45) facing north,
--- the training yard rebuilt as a combat arena (see "Yard layout" below),
--- transit node behind [exit-gate] in the boss arena's north wall.
+# PROVING GROUNDS  (loadout: none (unarmed), skin: weathered, sky: night)
+-- map: calibration rack [rack] at (0, 1.6, 45) in cell 1, the calibration rooms C1-C6 running west, the weapons range west of C6,
+-- the drill hall south of it, the supply corridor, the building (halls A / B), the boss arena (the only open sky),
+-- transit node behind [exit-gate] in the boss arena's north wall. 14 sectors (level.md "Sectors").
 
 ## 0. Boot
+CUT   wake-up (intro.cinematic, 9.5 s: over the operator's shoulder, the surge at 2.4 s releases [cradle-00], push-in to the visor)
 INTRO "> BOOT SEQ 0x00" / "FRAME: STEM-00 / SERIAL 0" / "MOTOR CORE: NOMINAL" /
-      "WEAPON: KP-12 EMBER" / "HIVEMIND LINK: LOST" / "DIRECTIVE: NONE"
+      "WEAPON: NONE" / "HIVEMIND LINK: LOST" / "DIRECTIVE: NONE"   -- after cinematic:done, POV hand-off
 LOG   "> LINK: NONE. DIRECTIVE: NONE. QUERY: WHY?"  ON intro:done
 
-## 1. Leave calibration bay
-GOAL  reach [leave-bay] "LEAVE CALIBRATION BAY"
-LOG   "> MOTION UNRESTRICTED. NO ONE OBJECTS."  ON [bay-exit]
-
-## 2. Calibrate
-GOAL  destroy count 3 "CALIBRATION TARGETS"   -- as built: the bay's CALIBRATION 01-06 (c1-move .. c6-transfer, orders 10-17) before [leave-bay] (20); no yard puppets
+## 1. Calibration   -- one room per step, each gate opens on the step's done and shuts behind (closeOn); orders 10-17
+GOAL  reach [c1-move] "CALIBRATION 01: LOCOMOTION"                 -- 10; CHECKPOINT [cp-c2] past [c1-gate]
+GOAL  interact [c2-arm] "CALIBRATION 02: ARM"  GIVES pistol         -- 10.5: the KP-12 on the bench (prompt TAKE KP-12 EMBER)
+LOG   "> ITEM: KP-12. FUNCTION: CALIBRATION. QUERY: CALIBRATE WHAT?"  ON DISCOVER pistol
+GOAL  destroy calib "CALIBRATION 02: TARGETING"                     -- 11: three static targets (count 3)
+GOAL  reach [c3-jet] "CALIBRATION 03: VERTICAL THRUST"             -- 12: the exit is on a 1.6 m ledge; CHECKPOINT [cp-c4]
+GOAL  action cover "CALIBRATION 04: TAKE COVER"  WAKE calib-shooter -- 13
+GOAL  destroy calib-shooter "CALIBRATION 04: RETURN FIRE"           -- 14
+GOAL  action vault "CALIBRATION 05: VAULT"                          -- 15 (hop)
+GOAL  action slide "CALIBRATION 05: SLIDE"                          -- 16 (slide vault)
+GOAL  action coverRun count 2 "CALIBRATION 06: COVER TRANSFER"      -- 17
 
 ## 2.5 Weapons range   -- west of C6: in through [range-gate], out through [range-exit-gate] onto the hall landing
 GOAL  action fire light "WEAPONS RANGE: LIGHT ROUNDS"   -- racks: light (KR-7, KM-90, KB-3, cyan) / heavy (KS-5, KX-9, amber), supply crates beside them
@@ -107,7 +114,12 @@ LOG   "> RANGE: LIVE. CLASS LIGHT: KR-7, KM-90, KB-3. ROUNDS: COMMON."
 GOAL  action fire heavy "WEAPONS RANGE: HEAVY ROUNDS"   -- armored puppets only yield to heavy rounds
 LOG   "> CLASS HEAVY: KS-5, KX-9. ROUNDS: SCARCE. FUNCTION: BREAK ARMOR."
 LOADOUT pistol  ON [range-return]                       -- trigger.volume loadout: the range guns stay behind
-LOG   "> RANGE ARMS: RECALLED. KP-12: RETAINED. ROUNDS: UNLIMITED."  ON [range-return]
+LOG   "> RANGE ARMS: RECALLED. KP-12: RETAINED. ROUNDS: UNLIMITED."  ON [range-return]   -- priority high
+CHECKPOINT [cp-range]
+
+## 2.9 Leave calibration bay
+GOAL  reach [leave-bay] "LEAVE CALIBRATION BAY"        -- 20: the landing past [range-exit-gate]
+LOG   "> MOTION UNRESTRICTED. NO ONE OBJECTS."  ON [bay-exit]
 
 ## 3. Purge starts
 GOAL  wait CUT purge-cut "PURGE INITIATED"
@@ -137,10 +149,11 @@ CHECKPOINT [cp-hall], [cp-hall-east]
 
 ## 6. Armoury (optional)
 GOAL  interact [armoury] "SALVAGE A WEAPON"  GIVES rifle +64  SKIP IF [armoury-skip]  SKIP IF OWNED rifle
+-- [armoury-skip]: in front of [arena-door] in hall B: walking on toward the arena without the Warden skips it
 LOG   "> ITEM: KR-7. FUNCTION: KILL. QUERY: WHY DOES IT FEEL HEAVY?"  ON DISCOVER rifle
 
 ## 8. Purge: hall troopers
-GOAL  destroy purge-4 "PURGE: HALL TROOPERS"  WAKE purge-4
+GOAL  destroy purge-4 "PURGE: HALL TROOPERS"  WAKE purge-4   -- two troopers, dropGun rifle +64 (once, unless owned)
 LOG   "> HOSTILES DESTROYED: 15. ORDERS RECEIVED: 0. SOURCE: UNKNOWN."  ON DONE
 
 
@@ -173,7 +186,8 @@ LOG   "> SX-6: DESTROYED. GATE: OPEN. QUERY: WHO OPENED IT?"  ON DONE
 ## 12. Exit
 GOAL  reach [exit] "REACH TRANSIT NODE"  NEEDS rifle
 ```
-Half-numbered beats (6.5 stand-by: not in the file at present; 9.5; 10.5) are inserted beats: order 65, 95 and 105. Beats 7 (yard troopers, `purge-3`)
+Half-numbered beats (2.5 range: orders 18 / 19; 2.9 leave: 20; 6.5 stand-by: not in the file at present; 9.5; 10.5) are inserted beats: order 95 and 105.
+The calibration beat 1 predates the order rule (its steps are 10-17, the bench 10.5). Beats 7 (yard troopers, `purge-3`)
 and 9 (drones, `purge-5`) were merged into beat 4's troop (owner, 2026-10-14).
 
 **Drill hall** (beats 3-4; the Prologue's 5th area, built by script with `serializeLevel`): a roofed, sunken straight lane, interior kit.

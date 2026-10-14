@@ -54,18 +54,20 @@ plain `bun test` is bun's own test runner and finds nothing.
 - `tests/scenes.browser.mjs`: every scene opens via `?scene=`; arena → every other scene (the four Gym rooms, library, workshop, prologue) → arena for 3 cycles in one page:
   player at the spawn, enemy / pickup counts match the level file, boss bar / lock-on / kills / weapon reset, HUD zone title per scene, the Library's demo enemies
   never fire or wake (10 s in range), the panel's scene buttons, no console errors, and no leaks
-  (`renderer.info.memory.geometries` / `textures` and scene object count identical after every cycle, exact, no tolerance). The probe also shows all six player gun models for its draw (the raised gun is the only one that uploads otherwise, and the Prologue raises the pistol).
+  (`renderer.info.memory.geometries` / `textures` and scene object count identical after every cycle, exact, no tolerance; a first warm-up cycle is not counted: the permanent world materials upload their textures and their env map's PMREM the first time a level draws them, and keep them). The probe also shows all six player gun models for its draw (the raised gun is the only one that uploads otherwise, and the Prologue raises the pistol).
   This suite RENDERS (info.memory counts uploads) and, before each reading, draws once with culling off and both LOD variants,
   because three uploads lazily and the counts would otherwise follow what the camera happens to see.
 - `tests/art.browser.mjs`: art-style readability rules (art-style.md): weak spots brighter than every other enemy glow at rest,
   enemy glows violet / magenta only, STEM-00's amber only and `setCore`, arena `weathered` skin vs Library grids, no red arena light.
 - `scripts/screenshots.mjs <outDir> [names]`: the fixed art-review screenshot set (20 angles, canvas only, no HUD), for before / after.
 - `tests/loadout.browser.mjs`: owned guns (#91): a pistol-only `loadout` (keys, wheel, pad, HUD ∞ and slots), `pickup.gun` discovery (event once, switch, toast, then ammo), no `loadout` = all six, bad ids fail validation; uses `?scene=workshop`.
-- `tests/prologue-warden.browser.mjs`: the Prologue weapon discovery (#93): armoury rack, skip and trooper drop, pause before the troopers.
+- `tests/prologue-warden.browser.mjs`: the Prologue weapon discovery (#93): unarmed start and the bench, the range takes its guns back, armoury rack, skip and trooper drop, pistol-only completion.
+- `tests/prologue-helpers.mjs` (not a suite): page helpers the four Prologue suites share; `T.finish()` ends the current objective as a player would (put there, G, kills, the move's event, cuts skipped), `T.advanceTo(id)` walks the chain.
 - `tests/log.browser.mjs`: STEM-00 log lines (#40): `log.line` on start / trigger / objective done / discovered, once, delay, priority queue, entries, validation; uses `?scene=workshop`.
 - `tests/intro.browser.mjs`: boot intro (#13): `intro.boot` overlay and input lock, `intro:done`, `log.line` on `intro:done`, skip only once seen, pause, restart / edit, validation; uses `?scene=workshop`.
-- `tests/prologue.browser.mjs`: the Prologue level (`?scene=prologue`): boot overlay, input lock, `intro:done` within 12 s, first log line and objective, pistol only (HUD ∞), skip only with the seen flag, passive yard, dormant `purge-*` groups.
+- `tests/prologue.browser.mjs`: the Prologue level (`?scene=prologue`): intro cinematic then boot overlay, input lock, `intro:done` within 12 s, first log line and objective (CALIBRATION 01), unarmed until the bench, skip only with the seen flag, passive calibration targets, dormant groups (culled out of sight).
 - `tests/prologue-exit.browser.mjs`: the Prologue's end (#15): exit gate shut then open, the exit needs the Warden, mission complete screen with real stats, RESTART, checkpoint respawn.
+- `tests/prologue-purge.browser.mjs`: the Prologue chain (#14): order, the purge start and its cut, one group awake per stage, the boss cut's end state, alarm, checkpoints, out-of-order kills, the supply corridor.
 - `tests/mission.browser.mjs`: mission framework (objective pieces, full mission in play, order, reinforcements, trigger reach, limit, restart / edit / scene switch, bad params); uses `?scene=workshop`.
 - `tests/gym-traversal|gym-range|gym-ai|gym-stress.browser.mjs`: the Gym rooms as fixtures (instructions/gym.md); they
   also print the measured metrics (metrics.md 8b). gym-stress takes several minutes under SwiftShader.
