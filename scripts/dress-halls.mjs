@@ -44,12 +44,12 @@ add('arch.floorChannel', [-12, 0, -37], { size: [0.5, 8], light: 'cyan' }); // f
 add('arch.floorChannel', [2, 0, -40], { size: [8.5, 0.5], light: 'cyan' }); // to the opening into hall B
 add('arch.floorChannel', [-6, 0, -46], { size: [1.2, 1.2], light: 'none' }); // a hatch under the skylight
 add('arch.floorChannel', [-19, 0, -54], { size: [1.2, 1.2], light: 'none' });
-add('arch.catwalk', [-6, 0, S], { length: 10, width: 1.2, height: 5.0 }, ROOM.pz); // above jet reach from the high cover (2.8 + 1.9)
-add('prop.pipes', [-17, 5.6, S], { length: 9, count: 3, mount: 'wall', valves: 2 }, ROOM.pz);
+// (the south wall holds the solid mezzanine, hall-mezzanine: deck at 3.6, so the pipes and the sign go above head height on it)
+add('prop.pipes', [-17, 6.2, S], { length: 9, count: 3, mount: 'wall', valves: 2 }, ROOM.pz);
 add('prop.pipes', [-23.7, 5.9, -46], { length: 10, count: 2, mount: 'wall', valves: 1 }, ROOM.px);
 add('prop.cables', [-23.2, 0, -44], { to: [3, 0, -6], count: 3 });
-add('prop.cables', [7.2, 0, -58], { to: [-4, 0, 2.5], count: 2 });
-add('prop.panel', [-2, 2.75, S + 0.06], { text: 'ASSEMBLY HALL A\nLINE 2', width: 1.8 }, ROOM.pz);
+add('prop.cables', [7.2, 0, -56], { to: [-4, 0, 2.5], count: 2 });
+add('prop.panel', [-8.4, 5.9, S + 0.06], { text: 'ASSEMBLY HALL A\nLINE 2', width: 1.8 }, ROOM.pz);
 add('prop.panel', [7.75 - 0.06, 2.75, -44], { text: 'HALL B\nMAINTENANCE', width: 1.4 }, ROOM.nx);
 
 // hall B (x 8.25..23.7): the arena door in the east wall z -54..-50, the heavy supply against it at z -59

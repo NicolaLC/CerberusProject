@@ -225,7 +225,12 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
   it rushes in at ×2 speed until 5 m away (max 4 s), where the stomp takes over. Circling uses local steering (`steer`: probes
   3.5 m ahead over a fan of angles, keeps its detour side); no progress for 0.8 s flips the detour side. Collision radius 4.2 m (the whole leg
   span, so legs don't reach into walls), walks over low cover, not through walls. A foot whose spot is behind or on
-  a wall is pulled in toward the body. Legs: tripod gait, IK (femur 2.4, tibia 3.8, knees up), a foot steps when 1.3 m from home.
+  a wall is pulled in toward the body (to 60% at most), and no foot comes nearer the body's centre than 2.6 m. Legs: tripod gait,
+  IK (femur 2.4, tibia 3.8, knees up), a foot steps when 1.3 m from home; only once every foot is planted, and the tripod of the
+  foot trailing farthest goes (first come starved the other tripod: a foot left metres behind, the leg stretched toward it).
+  Bones are placed with a fixed twist (the leg plane's normal), not `setFromUnitVectors`, which flips as a segment passes vertical.
+  Crippled (fewer than four legs, or none on one side) it stays down for good, firing cannon and mortar while the hatch is shut
+  and launching drones from its hull (`drones`: up to 2 every 8-12 s while fewer than 2 live, 4 over the fight).
 
 ## CERBERUS (`game/actors/cerberus.js` TUNING, scripted loss, gdd.md 8.5)
 - `boss.cerberus`: a colossal machine (about 22 m across, hull 7 m up) clamped to the tower beside the Skyway, out of reach (no walkable
@@ -255,6 +260,8 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
 ## Troopers (`game/actors/trooper.js`, cover in `game/ai/cover.js`)
 - Armed soldiers (150 hp, 1 weak spot, rifle). Idle until they see the player (32 m + line of sight), get
   shot, or a squadmate within 22 m alerts them.
+- `post: true`: holds its spawn spot for good (a gunner on a mezzanine behind a parapet). Crouched; stands up to shoot when the
+  player is in sight from standing height (bursts as usual); never relocates, flanks, retreats or hunts.
 - Take cover: pick a free spot whose box is between them and the player (threat within ~50° behind the box),
   6-28 m from the player (34 m when retreating: never out of the fight), ideally ~15 m, reachable in a straight line or around the spot's own box (one corner
   waypoint; no general pathfinding, same floor level only). Spots are reserved, one trooper each.

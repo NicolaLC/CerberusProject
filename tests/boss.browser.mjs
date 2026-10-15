@@ -120,11 +120,25 @@ const r = await p.evaluate(async () => {
   // plate greaves: light rounds and the pistol do x0.3 to a leg (knee included), heavy rounds full; hull and core unchanged
   out.greaves = boss.armor('weak', knee, light) === 0.3 && boss.armor('limb', legPart, light) === 0.3 && boss.armor('limb', legPart) === 0.3;
   out.hullHeavy = boss.armor('torso', hull, heavy) === 0 && boss.armor('weak', boss.core, heavy) === 0;
-  // 8. one collapse takes at most coreBite of the core, then the hatch closes and it stands up early
+  // 8. one collapse takes at most coreBite of the core, then the hatch closes; two legs left can't stand it up, so it stays
+  // down (crippled) and the hatch only opens again on the next leg
   for (const l of boss.legs.slice(2, 4)) boss.damage(500, l.foot, dir, 'weak', l.knee);
   for (let i = 0; i < 20; i++) boss.damage(100, boss.pos, dir, 'weak', boss.core);
   out.coreTaken = boss.maxHealth - boss.health;
-  out.biteCapped = boss.alive && Math.abs(out.coreTaken - boss.t.coreBite * boss.maxHealth) < 1e-6 && boss.armor('weak', boss.core) === 0 && boss.down <= 0.6;
+  out.biteCapped = boss.alive && Math.abs(out.coreTaken - boss.t.coreBite * boss.maxHealth) < 1e-6 && boss.armor('weak', boss.core) === 0 && boss.crippled && boss.down > 0;
+  // 8b. crippled, hatch shut: it launches drones, never more than `max` alive nor `total` over the fight (killed as they come)
+  const isDrone = (e) => e.kind === 'drone';
+  let launched = 0;
+  let maxAlive = 0;
+  const seen = new Set();
+  for (let i = 0; i < 60; i++) {
+    hold(30, -40, 1);
+    const ds = enemies.all.filter((e) => isDrone(e) && e.alive);
+    maxAlive = Math.max(maxAlive, ds.length);
+    for (const e of ds) if (!seen.has(e)) { seen.add(e); launched++; }
+    if (i % 3 === 2) for (const e of ds) e.damage(1e5, e.pos, dir, 'torso', null);
+  }
+  out.drones = { launched, maxAlive };
   // 9. no legs left: down for good, no cap, kill it through the core
   for (const l of boss.legs.slice(4)) boss.damage(500, l.foot, dir, 'weak', l.knee);
   const kills = enemies.kills;
@@ -156,7 +170,8 @@ expect('gets back up after a while', r.getsBackUp);
 expect('  standing again: the legs take damage from heavy rounds', r.legsHittableUp);
 expect('  plate greaves: light rounds and the pistol do x0.3 to a leg, knee included', r.greaves);
 expect('  heavy rounds do not pierce the hull or the closed core', r.hullHeavy);
-expect('one collapse takes at most coreBite of the core, then the hatch closes', r.biteCapped);
+expect('one collapse takes at most coreBite of the core, then the hatch closes (crippled: stays down)', r.biteCapped);
+expect('crippled: launches drones, a limited number', r.drones.launched === 4 && r.drones.maxAlive <= 2);
 expect('dies when the core is destroyed', r.dies);
 expect('no page errors', errors.length === 0);
 if (errors.length) console.log(errors);

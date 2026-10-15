@@ -39,9 +39,11 @@ export const TUNING = {
   burst: { charge: 0.7, shots: 6, gap: 0.11, cooldown: [2.2, 3.4], spread: 0.025, damage: 9 },
   mortar: { every: [6, 8.5], coverBoost: 1.8, flight: 1.5, radius: 3.6, damage: 34, minRange: 8 },
   stomp: { range: 6.5, telegraph: 0.75, radius: 7, damage: 24, cooldown: 3 },
+  drones: { total: 4, batch: 2, max: 2, every: [8, 12], first: 1.5 }, // crippled: launches up to `batch` drones from its hull
+  // when fewer than `max` of them live, `total` at most over the fight
 };
 
-const LEG = { femur: 2.4, tibia: 3.8, step: 1.3, stepTime: 0.3, stepHeight: 0.7, lead: 0.35 };
+const LEG = { femur: 2.4, tibia: 3.8, step: 1.3, stepTime: 0.3, stepHeight: 0.7, lead: 0.35, under: 2.6 }; // under: min m from the body's centre to a foot
 const HIPS = [[1.25, 1.2], [1.45, 0], [1.25, -1.2]]; // [|x|, z] on the hull, front to back
 const REST = [[3.8, 3.1], [4.4, 0], [3.8, -3.1]]; // foot rest offsets in the body's space (legs splayed wide)
 // rim sensor clusters: [angle around the rim (0 = front), height on the band, cluster radius, lenses]
@@ -55,7 +57,7 @@ const _h = new THREE.Vector3();
 const _k = new THREE.Vector3();
 const _f = new THREE.Vector3();
 const _c = new THREE.Vector3();
-const _yAxis = new THREE.Vector3(0, 1, 0);
+const _n = new THREE.Vector3();
 const DEBRIS_DIR = new THREE.Vector3();
 const DEBRIS = { dir: DEBRIS_DIR, push: [3, 3], spread: 3, up: [3, 3], spin: 8, life: 6 }; // see DebrisBank.burst
 const BLAST = { point: new THREE.Vector3(), radius: 0, kind: '' };
@@ -236,8 +238,8 @@ export class SpiderMech {
     this.muzzle.position.set(0, 0.06, 2.05); // between the pods; shots alternate to each pod (GUN_SIDE)
     this.guns.add(this.muzzle);
 
-    // legs: femur and tibia bones are posed by IK every frame (root space), +Y along the segment; their twist is
-    // arbitrary, so the leg looks stay round-ish
+    // legs: femur and tibia bones are posed by IK every frame (root space), +Y along the segment, +Z facing out of the leg
+    // (placeBone)
     this.legs = [];
     for (let i = 0; i < 6; i++) {
       const side = i < 3 ? 1 : -1; // +X = the mech's left
@@ -286,7 +288,7 @@ export class SpiderMech {
       this.legs.push({
         side, row, femur, tibia, knee, hip, rest, foot,
         group: (row + (side > 0 ? 0 : 1)) % 2, // tripod gait: two alternating groups of three
-        from: new THREE.Vector3(), to: new THREE.Vector3(), stepT: -1,
+        home: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(), stepT: -1,
         health: TUNING.legHealth, alive: true,
       });
     }
@@ -317,9 +319,17 @@ export class SpiderMech {
     return n;
   }
 
+  // Can't stand any more: fewer than four legs, or none left on one side. It stays down for good.
+  get crippled() {
+    let l = 0;
+    let r = 0;
+    for (const g of this.legs) if (g.alive) g.side > 0 ? l++ : r++;
+    return l + r < 4 || !l || !r;
+  }
+
   // Core open: collapsed with the hatch up (its bite not spent, or no legs left).
   get coreOpen() {
-    return this.down > 0 && (this.bite > 0 || this.down === Infinity);
+    return this.down > 0 && (this.bite > 0 || this.legsLost === 6);
   }
 
   // Damage multiplier for a hit on this object: the hull and closed core shrug shots off; while the core is open the legs
@@ -340,10 +350,10 @@ export class SpiderMech {
     if (!this.awake && !this.dormant) this.#wake();
     const p = object?.userData.part;
     if (p === 'core') {
-      if (this.down !== Infinity) {
+      if (this.legsLost < 6) {
         amount = Math.min(amount, this.bite);
         this.bite -= amount;
-        if (this.bite <= 0) this.down = Math.min(this.down, 0.6); // hatch closes: break more legs
+        if (this.bite <= 0 && !this.crippled) this.down = Math.min(this.down, 0.6); // hatch closes: break more legs
       }
       this.health -= amount;
       if (this.health <= 0) {
@@ -406,10 +416,16 @@ export class SpiderMech {
     for (const b of [leg.femur, leg.tibia]) b.scale.setScalar(1e-4); // hides its skinned parts
     this.hitMeshes = this.hitMeshes.filter((m) => m.userData.part !== this.legs.indexOf(leg));
     this.ctx.markDirty();
-    // every second leg lost brings it down (a mech with no legs left stays down)
-    const lost = this.legsLost;
-    if (lost % 2 === 0 || lost >= 5) {
-      this.down = lost >= 6 ? Infinity : this.t.downTime;
+    // the legs left on each side spread over the front, middle and back rest spots
+    for (const s of [1, -1]) {
+      const left = this.legs.filter((l) => l.alive && l.side === s);
+      const rows = [[1], [0, 2], [0, 1, 2]][left.length - 1] ?? [];
+      left.forEach((l, i) => l.rest.set(s * REST[rows[i]][0], 0, REST[rows[i]][1]));
+    }
+    // every second leg lost brings it down; crippled, it stays down (the hatch still closes when a bite is spent)
+    const crippled = this.crippled;
+    if (this.legsLost % 2 === 0 || crippled) {
+      this.down = crippled ? Infinity : this.t.downTime;
       this.bite = this.t.coreBite * this.maxHealth;
       this.gun.state = 'idle';
       this.gun.timer = 1.5;
@@ -497,6 +513,12 @@ export class SpiderMech {
       this.#stomp(dt, player);
     } else {
       this.vel.multiplyScalar(Math.max(0, 1 - dt * 6));
+      if (active && this.crippled && !this.coreOpen) {
+        // down for good, hatch shut: it still shoots from the ground, and calls drones
+        this.#cannon(dt, player);
+        this.#mortar(dt, player);
+        this.#drones(dt);
+      }
     }
     this.#updateOrbs(dt, player);
 
@@ -674,6 +696,25 @@ export class SpiderMech {
   }
 
   // Plasma mortar: lobbed at where the player is; a ring on the ground marks the impact.
+  // Crippled: while fewer than `max` of its drones live, launches up to `batch` more (ordinary awake drones of its spawn
+  // group, flying over the arena) from the top of the hull, `total` at most.
+  #drones(dt) {
+    const d = this.t.drones;
+    this.droneTimer = (this.droneTimer ?? d.first) - dt;
+    if (this.droneTimer > 0) return;
+    this.droneTimer = d.every[0] + Math.random() * (d.every[1] - d.every[0]);
+    this.drones = (this.drones ?? []).filter((x) => x.alive && this.ctx.all.includes(x));
+    const n = Math.min(d.batch, d.max - this.drones.length, d.total - (this.launched ?? 0));
+    if (n <= 0) return;
+    this.launched = (this.launched ?? 0) + n;
+    for (let k = 0; k < n; k++) {
+      const a = this.yaw + (k - (n - 1) / 2) * 2;
+      const drone = this.ctx.spawn({ id: 'enemy.drone', pos: [this.pos.x + Math.sin(a) * 2, this.pos.y + this.height + 1.5, this.pos.z + Math.cos(a) * 2], params: { group: this.squad ?? undefined, bounds: this.arena } });
+      drone.wake();
+      this.drones.push(drone);
+    }
+  }
+
   #mortar(dt, player) {
     const m = this.t.mortar;
     // hiding makes it come sooner: cover doesn't help against a lob
@@ -780,29 +821,39 @@ export class SpiderMech {
     this.body.rotation.set(pitch, 0, roll);
     root.updateMatrixWorld(true);
 
-    // gait: a foot steps when it trails too far from its rest spot and the other tripod is planted
+    // gait: once every foot is planted, the tripod of the foot trailing farthest from its rest spot (past the step length)
+    // lifts its trailing feet together (first come would starve the other tripod: a foot left behind for good)
     const world = this.ctx.world;
-    let stepping = -1;
-    for (const l of this.legs) if (l.alive && l.stepT >= 0) stepping = l.group;
+    const stride = this.down > 0 ? 3 : LEG.step;
+    let busy = !(dt > 0);
+    let worst = stride;
+    let lift = -1;
+    for (const l of this.legs) if (l.alive && l.stepT >= 0) busy = true;
     for (const l of this.legs) {
       if (!l.alive) continue;
-      const home = root.localToWorld(_h.copy(l.rest));
+      const home = root.localToWorld(l.home.copy(l.rest));
       home.addScaledVector(this.vel, LEG.lead);
       // never plant a foot in or on a wall: pull it in toward the body until the way is clear
       _c.set(this.pos.x, this.pos.y, this.pos.z);
-      for (let f = 0.8; f > 0.2 && !world.segmentClear(_c, home, 0.3, 1.3, 3); f -= 0.2) home.lerpVectors(_c, home, f / (f + 0.2));
+      for (let f = 0.8; f > 0.5 && !world.segmentClear(_c, home, 0.3, 1.3, 3); f -= 0.1) home.lerpVectors(_c, home, f / (f + 0.1));
       home.y = world.groundAt(home.x, home.z, this.pos.y + 1.5);
+      const lag = Math.hypot(home.x - l.foot.x, home.z - l.foot.z);
+      if (lag > worst) {
+        worst = lag;
+        lift = l.group;
+      }
+    }
+    if (busy) lift = -1;
+    for (const l of this.legs) {
+      if (!l.alive) continue;
+      const home = l.home;
       if (this.jump) {
         l.stepT = -1;
         l.foot.set(home.x, this.pos.y + 0.4, home.z); // in the air: feet tucked under the body (a planted foot would stretch the leg)
-      } else if (l.stepT < 0) {
-        const far = Math.hypot(home.x - l.foot.x, home.z - l.foot.z) > (this.down > 0 ? 3 : LEG.step);
-        if (far && (stepping < 0 || stepping === l.group) && dt > 0) {
-          l.stepT = 0;
-          l.from.copy(l.foot);
-          l.to.copy(home);
-          stepping = l.group;
-        }
+      } else if (l.group === lift && Math.hypot(home.x - l.foot.x, home.z - l.foot.z) > stride) {
+        l.stepT = 0;
+        l.from.copy(l.foot);
+        l.to.copy(home);
       }
       if (l.stepT >= 0) {
         l.stepT = Math.min(1, l.stepT + dt / LEG.stepTime);
@@ -816,6 +867,11 @@ export class SpiderMech {
           this.ctx.events.emit('boss:step', STEP);
         }
       }
+      // never under the hull: a step's straight path (the body turning, a wall pull) can cut beneath the hips, and a leg
+      // folded under its hip swings its knee round
+      _c.subVectors(l.foot, this.pos).setY(0);
+      const r = _c.length();
+      if (r < LEG.under) l.foot.addScaledVector(_c, LEG.under / Math.max(r, 1e-3) - 1);
       // IK: hip -> knee (bends up and out) -> foot
       const hip = this.body.localToWorld(_h.copy(l.hip));
       const d = _f.subVectors(l.foot, hip);
@@ -830,8 +886,9 @@ export class SpiderMech {
       _w.addScaledVector(d, -_w.dot(d)).normalize();
       const knee = _k.copy(hip).addScaledVector(d, a * cosA).addScaledVector(_w, a * sinA);
       const reach = _v.copy(hip).addScaledVector(d, dist);
-      placeBone(l.femur, root, hip, knee);
-      placeBone(l.tibia, root, knee, reach, true);
+      const n = _n.crossVectors(d, _w); // the leg plane's normal: a fixed twist, outer faces out on both bones
+      placeBone(l.tibia, root, knee, reach, n);
+      placeBone(l.femur, root, hip, knee, n.negate());
     }
     root.updateMatrixWorld(true);
     // the glowing parts (core, knees) were baked into the skin, so their meshes are frozen proxies that the update above
@@ -852,13 +909,19 @@ const ORB_GLOW_MAT = new THREE.MeshBasicMaterial({ color: PROJECTILE.glow, trans
 const RING_GEO = new THREE.RingGeometry(0.86, 1, 40);
 const RING_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(PROJECTILE.ring).multiplyScalar(2), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
 
-// Puts a segment bone (child of `root`, +Y along the segment) at world `a`, pointing at world `b`.
+// Puts a segment bone (child of `root`, +Y along the segment) at world `a`, pointing at world `b`, its +X along world
+// direction `x` (the twist; setFromUnitVectors alone picks one that flips as the segment swings past vertical).
 // The tibia is authored from the knee (y = 0) down, so it points from the knee to the foot.
 const _pa = new THREE.Vector3();
 const _pb = new THREE.Vector3();
-function placeBone(bone, root, a, b) {
+const _px = new THREE.Vector3();
+const _pz = new THREE.Vector3();
+const _pm = new THREE.Matrix4();
+function placeBone(bone, root, a, b, x) {
   const la = root.worldToLocal(_pa.copy(a));
   bone.position.copy(la);
-  const lb = root.worldToLocal(_pb.copy(b)).sub(la).normalize();
-  bone.quaternion.setFromUnitVectors(_yAxis, lb);
+  const y = root.worldToLocal(_pb.copy(b)).sub(la).normalize();
+  const lx = root.worldToLocal(_px.copy(a).add(x)).sub(la);
+  lx.addScaledVector(y, -lx.dot(y)).normalize();
+  bone.quaternion.setFromRotationMatrix(_pm.makeBasis(lx, y, _pz.crossVectors(lx, y)));
 }
