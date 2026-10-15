@@ -6,12 +6,13 @@ import gymStress from '../levels/gym-stress.json';
 import library from '../levels/library.json';
 import workshop from '../levels/workshop.json';
 import prologue from '../levels/prologue.json';
+import underworks from '../levels/underworks.json';
 import { loadJSON, saveJSON } from '../engine/storage.js';
 
 // Scene list: name -> level file. `?scene=<name>` opens one directly, `game.loadScene(name)` switches at runtime
 // (instructions/level.md). Add a scene: put the level file in src/levels/ and list it here.
 // The Gym is four rooms (Gym epic #58): gym = traversal and cover, then weapon range, enemy rooms, stress test.
-export const SCENES = { arena, gym, 'gym-range': gymRange, 'gym-ai': gymAi, 'gym-stress': gymStress, library, workshop, prologue };
+export const SCENES = { arena, gym, 'gym-range': gymRange, 'gym-ai': gymAi, 'gym-stress': gymStress, library, workshop, prologue, underworks };
 export const DEFAULT_SCENE = 'prologue'; // a new game opens the Prologue (#13); the arena is `?scene=arena`
 
 // Valid scene name for `name` (null / undefined / '' = default). Unknown names warn and fall back to the default.

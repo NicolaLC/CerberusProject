@@ -2,7 +2,7 @@ import { loadJSON, saveJSON } from '../../engine/storage.js';
 
 // Boot intro (#13, `intro.boot` piece in encounter.js): a full-screen overlay over the live scene while STEM-00 boots.
 // Black -> scanlines and static -> diagnostic lines typed in (cold white, monospace) -> the view fades in from black with an
-// exposure ramp (the optics coming online). A line containing HIVEMIND LINK: LOST flickers violet-magenta (art-style.md).
+// exposure ramp (the optics coming online). A line containing HIVEMIND LINK: LOST (or SEVERED) flickers violet-magenta (art-style.md).
 // Presentation plus the input lock: while `active`, `controls.locked` is set (controls.js); when it ends, `controls.ease`
 // ramps 0 -> 1 over TUNING.ease s so move and look return smoothly (the camera never snaps). Ends emit `intro:done` { skipped }.
 //
@@ -25,7 +25,7 @@ export const TUNING = {
   maxLines: 18, // lines kept on screen
 };
 export const STORAGE_KEY = 'cerberus.introSeen';
-export const HIVE = 'HIVEMIND LINK: LOST';
+export const HIVE = /HIVEMIND LINK: (LOST|SEVERED)/; // the link line that flickers violet (Prologue: LOST, Underworks: SEVERED)
 
 export class Boot {
   constructor({ controls, post, camRig = null }) {
@@ -183,8 +183,9 @@ export class Boot {
     if (row.n === n) return;
     row.n = n;
     const text = this.lines[i];
-    const a = text.toUpperCase().indexOf(HIVE);
-    const b = a + HIVE.length;
+    const m = HIVE.exec(text.toUpperCase());
+    const a = m ? m.index : -1;
+    const b = m ? a + m[0].length : -1;
     const parts = [];
     if (a < 0 || n <= a) parts.push(text.slice(0, n));
     else {
