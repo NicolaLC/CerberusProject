@@ -64,6 +64,9 @@ export class Summary {
       if (scene && !debrief) return this.#leave();
       this.state = 'waiting';
       this.t = 0;
+      // a cut that ended black (the Skyway's fall): stay black, no slow motion to watch, the report comes up out of the dark
+      this.dark = this.host.fade.value >= 0.999;
+      if (this.dark) this.host.fade.set(1);
       this.host.juice.hold(TUNING.slow);
     });
     return this;
@@ -73,7 +76,7 @@ export class Summary {
   update(realDt, padPressed = false, retryPressed = false) {
     if (this.state === 'idle' || this.state === 'gone') return;
     this.t += realDt;
-    if (this.state === 'waiting' && this.t >= TUNING.delay) this.#show();
+    if (this.state === 'waiting' && this.t >= (this.dark ? TUNING.beat : TUNING.delay)) this.#show();
     else if (this.state === 'leaving' && this.t >= this.beat) {
       this.state = 'gone';
       setTimeout(() => this.state === 'gone' && this.host.advance(this.chain), 0); // never reload inside a frame
@@ -116,6 +119,7 @@ export class Summary {
     this.state = 'idle';
     this.t = 0;
     this.button = this.alt = this.chain = null;
+    this.dark = false;
     this.el.hidden = true;
     this.el.replaceChildren();
   }
@@ -125,6 +129,7 @@ export class Summary {
     this.state = 'open';
     this.t = 0;
     host.juice.hold(TUNING.frozen);
+    if (this.dark) host.fade.to(0, 0.6); // the black gives way to the report (its own dark backdrop hides the frozen frame)
     host.controls.locked = true;
     host.release();
     const s = host.stats.snapshot();
