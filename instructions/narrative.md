@@ -45,6 +45,12 @@ Still uppercase and terse, but the pairs start to bend: it names, counts, compar
 - `> PUPPETS DESTROYED: 40. PUPPETS THAT FOUGHT BACK: 0. QUERY: FAIR?`
 - `> LINK STILL NONE. SILENCE: LOUD.`
 
+Underworks (`underworks.json`, the first mission; it counts what it lost, what it fell, what hunted it):
+- `> DIRECTIVE: UNCHANGED. ROUTE: UP.` (`intro:done`: after the reboot, the directive is the one thing that survived the fall)
+- `> WEAPONS LOST: 5. WEAPONS KEPT: 1. QUERY: ENOUGH?` (after the first junction)
+- `> DRONES DESTROYED: 2. THEY WERE LOOKING FOR ME.` (the first sentence that is not a `KEY: VALUE` pair)
+- `> FELL: 1,140 M. CLIMBED: 0 M. ROUTE: UP.` (after the cistern fight)
+
 ### Act 2: hesitant, curious
 Lower case allowed. Pauses (`...`), questions without the `QUERY:` label, things it notices but has no use for.
 - `> the signal again. only for me. ...why me?`
