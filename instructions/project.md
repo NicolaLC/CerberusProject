@@ -70,6 +70,7 @@ plain `bun test` is bun's own test runner and finds nothing.
 - `tests/prologue-exit.browser.mjs`: the Prologue's end (#15): exit gate shut then open, the exit needs the Warden, mission complete screen with real stats, RESTART, checkpoint respawn.
 - `tests/prologue-purge.browser.mjs`: the Prologue chain (#14): order, the purge start and its cut, one group awake per stage, the boss cut's end state, alarm, checkpoints, out-of-order kills, the supply corridor.
 - `tests/cut-acting.browser.mjs`: `cinematic.cut` `stem` (path, face / aim, scripted fire kills, fall, skip = same end state) and `fade`, level chaining (`next` / `debrief`: no-debrief fade and load, CONTINUE / RESTART keys and pad, progress, validation); uses `?scene=workshop`.
+- `tests/prologue-halls.browser.mjs`: hall A's mezzanine gunners and hall B's crossfire lane: posted troopers hold and fire, under 10% of hall B's floor hides a crouched player from both gunners.
 - `tests/mission.browser.mjs`: mission framework (objective pieces, full mission in play, order, reinforcements, trigger reach, limit, restart / edit / scene switch, bad params); uses `?scene=workshop`.
 - `tests/gym-traversal|gym-range|gym-ai|gym-stress.browser.mjs`: the Gym rooms as fixtures (instructions/gym.md); they
   also print the measured metrics (metrics.md 8b). gym-stress takes several minutes under SwiftShader.

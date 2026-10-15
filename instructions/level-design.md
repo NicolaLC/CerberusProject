@@ -164,8 +164,9 @@ GOAL  interact [armoury] "SALVAGE A WEAPON"  GIVES rifle +64  SKIP IF [armoury-s
 LOG   "> ITEM: KR-7. FUNCTION: KILL. QUERY: WHY DOES IT FEEL HEAVY?"  ON DISCOVER rifle
 
 ## 8. Purge: hall troopers
+-- hall B crossfire: two more of purge-4 posted at opposite corners (post: true), two drones; the low cover runs both ways
 GOAL  destroy purge-4 "PURGE: HALL TROOPERS"  WAKE purge-4   -- two PLATED troopers (armored: light rounds and the pistol x0.25 except the back cell; the Farsight breaks them), dropGun rifle +64 (once, unless owned)
-LOG   "> HOSTILES DESTROYED: 17. DIRECTIVE: UNCHANGED. SOURCE: UNKNOWN."  ON DONE
+LOG   "> HOSTILES DESTROYED: 21. DIRECTIVE: UNCHANGED. SOURCE: UNKNOWN."  ON DONE
 
 
 ## 9.5 Armoury, late

@@ -131,6 +131,7 @@ async function open() {
     const drop = T.guns();
     out.first = drop.map((i) => ({ gun: i.gun, ammo: i.ammo, near: Math.hypot(i.pos.x - a.pos.x, i.pos.z - a.pos.z) < 0.1 }));
     T.kill(b2);
+    for (const e of T.group(4)) if (e.alive) T.kill(e); // the hall B crossfire (gunners, drones): no drops
     T.step(0.1);
     out.second = T.guns().length;
     out.late = T.cur();

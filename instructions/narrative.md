@@ -48,7 +48,7 @@ Uppercase. `KEY: VALUE.` pairs, then at most one `QUERY: ...`. No feelings words
 
 Purge lines (placed after a wave, they wait for calm):
 - `> TARGETS: ARMED. DIRECTIVE: UNCHANGED. QUERY: WHO ARMED THEM?`
-- `> HOSTILES DESTROYED: 17. DIRECTIVE: UNCHANGED. SOURCE: UNKNOWN.`
+- `> HOSTILES DESTROYED: 21. DIRECTIVE: UNCHANGED. SOURCE: UNKNOWN.`
 - `> SQUAD: 4. STATUS: DESTROYED. EXIT: OPEN. QUERY: WHO SENT THEM?` (after the breakout cut)
 
 Weapon discovery (`log.line on: discovered:rifle`, Prologue armoury, #93; the one allowed "feel": it is a query about the gun's weight, the first thing STEM-00 cannot explain):

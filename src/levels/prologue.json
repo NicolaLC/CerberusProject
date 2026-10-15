@@ -270,7 +270,7 @@
     {"id":"env.alarm","name":"purge-alarm","pos":[0,1.6,45],"params":{"on":"objective:purge-start","off":"objective:purge-boss:done"}},
     {"id":"log.line","pos":[3,1.6,45],"params":{"text":"CALIBRATION UNIT 00: NONCOMPLIANT. PURGE.","on":"objective:purge-start","voice":"announcer"}},
     {"id":"log.line","pos":[4,1.6,45],"params":{"text":"> TARGETS: ARMED. DIRECTIVE: UNCHANGED. QUERY: WHO ARMED THEM?","on":"objective:purge-hall:done"}},
-    {"id":"log.line","pos":[5,1.6,45],"params":{"text":"> HOSTILES DESTROYED: 17. DIRECTIVE: UNCHANGED. SOURCE: UNKNOWN.","on":"objective:purge-troopers-hall:done"}},
+    {"id":"log.line","pos":[5,1.6,45],"params":{"text":"> HOSTILES DESTROYED: 21. DIRECTIVE: UNCHANGED. SOURCE: UNKNOWN.","on":"objective:purge-troopers-hall:done"}},
     {"id":"log.line","pos":[6,1.6,45],"params":{"text":"> ITEM: KR-7. FUNCTION: KILL. QUERY: WHY DOES IT FEEL HEAVY?","on":"discovered:rifle"}},
     {"id":"log.line","pos":[6.5,1.6,45],"params":{"text":"> ITEM: KS-5. ROUNDS: HEAVY. FUNCTION: BREAK ARMOR.","on":"discovered:sniper","priority":"high"}},
     {"id":"kit.doorway","name":"exit-door","pos":[30,0,-62.5],"params":{"width":4,"height":4,"length":10,"wallHeight":8,"thickness":1}},
@@ -635,6 +635,15 @@
     {"id":"prop.cables","name":"dress-58","pos":[49.5,0,-56],"params":{"to":[-5,0,3],"count":4}},
     {"id":"prop.cables","name":"dress-59","pos":[25,0,-36],"params":{"to":[3.5,0,-4],"count":3}},
     {"id":"prop.panel","name":"dress-60","pos":[24.36,3.2,-42],"yaw":1.5708,"params":{"text":"SX-6 PROVING FLOOR\nKEEP CLEAR","width":1.8}},
-    {"id":"prop.panel","name":"dress-61","pos":[49.94,3.2,-24],"yaw":4.7124,"params":{"text":"LOAD LIMIT 40 T","width":1.4}}
+    {"id":"prop.panel","name":"dress-61","pos":[49.94,3.2,-24],"yaw":4.7124,"params":{"text":"LOAD LIMIT 40 T","width":1.4}},
+    {"id":"env.box","pos":[21,0,-38],"params":{"size":[1,1.1,3],"mat":"inLow","cover":"low"}},
+    {"id":"env.box","pos":[16,0,-59.3],"params":{"size":[3,1.1,1],"mat":"inLow","cover":"low"}},
+    {"id":"env.box","pos":[12,0,-46],"params":{"size":[3,1.1,1],"mat":"inLow","cover":"low"}},
+    {"id":"env.box","pos":[15.5,0,-50],"params":{"size":[1,1.1,3],"mat":"inLow","cover":"low"}},
+    {"id":"env.box","pos":[20.5,0,-56.5],"params":{"size":[3,1.1,1],"mat":"inLow","cover":"low"}},
+    {"id":"enemy.trooper","name":"hallb-gunner-ne","pos":[22.6,0,-38],"yaw":-1.5708,"params":{"group":"purge-4","dormant":true,"hidden":true,"post":true}},
+    {"id":"enemy.trooper","name":"hallb-gunner-s","pos":[16,0,-60.8],"yaw":0,"params":{"group":"purge-4","dormant":true,"hidden":true,"post":true}},
+    {"id":"enemy.drone","pos":[12,0,-40],"params":{"group":"purge-4","dormant":true,"hidden":true,"bounds":{"minX":9,"maxX":23,"minZ":-61,"maxZ":-31}}},
+    {"id":"enemy.drone","pos":[12,0,-58],"params":{"group":"purge-4","dormant":true,"hidden":true,"bounds":{"minX":9,"maxX":23,"minZ":-61,"maxZ":-31}}}
   ]
 }
