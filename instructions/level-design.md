@@ -152,6 +152,7 @@ LOG   "> SUPPLY POINT: STOCKED. ROUNDS, REPAIR. QUERY: STOCKED FOR WHOM?"  ON [s
 
 ## 5. Purge: hall
 GOAL  destroy purge-2 "PURGE: HALL A"  WAKE purge-2   -- detail tells the player to resupply first ({interact})
+-- [hall-mezzanine]: a 3.6 m deck on the south wall, stairs at both ends; two of purge-2 are posted on it (post: true) and shoot down over the low cover
 LOG   "> TARGETS: ARMED. DIRECTIVE: UNCHANGED. QUERY: WHO ARMED THEM?"  ON DONE
 -- [hall-farsight]: a KS-5 Farsight (pickup.gun, sniper) on a stand just inside hall A's door: walking in takes it, before the plated troopers wake
 LOG   "> ITEM: KS-5. ROUNDS: HEAVY. FUNCTION: BREAK ARMOR."  ON DISCOVER sniper   -- priority high
@@ -164,7 +165,7 @@ LOG   "> ITEM: KR-7. FUNCTION: KILL. QUERY: WHY DOES IT FEEL HEAVY?"  ON DISCOVE
 
 ## 8. Purge: hall troopers
 GOAL  destroy purge-4 "PURGE: HALL TROOPERS"  WAKE purge-4   -- two PLATED troopers (armored: light rounds and the pistol x0.25 except the back cell; the Farsight breaks them), dropGun rifle +64 (once, unless owned)
-LOG   "> HOSTILES DESTROYED: 15. DIRECTIVE: UNCHANGED. SOURCE: UNKNOWN."  ON DONE
+LOG   "> HOSTILES DESTROYED: 17. DIRECTIVE: UNCHANGED. SOURCE: UNKNOWN."  ON DONE
 
 
 ## 9.5 Armoury, late

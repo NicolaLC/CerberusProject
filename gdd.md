@@ -539,12 +539,14 @@ with line of sight, or shoots it. On wake: toast "(warning sign) SX-6 TARANTULA"
 | Part | Rule |
 |---|---|
 | Hull, turret, closed shutters | Take no damage (sparks; the crosshair does not turn red). Block the railgun line |
-| Legs (6) | 160 HP each, limb x0.8; glowing knee joints are weak spots (x3); armored while the core is open. Plate greaves: light rounds and the pistol do x0.3 to a leg (knees included), heavy rounds full damage, so a heavy gun is the way to bring it down. A broken leg falls off, the body tilts toward the gap, speed drops 12% per lost leg (base 2.4 m/s) |
-| Core | 900 HP, weak x3. Reachable only when the mech is collapsed (shutters open, the core rises out of the hatch). One collapse takes at most 34% of it, then the hatch closes and the mech stands up (no cap once every leg is gone). Destroying it kills the mech |
+| Legs (6) | 160 HP each, limb x0.8; glowing knee joints are weak spots (x3); armored while the core is open. Plate greaves: light rounds and the pistol do x0.3 to a leg (knees included), heavy rounds full damage, so a heavy gun is the way to bring it down. A broken leg falls off, the body tilts toward the gap, the legs left on that side spread over the front, middle and back, speed drops 12% per lost leg (base 2.4 m/s) |
+| Core | 900 HP, weak x3. Reachable only when the mech is collapsed (shutters open, the core rises out of the hatch). One collapse takes at most 34% of it, then the hatch closes and the mech stands up, or stays down if crippled (no cap once every leg is gone). Destroying it kills the mech |
 
 **Phases (driven by leg loss):**
 1. **Standing:** armored, all attacks active, shoot the legs.
-2. **Collapsed:** every second leg lost (and the 5th) collapses it for 7 s; with none left it stays down. Shutters
+2. **Collapsed:** every second leg lost collapses it for 7 s. Crippled (fewer than four legs, or none left on one
+   side) it stays down for good: every further leg lost opens the hatch again, and with it shut it still fires the
+   cannon and the mortar from the ground and launches drones from its hull (2 at a time, 4 in all). Shutters
    open and the core rises out of the hatch, exposed to shots from the ground.
 3. **Recovered:** after 7 s it stands again, slower and tilted.
 

@@ -16,6 +16,8 @@ import { navGrid, navStep } from '../ai/nav.js';
 // bursts, or once when badly hurt (retreat). Getting hit while exposed can suppress them back into cover.
 // No cover reachable: they hunt (path toward the player round walls, ai/nav.js), fight in the open once in sight, and keep looking.
 // Running (to cover, flanking, hunting) they fire short bursts at the player in sight, with a wider spread.
+// `post` (param): holds its spawn spot for good (a gunner on a mezzanine behind a parapet): crouches, stands up to shoot
+// when the player is in sight, never runs, flanks or hunts.
 // Squad tactics: cover choice fans out around the player (spread), and the Enemies flank director
 // periodically sends one trooper (flank()) to cover on the player's side or rear while the rest keep
 // the player pinned.
@@ -83,6 +85,7 @@ export class Trooper extends EnemyBody {
       weakSpots: def.armored ? 0 : 1, // plated: no weak spot, the plates are the way in
     });
     this.armored = !!def.armored; // `armored` param: plated, see armor()
+    this.post = !!def.post;
     this.plates = buildTrooper(this.rig, this.mats, this.visor, this.armored) ?? {}; // group -> [look group]
     if (this.armored) this.debrisKind = 'trooper-plated';
     this.t = TUNING;
@@ -178,7 +181,7 @@ export class Trooper extends EnemyBody {
   onHit(amount, dir) {
     if (!this.alerted) this.alert();
     // exposed and taking fire: duck back
-    if ((this.state === 'peek' || this.state === 'aim') && this.spot && this.exposed >= this.t.suppressAfter && Math.random() < this.t.suppressChance) {
+    if ((this.state === 'peek' || this.state === 'aim') && (this.spot || this.post) && this.exposed >= this.t.suppressAfter && Math.random() < this.t.suppressChance) {
       this.#enterCover(rand(this.t.suppressTime));
     }
     if (!this.retreated && this.health < this.maxHealth * this.t.retreatAt) {
@@ -330,6 +333,16 @@ export class Trooper extends EnemyBody {
       }
 
       case 'cover':
+        if (this.post) {
+          // posted: down until the player is in sight from standing height, then up to shoot
+          if (this.timer > 0) break;
+          if (live && dist < t.engage && this.#canSee(_v.copy(this.pos).setY(this.pos.y + 1.6), target)) {
+            this.state = 'peek';
+            this.timer = t.peekTime;
+            this.volley = randInt(t.burstsPerPeek);
+          } else this.timer = rand(t.recheck);
+          break;
+        }
         // flanked while hiding: move at once rather than wait out the cover time
         if (live && this.spot && this.timer > 0 && !this.ctx.cover.protects(this.spot, player.pos)) {
           this.#relocate();
@@ -384,7 +397,7 @@ export class Trooper extends EnemyBody {
         this.visor.emissiveIntensity = VISOR_REST + Math.max(0, t.aimTime - Math.max(0, this.timer)) * 16; // telegraph
         if (this.timer <= 0) {
           // a follow-up burst needs the player still in sight from the muzzle, else back down
-          if (this.volley > 0 && this.spot && !(live && dist < t.engage && this.#canSee(this.muzzle.getWorldPosition(_v), target))) {
+          if (this.volley > 0 && (this.spot || this.post) && !(live && dist < t.engage && this.#canSee(this.muzzle.getWorldPosition(_v), target))) {
             this.#enterCover(rand(t.coverTime));
             break;
           }
@@ -402,7 +415,7 @@ export class Trooper extends EnemyBody {
           if (--this.shotsLeft <= 0) {
             this.visor.emissiveIntensity = VISOR_REST;
             this.bursts++;
-            if (!this.spot) this.#relocate(); // fighting in the open: look for cover again
+            if (!this.spot && !this.post) this.#relocate(); // fighting in the open: look for cover again
             else if (--this.volley > 0 && this.bursts < this.burstLimit) {
               this.state = 'aim'; // stay up: next burst after a short re-aim
               this.timer = t.aimTime + rand(t.burstGap);
@@ -426,7 +439,7 @@ export class Trooper extends EnemyBody {
     // stance: crouched behind low cover except while popping up to shoot
     const exposed = this.state === 'peek' || this.state === 'aim' || this.state === 'fire';
     this.exposed = exposed ? (this.exposed ?? 0) + dt : 0;
-    const crouched = this.spot && this.spot.type === 'low' && !moving && !exposed && this.state !== 'idle';
+    const crouched = (this.post || this.spot?.type === 'low') && !moving && !exposed && this.state !== 'idle';
     this.crouch += ((crouched ? 1 : 0) - this.crouch) * damp(10, dt);
     // high cover: step sideways to the edge while exposed
     if (this.spot && this.spot.type === 'high' && exposed && !moving) {
@@ -477,7 +490,7 @@ export class Trooper extends EnemyBody {
   // Flank: run to cover beside or behind the player (outside the side they defend or face) from which
   // the player is in sight. Returns false if there is no such spot; the trooper then carries on as before.
   flank(front, eye) {
-    if (!this.alive || !this.alerted || this.flanking) return false;
+    if (!this.alive || !this.alerted || this.flanking || this.post) return false;
     const found = this.ctx.cover.find(this, this.pos, this.ctx.player.pos, this.ctx.time, {
       avoid: this.spot,
       flank: { front },
@@ -493,6 +506,7 @@ export class Trooper extends EnemyBody {
 
   // Pick a (new) cover spot and run there; none reachable: fight from here.
   #relocate(retreat = false) {
+    if (this.post) return this.#enterCover(rand(this.t.coverTime)); // posted: back down, never leaves
     this.flanking = false;
     this.#take(this.#findCover(retreat));
   }
