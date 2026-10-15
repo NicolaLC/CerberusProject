@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { gridTexture, panelTexture, applyWorldUVs } from './textures.js';
-import { mergeStatic, mergeGroup } from '../../engine/batch.js';
+import { mergeStatic, mergeGroup, freeBatch } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
 import { GUNS, gunMaterials } from '../combat/guns.js';
 import { KIT_PIECES, MAT } from './kit.js';
@@ -132,6 +132,7 @@ export class World {
     this.pool = []; // permanent point lights (QUALITY lights); those not in `lights` are parked at intensity 0
     this.labels = []; // env.label meshes: own geometry, material and canvas texture each
     this.props = []; // prop.gun display models: own merged geometry, shared materials
+    this.spawnBatch = null; // batchSpawned(): { meshes: Set of merged spawned boxes, out: mergeStatic result }
     this.gates = []; // kit.gate records (addGate): { mesh, col, y0, h, dir, time, on, open, opening, inert }
     this.gizmoMode = false; // set while spawn() builds a gizmo piece (editor, Library): a gate is inert and shows its travel
     this.registry = null; // of the loaded level, for spawn()
@@ -184,6 +185,7 @@ export class World {
 
   // Removes and frees the level: proxies and merged batches (geometry, own material clones), point lights.
   unload() {
+    this.unbatchSpawned();
     for (const m of this.staticMeshes) disposeTree(m, { keep: this.keep });
     for (const m of [...this.batches, ...(this.batches.shadows ?? [])]) disposeTree(m, { keep: this.keep });
     for (const l of this.lights.slice()) this.releaseLight(l);
@@ -217,6 +219,7 @@ export class World {
 
   // Removes and frees what spawn() built (boxes, labels, lights, props, and their collision).
   despawn(handle) {
+    if (this.spawnBatch && handle.objects.some((o) => this.spawnBatch.meshes.has(o))) this.unbatchSpawned(); // the batch still draws it
     if (handle.piece?.isPointLight) this.releaseLight(handle.piece); // pool lights are not scene additions: no object in the handle
     const gone = new Set(handle.objects);
     for (const o of handle.objects) {
@@ -233,6 +236,30 @@ export class World {
     this.gridDirty = true;
     drop(this.flickerLights, (f) => f.light);
     for (const [k, v] of this.named) if (gone.has(v)) this.named.delete(k);
+  }
+
+  // Spawned boxes (the Workshop builds every box through spawn()) draw one call per box per pass. batchSpawned() merges
+  // the visible ones like load() merges a level's (they stay as raycast proxies); unbatchSpawned() shows them one by one
+  // again. despawn() of a merged box unbatches first (the batch would keep drawing it), so a caller only re-batches when
+  // it is idle. Merging reuses batch.js's part cache: an unchanged box is not transformed again.
+  batchSpawned() {
+    this.unbatchSpawned();
+    const meshes = this.staticMeshes.filter((m) => m.visible && !m.userData.proxy);
+    if (!meshes.length) return 0;
+    const out = mergeStatic(meshes, this.scene);
+    this.spawnBatch = { meshes: new Set(meshes), out };
+    return meshes.length;
+  }
+
+  unbatchSpawned() {
+    const b = this.spawnBatch;
+    if (!b) return;
+    freeBatch([...b.out, ...b.out.shadows]);
+    for (const m of b.meshes) {
+      m.visible = true;
+      m.userData.proxy = false;
+    }
+    this.spawnBatch = null;
   }
 
   // A gun's display model: its own model builder, merged to one mesh per material (shared propMats: free it with

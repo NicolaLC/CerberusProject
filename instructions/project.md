@@ -29,7 +29,8 @@ arena that proves aiming, shooting, cover, enemies and lighting. Prototype art o
 - Headless stepping: `engine.headless = true` skips the render phase (the scene's world matrices are still
   updated, so raycasts and hitboxes stay correct). Every browser suite except `render` (draw calls, LOD) uses it:
   the whole set runs in ~40 s instead of ~40 min on SwiftShader. Only render where a test checks pixels.
-- `npm test`: pure-math unit tests (`tests/ballistics.test.mjs`, `tests/levelio.test.mjs`).
+- `npm test`: unit tests without a browser (`tests/batch.test.mjs` draw-call merges and their part cache,
+  `tests/ballistics.test.mjs`, `tests/levelio.test.mjs`, `tests/workshop-doc.test.mjs`).
 - `npm run test:browser` (`tests/run-browser.mjs`): starts a vite dev server on a free port, sets `URL`, runs every
   `tests/*.browser.mjs` in parallel (one browser each, `-j N` or `BROWSER_JOBS`, default cores - 1; output printed per suite
   with its time) and exits non-zero on a non-zero exit or any `FAIL` line. `gym-stress` and `bench` are skipped (slow);

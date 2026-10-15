@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeStatic, mergeLines, freeBatch } from '../../engine/batch.js';
 import { GUNS } from '../combat/guns.js';
 
 // Encounter pieces (#73, instructions/workshop.md "Encounters"): markers and trigger volumes that script a fight.
@@ -166,6 +167,7 @@ export class Encounter {
     this.gizmoMode = false; // set while spawn() builds a gizmo piece
     this.res = null; // gizmo geometry + materials: built with the first gizmo, freed with the last (nothing stays on the GPU in play)
     this.gizmos = 0;
+    this.gizmoBatch = null; // batchGizmos(): { recs, parts, out }
     this.lines = []; // log lines waiting for calm and their delay (play): { t, rec }
     this.calm = TUNING.calm; // s since the last combat signal (a run starts calm)
     this.introPending = null; // the intro.boot record that starts at the first play frame
@@ -215,6 +217,7 @@ export class Encounter {
   }
 
   unload() {
+    this.unbatchGizmos();
     for (const r of this.items) {
       this.#dropZone(r);
       this.#dropGizmo(r);
@@ -244,6 +247,7 @@ export class Encounter {
   despawn(rec) {
     const i = this.items.indexOf(rec);
     if (i < 0) return;
+    if (this.gizmoBatch?.recs.has(rec)) this.unbatchGizmos(); // the batch still draws its gizmo
     this.items.splice(i, 1);
     this.lines = this.lines.filter((l) => l.rec !== rec);
     this.alarmQueue = this.alarmQueue.filter((a) => a.rec !== rec);
@@ -435,6 +439,41 @@ export class Encounter {
   }
 
   // ---- gizmos (editor / Library only): shared geometry and materials, nothing to free per piece ----
+
+  // Each gizmo is 2-8 small meshes and lines (a draw each). batchGizmos() merges every gizmo's parts, one draw per
+  // material (World.batchSpawned does the same for boxes); despawn() of a merged gizmo unbatches first. The parts stay
+  // as hidden children, so a gizmo's bounds are unchanged.
+  batchGizmos() {
+    this.unbatchGizmos();
+    const meshes = [];
+    const lines = [];
+    const recs = new Set();
+    for (const r of this.items) {
+      if (!r.gizmo?.parent) continue;
+      recs.add(r);
+      r.gizmo.traverse((o) => {
+        if (!o.visible) return;
+        if (o.isLineSegments) lines.push(o);
+        else if (o.isMesh) meshes.push(o);
+      });
+    }
+    if (!recs.size) return 0;
+    const merged = mergeStatic(meshes, this.scene);
+    const out = [...merged, ...merged.shadows, ...mergeLines(lines, this.scene)];
+    this.gizmoBatch = { recs, parts: [...meshes, ...lines], out };
+    return recs.size;
+  }
+
+  unbatchGizmos() {
+    const b = this.gizmoBatch;
+    if (!b) return;
+    freeBatch(b.out);
+    for (const o of b.parts) {
+      o.visible = true;
+      o.userData.proxy = false;
+    }
+    this.gizmoBatch = null;
+  }
 
   #resources() {
     if (this.res) return this.res;

@@ -25,6 +25,7 @@ const TUNING = {
   dragPx: 4, // pixels before a press on a piece becomes a drag
   toast: 2.8, // s
   maxBox: 40, // m: a measured bound larger than this is a failed measure (fallback box)
+  rebatch: 0.5, // s without a world / encounter edit before boxes and gizmos are merged again
 };
 const TINT = { wall: 0xe8f0ff, high: 0x3aa0ff, low: 0xff9a3a, none: 0xffe14a }; // box helper by cover class
 const font = '11px/1.45 monospace';
@@ -43,6 +44,24 @@ class Absent {
   }
 }
 const POINT = new THREE.Box3(new THREE.Vector3(-0.25, -0.25, -0.25), new THREE.Vector3(0.25, 0.25, 0.25)); // lights
+
+// Box3.expandByObject without its SkinnedMesh path: three skins every vertex on the CPU for a skinned mesh's box (the
+// slowest part of measuring an enemy); here it counts with its bind-pose box, and editor enemies stand in that pose.
+const _bb = new THREE.Box3();
+function expandBy(box, root) {
+  root.updateWorldMatrix(true, true);
+  root.traverse((o) => {
+    if (!o.geometry) return;
+    if (o.isInstancedMesh) {
+      if (!o.boundingBox) o.computeBoundingBox();
+      box.union(_bb.copy(o.boundingBox).applyMatrix4(o.matrixWorld));
+      return;
+    }
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    box.union(_bb.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld));
+  });
+  return box;
+}
 
 const deg = (rad) => Math.round((rad * 180) / Math.PI);
 const css = (el, style) => Object.assign(el.style, style);
@@ -107,6 +126,7 @@ export class WorkshopEditor {
     this.mouse = { x: 0, y: 0, over: false, looking: false };
     this.drag = null; // { i, px, grab, from, active, target }
     this.ghostPos = null; // where the armed piece would land
+    this.rebatchT = 0; // > 0: a world or encounter piece changed, boxes and gizmos are merged again when this runs out (update)
     if (!this.active) return;
 
     const { engine, enemies } = game;
@@ -199,6 +219,17 @@ export class WorkshopEditor {
       if (owner === 'pickups') return { owner, thing: crates[np++] };
       return this.#build(p); // world and encounter pieces
     });
+    this.#rebatch();
+  }
+
+  // Draw calls: every box and gizmo is its own objects in the editor (each piece owns its objects), so whenever the
+  // editor is idle the boxes are merged like a played level's (world.batchSpawned) and the gizmos too
+  // (encounter.batchGizmos). An edit that frees a merged piece splits its batch again (world / encounter despawn); the
+  // pieces then draw one by one until TUNING.rebatch passes without a world or encounter edit.
+  #rebatch() {
+    this.rebatchT = 0;
+    this.game.world.batchSpawned();
+    this.game.encounter.batchGizmos();
   }
 
   // ---- document ----
@@ -277,6 +308,7 @@ export class WorkshopEditor {
     this.items = [];
     this.model.reset(zonesToPieces(level));
     this.items = this.doc.pieces.map((p) => this.#build(p));
+    this.#rebatch();
     this.model.select(-1);
     this.#refreshSel();
   }
@@ -422,6 +454,8 @@ export class WorkshopEditor {
     const to = reverse ? cmd.before : cmd.after;
     const from = reverse ? cmd.after : cmd.before;
     const i = cmd.index;
+    const owner = this.game.registry.owner((to ?? from).id);
+    if (owner === 'world' || owner === 'encounter') this.rebatchT = TUNING.rebatch;
     if (!to) {
       this.#unbuild(this.items[i]);
       this.items.splice(i, 1);
@@ -470,7 +504,7 @@ export class WorkshopEditor {
   #boxOf(item, at) {
     const objs = item.owner === 'world' ? item.thing.objects : item.owner === 'encounter' ? [item.thing.gizmo] : item.owner === 'enemies' ? [item.thing.group ?? item.thing.root] : [item.thing.model, item.thing.ring];
     const box = new THREE.Box3();
-    for (const o of objs) box.expandByObject(o);
+    for (const o of objs) expandBy(box, o);
     const size = box.getSize(new THREE.Vector3());
     if (box.isEmpty() || Math.max(size.x, size.y, size.z) > TUNING.maxBox || !Number.isFinite(size.x + size.y + size.z)) {
       const fb = item.owner === 'world' || item.owner === 'encounter' ? POINT : FALLBACK;
@@ -974,6 +1008,7 @@ export class WorkshopEditor {
     }
 
     if (this.toastT > 0 && (this.toastT -= dt) <= 0 && this.toastEl) this.toastEl.style.opacity = 0;
+    if (this.rebatchT > 0 && !this.drag && (this.rebatchT -= dt) <= 0) this.#rebatch();
   }
 
   // ---- files (io.js; "not implemented" until #72 lands: shown as a toast) ----
@@ -1013,6 +1048,8 @@ export class WorkshopEditor {
     if (this.hud) this.hud.style.display = this.hudDisplay;
     this.game.enemies.freeze(this.wasFrozen);
     this.game.engine.setMode('play');
+    this.game.world.unbatchSpawned();
+    this.game.encounter.unbatchGizmos();
     for (let i = this.items.length - 1; i >= 0; i--) this.#unbuild(this.items[i]);
     this.items.length = 0;
   }

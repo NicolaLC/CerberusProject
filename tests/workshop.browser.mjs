@@ -1491,6 +1491,60 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
     && tiers.resize.end.pool === POOL && tiers.resize.end.inUse === 0 && tiers.resize.end.lights === POOL + 1 && tiers.resize.end.parked && tiers.resize.end.ok, JSON.stringify(tiers.resize));
 }
 
+// ---- 16. draw calls: idle, the editor merges its boxes and gizmos like a played level; an edit splits them, idle merges again ----
+// (a moved box may land in another 64 m chunk of the merge: one draw more or less is fine)
+{
+  const prologue = JSON.parse(readFileSync(new URL('../src/levels/prologue.json', import.meta.url), 'utf8'));
+  const r = await ev((lvl) => {
+    const g = window.game;
+    const t = T.tool();
+    const { engine, world } = g;
+    if (t.playing) t.edit();
+    t.load(lvl);
+    const view = () => { engine.camera.position.set(0, 40, 40); engine.camera.lookAt(0, 0, 0); engine.camera.updateMatrixWorld(); };
+    view();
+    T.step(1); // enemy LOD settles for this camera position
+    const calls = () => { view(); engine.renderer.info.reset(); engine.renderer.render(engine.scene, engine.camera); return engine.renderer.info.render.calls; };
+    const boxes = () => world.staticMeshes.filter((m) => m.visible || m.userData.proxy).length;
+    const gizmos = () => g.encounter.items.filter((r) => r.gizmo).length;
+    const idle = { calls: calls(), batched: world.spawnBatch?.meshes.size ?? 0, boxes: boxes(), gizmos: gizmos(), merged: g.encounter.gizmoBatch?.recs.size ?? 0, ok: T.ok().ok };
+    const i = t.doc.pieces.findIndex((p) => p.id === 'env.box');
+    const at = t.doc.pieces[i].pos;
+    t.move(i, [at[0] + 1, at[1], at[2]]);
+    const split = { batch: world.spawnBatch !== null, calls: calls(), visible: world.staticMeshes.every((m) => m.visible), ok: T.ok().ok };
+    T.step(0.2);
+    const early = world.spawnBatch !== null;
+    T.step(0.5);
+    const again = { calls: calls(), batched: world.spawnBatch?.meshes.size ?? 0, boxes: boxes(), ok: T.ok().ok };
+    // an encounter piece: its gizmo batch splits the same way (a deleted gizmo is not left drawn in the batch)
+    const j = t.doc.pieces.findIndex((p) => p.id === 'marker.checkpoint');
+    t.remove(j);
+    const gizmoSplit = { batch: g.encounter.gizmoBatch !== null, ok: T.ok().ok };
+    t.undo();
+    T.step(0.7);
+    const gizmoAgain = { merged: g.encounter.gizmoBatch?.recs.size ?? 0, gizmos: gizmos(), calls: calls(), ok: T.ok().ok };
+    // what a pick or a placement needs still works on merged boxes: the proxies are raycast, bounds come from them
+    t.select(-1);
+    const picked = (() => { const b = world.staticMeshes.find((m) => m.userData.proxy); return !!b && b.parent === engine.scene; })();
+    // repeated edit / idle cycles free every batch they build
+    const m0 = T.mem().geometries;
+    for (let k = 0; k < 4; k++) { t.move(i, [at[0] + (k % 2), at[1], at[2]]); T.step(0.7); }
+    const m1 = T.mem().geometries;
+    t.play();
+    T.step(0.1);
+    const play = calls();
+    t.edit();
+    const back = world.spawnBatch?.meshes.size ?? 0;
+    t.load(g.level);
+    return { idle, split, early, again, gizmoSplit, gizmoAgain, picked, m0, m1, play, back };
+  }, prologue);
+  expect('idle editing merges boxes and gizmos: every box and gizmo batched, far fewer draws than one per object, close to the played level', r.idle.batched === r.idle.boxes && r.idle.boxes > 50 && r.idle.merged === r.idle.gizmos && r.idle.gizmos > 10 && r.idle.calls < r.split.calls / 2 && r.idle.calls <= r.play * 1.3 && r.idle.ok, JSON.stringify(r));
+  expect('  an edit splits the batch at once (every box drawn on its own, scene = doc); it merges again only after TUNING.rebatch idle', !r.split.batch && r.split.visible && r.split.ok && !r.early && r.again.batched === r.again.boxes && r.again.calls <= r.idle.calls + 2 && r.again.ok, JSON.stringify(r));
+  expect('  deleting a merged gizmo splits the gizmo batch; undo and idle merge it again', !r.gizmoSplit.batch && r.gizmoSplit.ok && r.gizmoAgain.merged === r.gizmoAgain.gizmos && r.gizmoAgain.gizmos === r.idle.gizmos && r.gizmoAgain.calls <= r.idle.calls + 2 && r.gizmoAgain.ok, JSON.stringify(r));
+  expect('  merged boxes stay in the scene as raycast proxies; back from play the boxes are merged again', r.picked && r.back === r.idle.boxes, JSON.stringify(r));
+  expect('  edit / idle cycles do not leak geometry', r.m1 <= r.m0, JSON.stringify({ m0: r.m0, m1: r.m1 }));
+}
+
 expect('no page or console errors', errors.length === 0, errors.join(' | '));
 await b.close();
 process.exit(fail.length ? 1 : 0);

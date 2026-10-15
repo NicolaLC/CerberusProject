@@ -13,7 +13,7 @@ other level is inert (`tool.editing === false`).
   A piece that cannot be built throws before the doc changes, so a bad edit never leaves doc and scene apart.
 - At start the level's world pieces are rebuilt one by one (`world.load` with the world pieces left out, then
   `world.spawn` each) because the loaded boxes are merged into batches and have no handle. Enemies and pickups are
-  adopted in file order. Consequences: in the editor boxes are individual meshes (more draw calls than the played level),
+  adopted in file order. Consequences: in the editor boxes are individual meshes (merged while idle, see Draw calls),
   and the enemies' `CoverMap` still describes the level as loaded (they are frozen, so nothing reads it). Anything that
   plays the doc (play in place) reloads the scene from it instead of reusing these objects (see Play in place).
 - **Commands**: every edit is `{ index, before, after }` (piece snapshots; before null = insert, after null = delete,
@@ -33,6 +33,22 @@ other level is inert (`tool.editing === false`).
 - A mover's rail (`params.to`) and a boss arena (`params.arena`) move with the piece.
 - Editor enemies are frozen (`enemies.freeze(true)`, the previous state is restored on dispose), posed once after spawning (`enemies.pose(actor, { viewer })`, the viewer is a dead `Absent` stand-in so nothing wakes) and the boss is set with `enemies.setBoss`.
 
+
+## Draw calls and build cost
+- Each piece owns its objects, so every box and gizmo would draw on its own (prologue: ~470 calls in the editor against
+  ~145 played). While the editor is idle the boxes are merged like a played level's (`world.batchSpawned`) and the
+  encounter gizmos too (`encounter.batchGizmos`: meshes per material, edges through `mergeLines`): prologue ~140 calls.
+- An edit that frees a merged box or gizmo splits that batch at once (in `world.despawn` / `encounter.despawn`, so
+  nothing draws a piece that is gone); the pieces draw one by one until `TUNING.rebatch` (0.5 s) passes without a world
+  or encounter edit and not mid-drag, then everything is merged again (`#rebatch`). Merged boxes stay as raycast proxies
+  (placement on top of boxes, `surface()`), and piece bounds come from the hidden parts, so picking is unchanged.
+- Enemies are rebuilt on every edit (move, rotate, field, undo), so their build cost is editing latency. It comes down
+  to the RigidSkin bake (engine.md, Draw calls: the part cache). A move-only fast path (repositioning the live actor)
+  was left out on purpose: home, stand slot, rail and arena are per actor type, and a rebuild keeps "scene = doc" exact.
+- Piece bounds (`#boxOf`) use a skinned mesh's bind-pose box instead of `Box3.expandByObject`, which skins every
+  vertex on the CPU (the first pick after opening a level cost ~13 ms per call before).
+- Section 16 of `tests/workshop.browser.mjs` checks the merge (idle draws close to play, split on edit, merged again
+  after the idle time, no leaks); `tests/batch.test.mjs` the bake itself.
 ## Edit mode
 Free-fly camera; the editor sets engine mode `'edit'` (`engine.setMode`), so the `'play'` group systems (player, weapon, pickups,
 encounter, camera rig) do not run (`game.editing` reads the mode), the HUD (`#hud`) is hidden, and the player model is hidden. The sun's shadow window follows the editor camera

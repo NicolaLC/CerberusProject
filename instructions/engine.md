@@ -55,7 +55,18 @@ repeats every caster). Budget: ≤ 140 calls per frame at the spawn view, ≤ 25
   of them and they would be recomputed every frame. Their `matrixWorld` is only valid after `skin.syncProxies()` (all,
   from the parents' fresh matrices; `EnemyBody.#die` does it before cutting debris) or `skin.syncHit(mesh)` (one raycast
   target, e.g. a weak spot; `Enemies.animate` does it). Do not move a proxy after the bake; `rebuild()` wakes and re-freezes them.
+- Bake cost: every merge concatenates typed-array PARTS (one per source mesh group, already transformed). Parts are cached
+  per source geometry (WeakMap) and transform (rounded to 1e-5) plus the attribute versions, so identical rigs (same
+  kind and kit, same bind pose) transform each part once and a re-merge of unchanged boxes transforms nothing. An edit
+  to a geometry's attributes must bump their version (`needsUpdate`, or three's `geo.scale/translate/...`) or the old
+  part is reused. Building an enemy is ~6x cheaper than with the old per-vertex array pushes (`tests/batch.test.mjs`).
 - `mergeGroup(group)`: rigid sub-models (guns) → one mesh per material inside the group.
+- `mergeLines(lines, parent)`: LineSegments → one per material (Workshop gizmo edges). `freeBatch(meshes)`: removes
+  merged meshes and frees only their geometry, for batches whose sources live on (disposeTree would free the sources'
+  materials too).
+- Workshop: `World.batchSpawned()` / `unbatchSpawned()` merge / split the runtime-spawned boxes, and
+  `Encounter.batchGizmos()` / `unbatchGizmos()` do the same for the gizmos. A despawn of a merged object splits its
+  batch first (workshop.md, Draw calls).
 - Instancing for many copies of one thing: puppet stands, sparks (per-instance HDR color), casings, decals.
 - New per-object visuals: prefer adding to an existing batch/instanced mesh over new Mesh objects.
 

@@ -66,11 +66,16 @@ export function makeLodMaterial() {
   return m;
 }
 
+// Buckets: { material, castShadow, receiveShadow, entries: [{ part, bone, col?, emi? }] }. A part is one source mesh
+// group already transformed into the bake space (typed arrays, local indices); the arrays are only concatenated once, in
+// toGeometry. Parts are cached per source geometry and transform (partOf), so identical rigs (two troopers with the same
+// kit, in the same bind pose) transform each part once, and a re-merge (Workshop rebatch) reuses every unchanged box.
+
 // Merges every opaque bucket into one, recording each source material's color and glow per vertex.
 // A textured material may set userData.lodColor (its average look) since the texture is dropped;
 // userData.lodGlow overrides emissiveIntensity (e.g. brighter, to stand in for a dropped transparent halo).
 function lodBucket(buckets, material) {
-  const out = { material, pos: [], nor: [], uv: [], skin: [], idx: [], col: [], emi: [] };
+  const out = { material, entries: [], lod: true };
   const c = new THREE.Color();
   const e = new THREE.Color();
   for (const b of buckets.values()) {
@@ -79,31 +84,21 @@ function lodBucket(buckets, material) {
     c.copy(mat.userData.lodColor ?? mat.color ?? c.setScalar(1));
     if (mat.emissive) e.copy(mat.emissive).multiplyScalar(mat.userData.lodGlow ?? mat.emissiveIntensity ?? 1);
     else e.setScalar(0);
-    append(out, b);
-    const n = b.pos.length / 3;
-    for (let i = 0; i < n; i++) {
-      out.col.push(c.r, c.g, c.b);
-      out.emi.push(e.r, e.g, e.b);
-    }
+    const col = [c.r, c.g, c.b];
+    const emi = [e.r, e.g, e.b];
+    for (const en of b.entries) out.entries.push({ ...en, col, emi });
   }
-  return out.pos.length ? out : null;
-}
-
-// Appends bucket `b` to `out`, offsetting its indices.
-function append(out, b) {
-  const base = out.pos.length / 3;
-  for (const k of ['pos', 'nor', 'uv', 'skin']) for (let i = 0; i < b[k].length; i++) out[k].push(b[k][i]);
-  for (let i = 0; i < b.idx.length; i++) out.idx.push(b.idx[i] + base);
+  return out.entries.length ? out : null;
 }
 
 // Concatenates every opaque casting bucket into one bucket for the shadow-only mesh (null if none).
 function shadowBucket(buckets) {
-  const out = { material: SHADOW_MAT, pos: [], nor: [], uv: [], skin: [], idx: [] };
+  const out = { material: SHADOW_MAT, entries: [] };
   for (const b of buckets.values()) {
     if (!b.castShadow || b.material.transparent) continue;
-    append(out, b);
+    for (const en of b.entries) out.entries.push(en);
   }
-  return out.pos.length ? out : null;
+  return out.entries.length ? out : null;
 }
 
 function shadowOnly(mesh) {
@@ -117,68 +112,136 @@ function shadowOnly(mesh) {
   return mesh;
 }
 
+// geometry -> Map(key -> part). Weak: a part dies with its geometry. Capped per geometry (a shared part geometry
+// re-baked in many poses would otherwise keep every pose).
+const parts = new WeakMap();
+const PARTS_PER_GEOMETRY = 64;
+const q = (v) => Math.round(v * 1e5); // transforms equal to 1e-5 share a part (well under a millimetre)
+
+// One group of `geo` transformed by `matrix`: indexed, each source vertex used by the group emitted once.
+function partOf(geo, start, end, matrix) {
+  const pos = geo.attributes.position;
+  const nor = geo.attributes.normal;
+  const uv = geo.attributes.uv;
+  const e = matrix.elements;
+  const key = `${start}|${end}|${pos.version}|${nor?.version}|${uv?.version}|${geo.index?.version}|${e.map(q).join(',')}`;
+  let cache = parts.get(geo);
+  let part = cache?.get(key);
+  if (part) return part;
+  const index = geo.index;
+  const remap = new Map();
+  const idx = new Uint32Array(end - start);
+  const src = [];
+  for (let i = start; i < end; i++) {
+    const v = index ? index.getX(i) : i;
+    let nv = remap.get(v);
+    if (nv === undefined) {
+      nv = src.length;
+      remap.set(v, nv);
+      src.push(v);
+    }
+    idx[i - start] = nv;
+  }
+  const n = src.length;
+  const P = new Float32Array(n * 3);
+  const N = new Float32Array(n * 3);
+  const U = new Float32Array(n * 2);
+  _nm.getNormalMatrix(matrix);
+  for (let k = 0; k < n; k++) {
+    const v = src[k];
+    _p.fromBufferAttribute(pos, v).applyMatrix4(matrix);
+    P[k * 3] = _p.x;
+    P[k * 3 + 1] = _p.y;
+    P[k * 3 + 2] = _p.z;
+    if (nor) _n.fromBufferAttribute(nor, v).applyMatrix3(_nm).normalize();
+    else _n.set(0, 1, 0);
+    N[k * 3] = _n.x;
+    N[k * 3 + 1] = _n.y;
+    N[k * 3 + 2] = _n.z;
+    if (uv) {
+      U[k * 2] = uv.getX(v);
+      U[k * 2 + 1] = uv.getY(v);
+    }
+  }
+  part = { pos: P, nor: N, uv: U, idx, n };
+  if (!cache) parts.set(geo, (cache = new Map()));
+  if (cache.size >= PARTS_PER_GEOMETRY) cache.clear();
+  cache.set(key, part);
+  return part;
+}
+
 // Buckets triangles of `mesh` (all groups, multi-material aware) into `buckets` keyed by material + shadow
 // flags, transformed by `matrix`. boneIndex >= 0 also records skin attributes.
 function collect(buckets, mesh, matrix, boneIndex = -1) {
   const geo = mesh.geometry;
   const pos = geo.attributes.position;
-  const nor = geo.attributes.normal;
-  const uv = geo.attributes.uv;
   const index = geo.index;
   const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
   const groups = Array.isArray(mesh.material) && geo.groups.length ? geo.groups : [{ start: 0, count: index ? index.count : pos.count, materialIndex: 0 }];
-  _nm.getNormalMatrix(matrix);
   for (const g of groups) {
     const mat = mats[g.materialIndex];
     if (!mat || !mat.visible) continue;
+    const end = Math.min(g.start + g.count, index ? index.count : pos.count);
+    if (end <= g.start) continue;
     const key = `${mat.uuid}|${mesh.castShadow ? 1 : 0}${mesh.receiveShadow ? 1 : 0}`;
     let b = buckets.get(key);
-    if (!b) buckets.set(key, (b = { material: mat, castShadow: mesh.castShadow, receiveShadow: mesh.receiveShadow, pos: [], nor: [], uv: [], skin: [], idx: [] }));
-    const end = Math.min(g.start + g.count, index ? index.count : pos.count);
-    // indexed output: each source vertex used by this group is emitted once (remap: source vertex -> bucket vertex)
-    const remap = new Map();
-    for (let i = g.start; i < end; i++) {
-      const v = index ? index.getX(i) : i;
-      const seen = remap.get(v);
-      if (seen !== undefined) {
-        b.idx.push(seen);
-        continue;
-      }
-      const nv = b.pos.length / 3;
-      remap.set(v, nv);
-      b.idx.push(nv);
-      _p.fromBufferAttribute(pos, v).applyMatrix4(matrix);
-      b.pos.push(_p.x, _p.y, _p.z);
-      if (nor) {
-        _n.fromBufferAttribute(nor, v).applyMatrix3(_nm).normalize();
-        b.nor.push(_n.x, _n.y, _n.z);
-      } else b.nor.push(0, 1, 0);
-      if (uv) b.uv.push(uv.getX(v), uv.getY(v));
-      else b.uv.push(0, 0);
-      if (boneIndex >= 0) b.skin.push(boneIndex);
-    }
+    if (!b) buckets.set(key, (b = { material: mat, castShadow: mesh.castShadow, receiveShadow: mesh.receiveShadow, entries: [] }));
+    b.entries.push({ part: partOf(geo, g.start, end, matrix), bone: boneIndex });
   }
 }
 
 function toGeometry(b) {
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3));
-  geo.setAttribute('normal', new THREE.Float32BufferAttribute(b.nor, 3));
-  geo.setAttribute('uv', new THREE.Float32BufferAttribute(b.uv, 2));
-  if (b.col) geo.setAttribute('color', new THREE.Float32BufferAttribute(b.col, 3));
-  if (b.emi) geo.setAttribute('lodEmissive', new THREE.Float32BufferAttribute(b.emi, 3));
-  if (b.skin.length) {
-    const n = b.skin.length;
-    const idx = new Uint16Array(n * 4);
-    const w = new Float32Array(n * 4);
-    for (let i = 0; i < n; i++) {
-      idx[i * 4] = b.skin[i];
-      w[i * 4] = 1;
-    }
-    geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));
-    geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(w, 4));
+  let n = 0;
+  let ni = 0;
+  for (const { part } of b.entries) {
+    n += part.n;
+    ni += part.idx.length;
   }
-  if (b.idx.length) geo.setIndex(b.idx.length > 65535 || b.pos.length / 3 > 65535 ? new THREE.Uint32BufferAttribute(b.idx, 1) : new THREE.Uint16BufferAttribute(b.idx, 1));
+  const P = new Float32Array(n * 3);
+  const N = new Float32Array(n * 3);
+  const U = new Float32Array(n * 2);
+  const I = n > 65535 ? new Uint32Array(ni) : new Uint16Array(ni);
+  const skinned = b.entries.some((en) => en.bone >= 0);
+  const SI = skinned ? new Uint16Array(n * 4) : null;
+  const SW = skinned ? new Float32Array(n * 4) : null;
+  const C = b.lod ? new Float32Array(n * 3) : null;
+  const E = b.lod ? new Float32Array(n * 3) : null;
+  let v = 0;
+  let k = 0;
+  for (const { part, bone, col, emi } of b.entries) {
+    P.set(part.pos, v * 3);
+    N.set(part.nor, v * 3);
+    U.set(part.uv, v * 2);
+    const idx = part.idx;
+    for (let i = 0; i < idx.length; i++) I[k + i] = idx[i] + v;
+    for (let i = v; i < v + part.n; i++) {
+      if (SI) {
+        SI[i * 4] = bone;
+        SW[i * 4] = 1;
+      }
+      if (C) {
+        C[i * 3] = col[0];
+        C[i * 3 + 1] = col[1];
+        C[i * 3 + 2] = col[2];
+        E[i * 3] = emi[0];
+        E[i * 3 + 1] = emi[1];
+        E[i * 3 + 2] = emi[2];
+      }
+    }
+    v += part.n;
+    k += idx.length;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(P, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(U, 2));
+  if (C) geo.setAttribute('color', new THREE.BufferAttribute(C, 3));
+  if (E) geo.setAttribute('lodEmissive', new THREE.BufferAttribute(E, 3));
+  if (SI) {
+    geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4));
+    geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4));
+  }
+  if (ni) geo.setIndex(new THREE.BufferAttribute(I, 1));
   geo.computeBoundingSphere();
   geo.computeBoundingBox();
   return geo;
@@ -249,6 +312,56 @@ export function mergeStatic(meshes, parent) {
     }
   }
   return out;
+}
+
+// Merges LineSegments (world space) into one LineSegments per material under `parent` (editor gizmo edges). The sources
+// are hidden; lines are never raycast, so they are not proxies. Returns the merged lines.
+export function mergeLines(lines, parent) {
+  const byMat = new Map();
+  for (const l of lines) {
+    l.updateWorldMatrix(true, false);
+    if (!byMat.has(l.material)) byMat.set(l.material, []);
+    byMat.get(l.material).push(l);
+  }
+  const out = [];
+  for (const [material, list] of byMat) {
+    let n = 0;
+    for (const l of list) n += l.geometry.index ? l.geometry.index.count : l.geometry.attributes.position.count;
+    const P = new Float32Array(n * 3);
+    let k = 0;
+    for (const l of list) {
+      const pos = l.geometry.attributes.position;
+      const idx = l.geometry.index;
+      const count = idx ? idx.count : pos.count;
+      for (let i = 0; i < count; i++) {
+        _p.fromBufferAttribute(pos, idx ? idx.getX(i) : i).applyMatrix4(l.matrixWorld);
+        P[k++] = _p.x;
+        P[k++] = _p.y;
+        P[k++] = _p.z;
+      }
+      l.visible = false;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(P, 3));
+    geo.computeBoundingSphere();
+    const m = new THREE.LineSegments(geo, material);
+    m.matrixAutoUpdate = false;
+    m.raycast = noRaycast;
+    m.userData.batch = true;
+    parent.add(m);
+    out.push(m);
+  }
+  return out;
+}
+
+// Frees merged meshes (mergeStatic's colour and shadow meshes, mergeLines' lines) whose sources stay alive: only the
+// merged geometry is theirs, the materials belong to the sources (disposeTree would free those too).
+export function freeBatch(meshes) {
+  for (const m of meshes) {
+    m.removeFromParent();
+    m.geometry.dispose();
+    shadowOnlyMeshes.delete(m);
+  }
 }
 
 // Merges a rigid group's visible meshes in the group's own space (e.g. a gun model): one mesh per material.
