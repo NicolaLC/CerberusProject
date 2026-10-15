@@ -17,6 +17,9 @@ const TUNING = {
 
 // Pickup pieces (registry ids, a public contract: instructions/level.md). Data: { id, pos } for a respawning crate
 // of that ammo class. Spots live in the level file (7 light, 3 heavy in the arena).
+// pickup rings float this far over the pickup's floor: interior floors are 0.02 skins over the ground, so +0.02 z-fought
+const RING_Y = 0.05;
+
 export const PICKUP_PIECES = {
   'pickup.light': { example: { params: {} }, label: `light ammo (AR MG BR) | respawns in ${TUNING.respawn} s`, build: (pickups, d) => pickups.addCrate(d.pos, 'light') },
   'pickup.heavy': { example: { params: {} }, label: `heavy ammo (SR RG) | respawns in ${TUNING.respawn} s`, build: (pickups, d) => pickups.addCrate(d.pos, 'heavy') },
@@ -72,7 +75,7 @@ export class Pickups {
       return g;
     };
     this.ringGeo = new THREE.RingGeometry(0.45, 0.55, 32).rotateX(-Math.PI / 2);
-    const ringMat = (c) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(2), transparent: true, opacity: 0.5, depthWrite: false });
+    const ringMat = (c) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(2), transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     this.ringMats = { light: ringMat(hex.light), heavy: ringMat(hex.heavy), gun: ringMat(0xeaf6fa) };
     this.standMat = caseMat;
   }
@@ -116,7 +119,7 @@ export class Pickups {
     model.position.set(...pos);
     model.rotation.y = yaw;
     const ring = new THREE.Mesh(this.ringGeo, this.ringMats.gun);
-    ring.position.set(pos[0], pos[1] + 0.02, pos[2]);
+    ring.position.set(pos[0], pos[1] + RING_Y, pos[2]);
     ring.scale.setScalar(1.5);
     ring.visible = !rack; // the rack's class band marks it
     this.scene.add(model, ring);
@@ -136,7 +139,7 @@ export class Pickups {
   #spawn(pos, { crate, type }) {
     const model = this.makeModel(crate ? 1.3 : 0.9, type);
     const ring = new THREE.Mesh(this.ringGeo, this.ringMats[type]);
-    ring.position.copy(pos).y += 0.02;
+    ring.position.copy(pos).y += RING_Y;
     model.position.copy(pos);
     this.scene.add(model, ring);
     const item = { pos: pos.clone(), model, ring, crate, type, active: true, timer: 0, phase: Math.random() * 6 };

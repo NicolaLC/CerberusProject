@@ -43,6 +43,25 @@ export function sightRay(from, to, meshes, slack = 0.5) {
 const _inv = new THREE.Matrix4();
 const _box = new THREE.Box3();
 
+// Enemy outline: a faint violet rim (fresnel) in the emissive, so a dark robot reads against a dark room (art-style.md: violet =
+// HiveMind). Chained after a material's own onBeforeCompile (the far LOD's), one program per material kind (shared cache key).
+// No extra draws. Weak spots and sensors stay the brightest glows (the rim peaks at RIM.strength, edge-on only).
+const RIM = { color: new THREE.Color(VISOR), strength: 0.1, power: 8 };
+const RIM_GLSL = `{ float rimK = 1.0 - saturate(dot(normalize(vViewPosition), normal)); totalEmissiveRadiance += vec3(${RIM.color.toArray().map((c) => (c * RIM.strength).toFixed(4)).join(', ')}) * pow(rimK, ${RIM.power.toFixed(1)}); }`;
+export function rim(materials) {
+  for (const m of materials) {
+    if (!m || m.userData.rim) continue;
+    m.userData.rim = true;
+    const prev = m.onBeforeCompile;
+    const key = m.customProgramCacheKey();
+    m.onBeforeCompile = (shader, renderer) => {
+      prev.call(m, shader, renderer);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${RIM_GLSL}`);
+    };
+    m.customProgramCacheKey = () => `${key}|enemy-rim`;
+  }
+}
+
 export class EnemyBody {
   // mats: the look's materials (all flash on a hit); visor: color of the glowing sensors (telegraphs shots). Sensors are
   // violet and the magenta weak spots stay the brightest thing on the body (art-style.md: if it glows violet, shoot it).
@@ -95,6 +114,7 @@ export class EnemyBody {
     this.#placeWeakSpots();
     // all parts -> one skinned draw per material; far away one draw with baked colors (see game.js LOD)
     this.skin = new RigidSkin(this.rig.root, this.rig.skeleton, { lod: true, exclude: (o) => o.userData.dropped });
+    rim([...Object.values(this.mats), this.skin.lodMaterial]);
     this.group.updateMatrixWorld(true);
     this.ctx.debris.prime(this.debrisKind, this.skin); // death debris of this type is baked now, not during the hitstop
   }
@@ -128,12 +148,12 @@ export class EnemyBody {
       spot.add(halo);
       spot.position.copy(part.position);
       spot.position.z += d / 2 + 0.02;
-      // mounted on the look's front (its armor would bury it), not the hitbox's; a trooper's add-on plates do not count
+      // mounted on the look's front (its armor would bury it), not the hitbox's
       const host = this.rig.bones[bone];
       host.updateWorldMatrix(true, false);
       _inv.copy(host.matrixWorld).invert();
       for (const c of host.children) {
-        if (!c.userData.noHit || c.userData.plate) continue;
+        if (!c.userData.noHit) continue;
         _box.setFromObject(c).applyMatrix4(_inv);
         spot.position.z = Math.max(spot.position.z, _box.max.z - 0.01);
       }

@@ -281,4 +281,4 @@ The editor (#70) calls four functions plus `levelNames()`; the level is the plai
 - Point lights: any number of `light.point` records; a fixed pool of N real lights in `World` (N by quality tier) shows the best N for the camera, so the light count never changes (engine.md "Light pool").
 - Interior: darker albedo than outside (but readable), 8 point lights incl. fills; cold white and cyan only (red is for story
   beats), emissive strips, flicker via `pointLight(..., { strip })`.
-- Exposure adaptation in `game/view/post.js`: 1.0 outside, 1.9 when the camera is inside an `interiorZones` box.
+- Exposure adaptation in `game/view/post.js`: 1.0 outside (the sky preset's exposure), 1.9 when the camera is inside an interior zone. The view (exposure, sky fill, HUD INTERIOR, ambience) counts a zone `VIEW_ABOVE` (6 m) over its top, so jumping or jetting in a short zone (the drill hall tiers, the Underworks hall) never flips to the outdoor look; drones use the zone as it is.

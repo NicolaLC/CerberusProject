@@ -3,7 +3,7 @@ import { RigidSkin } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
 import { damp, wrapAngle } from '../../engine/math.js';
 import { rb, cyl, ring, look } from './parts.js';
-import { sightRay, VISOR, PROJECTILE } from './enemy.js';
+import { sightRay, rim, VISOR, PROJECTILE } from './enemy.js';
 import { wornMaterial } from '../world/textures.js';
 
 // CERBERUS: the HiveMind's guardian protocol in one war-body (gdd.md 8.5), met once at the end of the Prologue on the
@@ -164,12 +164,17 @@ export class Cerberus {
     this.hull = bone(this.root, 0, TUNING.hullY, 0);
     this.#buildFrame(M);
     this.#buildHull(M, box);
-    this.heads.forEach((h, i) => this.#buildHead(h, i, M, bone, box));
+    this.#detailHull(M);
+    this.heads.forEach((h, i) => {
+      this.#buildHead(h, i, M, bone, box);
+      this.#detailHead(h, i, M);
+    });
 
     this.skeleton = new THREE.Skeleton(bones);
     ctx.scene.add(this.root);
     this.#pose(0, null);
     this.skin = new RigidSkin(this.root, this.skeleton, { cullMargin: 1.4, lod: true });
+    rim([M.hull, M.plate, M.trim, M.rust, ...M.shell, this.skin.lodMaterial]);
     ctx.markDirty();
   }
 
@@ -353,6 +358,101 @@ export class Cerberus {
       box(h.bone, 2.6, 2.6, 3.4, 0, 0, 3.4, 'torso', 2);
       h.weak = box(h.bone, 1.1, 1.1, 0.5, 0, 0, 5.2, 'weak', 2);
       h.muzzle.position.set(0, 0, 5.5);
+    }
+  }
+
+  // Final-boss dressing (visual only, no hitboxes): a dorsal crest of swept fins, spiked pauldrons and hanging armor skirts on the
+  // shoulder pods, violet power seams (the sensor material: dimmer than the weak spots), a glowing reactor ring under the hull and
+  // cable runs sagging from the belly to the clamps.
+  #detailHull(M) {
+    const parts = [];
+    // dorsal crest: swept-back fins along the deck, tallest in the middle
+    for (let k = -3; k <= 3; k++) {
+      const h = 2.6 - Math.abs(k) * 0.45;
+      parts.push(rb(M.trim, 0.32, h, 2.4, 0.08, k * 1.9, 3.2 + h / 2 - 0.3, -0.9, -0.45, 0, 0));
+      parts.push(rb(M.plate, 0.36, 0.3, 1.2, 0.06, k * 1.9, 3.15 + h - 0.25, -1.55, -0.45, 0, 0)); // ochre caps
+    }
+    // armor ridges either side of the crest and a rear collar
+    for (const s of [1, -1]) {
+      parts.push(
+        rb(M.hull, 6.5, 0.9, 1.3, 0.2, s * 3.6, 3.3, 1.8, 0.25, 0, 0),
+        rb(M.trim, 6.6, 0.2, 0.3, 0.05, s * 3.6, 3.75, 2.3, 0.25, 0, 0),
+        // spiked pauldron over each shoulder pod, armor skirt hanging off its outer side
+        rb(M.plate, 5.2, 0.9, 8.2, 0.25, s * 9.3, 3.0, -0.2, 0, 0, s * -0.22),
+        rb(M.trim, 5.3, 0.25, 0.5, 0.06, s * 9.3, 3.0, 3.9, 0, 0, s * -0.22),
+        cyl(M.trim, 0, 0.42, 2.6, s * 10.6, 4.4, -1.6, -0.5, 0, s * -0.45, 8), // spikes
+        cyl(M.trim, 0, 0.34, 2.0, s * 9.0, 4.3, -2.6, -0.6, 0, s * -0.3, 8),
+        cyl(M.trim, 0, 0.3, 1.6, s * 11.4, 3.6, 0.6, -0.3, 0, s * -0.7, 8),
+        rb(M.hull, 0.5, 3.6, 7.0, 0.12, s * 11.5, -0.6, 0, 0, 0, s * 0.18),
+        rb(M.rust, 0.12, 1.2, 2.0, 0.03, s * 11.8, -0.4, 1.4, 0, 0, s * 0.18),
+        ...[-2.4, -0.8, 0.8, 2.4].map((z) => rb(M.trim, 0.6, 3.0, 0.25, 0.05, s * 11.6, -0.8, z, 0, 0, s * 0.18)), // skirt ribs
+        // violet power seams down the pods and along the carapace front
+        rb(M.eye, 0.08, 3.4, 0.06, 0.02, s * 7.05, -0.2, 3.72),
+        rb(M.eye, 0.08, 2.2, 0.06, 0.02, s * 10.9, 0.3, 3.72),
+        rb(M.eye, 5.6, 0.08, 0.06, 0.02, s * 3.4, -1.9, 4.56),
+      );
+      // cable runs sagging from the belly to the lower clamps (two straight runs per cable)
+      for (const [x, z] of [[2.5, -2.5], [4.5, -3.5]]) {
+        const a = new THREE.Vector3(s * x, -2.6, z);
+        const m = new THREE.Vector3(s * (x + 1.8), -6.2, z - 3.2);
+        const b = new THREE.Vector3(s * (x + 3.6), -7.4, z - 6.2);
+        parts.push(strut(M.trim, 0.22, a, m, 8), strut(M.trim, 0.22, m, b, 8));
+      }
+    }
+    // the reactor under the hull: glowing rings round the drum (seen from the deck below)
+    parts.push(ring(M.eye, 2.5, 0.09, 0, -3.1, -0.5, R, 0, 0), ring(M.eye, 1.7, 0.07, 0, -3.95, -0.5, R, 0, 0), cyl(M.eye, 0.9, 0.9, 0.06, 0, -4.02, -0.5, 0, 0, 0, 16));
+    this.hull.add(look(...parts));
+  }
+
+  // Per head: a heavier cowl and silhouette (VIGIL swept crest fins and cheek guards, LEGION horned frame and an antenna crown,
+  // COLOSSUS armored jaw teeth and brow), violet seams down the sides. Visual only: the hitboxes are #buildHead's.
+  #detailHead(h, i, M) {
+    const shell = M.shell[i];
+    const parts = [];
+    if (i === 0) {
+      for (const [x, hh] of [[0, 1.8], [0.75, 1.3], [-0.75, 1.3]]) parts.push(rb(shell, 0.2, hh, 2.4, 0.06, x, 1.6 + hh / 2, 0.6, -0.55, 0, 0)); // swept crest
+      for (const s of [1, -1]) {
+        parts.push(
+          rb(shell, 0.45, 2.2, 1.6, 0.1, s * 1.75, -0.4, 2.4, 0, s * 0.35, 0), // cheek guards round the lens
+          rb(M.trim, 0.2, 1.6, 0.25, 0.04, s * 1.95, -0.4, 3.1, 0, s * 0.35, 0),
+          rb(M.eye, 0.06, 1.8, 0.06, 0.02, s * 1.42, 0, 2.2),
+          cyl(M.trim, 0, 0.18, 0.9, s * 1.2, -1.6, 2.0, R + 0.4, 0, 0, 6), // chin barbs
+        );
+      }
+      parts.push(rb(M.trim, 2.4, 0.3, 1.2, 0.06, 0, -1.4, 1.6), ring(M.trim, 1.35, 0.1, 0, 0, 3.25));
+    } else if (i === 1) {
+      for (const s of [1, -1]) {
+        parts.push(
+          cyl(M.trim, 0, 0.32, 2.4, s * 2.5, 2.6, 1.2, -0.3, 0, s * -0.5, 8), // frame horns
+          cyl(M.trim, 0, 0.22, 1.6, s * 2.9, -2.2, 1.6, 0.4, 0, s * -2.6, 8),
+          rb(shell, 0.5, 3.4, 1.8, 0.1, s * 3.0, 0, 1.4, 0, s * -0.25, 0), // ear plates
+          rb(M.eye, 0.06, 3.2, 0.06, 0.02, s * 2.6, 0, 2.42),
+        );
+      }
+      for (const [x, hh, t] of [[-1.2, 2.2, 0.1], [-0.4, 3.0, 0.03], [0.5, 2.6, -0.05], [1.3, 1.8, -0.12]]) parts.push(cyl(M.trim, 0.05, 0.07, hh, x, 2.3 + hh / 2, 0.8, -0.2, 0, t, 5)); // antenna crown
+      parts.push(rb(M.eye, 4.8, 0.06, 0.06, 0.02, 0, -1.98, 2.42));
+    } else {
+      for (let k = 0; k < 6; k++) {
+        const x = -1.5 + k * 0.6;
+        parts.push(cyl(M.trim, 0, 0.16, 0.6, x, 1.2, 4.75, Math.PI, 0, 0, 6), cyl(M.trim, 0, 0.16, 0.6, x, -1.2, 4.75, 0, 0, 0, 6)); // jaw teeth
+      }
+      for (const s of [1, -1]) {
+        parts.push(
+          rb(shell, 0.6, 2.6, 3.6, 0.12, s * 2.25, 0, 2.2), // armored cheeks over the jaw rams
+          rb(M.rust, 0.08, 1.0, 1.4, 0.02, s * 2.58, 0.4, 1.6),
+          rb(M.eye, 0.06, 0.06, 3.0, 0.02, s * 2.58, -0.9, 2.3),
+          cyl(M.trim, 0, 0.3, 1.6, s * 1.2, 2.4, 0.6, -0.6, 0, s * -0.3, 8), // brow horns
+        );
+      }
+      parts.push(rb(shell, 3.4, 0.7, 2.4, 0.2, 0, 2.3, 1.0, -0.15, 0, 0), rb(M.trim, 3.5, 0.2, 0.3, 0.04, 0, 2.6, 2.1)); // brow
+    }
+    h.bone.add(look(...parts));
+    // segmented collars along both boom segments, a violet seam under each
+    for (const [b, len] of [[h.neckA, BOOM.a], [h.neckB, BOOM.b]]) {
+      const p = [];
+      for (let z = 0.8; z < len - 0.4; z += 1.1) p.push(ring(M.trim, 0.95, 0.14, 0, 0, z));
+      p.push(rb(M.eye, 0.08, 0.06, len * 0.75, 0.02, 0, -0.9, len * 0.5));
+      b.add(look(...p));
     }
   }
 

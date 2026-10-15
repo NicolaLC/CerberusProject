@@ -131,7 +131,7 @@ async function open() {
   expect('killing the spider ends the alarm and siren but not the mission; the breakout cut plays (its squad alive and waiting), then the exit is next; reaching it completes the mission once, no failure', r.end.state === 'active' && r.end.cur === 'breakout' && r.breakout.cur === 'breakout' && r.breakout.cut === 'breakout' && r.breakout.active && r.breakout.squad.length === 4 && r.afterBreakout.cur === 'exit' && r.afterBreakout.squad === 0 && r.end.complete === 0 && r.done.state === 'complete' && r.done.complete === 1 && r.done.failed === 0 && r.end.failed === 0 && r.end.alarmTarget === 0 && !r.end.siren && r.after.level === 0 && r.after.fog === r.after.base && JSON.stringify(r.alarmEvents) === '[["on","purge-alarm",true],["off","purge-alarm"]]', JSON.stringify([r.end, r.breakout, r.afterBreakout, r.done, r.after, r.alarmEvents]));
   expect('every objective became current exactly once, in chain order', r.objectives.join() === r.chain.slice(1).join(), r.objectives.join());
   expect('  checkpoints between the stages were reached: yard, hall, hall-east, gate', ['cp-yard', 'cp-hall', 'cp-hall-east', 'cp-gate'].every((c) => r.checkpoints.includes(c)), r.checkpoints.join());
-  expect('  the announcer and the STEM-00 lines after the hall shooters and the troopers played (the directive is known, its source is not); every STEM-00 line is at most 70 characters', r.lines.includes('CALIBRATION UNIT 00: NONCOMPLIANT. PURGE.') && r.lines.some((t) => t.startsWith('> TARGETS: ARMED. DIRECTIVE: UNCHANGED')) && r.lines.some((t) => t.startsWith('> HOSTILES DESTROYED')) && !r.lines.some((t) => /DIRECTIVE: (NONE|STILL NONE)|ORDERS RECEIVED/.test(t)) && r.lines.filter((t) => t.startsWith('> ')).every((t) => t.length <= 70), JSON.stringify(r.lines));
+  expect('  the announcer and the STEM-00 lines after the hall A and the plated troopers played (the directive is known, its source is not); every STEM-00 line is at most 70 characters', r.lines.includes('CALIBRATION UNIT 00: NONCOMPLIANT. PURGE.') && r.lines.some((t) => t.startsWith('> TARGETS: ARMED. DIRECTIVE: UNCHANGED')) && r.lines.some((t) => t.startsWith('> HOSTILES DESTROYED')) && !r.lines.some((t) => /DIRECTIVE: (NONE|STILL NONE)|ORDERS RECEIVED/.test(t)) && r.lines.filter((t) => t.startsWith('> ')).every((t) => t.length <= 70), JSON.stringify(r.lines));
   expect('no page errors', errors.length === 0, errors.join(' | '));
   await p.close();
 }
@@ -142,7 +142,7 @@ async function open() {
   const r = await p.evaluate(() => {
     const g = window.game;
     const out = {};
-    // kill the hall shooters and troopers before the purge: shot while dormant, they stay asleep
+    // kill the hall A and the plated troopers before the purge: shot while dormant, they stay asleep
     T.killGroup(2); T.killGroup(4);
     out.asleep = T.awake();
     T.advanceTo('purge-yard', { rifle: false });
@@ -171,7 +171,7 @@ async function open() {
   });
   expect('groups killed asleep stay asleep', JSON.stringify(r.asleep) === '[]', JSON.stringify(r.asleep));
   expect('pistol only past the range (the landing KR-7 left); yard stage: purge-1 awake alone', r.owned === 'pistol' && r.yard.cur === 'purge-yard' && r.yard.awake.join() === 'purge-1', JSON.stringify([r.owned, r.yard]));
-  expect('hall shooters already dead: their stage passes at once; the armoury is current and walking on skips it', r.armoury === 'armoury', r.armoury);
+  expect('hall A troopers already dead: their stage passes at once; the armoury is current and walking on skips it', r.armoury === 'armoury', r.armoury);
   expect('hall troopers already dead: the chain stops at the late armoury step (no KR-7 yet) until G at the rack gives it', r.late.cur === 'armoury-late' && r.late.owned === 'pistol' && !r.late.awake.length && r.lateStill === 'armoury-late' && r.gate.cur === 'purge-gate' && r.gate.owned === 'pistol,rifle', JSON.stringify([r.late, r.lateStill, r.gate]));
   expect('the spider stage still works; the breakout cut follows and the mission ends at the Skyway exit', r.boss.cur === 'purge-boss' && r.boss.awake.join() === 'purge-6' && r.preExit === 'active' && r.end.state === 'complete' && r.end.failed === 0 && r.end.alarm === 0, JSON.stringify([r.boss, r.preExit, r.end]));
   expect('no objective skipped, none repeated', r.objectives.join() === CHAIN.split(',').slice(1).join(), r.objectives.join());
@@ -204,7 +204,7 @@ async function open() {
     out.repaired = { health: player.health, shields: player.shields, max: [player.t.maxHealth, player.t.maxShields] };
     T.mortal = false;
     out.cur = T.cur();
-    // its line waits for calm: it plays once the building is clear (the hall shooters, then the troopers the chain wakes next)
+    // its line waits for calm: it plays once the building is clear (the hall A troopers, then the troopers the chain wakes next)
     T.killGroup(2);
     T.step(0.2);
     T.killGroup(4);

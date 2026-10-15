@@ -30,6 +30,8 @@ All of it reacts to gameplay events (see the events table in architecture.md); g
 | headshot | 25ms hitstop |
 | kill | 70ms hitstop at 0.08× time, trauma 0.22, white flash, cyan shockwave ring, spark burst, kill chime, big red hitmarker |
 | hurt | trauma 0.38, red chromatic aberration pulse |
+| shields break (`player:shieldBreak`) | slow motion (x0.3 game time for 0.7 s real, easing back over the last half; `Juice` TUNING `shieldBreak`), trauma 0.5, FOV pull-in, red pulse, toast `⚠ SHIELDS DOWN`, the empty shield bar's frame pulses red (`.shield.down`) until it recharges, a sound (`shieldBreak` sample, synth `zap` until recorded) |
+| enemy outline | every enemy material (troopers, puppets, drones, the SX-6, their far LOD) adds a faint violet rim (fresnel, `rim()` in enemy.js, 0.1 strength, power 8: only the silhouette edges): no extra draws, the weak spots and sensors stay brighter |
 | reload jam / perfect | trauma 0.15 / FOV punch + white flash |
 | cover / vault landing | trauma + camera dip |
 | jet (`player:jet`) | fx: orange flames + blue core sprites along `dir` for 0.22 s (2/frame, 0.13 s life, speed 7 m/s, follows nozzle via `fx.player.jetting`), smoke puff every 45 ms, tan ground dust ring + 5 puffs; audio: recorded thruster burst (`jet.mp3`; synth fallback: bandpassed noise whoosh 1.4k to 420 Hz + 120 to 45 Hz thump); juice: trauma 0.05, camera dips -0.35 (springs up); rumble 0.2/0.3 for 90 ms (game.js) |

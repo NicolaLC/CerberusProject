@@ -39,6 +39,7 @@ export const SUN_DIR = new THREE.Vector3(0.45, 0.78, 0.43).normalize();
 // exposure so the arena's own lamps and emissives carry it. The sky dome, fog and sun are the preset's from the first frame (an
 // outdoor space seen through a door or by a cut camera is never under the day sky; roofs shade the sun indoors); only the hemisphere
 // fill and the outdoor exposure follow the camera (interiors keep their look: the fill is not shadowed by roofs), eased at SKY_RATE per second.
+export const VIEW_ABOVE = 6; // m: isInterior's margin over a zone's top for the camera / player view (a jet arc's reach)
 export const SKIES = {
   night: { top: '#020406', horizon: '#13262c', ground: '#040607', glow: 0, fog: '#0a1317', fogNear: 20, fogFar: 160, hemi: 0x3e5a6a, hemiGround: 0x0c0f10, hemiI: 1.1, sun: 0x86a6c8, sunI: 0.8, exposure: 1.7 },
 };
@@ -641,7 +642,7 @@ export class World {
     const dt = a.t == null ? 0 : Math.min(0.1, Math.max(0, t - a.t));
     a.t = t;
     if (this.night && focus) {
-      const want = this.isInterior(focus) ? 0 : 1;
+      const want = this.isInterior(focus, VIEW_ABOVE) ? 0 : 1;
       if (this.skyK !== want) {
         this.skyK = this.lightSnap ? want : want > this.skyK ? Math.min(want, this.skyK + dt * SKY_RATE) : Math.max(want, this.skyK - dt * SKY_RATE);
         this.#applySky();
@@ -749,9 +750,14 @@ export class World {
     p.position.copy(PARKED);
   }
 
-  isInterior(p) {
+  // `above`: metres a zone also counts over its top. The view (exposure, sky fill, HUD, ambience) passes VIEW_ABOVE so a jet or a
+  // jump never lifts the camera out of a short zone (the drill hall's tiers, the Underworks hall) into the outdoor look; drones pass 0.
+  isInterior(p, above = 0) {
     const z = this.interiorZones;
-    for (let i = 0; i < z.length; i++) if (z[i].containsPoint(p)) return true;
+    for (let i = 0; i < z.length; i++) {
+      const b = z[i];
+      if (p.x >= b.min.x && p.x <= b.max.x && p.z >= b.min.z && p.z <= b.max.z && p.y >= b.min.y && p.y <= b.max.y + above) return true;
+    }
     return false;
   }
 

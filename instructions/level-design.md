@@ -142,7 +142,7 @@ CAM   over the west cover as they advance, 2.6 s
 CAM   back behind STEM-00, 1.6 s, control returns
 
 ## 4. Purge: drill hall
-GOAL  destroy purge-1 "PURGE: DRILL HALL"   -- 4 shooters on posts, 3 troopers + 3 drones from the pen; nobody drops anything
+GOAL  destroy purge-1 "PURGE: DRILL HALL"   -- 7 troopers (4 on the posts, 3 from the pen) + 3 drones; nobody drops anything
 -- the KR-7 waits on a stand on the landing [landing-rifle], in the path from the range exit to the cut: the first fight has two guns
 
 ## 4.5 Supply corridor   -- hall exit -> east 22 m -> north 9 m -> the building's west door; interior kit, two sectors (supply-a / supply-b)
@@ -151,7 +151,7 @@ LOG   "> SUPPLY POINT: STOCKED. ROUNDS, REPAIR. QUERY: STOCKED FOR WHOM?"  ON [s
 -- a second, heavy-only supply.ammo [arena-supply-heavy] stands in hall B's east wall north of [arena-door]: heavy rounds for the SX-6
 
 ## 5. Purge: hall
-GOAL  destroy purge-2 "PURGE: HALL SHOOTERS"  WAKE purge-2   -- detail tells the player to resupply first ({interact})
+GOAL  destroy purge-2 "PURGE: HALL A"  WAKE purge-2   -- detail tells the player to resupply first ({interact})
 LOG   "> TARGETS: ARMED. DIRECTIVE: UNCHANGED. QUERY: WHO ARMED THEM?"  ON DONE
 -- [hall-farsight]: a KS-5 Farsight (pickup.gun, sniper) on a stand just inside hall A's door: walking in takes it, before the plated troopers wake
 LOG   "> ITEM: KS-5. ROUNDS: HEAVY. FUNCTION: BREAK ARMOR."  ON DISCOVER sniper   -- priority high
@@ -335,4 +335,4 @@ LOG   "> FELL: 1,140 M. CLIMBED: 0 M. ROUTE: UP."  ON DONE
 GOAL  reach [exit] "FIND A WAY UP"   -- 50: the shaft's foot under the ladder; the mission completes (default debrief, no NEXT: the end of what exists)
 ```
 Notes: the drones' `bounds` (the hall, the cistern) are required: the default is the Prologue's yard. Zones: `zone.interior` is full height everywhere but the hall and the
-cistern (0..2.7 m; a jet lifts the camera out of them, as in the drill hall). Shots, boot lines and the four log lines are in the script.
+cistern (0..2.7 m: drones fly above them; the view counts a zone 6 m over its top, `VIEW_ABOVE`, so a jet never flips the camera to the outdoor look). Shots, boot lines and the four log lines are in the script.

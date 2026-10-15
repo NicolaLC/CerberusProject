@@ -27,8 +27,12 @@ const GROUP = { key: 'group', type: 'text', optional: true };
 // `dormant` (every enemy): never wakes itself (no sight, hearing, arena entry or damage wake; a shooter never pops up or
 // fires) but still takes hits and dies; only wakeGroup(its group) wakes it. Needs a group, or it could never wake.
 const DORMANT = { key: 'dormant', type: 'bool', def: false };
+// `hidden` (with `dormant`): not drawn and not a target until its group wakes (a later stage's squad that must not stand asleep in
+// sight of an earlier fight, e.g. the Prologue's plated troopers in hall A while the hall A troopers fight).
+const HIDDEN = { key: 'hidden', type: 'bool', def: false };
 const ARMORED = { key: 'armored', type: 'bool', def: false }; // puppets: only heavy rounds hurt it (puppet.js armor); trooper: light rounds do x0.25 (trooper.js armor)
-const dormantCheck = (p) => (p.dormant && (typeof p.group !== 'string' || !p.group) ? 'is dormant but has no group: nothing could ever wake it (set "group")' : null);
+const dormantCheck = (p) =>
+  p.dormant && (typeof p.group !== 'string' || !p.group) ? 'is dormant but has no group: nothing could ever wake it (set "group")' : p.hidden && !p.dormant ? 'is hidden but not dormant: only a dormant enemy waits hidden for its group' : null;
 // `dropGun` (every enemy): the gun id it leaves on the floor when destroyed (a pickup, Pickups.dropGun), unless the player owns it already.
 // `dropAmmo`: rounds in that pickup (default the gun's drop size). `dropOnce` (true): only the first destroyed enemy of the level drops that gun.
 const DROP = [{ key: 'dropGun', type: 'enum', options: Object.keys(GUNS), optional: true }, { key: 'dropAmmo', type: 'number', min: 0, optional: true }, { key: 'dropOnce', type: 'bool', def: true }];
@@ -44,18 +48,18 @@ const def = (kind, d) => ({ kind, pos: d.pos, yaw: d.yaw, ...d.params });
 // `example` ({ params, yaw? }) is what the Library spawns; `label` is its one-line stat sheet (level.md, meta convention).
 export const ENEMY_PIECES = {
   // `armored` (static / mover): plate steel, only heavy rounds hurt it (the range's heavy-weapon targets)
-  'enemy.static': { stand: true, example: { params: {} }, label: `HP ${HEALTH.default} | stands, takes hits`, check: enemyCheck, fields: [GROUP, DORMANT, ARMORED, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('static', d)) },
-  'enemy.mover': { stand: true, example: { params: { speed: 0 } }, label: `HP ${HEALTH.default} | slides on a rail`, check: enemyCheck, fields: [GROUP, DORMANT, ARMORED, { key: 'to', type: 'vec3', optional: true }, { key: 'speed', type: 'number', min: 0 }, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('mover', d)) },
-  'enemy.shooter': { stand: true, example: { params: {} }, label: `HP ${HEALTH.shooter} | pops up and fires within ${ENGAGE_RANGE} m`, check: enemyCheck, fields: [GROUP, DORMANT, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('shooter', d)) },
+  'enemy.static': { stand: true, example: { params: {} }, label: `HP ${HEALTH.default} | stands, takes hits`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, ARMORED, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('static', d)) },
+  'enemy.mover': { stand: true, example: { params: { speed: 0 } }, label: `HP ${HEALTH.default} | slides on a rail`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, ARMORED, { key: 'to', type: 'vec3', optional: true }, { key: 'speed', type: 'number', min: 0 }, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('mover', d)) },
+  'enemy.shooter': { stand: true, example: { params: {} }, label: `HP ${HEALTH.shooter} | pops up and fires within ${ENGAGE_RANGE} m`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('shooter', d)) },
   // moves between cover and shoots back
-  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m`, check: enemyCheck, fields: [GROUP, DORMANT, ARMORED, ...DROP], build: (sys, d) => new Trooper(sys.ctx, def('trooper', d)) },
+  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, ARMORED, ...DROP], build: (sys, d) => new Trooper(sys.ctx, def('trooper', d)) },
   // hovers and strafes, short bursts
-  'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m`, check: enemyCheck, fields: [GROUP, DORMANT, ...DROP], build: (sys, d) => new Drone(sys.ctx, def('drone', d)) },
+  'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, ...DROP], build: (sys, d) => new Drone(sys.ctx, def('drone', d)) },
   // miniboss
   // CERBERUS (the Prologue's scripted loss): three heads, never destroyed, never counted (`unkillable`: kills / arena:clear / destroy objectives skip it).
   // `arena` (not in the inspector, like the spider's): where the player can be; wakes when they enter it, or by wakeGroup.
-  'boss.cerberus': { example: { params: {} }, label: `3 heads x ${CERBERUS.head} HP | never destroyed, repairs to full above ${Math.round(CERBERUS.floor * 100)}%, hull is armor`, check: enemyCheck, fields: [GROUP, DORMANT, { key: 'floor', type: 'number', min: 0, max: 1, optional: true }, { key: 'repair', type: 'number', min: 0, optional: true }], build: (sys, d) => new Cerberus(sys.ctx, def('boss', d)) },
-  'boss.spider': { example: { params: {} }, label: `HP ${SPIDER.core} core | wakes at ${SPIDER.wakeRange} m or in its arena`, check: enemyCheck, fields: [GROUP, DORMANT, ...DROP], build: (sys, d) => new SpiderMech(sys.ctx, def('boss', d)) },
+  'boss.cerberus': { example: { params: {} }, label: `3 heads x ${CERBERUS.head} HP | never destroyed, repairs to full above ${Math.round(CERBERUS.floor * 100)}%, hull is armor`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, { key: 'floor', type: 'number', min: 0, max: 1, optional: true }, { key: 'repair', type: 'number', min: 0, optional: true }], build: (sys, d) => new Cerberus(sys.ctx, def('boss', d)) },
+  'boss.spider': { example: { params: {} }, label: `HP ${SPIDER.core} core | wakes at ${SPIDER.wakeRange} m or in its arena`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, ...DROP], build: (sys, d) => new SpiderMech(sys.ctx, def('boss', d)) },
 };
 
 // Flank director: with 2+ troopers engaged, every FLANK_EVERY s one of them is sent around the player.
@@ -66,6 +70,7 @@ const _front = new THREE.Vector3();
 const _eye = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _step = new THREE.Vector3();
+const _dir = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _ray = new THREE.Raycaster();
 const _hits = [];
@@ -200,7 +205,8 @@ export class Enemies {
     this.kills++;
     this.dirty = true;
     this.events.emit('puppet:down', actor);
-    if (this.kills === this.killable) this.events.emit('arena:clear');
+    // an awake unkillable boss (CERBERUS) is still a fight: no ARENA CLEAR (and no combat music cut) while it is up
+    if (this.kills === this.killable && !this.all.some((e) => e.unkillable && e.alive && e.awake)) this.events.emit('arena:clear');
   }
 
   // Enemies that can be destroyed (everything but `unkillable` ones, i.e. CERBERUS): what `kills` is counted against.
@@ -255,6 +261,7 @@ export class Enemies {
     const actor = this.registry.build('enemies', this, data);
     actor.squad = data.params?.group ?? null;
     actor.dormant = !!data.params?.dormant;
+    actor.hiddenAsleep = !!data.params?.hidden; // see HIDDEN: with dormant, not drawn nor a target until woken
     const { dropGun, dropAmmo, dropOnce } = data.params ?? {};
     actor.dropGun = dropGun ? { gun: dropGun, ammo: dropAmmo, once: dropOnce ?? true } : null; // see DROP
     return actor;
@@ -272,6 +279,7 @@ export class Enemies {
         if (e.wake() !== false) n++;
       }
     }
+    this.dirty = true; // a hidden sleeper is a target now
     if (!this.woken.has(group)) {
       this.woken.add(group);
       this.events.emit('group:wake', { group });
@@ -375,7 +383,7 @@ export class Enemies {
     if (this.dirty) {
       this.dirty = false;
       this.targets.length = 0;
-      for (const p of this.all) if (p.alive) for (const m of p.hitMeshes) this.targets.push(m);
+      for (const p of this.all) if (p.alive && !(p.dormant && p.hiddenAsleep)) for (const m of p.hitMeshes) this.targets.push(m);
     }
     return this.targets;
   }
@@ -486,10 +494,11 @@ export class Enemies {
     }
   }
 
-  // Dormant (never woken) and in a sector the camera cannot see into (world/sectors.js; never in a level without sectors): such an
-  // enemy skips its AI update and its pose, and is not drawn (cull). It still takes hits and wakes with its group.
+  // Dormant (never woken) and hidden (HIDDEN) or in a sector the camera cannot see into (world/sectors.js; never in a level without
+  // sectors): such an enemy skips its AI update and its pose, and is not drawn (cull). It still takes hits (not a hidden one: no
+  // target) and wakes with its group.
   #asleep(p) {
-    return p.dormant && p.alive && !this.world.sectors.visibleAt(p.pos);
+    return p.dormant && p.alive && (p.hiddenAsleep || !this.world.sectors.visibleAt(p.pos));
   }
 
   // After the world's sector visibility (game.js, present phase): hides the sleeping enemies, shows them again when they wake, die or
@@ -565,24 +574,26 @@ export class Enemies {
       const to = _w.copy(from).add(step);
       let done = b.life <= 0;
 
+      // walls first: the step is cut at the first world hit, so a player hugging the far side of a wall is never hit through it
+      let wall = null;
+      if (!done) {
+        _ray.set(from, _dir.copy(step).divideScalar(len || 1));
+        _ray.far = len;
+        _hits.length = 0;
+        wall = _ray.intersectObjects(this.world.meshes, false, _hits)[0] ?? null;
+        if (wall) to.copy(wall.point);
+      }
       if (!done && cap && segSegDist(from, to, cap.a, cap.b) < cap.r + BOLT.radius) {
         HURT.amount = player.damage(b.damage);
         HURT.dir.copy(b.vel).normalize();
         this.events.emit('player:hurt', HURT);
         done = true;
-      }
-      if (!done) {
-        _ray.set(from, step.divideScalar(len || 1));
-        _ray.far = len;
-        _hits.length = 0;
-        const hit = _ray.intersectObjects(this.world.meshes, false, _hits)[0];
-        if (hit) {
-          BOLT_HIT.point = hit.point;
-          if (hit.face) BOLT_HIT.normal.copy(hit.face.normal);
-          else BOLT_HIT.normal.copy(step).negate();
-          this.events.emit('bolt:impact', BOLT_HIT);
-          done = true;
-        }
+      } else if (wall) {
+        BOLT_HIT.point = wall.point;
+        if (wall.face) BOLT_HIT.normal.copy(wall.face.normal);
+        else BOLT_HIT.normal.copy(step).negate().normalize();
+        this.events.emit('bolt:impact', BOLT_HIT);
+        done = true;
       }
       if (done) {
         this.boltPool.release(b);

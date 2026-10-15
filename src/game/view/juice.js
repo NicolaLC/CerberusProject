@@ -15,6 +15,7 @@ const TUNING = {
   jetDip: -0.35, // camera sinks slightly, then springs back up
   jetLandTrauma: 0.06, // landing after a jet: light dip instead of the vault slam
   jetLandDip: 0.7,
+  shieldBreak: { scale: 0.3, time: 0.7, trauma: 0.5 }, // shields gone: slow motion (game time x scale for `time` s of real time, easing back over its last half)
 };
 
 export class Juice {
@@ -24,6 +25,7 @@ export class Juice {
     this.stop = 0;
     this.timeScale = 1;
     this.cap = this.capNow = 1; // hold(): a ceiling on the time scale, eased in
+    this.slow = 0; // shield break slow motion left (s, real time)
   }
 
   // Level change: no hitstop or hold left running.
@@ -31,6 +33,7 @@ export class Juice {
     this.stop = 0;
     this.timeScale = 1;
     this.cap = this.capNow = 1;
+    this.slow = 0;
   }
 
   listen(events) {
@@ -40,6 +43,7 @@ export class Juice {
       else if (kind === 'jam') this.camRig.addTrauma(0.15);
     });
     events.on('player:hurt', () => this.hurt());
+    events.on('player:shieldBreak', () => this.shieldBreak());
     events.on('player:coverSlam', () => this.coverSlam());
     events.on('player:jet', () => this.jet());
     events.on('player:land', (kind) => this.land(kind));
@@ -92,6 +96,13 @@ export class Juice {
     this.post.hit();
   }
 
+  shieldBreak() {
+    this.slow = this.t.shieldBreak.time;
+    this.camRig.addTrauma(this.t.shieldBreak.trauma);
+    this.camRig.punch(-3);
+    this.post.hit();
+  }
+
   coverSlam() {
     this.camRig.addTrauma(this.t.coverTrauma);
     this.camRig.dip(0.9);
@@ -117,6 +128,12 @@ export class Juice {
       this.timeScale += (1 - this.timeScale) * Math.min(1, realDt * 12);
     }
     this.capNow += (this.cap - this.capNow) * Math.min(1, realDt * 4);
-    return Math.min(this.timeScale, this.capNow);
+    let slow = 1;
+    if (this.slow > 0) {
+      const S = this.t.shieldBreak;
+      this.slow -= realDt;
+      slow = S.scale + (1 - S.scale) * Math.max(0, 1 - this.slow / (S.time / 2)); // flat, then back to 1 over the last half
+    }
+    return Math.min(this.timeScale, this.capNow, slow);
   }
 }

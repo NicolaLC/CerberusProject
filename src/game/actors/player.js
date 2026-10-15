@@ -188,9 +188,10 @@ export class Player {
     this.sinceHit = 0;
     if (this.shields > 0) {
       this.shields -= amount;
-      if (this.shields < 0) {
+      if (this.shields <= 0) {
         this.health += this.shields;
         this.shields = 0;
+        this.events.emit('player:shieldBreak'); // juice: slow motion; HUD: SHIELDS DOWN; audio
       }
     } else {
       this.health -= amount;
@@ -447,6 +448,10 @@ export class Player {
     // the camera swaps shoulder only for the peek; the player's chosen shoulder comes back afterwards
     const peekTarget = _v.set(0, 0, 0);
     rig.peekSide = 0;
+    // at one edge of high cover the camera sits over that shoulder (else the cover fills the view); the middle of a wall or
+    // low cover keeps the player's shoulder
+    const c = this.cover;
+    rig.coverSide = c && c.type === 'high' && c.edgeL !== c.edgeR ? (c.edgeR ? 1 : -1) : 0;
     if (this.cover && this.cover.type === 'high' && combat) {
       const tr = this.cover.tangent; // points toward camera right
       let side = 0;

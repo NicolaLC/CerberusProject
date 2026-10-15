@@ -91,11 +91,11 @@ for (const f of files) {
   check('prologue.json: every one-way gate (closeOn / shutOn) names a piece of the file', oneWay.length >= 8 && oneWay.every((g) => names.has((g.params.closeOn || g.params.shutOn).split(':')[1])));
   // rounds and repairs come only from supply points: no loose ammo, the corridor has one of each
   check('prologue.json: no loose ammo, a supply.ammo and a supply.repair in the supply corridor', !lv.pieces.some((p) => /^pickup\.(light|heavy)$/.test(p.id)) && ['supply-ammo', 'supply-repair'].every((n) => names.has(n)));
-  // the armoury (#93): order 60 between the shooters (purge-2) and the troopers (purge-4); a skip trigger that exists; the troopers carry the drop
+  // the armoury (#93): order 60 between the hall A troopers (purge-2) and the troopers (purge-4); a skip trigger that exists; the troopers carry the drop
   const arm = chain.find((o) => o.params.order === 60);
   const prev = chain.filter((o) => o.params.order < 60).at(-1);
   const next = chain.find((o) => o.params.order > 60 && o.params.wakeGroup);
-  check('prologue.json: the armoury (order 60, interact, grants the rifle) sits between the shooters (purge-2) and the troopers (purge-4)', arm?.id === 'objective.interact' && arm.params.grantGun === 'rifle' && prev?.params.wakeGroup === 'purge-2' && next?.params.wakeGroup === 'purge-4');
+  check('prologue.json: the armoury (order 60, interact, grants the rifle) sits between the hall A troopers (purge-2) and the plated troopers (purge-4)', arm?.id === 'objective.interact' && arm.params.grantGun === 'rifle' && prev?.params.wakeGroup === 'purge-2' && next?.params.wakeGroup === 'purge-4');
   check('prologue.json: the armoury skipOn names a trigger.volume of the file', lv.pieces.some((p) => p.id === 'trigger.volume' && p.name === arm?.params.skipOn && p.params.once === false));
   check('prologue.json: every trooper of purge-3 / purge-4 drops the rifle', lv.pieces.filter((p) => p.id === 'enemy.trooper' && /^purge-[34]$/.test(p.params?.group)).every((p) => p.params.dropGun === 'rifle'));
   // the exit (#15): a gate opened by the breakout cut's cue, a last reach needing the rifle, the late armoury step before the arena gate

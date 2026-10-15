@@ -67,6 +67,7 @@ const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _chest = new THREE.Vector3();
+const _eyeV = new THREE.Vector3();
 const rand = ([a, b]) => a + Math.random() * (b - a);
 const randInt = ([a, b]) => a + Math.floor(Math.random() * (b - a + 1));
 
@@ -79,10 +80,10 @@ export class Trooper extends EnemyBody {
       health: TUNING.health,
       mats: trooperMaterials(!!def.armored),
       armed: true,
-      weakSpots: 1,
+      weakSpots: def.armored ? 0 : 1, // plated: no weak spot, the plates are the way in
     });
     this.armored = !!def.armored; // `armored` param: plated, see armor()
-    this.plates = buildTrooper(this.rig, this.mats, this.visor, this.armored) ?? {}; // group -> [{ bone, object }]
+    this.plates = buildTrooper(this.rig, this.mats, this.visor, this.armored) ?? {}; // group -> [look group]
     if (this.armored) this.debrisKind = 'trooper-plated';
     this.t = TUNING;
     this.vel = new THREE.Vector3();
@@ -111,7 +112,6 @@ export class Trooper extends EnemyBody {
     this.rig.socket('Weapon', 'gripL', ...s.gripL);
     this.muzzle = this.rig.socket('Weapon', 'muzzle', ...s.muzzle);
     this.finishBody();
-    this.#clearWeakSpots();
     this.#place();
   }
 
@@ -128,9 +128,9 @@ export class Trooper extends EnemyBody {
     return this.alerted;
   }
 
-  // Damage multiplier (weapon.js). Plated: a part under an intact plate shrugs off light rounds and the pistol (0: sparks,
-  // weapon:armored) and takes plateHeavy of a heavy round, which knocks that plate group off (damage()); a bare part and the
-  // glowing weak spot (never plated) take everything.
+  // Damage multiplier (weapon.js). Plated (no weak spot): a part under an intact plate shrugs off light rounds and the pistol
+  // (0: sparks, weapon:armored) and takes plateHeavy of a heavy round, which knocks that plate group off (damage()); a bare part
+  // takes everything.
   armor(zone, object, gun) {
     if (zone === 'weak' || !this.plates[PLATE_OF[object?.userData.bone]]) return 1;
     return gun?.ammo === 'heavy' ? this.t.plateHeavy : 0;
@@ -144,31 +144,13 @@ export class Trooper extends EnemyBody {
   }
 
   #dropPlates(key, point, dir) {
-    const pieces = new Set(this.plates[key].map((p) => p.object));
+    const pieces = new Set(this.plates[key]);
     delete this.plates[key];
     this.group.updateMatrixWorld(true);
     this.ctx.debris.burst(this.debrisKind, this.skin, this.ctx.scene, this.shed, { ...PLATE_OFF, dir }, undefined, pieces);
     for (const o of pieces) o.userData.dropped = true;
     this.skin.rebuild();
     this.ctx.events.emit('enemy:plate', { enemy: this, group: key, point });
-  }
-
-  // The weak spot is never plated: a plate on its bone is left off (the gap shows where it is).
-  #clearWeakSpots() {
-    let changed = false;
-    for (const spot of this.weakSpots) {
-      for (const key in this.plates) {
-        const list = this.plates[key];
-        for (let i = list.length - 1; i >= 0; i--) {
-          if (list[i].bone !== spot.userData.bone) continue;
-          list[i].object.userData.dropped = true;
-          list.splice(i, 1);
-          changed = true;
-        }
-        if (!list.length) delete this.plates[key];
-      }
-    }
-    if (changed) this.skin.rebuild();
   }
 
   wake() {
@@ -594,7 +576,9 @@ export class Trooper extends EnemyBody {
   }
 
   #fire(target, dist, extra = 0) {
-    const from = this.muzzle.getWorldPosition(_v);
+    let from = this.muzzle.getWorldPosition(_v);
+    // the rifle poking through a wall it hugs: the bolt leaves from the body instead, so the wall stops it
+    if (!this.#canSee(this.#eye(_eyeV), from, 0)) from = _eyeV;
     const spread = this.t.spreadBase + dist * this.t.spreadPerMeter + extra;
     const dir = _w.copy(target);
     dir.x += (Math.random() - 0.5) * spread;

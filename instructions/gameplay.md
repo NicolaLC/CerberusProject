@@ -53,8 +53,8 @@
   `PLATE_OF` in trooper.js maps every bone to one). A part under an intact plate takes nothing from light rounds and the pistol
   (`armor()` 0: `weapon:impact` sparks and `weapon:armored`, the crosshair does not turn red) and `TUNING.plateHeavy` (x0.5) of a
   heavy round, which knocks that whole group off (`enemy:plate`: the plates fly off as debris, sparks, a clank; the skin is re-baked).
-  A bare part takes every gun at full damage. The glowing weak spot is never plated (every gun, full `weakMult`; a plate on its bone
-  is left off). `armor(zone, part, gun)` gets the gun def from weapon.js (also in the aim probe and the pierce check).
+  A bare part takes every gun at full damage. A plated trooper has no weak spot: a heavy gun is the way in.
+  `armor(zone, part, gun)` gets the gun def from weapon.js (also in the aim probe and the pierce check).
 - Walk within 1.1m to collect; toast "LIGHT AMMO +n AR ..." / "HEAVY AMMO +n SR ...". If every gun of that class is
   full the pickup stays ("AMMO FULL").
 
@@ -115,7 +115,9 @@
 - High: standing; aiming at an edge peeks: the feet stay behind cover (0.2 m weight shift, `PEEK` in player.js), the torso
   leans out 0.6 rad so head and gun clear the edge, at a left edge the gun hold mirrors to the left shoulder
   (`leftHanded` → Animator `hand`), and the camera moves to that side
-  only for the peek (`camRig.peekSide`); the player's own shoulder (`camRig.shoulder`) comes back afterwards. Away from the ends
+  only for the peek (`camRig.peekSide`); the player's own shoulder (`camRig.shoulder`) comes back afterwards. Not aiming, at one
+  edge of high cover (only `edgeL` or only `edgeR`) the camera sits over that edge's shoulder (`camRig.coverSide`, set in
+  `player.#peek`), so the cover never fills the view; the middle of a wall and low cover keep the player's shoulder. Away from the ends
   (no edge within 0.45 m) there is no line of fire: aiming and shooting are blocked (`player.pinned`).
 
 ## Weapons (`game/combat/guns.js`, controller in `weapon.js`)
@@ -190,7 +192,7 @@
 - Shooters only engage a player within `ENGAGE_RANGE` (30 m) with line of sight.
 
 ## Spawn groups (#73)
-Enemies with the same `params.group` wake together: when any troopers / drone / boss member is awake the rest wake too (once). `dormant: true` enemies (troopers, drones, boss, shooters) ignore sight, sound, arena entry and damage and wait for `wakeGroup`; plain puppets are always on. Triggers and reinforcements: workshop.md, Encounters.
+Enemies with the same `params.group` wake together: when any troopers / drone / boss member is awake the rest wake too (once). `dormant: true` enemies (troopers, drones, boss, shooters) ignore sight, sound, arena entry and damage and wait for `wakeGroup`; with `hidden: true` too they are not drawn and not a target until then (a later stage's squad that must not stand asleep in sight of an earlier fight: the Prologue's plated `purge-4`); plain puppets are always on. Triggers and reinforcements: workshop.md, Encounters.
 On death the player respawns after 3 s at the last checkpoint reached, else at the spawn.
 
 ## Drones (`game/actors/drone.js` TUNING)
@@ -233,7 +235,7 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
   A hit flashes its head. A head never drops below `floor` (0.65, so 650 HP) and starts repairing `repair` (0.08, 80 HP/s) once it has been left alone for 1.5 s.
   `damage()` always returns false: no kill, no `puppet:down`, no `boss:dead`.
 - Counting: `unkillable = true`. Not a destroy target (mission.js skips it in the target count and the pin), not part of `arena:clear` or the
-  HUD kill counter (`Enemies.killable`), so it never blocks a level. The drones it calls are normal drones in its group (their kills count).
+  HUD kill counter (`Enemies.killable`), so it never blocks a level. While it is awake no `arena:clear` fires (its drones dying is no ARENA CLEAR mid-fight). The drones it calls are normal drones in its group (their kills count).
 - Wakes (`boss:wake` { name: 'CERBERUS' }: toast, boss music) when the player enters `arena`, on damage, or through `wakeGroup`; `dormant` + `group` waits for the cut.
   Dormant: heads folded down, sensors dim. Awake: the heads track the player, the hull sways.
 - Attacks (all wait while `enemies.holdFire` is set, i.e. during cinematics; nothing new fires or hurts):
@@ -242,6 +244,10 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
   - LEGION: first after 3 s, then every 7-10 s, calls up to 2 awake drones (of its group, flying over `arena`) when fewer than 3 of its drones live.
   - Intended pressure (not measured with a player): a player standing in the open dies in well under a minute, one using cover and moving survives the ~45 s of the scripted fight.
 - Camera lock-on and the diamond marker are the generic boss behaviour (`focusPoint`: the hull, forward and up). The boss bar follows the engaged boss when a level has several (`Enemies.#followBoss`).
+- Look: final-boss dressing (`#detailHull` / `#detailHead`, visual only): a dorsal crest of swept fins, armor ridges, spiked pauldrons and ribbed
+  skirts on the shoulder pods, violet power seams, glowing reactor rings under the hull, cable runs sagging to the clamps, collars along the booms;
+  per head a heavier cowl (VIGIL crest fins, cheek guards, chin barbs; LEGION horned frame, antenna crown, ear plates; COLOSSUS jaw teeth,
+  armored cheeks, brow and horns), and the enemy edge outline (`rim`).
 - Art: heads follow the livery rule (VIGIL light ochre, LEGION ochre on dark grey, COLOSSUS faded to bone with rust); sensors violet, weak spots magenta and the brightest glow (`tests/art.browser.mjs`).
 - Cost: one skinned draw per material (12 materials) plus one shadow draw, far LOD with the other rigs. The sector cull (`dormant` out of sight) uses `pos`.
 - Test: `tests/cerberus.browser.mjs`.

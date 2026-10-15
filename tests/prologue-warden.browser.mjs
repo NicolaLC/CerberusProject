@@ -40,7 +40,7 @@ async function open() {
   });
   await p.evaluate(prologueHelpers);
   await p.evaluate(() => {
-    // to the armoury, pistol only: around the landing KR-7, the drill hall troop and the hall shooters dead
+    // to the armoury, pistol only: around the landing KR-7, the drill hall troop and the hall A troopers dead
     T.toArmoury = () => {
       T.advanceTo('armoury', { rifle: false });
       T.disc.length = 0; // the bench and the range lent guns on the way
@@ -71,7 +71,7 @@ async function open() {
   });
   expect('a fresh run owns nothing (no slot); the bench gives the KP-12 (one slot, discovered)', r.start.owned === '' && r.start.current === null && r.start.slots === '' && r.bench.owned === 'pistol' && r.bench.current === 'pistol' && r.bench.slots === 'slot-pistol' && r.bench.disc.join() === 'pistol', JSON.stringify([r.start, r.bench]));
   expect('the range lends light and heavy guns; its door takes them all back (pistol raised, one slot)', r.range.split(',').length >= 3 && r.back.owned === 'pistol' && r.back.current === 'pistol' && r.back.slots === 'slot-pistol', JSON.stringify([r.range, r.back]));
-  expect('after the hall shooters the armoury is current: SALVAGE A WEAPON, an interact at the rack, nobody awake', r.armoury.cur === 'armoury' && r.armoury.obj === 'interact' && /^SALVAGE A WEAPON/.test(r.armoury.text) && r.armoury.gun === 'rifle' && !r.armoury.awake.length && r.rack >= 1, JSON.stringify(r.armoury));
+  expect('after the hall A troopers the armoury is current: SALVAGE A WEAPON, an interact at the rack, nobody awake', r.armoury.cur === 'armoury' && r.armoury.obj === 'interact' && /^SALVAGE A WEAPON/.test(r.armoury.text) && r.armoury.gun === 'rifle' && !r.armoury.awake.length && r.rack >= 1, JSON.stringify(r.armoury));
   expect('  the stage waits for the player (no timer, nothing wakes)', r.idle.cur === 'armoury' && !r.idle.awake.length, JSON.stringify(r.idle));
   expect('no page errors', errors.length === 0, errors.join(' | '));
   await p.close();

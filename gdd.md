@@ -79,7 +79,7 @@ is, the more the HiveMind escalates. They coordinate, because they share one min
 |---|---|---|---|---|
 | LEGION | Puppet | Training frame, remote-controlled calibration dummy | Glowing weak spots (x3) | Yes (8.1) |
 | LEGION | Trooper | Line infantry: uses cover, suppresses, flanks in pairs | Head, exposed power cell | Yes (8.2) |
-| LEGION | Plated trooper | Armored infantry: a trooper in bolted-on heavy plate; light rounds spark off, a heavy round knocks a plate off and bares that part | Heavy rounds; its unplated weak spot | Yes (8.2, `armored`) |
+| LEGION | Plated trooper | Armored infantry: a trooper in bolted-on heavy plate; light rounds spark off, a heavy round knocks a plate off and bares that part | Heavy rounds only (no weak spot) | Yes (8.2, `armored`) |
 | LEGION | Aegis | Shield bearer, advances behind a deployable energy shield | Flank, or overload the shield with sustained fire | No |
 | LEGION | Lancer | Sniper: long-range rail shots, relocates after firing | Low HP, loses track when line of sight breaks | No |
 | VIGIL | Seeker drone | Flanker and spotter, marks the player for other units | Eye and core (x3) | Close match to the drone (8.3) |
@@ -175,7 +175,7 @@ too strong to beat. Each act then takes one of its heads.
 2. **Tutorial path (calibration rooms, range, drill hall, halls).** By the end STEM-00 has learned to move, take cover,
    vault, slide and use the guns. The weapons range teaches the two ammo classes: light rounds spark off armor, heavy
    rounds break it.
-3. **Armor makes it dynamic.** Plated troopers (8.2) shrug off light rounds and the pistol except on their glowing weak
+3. **Armor makes it dynamic.** Plated troopers (8.2) shrug off light rounds and the pistol and have no weak
    spot; a heavy gun (the KS-5 Farsight, on a stand inside hall A's west door, before them) breaks them. A heavy-rounds
    supply point waits by the boss arena door. The SX-6's legs wear plate greaves
    (8.4): light rounds barely scratch them, heavy rounds take them apart. The switch to a heavy gun is the lesson.

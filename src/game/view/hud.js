@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GUNS, GUN_ORDER } from '../combat/guns.js';
 import { inputName } from '../controls.js';
+import { VIEW_ABOVE } from '../world/world.js';
 
 const _p = new THREE.Vector3();
 
@@ -100,6 +101,7 @@ export class Hud {
     events.on('pickup:full', () => this.toast('AMMO FULL'));
     events.on('weapon:discovered', ({ gun }) => this.toast(`${GUNS[gun].name} ACQUIRED`, 3)); // the log line is level data (log.line on: discovered:<gun>)
     events.on('arena:clear', () => this.toast('ARENA CLEAR', 6));
+    events.on('player:shieldBreak', () => this.toast('⚠ SHIELDS DOWN', 1.6));
     events.on('boss:wake', (b) => this.toast(`⚠ ${b.name}`, 3));
     events.on('boss:down', () => this.toast('CORE EXPOSED', 2));
     events.on('boss:dead', () => this.toast('MECH DESTROYED', 3));
@@ -351,11 +353,13 @@ export class Hud {
     if (!weapon.current) for (const k of ['cross', 'scope', 'charge', 'ar', 'block']) css(e[k], 'opacity', 0);
 
     css(e.shield, 'width', `${player.shields}%`);
+    const down = player.shields <= 0 && !player.dead;
+    if (down !== this.shieldDown) e.shield.parentElement.classList.toggle('down', (this.shieldDown = down)); // empty bar: pulsing red frame
     css(e.health, 'width', `${player.health}%`);
 
 
     text(e.kills, `${enemies.kills} / ${enemies.killable}`);
-    text(e.zone, world.isInterior(player.pos) ? 'INTERIOR' : this.zoneName);
+    text(e.zone, world.isInterior(player.pos, VIEW_ABOVE) ? 'INTERIOR' : this.zoneName);
     this.#objective(mission.hudPanel(), scheme);
     this.#prompt(mission.interactPrompt(player) ?? pickups?.supplyPrompt(player) ?? null, scheme, camRig.camera); // an objective terminal, else a supply point
     this.#pin(pin && !player.dead ? mission.pinTarget(player.pos) : null, player.pos, camRig.camera, dt);

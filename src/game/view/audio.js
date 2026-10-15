@@ -58,6 +58,7 @@ import objectiveNew from '../../assets/sfx/objective-new.mp3';
 import objectiveDone from '../../assets/sfx/objective-done.mp3';
 import gunDiscovered from '../../assets/sfx/gun-discovered.mp3';
 import missionComplete from '../../assets/sfx/mission-complete.mp3';
+import { VIEW_ABOVE } from '../world/world.js';
 import armRetract from '../../assets/sfx/arm-retract.mp3';
 import bayHumLoop from '../../assets/sfx/bay-hum-loop.mp3';
 import consoleLoop from '../../assets/sfx/console-loop.mp3';
@@ -248,13 +249,14 @@ export class Audio {
     });
     events.on('puppet:down', () => this.sample('robotDown', 0, 1, true) || this.thud());
     events.on('player:hurt', () => this.sample('hurt') || this.thud());
+    events.on('player:shieldBreak', () => this.sample('shieldBreak') || this.zap(0.45));
     events.on('player:jet', () => this.sample('jet') || this.jet());
     events.on('player:land', () => this.sample('land') || this.land());
     events.on('bolt:fired', () => this.sample('enemyShot', 0, 1, true) || this.zap(0.12));
     events.on('bolt:impact', () => this.sample('boltImpact', 0, 1, true));
     events.on('blast', (b) => (b.kind === 'stomp' && this.sample('bossSlam')) || this.blast(Math.min(1.2, 0.4 + b.radius / 6)));
     events.on('boss:leg', () => this.sample('bossLeg') || this.boom(0.8));
-    events.on('enemy:plate', () => this.sample('bossLeg', 0, 0.6) || this.boom(0.35));
+    events.on('enemy:plate', () => this.sample('plateOff') || this.sample('bossLeg', 0, 0.6) || this.boom(0.35));
     events.on('boss:dead', () => {
       this.engine(false);
       this.sample('bossDeath') || this.boom(1.4);
@@ -643,7 +645,7 @@ export class Audio {
     let bay = 0, con = 0, drone = 0;
     if (p && !paused) {
       if (this.world) {
-        bay = this.world.isInterior(p) ? 1 : 0;
+        bay = this.world.isInterior(p, VIEW_ABOVE) ? 1 : 0;
         let d = CONSOLE_RANGE;
         for (const c of this.world.consoles) d = Math.min(d, c.distanceTo(p));
         con = (1 - d / CONSOLE_RANGE) ** 2;

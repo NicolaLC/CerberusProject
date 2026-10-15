@@ -3,7 +3,7 @@ import { RigidSkin } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
 import { damp, wrapAngle, lerpAngle } from '../../engine/math.js';
 import { rbox, rb, cyl, look } from './parts.js';
-import { sightRay, VISOR, PROJECTILE } from './enemy.js';
+import { sightRay, rim, VISOR, PROJECTILE } from './enemy.js';
 import { navGrid, navStep } from '../ai/nav.js';
 import { wornMaterial } from '../world/textures.js';
 
@@ -294,6 +294,7 @@ export class SpiderMech {
     ctx.scene.add(this.root);
     this.#pose(0);
     this.skin = new RigidSkin(this.root, this.skeleton, { cullMargin: 1.6, lod: true });
+    rim([M.hull, M.plate, M.trim, this.skin.lodMaterial]);
     ctx.debris.prime(this.kind, this.skin);
     ctx.markDirty();
   }

@@ -63,6 +63,7 @@
  * @property {Blast} boss:leg
  * @property {Blast} boss:dead
  * @property {PlayerHurt} player:hurt
+ * @property {void} player:shieldBreak the shields hit 0 (slow motion, SHIELDS DOWN, sound)
  * @property {LandKind} player:land
  * @property {PlayerJet} player:jet
  * @property {VaultKind} player:vault

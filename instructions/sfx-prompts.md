@@ -11,6 +11,13 @@ saved to `src/assets/sfx/`, wired in `audio.js` (synth kept as fallback) and lis
 used: model `eleven_text_to_sound_v2`, prompt influence 0.3, the length given as `duration_seconds`, `loop` on for
 the looping sounds. Add new rows here for the next missing sounds.
 
+## Missing (synth fallback until recorded)
+
+| File | Event | Length | Prompt |
+| --- | --- | --- | --- |
+| `shield-break.mp3` (`SAMPLES.shieldBreak`) | `player:shieldBreak` (synth: `zap`) | 0.8 s | An energy shield collapsing on a combat robot: a sharp glassy electric crack, a falling whine as the field drains, a brief crackle of static, alarming, sci-fi, close, dry (influence 0.5) |
+| `plate-off.mp3` (`SAMPLES.plateOff`) | `enemy:plate` (now: `bossLeg` quieter, synth `boom`) | 0.6 s | A heavy armor plate blown off a combat robot by a high-calibre round: a hard metallic clang, a bolt shearing with a short screech, the plate clattering away, close, dry (influence 0.5) |
+
 ## Replaced or added after play-testing
 
 | File | Why | Prompt / settings |

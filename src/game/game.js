@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Engine } from '../engine/engine.js';
 import { Registry } from './registry.js';
-import { World, WORLD_PIECES } from './world/world.js';
+import { World, WORLD_PIECES, VIEW_ABOVE } from './world/world.js';
 import { Pickups, PICKUP_PIECES } from './world/pickups.js';
 import { Mission } from './world/mission.js';
 import { RunStats } from './run-stats.js';
@@ -174,7 +174,7 @@ export class Game {
         controls.update();
         this.shell.update();
         engine.timeScale = juice.update(realDt); // hitstop / slow motion
-        if (engine.paused) return;
+        if (engine.paused || engine.idle) return; // idle: the title, or the intro reel playing over it (no level)
         // aim assist (friction + gentle pull) while aiming, stronger on a trackpad or a controller
         let friction = 1;
         const assisted = settings.trackpad || controls.pad;
@@ -297,7 +297,7 @@ export class Game {
       name: 'post',
       phase: 'render',
       whilePaused: true,
-      update: (realDt) => post.render(realDt, { player, inside: world.isInterior(camera.position), outside: world.outsideExposure }), // a level `sky` preset raises the outdoor exposure
+      update: (realDt) => post.render(realDt, { player, inside: world.isInterior(camera.position, VIEW_ABOVE), outside: world.outsideExposure }), // a level `sky` preset raises the outdoor exposure
     });
     engine.events.on('engine:systemFailed', ({ name }) => hud.toast(`SYSTEM FAULT: ${name.toUpperCase()}`));
 

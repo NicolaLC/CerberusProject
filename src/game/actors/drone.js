@@ -3,7 +3,7 @@ import { RigidSkin } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
 import { damp } from '../../engine/math.js';
 import { rb, cyl, ring, look } from './parts.js';
-import { sightRay, VISOR } from './enemy.js';
+import { sightRay, rim, VISOR } from './enemy.js';
 import { wornMaterial } from '../world/textures.js';
 
 // Attack drone: a small quad-rotor that hovers 3.5-5 m up, circles the player at range and fires short bolt
@@ -183,6 +183,7 @@ export class Drone {
     ctx.scene.add(this.root);
     this.#place();
     this.skin = new RigidSkin(this.root, this.skeleton, { cullMargin: 1.5, lod: true });
+    rim([M.shell, M.plate, this.skin.lodMaterial]);
     ctx.debris.prime(this.kind, this.skin);
     ctx.markDirty();
   }

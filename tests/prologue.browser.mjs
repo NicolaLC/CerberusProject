@@ -195,9 +195,9 @@ for (const seen of [true, false]) {
     T.hurt = 0;
     const purge = () => g.enemies.all.filter((e) => String(e.squad).startsWith('purge-'));
     const out = { dormantAll: purge().every((e) => e.dormant === true), n: purge().length };
-    // stand on the drill hall's lower tier, in the open, between a purge-1 shooter and the troop's pen, for 20 s
-    const shooter = T.group(1).find((e) => e.kind === 'shooter');
-    const trooper = T.group(1).find((e) => e.kind === 'trooper');
+    // stand on the drill hall's lower tier, in the open, between a purge-1 trooper on a post and the troop's pen, for 20 s
+    const shooter = T.group(1).find((e) => e.kind === 'trooper' && e.pos.z > -20); // on a post in the hall
+    const trooper = T.group(1).find((e) => e.kind === 'trooper' && e.pos.z < -20); // in the pen
     for (let i = 0; i < 20 * 60; i++) {
       g.player.pos.set(shooter.pos.x, -1.6, shooter.pos.z - 6);
       g.player.vel?.set(0, 0, 0);
@@ -206,7 +206,7 @@ for (const seen of [true, false]) {
     }
     out.shooterDist = shooter.pos.distanceTo(g.player.pos);
     out.trooperDist = trooper.pos.distanceTo(g.player.pos);
-    out.culled = T.group(1).filter((e) => e.kind === 'shooter' && e.culled).length; // the hall's shooters (the pen behind its shut gate is out of sight)
+    out.culled = T.group(1).filter((e) => e.kind === 'trooper' && e.pos.z > -20 && e.culled).length; // the hall's post troopers (the pen behind its shut gate is out of sight)
     out.awake = purge().filter((e) => e.awake).length;
     out.bolts = T.bolts;
     out.hurt = T.hurt;
@@ -221,15 +221,15 @@ for (const seen of [true, false]) {
     out.purge2 = T.group(2).every((e) => e.awake);
     out.after = purge().filter((e) => e.awake).length;
     out.expect = T.group(1).length + T.group(2).length;
-    // a woken shooter may fire now
+    // a woken trooper may fire now
     T.step(6);
     out.fired = T.bolts > 0;
     return out;
   });
   expect('every purge-* enemy is dormant in the level data', r.dormantAll && r.n > 0, JSON.stringify(r));
-  expect('player among the drill hall troop for 20 s: the hall shooters in sight (not culled), none awake, no bolt, no hurt', r.shooterDist < 15 && r.trooperDist < 40 && r.culled === 0 && r.awake === 0 && r.bolts === 0 && r.hurt === 0 && r.woken.length === 0 && r.shooterState === 'hidden', JSON.stringify(r));
-  expect('wakeGroup("purge-1") wakes exactly that group (shooters, troopers, drones); encounter:wake wakes purge-2; the rest stay dormant', r.n1 === r.size1 && r.size1 === 10 && r.purge1 && r.others === 0 && r.purge2 && r.after === r.expect, JSON.stringify(r));
-  expect('  a woken shooter fires', r.fired, JSON.stringify(r));
+  expect('player among the drill hall troop for 20 s: the post troopers in sight (not culled), none awake, no bolt, no hurt', r.shooterDist < 15 && r.trooperDist < 40 && r.culled === 0 && r.awake === 0 && r.bolts === 0 && r.hurt === 0 && r.woken.length === 0 && r.shooterState === 'idle', JSON.stringify(r));
+  expect('wakeGroup("purge-1") wakes exactly that group (troopers, drones); encounter:wake wakes purge-2; the rest stay dormant', r.n1 === r.size1 && r.size1 === 10 && r.purge1 && r.others === 0 && r.purge2 && r.after === r.expect, JSON.stringify(r));
+  expect('  a woken trooper fires', r.fired, JSON.stringify(r));
   await p.close();
 }
 
