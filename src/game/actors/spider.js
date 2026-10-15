@@ -4,6 +4,7 @@ import { disposeTree } from '../../engine/dispose.js';
 import { damp, wrapAngle, lerpAngle } from '../../engine/math.js';
 import { rbox, rb, cyl, look } from './parts.js';
 import { sightRay, VISOR, PROJECTILE } from './enemy.js';
+import { navGrid, navStep } from '../ai/nav.js';
 import { wornMaterial } from '../world/textures.js';
 
 // Miniboss: a six-legged walker (saucer hull, twin gun pods) guarding the north-east arena.
@@ -601,88 +602,10 @@ export class SpiderMech {
     } else this.stuck = Math.max(0, this.stuck - dt);
   }
 
-  // Pursuit path: breadth-first over the arena grid (built once, on first use: the colliders don't move) from the boss's cell,
-  // to the reachable cell nearest `goal`; returns `out` set to the path cell `ahead` cells on, or null (already as near as it gets).
+  // Pursuit path (ai/nav.js): over the arena grid, built once on first use (the colliders don't move); the path cell `ahead` cells on, or null.
   #path(goal, out) {
-    const N = this.#navGrid();
-    const { x0, z0, nx, nz, cell, free, prev, queue } = N;
-    const at = (x, z) => {
-      const i = Math.round((x - x0) / cell);
-      const k = Math.round((z - z0) / cell);
-      return THREE.MathUtils.clamp(k, 0, nz - 1) * nx + THREE.MathUtils.clamp(i, 0, nx - 1);
-    };
-    const start = at(this.pos.x, this.pos.z);
-    prev.fill(-2);
-    prev[start] = -1;
-    queue[0] = start;
-    let head = 0;
-    let tail = 1;
-    let best = start;
-    let bestD = Infinity;
-    while (head < tail) {
-      const c = queue[head++];
-      const cx = c % nx;
-      const cz = (c - cx) / nx;
-      const d = (x0 + cx * cell - goal.x) ** 2 + (z0 + cz * cell - goal.z) ** 2;
-      if (d < bestD) {
-        bestD = d;
-        best = c;
-      }
-      for (let oz = -1; oz <= 1; oz++) {
-        for (let ox = -1; ox <= 1; ox++) {
-          const x = cx + ox;
-          const z = cz + oz;
-          if ((!ox && !oz) || x < 0 || z < 0 || x >= nx || z >= nz) continue;
-          const n = z * nx + x;
-          if (prev[n] !== -2 || !free[n]) continue;
-          if (ox && oz && (!free[cz * nx + x] || !free[z * nx + cx])) continue; // no corner cutting
-          prev[n] = c;
-          queue[tail++] = n;
-        }
-      }
-    }
-    if (best === start) return null;
-    // walk back from the best cell to the one `ahead` steps from the start
-    let len = 0;
-    for (let c = best; c !== start; c = prev[c]) len++;
-    let c = best;
-    for (let k = len - Math.min(len, this.t.nav.ahead); k > 0; k--) c = prev[c];
-    const cx = c % nx;
-    return out.set(x0 + cx * cell, this.pos.y, z0 + ((c - cx) / nx) * cell);
-  }
-
-  #navGrid() {
-    if (this.nav) return this.nav;
-    const A = this.arena;
-    const r = this.t.radius;
-    const cell = this.t.nav.cell;
-    const x0 = A.minX + r;
-    const z0 = A.minZ + r;
-    const nx = Math.max(1, Math.floor((A.maxX - r - x0) / cell) + 1);
-    const nz = Math.max(1, Math.floor((A.maxZ - r - z0) / cell) + 1);
-    const free = new Uint8Array(nx * nz);
-    const feet = this.pos.y;
-    const fit = (r + 0.05) ** 2; // the collision circle and a hair: a squeeze the circle can't pass is no passage
-    for (let k = 0; k < nz; k++) {
-      for (let i = 0; i < nx; i++) {
-        const x = x0 + i * cell;
-        const z = z0 + k * cell;
-        let ok = 1;
-        for (const { box: b } of this.ctx.world.nearColliders(x - r, z - r, x + r, z + r)) {
-          if (b.max.y <= feet + 1.3 || b.min.y >= feet + 2.4) continue; // low cover is walked over, like collideCircle
-          const ddx = x - Math.max(b.min.x, Math.min(x, b.max.x));
-          const ddz = z - Math.max(b.min.z, Math.min(z, b.max.z));
-          if (ddx * ddx + ddz * ddz < fit) {
-            ok = 0;
-            break;
-          }
-        }
-        free[k * nx + i] = ok;
-      }
-    }
-    const n = nx * nz;
-    this.nav = { x0, z0, nx, nz, cell, free, prev: new Int32Array(n), queue: new Int32Array(n) };
-    return this.nav;
+    this.nav ??= navGrid(this.ctx.world, this.arena, { radius: this.t.radius, cell: this.t.nav.cell, feet: this.pos.y, climb: 1.3, height: 2.4 });
+    return navStep(this.nav, this.pos, goal, this.t.nav.ahead, out);
   }
 
   // Obstacle avoidance: turns the wish `w` (xz, length = throttle) to the nearest fan angle whose path `look` m ahead is clear

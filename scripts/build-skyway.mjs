@@ -93,7 +93,7 @@ for (const z of [-56, -140]) {
 box([8.6, BASE, -108], [0.4, -DECK.thick - 4.6 - BASE - 1, 0.4], 'inWall', { collide: false });
 for (let y = -20; y > BASE + 10; y -= 20) {
   strip([8.6, y, -107.7], [0.7, 0.7, 0.7], y % 40 === 0 ? 'stripCyan' : 'stripWhite');
-  lamp(8.6, y, -106, '#cfe8f0', 70, 34);
+  lamp(8.6, y, -106, '#cfe8f0', 70, 12); // short reach: never outscores the deck lamps in the light pool (no occlusion test)
 }
 // the end: the Gate district's shutter (sealed) and the mass behind it
 box([0, 0, -177.5], [DECK.half * 2 + 2, 15, 3], 'wall');
@@ -133,7 +133,7 @@ for (const [s, z] of posts) {
   const x = s * PARAPET.x;
   box([x, PARAPET.h, z], [0.28, 4.1, 0.28], 'inWall', { collide: false });
   strip([x - s * 0.5, 5.15, z], [1.0, 0.16, 0.5], 'stripWhite');
-  lamp(x - s * 1.0, 4.9, z, '#cfe8f0', 28, 20);
+  lamp(x - s * 1.0, 4.9, z, '#cfe8f0', 45, 26);
 }
 
 // ---------------------------------------------------------------- bridge pylons (cable towers) with stay cables
@@ -281,9 +281,9 @@ add('env.alarm', [0, 1.6, 20], { on: 'objective:cerberus-cut', off: 'objective:h
 
 // ---------------------------------------------------------------- the squad
 const deck = { group: 'deck', dormant: true };
-add('enemy.trooper', [-8, 0, -84.5], deck, { yaw: 0 });
+add('enemy.trooper', [-8, 0, -84.5], { ...deck, armored: true }, { yaw: 0 }); // plated: the Farsight strips its plates
 add('enemy.trooper', [3, 0, -88], deck, { yaw: 0 });
-add('enemy.trooper', [9.5, 0, -84], deck, { yaw: 0 });
+add('enemy.trooper', [9.5, 0, -84], { ...deck, armored: true }, { yaw: 0 });
 const droneBounds = { minX: -11, maxX: 11, minZ: -91, maxZ: -52 };
 add('enemy.drone', [-3, 0, -86], { ...deck, bounds: droneBounds });
 add('enemy.drone', [5, 0, -82], { ...deck, bounds: droneBounds });

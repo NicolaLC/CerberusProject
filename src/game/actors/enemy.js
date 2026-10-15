@@ -40,12 +40,16 @@ export function sightRay(from, to, meshes, slack = 0.5) {
   return _sRay.intersectObjects(meshes, false, _sHits).length === 0;
 }
 
+const _inv = new THREE.Matrix4();
+const _box = new THREE.Box3();
+
 export class EnemyBody {
   // mats: the look's materials (all flash on a hit); visor: color of the glowing sensors (telegraphs shots). Sensors are
   // violet and the magenta weak spots stay the brightest thing on the body (art-style.md: if it glows violet, shoot it).
   constructor(ctx, { kind, pos, yaw = 0, health, mats, visor = VISOR, armed = false, weakSpots = 2 }) {
     this.ctx = ctx;
     this.kind = kind;
+    this.debrisKind = kind; // the debris bank's key (parts.js): a variant with other pieces on its bones needs its own
     this.pos = new THREE.Vector3(...pos);
     this.yaw = yaw;
     this.maxHealth = this.health = health;
@@ -53,6 +57,7 @@ export class EnemyBody {
     this.lift = 0; // vertical offset of the rig (puppets retract behind cover)
     this.flash = 0;
     this.debris = [];
+    this.shed = []; // chunks knocked off while alive (a trooper's plates), tumbling with the debris
     this.weakCount = weakSpots;
 
     this.mats = mats;
@@ -89,27 +94,49 @@ export class EnemyBody {
     this.weakSpots = [];
     this.#placeWeakSpots();
     // all parts -> one skinned draw per material; far away one draw with baked colors (see game.js LOD)
-    this.skin = new RigidSkin(this.rig.root, this.rig.skeleton, { lod: true });
+    this.skin = new RigidSkin(this.rig.root, this.rig.skeleton, { lod: true, exclude: (o) => o.userData.dropped });
     this.group.updateMatrixWorld(true);
-    this.ctx.debris.prime(this.kind, this.skin); // death debris of this type is baked now, not during the hitstop
+    this.ctx.debris.prime(this.debrisKind, this.skin); // death debris of this type is baked now, not during the hitstop
   }
 
-  // Glowing weak spots on random body parts (front face). Hits there deal weakMult damage.
+  // Glowing weak spots on random body parts (front face): an exposed power cell, a glowing core in a ring housing of the frame
+  // material (no extra draw), with a round halo. Only the core is a hit mesh: hits there deal weakMult damage.
   #placeWeakSpots() {
     const pool = [...WEAK_BONES];
+    const housing = this.mats.frame ?? Object.values(this.mats)[0];
     for (let i = 0; i < this.weakCount; i++) {
       const bone = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
       const part = this.rig.parts[bone];
       const [w, h, d] = part.userData.size;
-      const sw = Math.min(w, 0.16) * 0.95;
-      const sh = Math.min(h, 0.2);
-      const spot = new THREE.Mesh(new THREE.BoxGeometry(sw, sh, 0.03), this.weakMat);
-      const halo = new THREE.Mesh(new THREE.PlaneGeometry(sw * 2.2, sh * 2), this.haloMat);
-      halo.position.z = 0.02;
+      const r = THREE.MathUtils.clamp(Math.min(w, h) * 0.45, 0.06, 0.09);
+      const spot = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.9, 0.04, 16).rotateX(Math.PI / 2), this.weakMat);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 1.12, r * 0.26, 6, 18), housing);
+      ring.position.z = 0.012;
+      ring.raycast = () => {}; // visual only: the core is the target
+      spot.add(ring);
+      for (const a of [0.785, 2.356, 3.927, 5.498]) {
+        // four clamp bolts on the ring
+        const bolt = new THREE.Mesh(new THREE.BoxGeometry(r * 0.32, r * 0.32, 0.03), housing);
+        bolt.position.set(Math.cos(a) * r * 1.45, Math.sin(a) * r * 1.45, 0.008);
+        bolt.rotation.z = a;
+        bolt.raycast = () => {};
+        spot.add(bolt);
+      }
+      const halo = new THREE.Mesh(new THREE.CircleGeometry(r * 1.7, 20), this.haloMat);
+      halo.position.z = 0; // behind the ring: the housing reads dark against the glow
       halo.raycast = () => {}; // visual only
       spot.add(halo);
       spot.position.copy(part.position);
-      spot.position.z += d / 2 + 0.012;
+      spot.position.z += d / 2 + 0.02;
+      // mounted on the look's front (its armor would bury it), not the hitbox's; a trooper's add-on plates do not count
+      const host = this.rig.bones[bone];
+      host.updateWorldMatrix(true, false);
+      _inv.copy(host.matrixWorld).invert();
+      for (const c of host.children) {
+        if (!c.userData.noHit || c.userData.plate) continue;
+        _box.setFromObject(c).applyMatrix4(_inv);
+        spot.position.z = Math.max(spot.position.z, _box.max.z - 0.01);
+      }
       if (bone === 'Spine2') spot.position.x += Math.random() < 0.5 ? 0.17 : -0.17; // beside the chest plate
       spot.userData = { enemy: this, zone: 'weak', bone };
       this.rig.bones[bone].add(spot);
@@ -142,13 +169,16 @@ export class EnemyBody {
     this.group.updateMatrixWorld(true);
     // break apart: every piece on a bone (look, weak spot, gun) becomes a debris chunk (baked once per type)
     DEBRIS_DIR.copy(dir);
-    this.ctx.debris.burst(this.kind, this.skin, this.ctx.scene, this.debris, DEBRIS_OPT);
+    this.ctx.debris.burst(this.debrisKind, this.skin, this.ctx.scene, this.debris, DEBRIS_OPT);
+    this.debris.push(...this.shed);
+    this.shed.length = 0;
     this.rig.root.visible = false;
   }
 
   // Removes the enemy from the scene and frees everything it owns (rig, baked skin + LOD, own materials, debris).
   dispose() {
     this.ctx.debris.releaseAll(this.debris);
+    this.ctx.debris.releaseAll(this.shed);
     disposeTree(this.group);
     for (const m of [...Object.values(this.mats), this.visor, this.weakMat, this.haloMat, this.skin?.lodMaterial]) m?.dispose();
   }
@@ -159,6 +189,7 @@ export class EnemyBody {
       return;
     }
     this.think(dt, player);
+    if (this.shed.length) this.ctx.debris.step(this.shed, dt, this.ctx.world);
     // hit flash + weak spot pulse
     this.flash -= dt;
     const e = this.flash > 0 ? 0.9 : 0;

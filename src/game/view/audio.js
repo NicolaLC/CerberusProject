@@ -254,6 +254,7 @@ export class Audio {
     events.on('bolt:impact', () => this.sample('boltImpact', 0, 1, true));
     events.on('blast', (b) => (b.kind === 'stomp' && this.sample('bossSlam')) || this.blast(Math.min(1.2, 0.4 + b.radius / 6)));
     events.on('boss:leg', () => this.sample('bossLeg') || this.boom(0.8));
+    events.on('enemy:plate', () => this.sample('bossLeg', 0, 0.6) || this.boom(0.35));
     events.on('boss:dead', () => {
       this.engine(false);
       this.sample('bossDeath') || this.boom(1.4);

@@ -98,6 +98,7 @@ const r = await p.evaluate(() => {
   engine.events.on('trooper:flank', (t) => (flanker ??= t));
   for (let i = 0; i < 20 && !flanker; i++) step(1);
   out.flanked = !!flanker;
+  out.flankDiag = enemies.all.filter((t) => t.kind === 'trooper' && t.alive).map((t) => `${t.state} ${t.pos.x.toFixed(1)},${t.pos.z.toFixed(1)} d=${t.pos.distanceTo(player.pos).toFixed(1)} spot=${!!t.spot}`);
   if (flanker) {
     for (let i = 0; i < 12 && flanker.flanking; i++) step(0.5); // arrive
     const d = flanker.pos.clone().sub(player.pos).setY(0).normalize();
@@ -195,8 +196,9 @@ expect('shooter: the player behind a wall -> it stays down (no blind pop-ups), i
 expect('dormant: a dormant enemy can be killed', d.dies);
 expect('dormant: without a group it fails validation with a clear message', /dormant/.test(d.noGroup ?? '') && /group/.test(d.noGroup ?? '') && d.okGroup === null && d.okPlain === null);
 
-// plated trooper (armored: true): light rounds and the pistol do x0.25 on the body, heavy rounds and the weak spot full. Real shots
-// through the weapon, measured against an ordinary trooper hit in the same spot from the same distance.
+// plated trooper (armored: true): light rounds and the pistol spark off a plate (0), a heavy round does x0.5 and knocks that plate
+// group off, the weak spot takes everything. Real shots through the weapon, measured against an ordinary trooper hit in the same spot
+// from the same distance.
 const a = await p.evaluate(() => {
   const { engine, enemies, player, camRig, weapon } = window.game;
   const events = engine.events;
@@ -210,6 +212,8 @@ const a = await p.evaluate(() => {
   for (const id of ['rifle', 'sniper']) weapon.grant(id, { ammo: 40 });
   let armoredEvents = 0;
   events.on('weapon:armored', () => armoredEvents++);
+  let plateEvents = 0;
+  events.on('enemy:plate', () => plateEvents++);
   const test = (gun, armored, weak) => {
     weapon.switchTo(gun);
     step(60);
@@ -234,11 +238,12 @@ const a = await p.evaluate(() => {
     }
     const hp = tr.health;
     const ev = armoredEvents;
+    const pe = plateEvents;
     weapon.cooldown = 0;
     keys.add('Mouse0'); engine.input.pressed.add('Mouse0'); step(); keys.delete('Mouse0');
     step(2);
     keys.delete('Mouse2');
-    const res = { dmg: hp - tr.health, sparks: armoredEvents - ev };
+    const res = { dmg: hp - tr.health, sparks: armoredEvents - ev, plates: plateEvents - pe, torsoBare: !tr.plates.torso };
     tr.alive = false;
     enemies.dirty = true;
     step(2);
@@ -247,7 +252,7 @@ const a = await p.evaluate(() => {
   for (const gun of ['pistol', 'rifle', 'sniper']) {
     const plain = test(gun, false, false);
     const plated = test(gun, true, false);
-    out[gun] = { plain: plain.dmg, plated: plated.dmg, ratio: plated.dmg / plain.dmg, sparks: plated.sparks, plainSparks: plain.sparks };
+    out[gun] = { plain: plain.dmg, plated: plated.dmg, ratio: plated.dmg / plain.dmg, sparks: plated.sparks, plainSparks: plain.sparks, plates: plated.plates, torsoBare: plated.torsoBare };
   }
   // (the weak spot sits on a random body part, sometimes hidden behind the gun, a limb or a plate from any angle: a shot that does not
   // land on it, a clean miss or a plate hit with sparks, spawns a new trooper; one of them must show the full weak-spot damage)
@@ -256,17 +261,24 @@ const a = await p.evaluate(() => {
   for (let i = 0; i < 6 && !(weakPlated.dmg > weakExpected * 0.9); i++) weakPlated = test('pistol', true, true);
   out.weak = { plated: weakPlated.dmg, sparks: weakPlated.sparks, expected: weakExpected };
   const tr = enemies.spawn({ id: 'enemy.trooper', pos: [0, 0, 0], params: { armored: true } });
-  out.zoneMults = { limb: tr.armor('limb', null, { ammo: 'light' }), head: tr.armor('head', null, { ammo: 'light' }), heavy: tr.armor('torso', null, { ammo: 'heavy' }), weak: tr.armor('weak', null, { ammo: 'light' }) };
+  const box = (bone) => tr.hitMeshes.find((m) => m.userData.bone === bone);
+  const L = { ammo: 'light' };
+  out.zoneMults = { limb: tr.armor('limb', box('LeftForeArm'), L), head: tr.armor('head', box('Head'), L), heavy: tr.armor('torso', box('Spine1'), { ammo: 'heavy' }), weak: tr.armor('weak', tr.weakSpots[0], L) };
+  // a heavy hit on the left leg knocks its plates off: the bare leg takes light rounds in full, the right leg still sparks
+  const thigh = box('LeftUpLeg');
+  tr.damage(20, thigh.getWorldPosition(player.pos.clone()), player.pos.clone().set(0, 0, -1), 'limb', thigh);
+  out.bare = { left: tr.armor('limb', thigh, L), right: tr.armor('limb', box('RightUpLeg'), L), shed: tr.shed.length };
   tr.alive = false;
   return out;
 });
 console.log(a);
 const near = (x, y) => Math.abs(x - y) < 0.02;
-expect('plated trooper: pistol body hit does x0.25', a.pistol.plain > 0 && near(a.pistol.ratio, 0.25) && a.pistol.sparks === 1 && a.pistol.plainSparks === 0);
-expect('plated trooper: rifle body hit does x0.25 (sparks too)', a.rifle.plain > 0 && near(a.rifle.ratio, 0.25) && a.rifle.sparks >= 1);
-expect('plated trooper: the Farsight does full damage, no sparks', a.sniper.plain > 0 && near(a.sniper.ratio, 1) && a.sniper.sparks === 0);
+expect('plated trooper: a pistol body hit sparks off the plate (no damage)', a.pistol.plain > 0 && a.pistol.plated === 0 && a.pistol.sparks === 1 && a.pistol.plainSparks === 0 && a.pistol.plates === 0);
+expect('plated trooper: rifle body hits spark off too', a.rifle.plain > 0 && a.rifle.plated === 0 && a.rifle.sparks >= 1 && a.rifle.plates === 0);
+expect('plated trooper: the Farsight does x0.5 and knocks the torso plates off', a.sniper.plain > 0 && near(a.sniper.ratio, 0.5) && a.sniper.plates === 1 && a.sniper.torsoBare);
 expect('plated trooper: the weak spot takes full damage from the pistol', a.weak.plated > 0 && near(a.weak.plated, a.weak.expected) && a.weak.sparks === 0);
-expect('plated trooper: head and limbs x0.25 for light rounds, heavy full, weak spot full', a.zoneMults.limb === 0.25 && a.zoneMults.head === 0.25 && a.zoneMults.heavy === 1 && a.zoneMults.weak === 1);
+expect('plated trooper: plated head and limbs 0 for light rounds, heavy x0.5, weak spot full', a.zoneMults.limb === 0 && a.zoneMults.head === 0 && a.zoneMults.heavy === 0.5 && a.zoneMults.weak === 1);
+expect('plated trooper: a knocked-off plate bares only its group (debris flies)', a.bare.left === 1 && a.bare.right === 0 && a.bare.shed > 0);
 console.log(r);
 expect('destroyed puppet stays destroyed after 15 s', r.stillDead);
 expect('its debris is cleaned up', r.debrisCleared);

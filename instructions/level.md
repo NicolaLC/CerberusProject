@@ -20,7 +20,7 @@ pickups are data; sky, sun, fog and materials stay in code (`world.js`).
   them); "real" scenes (arena, later the Prologue) use `weathered`. Unknown skin throws.
 - `sky`: a key of `SKIES` (world.js), the outdoor light preset; absent = the default hazy day (arena, Gym, Library, Workshop). `night` (the
   Prologue, art-style.md "Lighting rule: a dark world"): near-black sky with a dim teal horizon, no sun disc, a weak cold key (shadows), a dim cold
-  fill, closer fog, outdoor exposure x1.45. The sky dome, fog and sun are the preset's from the first frame, indoors too (an open space seen
+  fill, closer fog, outdoor exposure x1.7. The sky dome, fog and sun are the preset's from the first frame, indoors too (an open space seen
   through a door or by a cut camera is never under the day sky); only the hemisphere fill and the outdoor exposure ease in while the camera is
   outdoors (not in an interior zone), so interiors keep their look; the alarm tint mixes from it. Unknown sky throws.
 - `loadout`: the gun ids (keys of `GUNS`) the player owns at the start, e.g. `["pistol"]`. `[]` = unarmed: no gun, no weapon HUD or crosshair, nothing to fire or aim until a `pickup.gun` or an objective `grantGun` (the Prologue). Absent = all six
@@ -231,6 +231,8 @@ The editor (#70) calls four functions plus `levelNames()`; the level is the plai
 - Architecture (`arch.*`, after the props): every room has lit ceiling coves (cyan), 45 degree corner chamfers, panelling on every wall face, ceiling coffers between the light fixtures, ribs every 3-4 m along walls (none in the station spaces; two deep ones frame the cell 2 console as an operator niche with a header and down light), bulkheads on all six bay doorways, lit floor channels flanking the gate path in every cell, the C5 lane and the exit, four floor hatches, and a catwalk along the north wall of cell 0 (3.4 m, decor).
 - Calibration rooms C1-C6 wear the full interior kit (`c1-kit`..`c6-kit`, `arch.corridor` with `collide: false`, so colliders and metrics are unchanged): each runs from its entry wall to its exit wall (C1-C3, C5, C6 toward -X, C4 toward -Z) with the pipe-truss ceiling, a lit end wall (`door` around the exit, `end` where the exit is in a side wall) and, except C1, the decked floor with its centre grate; deep wall bays only on walls with nothing on them (C2 / C3 south, C5 north and C6 south between x -34.25 and -43.7 via the extra `c5-kit-north` / `c6-kit-south` pieces); walls with signs, props, crowded cover, doors, and all of C1 (cradle / console area) keep the slim `arch.wall`.
 - The coffers, ceiling coves, ceiling pipes and floor channels they replaced are gone; hazard stripes in decked rooms sit at y 0.04, signs on the new end walls stand 0.12 (door wall) / 0.2 (closed wall) off the wall.
+- Halls A and B are one `zone.interior` (`halls-zone`, the building inside up to the 7 m ceiling: interior camera exposure, HUD INTERIOR).
+- Hall A, hall B and the boss arena are dressed by `scripts/dress-halls.mjs` (pieces named `dress-*`, dropped and re-added on every run; dressing only, nothing collides): slim `arch.wall` on every wall, split round the doors (6 m tall in the arena); `arch.ceiling` under the roofs either side of hall A's skylight and over hall B; lit ceiling coves (cyan in A, white in B); corner chamfers; `arch.floorChannel` lines and hatches (in the arena a lit lane through the SX-6's landing spot, with hazard bands); wall `prop.pipes`, cables, `prop.panel` signs; catwalks at 5 m or more (out of jet reach from the 2.8 m cover).
 - Re-dress by script: load the JSON, edit `pieces`, write with `serializeLevel`. Edited in the Workshop from now on.
 
 ### Skyway scene (`skyway.json`, THE SKYWAY)
@@ -240,7 +242,7 @@ The editor (#70) calls four functions plus `levelNames()`; the level is the plai
 - `loadout` pistol + rifle + sniper, no boot (`marker.spawn` at the lab exit landing (0, 0, 18.5) facing north).
 - A 24 m x 200 m deck (x -12..12, z 24..-176, top y 0): parapets 1.1 m with an invisible 6 m rail (`env.box` `hidden`) inside them, so nothing climbs or jets off; the lab spire wall at the south end (shut `lab-gate`), the Gate shutter at the north end; flanking skyscrapers (bases y -420, lit window strips), two cable pylons with stay cables, two piers, a hoist cable with lamps down the fall shaft, `env.backdrop` at y -500.
 - Frozen-metric cover (low 1.1, high 2.8, pillars, wrecked transit cars as 2.8 cover, a barricade at z -93 with a 4.8 m gap at the checkpoint).
-- Chain (orders 10-50): `cross-skyway`, `deck-patrol` (3 troopers + 2 drones, `deck`), `far-span`, `cerberus-cut`, `hivemind` (survive 45 s), `the-fall`.
+- Chain (orders 10-50): `cross-skyway`, `deck-patrol` (3 troopers, two of them plated, + 2 drones, `deck`), `far-span`, `cerberus-cut`, `hivemind` (survive 45 s), `the-fall`.
 - `boss.cerberus` at (33.5, 0, -118) facing -X on the east tower, group `cerberus`.
 - Three `cinematic.cut`s: `skyway-intro` (on `start`), `cerberus-cut`, `the-fall` (nine `kit.gate` `plain` deck plates drop on `cue:break`, the `volley` cue, STEM-00 falls 380 m, ends black).
 

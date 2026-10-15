@@ -181,7 +181,7 @@ SAY   "UNITS RECALLED. SX-6 IS SUFFICIENT."  ON cue:recall
 ## CUT 10.5 The SX-6 arrives   ON objective:boss-cut   PLACE [cp-gate] toward the exit   (14.8 s, skippable)
 CAM   over STEM-00's shoulder: the rush (5 troopers, 3 drones, arena-rush) comes at it from across the arena, 2.8 s  CUE rush  WAKE arena-rush
 CAM   on the exit gate, a few metres away, 2.4 s                               -- "so close"
-CAM   low, looking up: the SX-6 leaps off hall B's roof, over STEM-00, 2.4 s  WAKE purge-6  LEAP purge-6 -> (30.5, 0, -57)
+CAM   low, looking up: the SX-6 leaps off hall B's roof, over STEM-00, 2.4 s  WAKE purge-6  LEAP purge-6 -> (37.25, 0, -45.5), the middle of the arena between its two centre walls
 CAM   it lands between STEM-00 and the exit, 2 s, shake
 CAM   the rush turns and runs out through [arena-far-gate], 3.4 s  CUE recall  RECALL arena-rush -> far gate -> out
 CAM   back behind STEM-00 facing the SX-6, 1.8 s

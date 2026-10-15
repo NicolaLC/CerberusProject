@@ -79,7 +79,7 @@ is, the more the HiveMind escalates. They coordinate, because they share one min
 |---|---|---|---|---|
 | LEGION | Puppet | Training frame, remote-controlled calibration dummy | Glowing weak spots (x3) | Yes (8.1) |
 | LEGION | Trooper | Line infantry: uses cover, suppresses, flanks in pairs | Head, exposed power cell | Yes (8.2) |
-| LEGION | Plated trooper | Armored infantry: a trooper in heavy plate, light rounds do x0.25 | Heavy rounds; its unplated weak spot | Yes (8.2, `armored`) |
+| LEGION | Plated trooper | Armored infantry: a trooper in bolted-on heavy plate; light rounds spark off, a heavy round knocks a plate off and bares that part | Heavy rounds; its unplated weak spot | Yes (8.2, `armored`) |
 | LEGION | Aegis | Shield bearer, advances behind a deployable energy shield | Flank, or overload the shield with sustained fire | No |
 | LEGION | Lancer | Sniper: long-range rail shots, relocates after firing | Low HP, loses track when line of sight breaks | No |
 | VIGIL | Seeker drone | Flanker and spotter, marks the player for other units | Eye and core (x3) | Close match to the drone (8.3) |
@@ -392,7 +392,7 @@ Spread values are cone half-angles in radians. "Moving adds" applies at full wal
 
 - **Aim probe (every frame):** crosshair turns red over an enemy, magenta over a weak spot, grey when the muzzle is
   obstructed (e.g. crouched behind low cover) with a red X where the round would really land.
-- **Weak spots:** pulsing magenta patches on enemies, x3 damage with most guns (x2.5 railgun).
+- **Weak spots:** exposed power cells (a pulsing magenta core in a ring housing) on enemies, x3 damage with most guns (x2.5 railgun).
 - **Aim assist:** see section 4.
 
 ### 6.4 Railgun charge and pierce

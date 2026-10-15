@@ -3,6 +3,7 @@ import { EnemyBody, sightRay, VISOR_REST } from './enemy.js';
 import { buildTrooper, trooperMaterials } from './looks.js';
 import { GUNS, gunMaterials } from '../combat/guns.js';
 import { damp, lerpAngle } from '../../engine/math.js';
+import { navGrid, navStep } from '../ai/nav.js';
 
 // Troopers: armed assault robots (looks.js) that move and use cover.
 //   idle   -> spot the player (range + line of sight), get shot, or hear a squadmate -> take cover
@@ -13,7 +14,8 @@ import { damp, lerpAngle } from '../../engine/math.js';
 //   aim    -> telegraph: visor flares, then a 3-4 bolt burst; 1-3 bursts per peek (the player still in sight), then cover
 // They relocate when the spot stops protecting them (flanked), the player gets close, after a few
 // bursts, or once when badly hurt (retreat). Getting hit while exposed can suppress them back into cover.
-// No cover reachable: they fight in the open and keep looking.
+// No cover reachable: they hunt (path toward the player round walls, ai/nav.js), fight in the open once in sight, and keep looking.
+// Running (to cover, flanking, hunting) they fire short bursts at the player in sight, with a wider spread.
 // Squad tactics: cover choice fans out around the player (spread), and the Enemies flank director
 // periodically sends one trooper (flank()) to cover on the player's side or rear while the rest keep
 // the player pinned.
@@ -27,7 +29,7 @@ export const TUNING = {
   flankRun: 5.4, // flankers sprint
   flankTravel: 30, // m: how far a flanker will go
   accel: 10,
-  plateMult: 0.25, // plated trooper: damage factor of light rounds and the pistol on plate (heavy rounds and the weak spot: x1)
+  plateHeavy: 0.5, // plated trooper: damage factor of a heavy round on an intact plate (it knocks the plate off); light rounds: 0
   sight: 32, // m: notice the player within this range with line of sight
   engage: 30, // m: shoot within this range
   alertRadius: 22, // squadmates within this range join in
@@ -48,10 +50,19 @@ export const TUNING = {
   retreatAt: 0.4, // health fraction
   spreadBase: 0.3,
   spreadPerMeter: 0.012,
+  hunt: { cell: 0.75, margin: 8, maxSpan: 140, every: 1.0, ahead: 4, coverEvery: 1.5 }, // no cover in reach: path toward the player
+  runFire: { every: [1.0, 2.0], shots: [2, 3], spread: 0.35 }, // bursts on the run: s between them, bolts, extra spread
 };
 
 // s without getting 5 cm closer to the move goal before a trooper gives up on it (squadmate or corner in the way)
 const STALL_TIME = 1.0;
+// plated trooper: the plate group covering each hit bone (looks.js buildTrooper)
+const PLATE_OF = { Head: 'head', Neck: 'head', Hips: 'torso', Spine: 'torso', Spine1: 'torso', Spine2: 'torso' };
+for (const [side, k] of [['Left', 'L'], ['Right', 'R']]) {
+  for (const b of ['Arm', 'ForeArm', 'Hand']) PLATE_OF[side + b] = 'arm' + k;
+  for (const b of ['UpLeg', 'Leg', 'Foot', 'ToeBase']) PLATE_OF[side + b] = 'leg' + k;
+}
+const PLATE_OFF = { push: [3, 2], spread: 2.5, up: [2.5, 2], spin: 14, life: 4 };
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _d = new THREE.Vector3();
@@ -70,8 +81,9 @@ export class Trooper extends EnemyBody {
       armed: true,
       weakSpots: 1,
     });
-    this.armored = !!def.armored; // `armored` param: plated, light rounds / pistol do TUNING.plateMult (weak spot excepted)
-    buildTrooper(this.rig, this.mats, this.visor, this.armored);
+    this.armored = !!def.armored; // `armored` param: plated, see armor()
+    this.plates = buildTrooper(this.rig, this.mats, this.visor, this.armored) ?? {}; // group -> [{ bone, object }]
+    if (this.armored) this.debrisKind = 'trooper-plated';
     this.t = TUNING;
     this.vel = new THREE.Vector3();
     this.offset = new THREE.Vector3(); // peek step, applied to the visual position
@@ -99,6 +111,7 @@ export class Trooper extends EnemyBody {
     this.rig.socket('Weapon', 'gripL', ...s.gripL);
     this.muzzle = this.rig.socket('Weapon', 'muzzle', ...s.muzzle);
     this.finishBody();
+    this.#clearWeakSpots();
     this.#place();
   }
 
@@ -115,10 +128,47 @@ export class Trooper extends EnemyBody {
     return this.alerted;
   }
 
-  // Damage multiplier (weapon.js): plate turns light rounds and the pistol (GUNS ammo not 'heavy') to plateMult, with sparks
-  // and weapon:armored; heavy rounds and the glowing weak spot take full damage.
+  // Damage multiplier (weapon.js). Plated: a part under an intact plate shrugs off light rounds and the pistol (0: sparks,
+  // weapon:armored) and takes plateHeavy of a heavy round, which knocks that plate group off (damage()); a bare part and the
+  // glowing weak spot (never plated) take everything.
   armor(zone, object, gun) {
-    return !this.armored || zone === 'weak' || gun?.ammo === 'heavy' ? 1 : this.t.plateMult;
+    if (zone === 'weak' || !this.plates[PLATE_OF[object?.userData.bone]]) return 1;
+    return gun?.ammo === 'heavy' ? this.t.plateHeavy : 0;
+  }
+
+  // Whatever gets through a plate (a heavy round, armor()) knocks the whole group off.
+  damage(amount, point, dir, zone, object) {
+    const key = zone === 'weak' ? null : PLATE_OF[object?.userData.bone];
+    if (key && this.plates[key] && this.alive) this.#dropPlates(key, point, dir);
+    return super.damage(amount, point, dir, zone, object);
+  }
+
+  #dropPlates(key, point, dir) {
+    const pieces = new Set(this.plates[key].map((p) => p.object));
+    delete this.plates[key];
+    this.group.updateMatrixWorld(true);
+    this.ctx.debris.burst(this.debrisKind, this.skin, this.ctx.scene, this.shed, { ...PLATE_OFF, dir }, undefined, pieces);
+    for (const o of pieces) o.userData.dropped = true;
+    this.skin.rebuild();
+    this.ctx.events.emit('enemy:plate', { enemy: this, group: key, point });
+  }
+
+  // The weak spot is never plated: a plate on its bone is left off (the gap shows where it is).
+  #clearWeakSpots() {
+    let changed = false;
+    for (const spot of this.weakSpots) {
+      for (const key in this.plates) {
+        const list = this.plates[key];
+        for (let i = list.length - 1; i >= 0; i--) {
+          if (list[i].bone !== spot.userData.bone) continue;
+          list[i].object.userData.dropped = true;
+          list.splice(i, 1);
+          changed = true;
+        }
+        if (!list.length) delete this.plates[key];
+      }
+    }
+    if (changed) this.skin.rebuild();
   }
 
   wake() {
@@ -232,7 +282,48 @@ export class Trooper extends EnemyBody {
         const k = damp(t.accel, dt);
         this.vel.x += (_d.x - this.vel.x) * k;
         this.vel.z += (_d.z - this.vel.z) * k;
+        combat = this.#runFire(dt, target, dist, live);
         if (this.timer <= 0) this.#relocate(); // stuck for too long: pick something else
+        break;
+      }
+
+      case 'hunt': {
+        // no cover in reach: walk at the player round the walls; cover turning up or the player in sight ends it
+        moving = true;
+        const H = t.hunt;
+        if (!live) {
+          this.vel.set(0, 0, 0);
+          break;
+        }
+        if ((this.huntCover -= dt) <= 0) {
+          this.huntCover = H.coverEvery;
+          const found = this.#findCover();
+          if (found) {
+            this.#take(found);
+            break;
+          }
+        }
+        if (dist < t.engage && (this.huntSight -= dt) <= 0) {
+          this.huntSight = 0.25;
+          if (this.#canSee(this.#eye(_v), target)) {
+            this.state = 'peek'; // in the open: shoot, then look again
+            this.timer = 0.3;
+            break;
+          }
+        }
+        if (this.timer <= 0) {
+          this.timer = H.every;
+          this.waypoint = this.#huntStep(player.pos);
+        }
+        if (this.waypoint) _d.subVectors(this.waypoint, this.pos).setY(0);
+        else _d.set(0, 0, 0); // as near as the grid gets: wait
+        const left = _d.length();
+        if (left < 0.4) this.timer = 0; // waypoint reached: the next one now, no stop-and-go
+        else _d.divideScalar(left).multiplyScalar(t.run);
+        const k = damp(t.accel, dt);
+        this.vel.x += (_d.x - this.vel.x) * k;
+        this.vel.z += (_d.z - this.vel.z) * k;
+        combat = this.#runFire(dt, target, dist, live);
         break;
       }
 
@@ -299,7 +390,7 @@ export class Trooper extends EnemyBody {
           this.timer = t.aimTime;
         } else {
           // can't see the player from here: give it one more try, then move
-          if (++this.noSight >= 2) {
+          if (!this.spot || ++this.noSight >= 2) { // in the open: back to hunting at once
             if (this.spot) this.spot.badUntil = this.ctx.time + 6;
             this.#relocate();
           } else this.#enterCover(rand(t.coverTime));
@@ -364,7 +455,7 @@ export class Trooper extends EnemyBody {
     // facing: where we run, otherwise at the player
     let want = this.yaw;
     const speed = Math.hypot(this.vel.x, this.vel.z);
-    if (moving && speed > 0.5) want = Math.atan2(this.vel.x, this.vel.z);
+    if (moving && speed > 0.5 && !combat) want = Math.atan2(this.vel.x, this.vel.z); // firing on the run: faces the player
     else if (this.alerted) want = Math.atan2(target.x - this.pos.x, target.z - this.pos.z);
     this.yaw = lerpAngle(this.yaw, want, damp(combat ? 14 : 8, dt));
 
@@ -420,17 +511,60 @@ export class Trooper extends EnemyBody {
 
   // Pick a (new) cover spot and run there; none reachable: fight from here.
   #relocate(retreat = false) {
+    this.flanking = false;
+    this.#take(this.#findCover(retreat));
+  }
+
+  #findCover(retreat = false) {
     const cover = this.ctx.cover;
     const opts = { avoid: this.spot, retreat, spread: this.#squad() };
-    let found = cover.find(this, this.pos, this.ctx.player.pos, this.ctx.time, opts);
+    const found = cover.find(this, this.pos, this.ctx.player.pos, this.ctx.time, opts);
+    if (found) return found;
     // nothing in range (e.g. the player went deep into the building): take cover a bit farther out rather than
     // stand in the open; later relocations work it closer
-    if (!found) {
-      opts.maxRange = cover.t.maxRange + 6; // the retreat limit: never out of the fight
-      found = cover.find(this, this.pos, this.ctx.player.pos, this.ctx.time, opts);
+    opts.maxRange = cover.t.maxRange + 6; // the retreat limit: never out of the fight
+    return cover.find(this, this.pos, this.ctx.player.pos, this.ctx.time, opts);
+  }
+
+  // Hunt path: a grid over the box round the trooper and the player (ai/nav.js), rebuilt per step (the player moves).
+  // ponytail: rebuilt every hunt.every s per hunting trooper (~10k cells over 90 m); cache the grid per level if hunts get common.
+  #huntStep(goal) {
+    const H = this.t.hunt;
+    const p = this.pos;
+    const half = H.maxSpan / 2;
+    const clampTo = (v, c) => Math.max(c - half, Math.min(c + half, v));
+    const bounds = {
+      minX: clampTo(Math.min(p.x, goal.x) - H.margin, p.x),
+      maxX: clampTo(Math.max(p.x, goal.x) + H.margin, p.x),
+      minZ: clampTo(Math.min(p.z, goal.z) - H.margin, p.z),
+      maxZ: clampTo(Math.max(p.z, goal.z) + H.margin, p.z),
+    };
+    const t = this.t;
+    const grid = navGrid(this.ctx.world, bounds, { radius: t.radius, cell: H.cell, feet: p.y, climb: t.step, height: t.height });
+    return navStep(grid, p, goal, H.ahead, (this._wp ??= new THREE.Vector3()));
+  }
+
+  // Bursts on the run (move / hunt): the player in sight and range from the muzzle, every runFire.every s. True while a burst is on.
+  #runFire(dt, target, dist, live) {
+    const R = this.t.runFire;
+    if (this.runShots > 0) {
+      if ((this.runGap -= dt) <= 0) {
+        this.#fire(target, dist, R.spread);
+        this.runGap = this.t.shotGap;
+        if (--this.runShots <= 0) {
+          this.runTimer = rand(R.every);
+          this.visor.emissiveIntensity = VISOR_REST;
+        }
+      }
+      return true;
     }
-    this.flanking = false;
-    this.#take(found);
+    if ((this.runTimer -= dt) > 0) return false;
+    this.runTimer = 0.3; // no shot now: look again soon
+    if (!live || dist >= this.t.engage || !this.#canSee(this.muzzle.getWorldPosition(_v), target)) return false;
+    this.runShots = randInt(R.shots);
+    this.runGap = 0.15; // a beat to turn toward the player
+    this.visor.emissiveIntensity = VISOR_REST + 8;
+    return true;
   }
 
   #take(found) {
@@ -449,14 +583,19 @@ export class Trooper extends EnemyBody {
       this.closest = Infinity; // progress watch (move state)
       this.stalled = 0;
     } else {
-      this.state = 'peek'; // in the open: shoot, then look again
-      this.timer = 0.3;
+      this.state = 'hunt'; // no cover in reach: close in (it shoots on sight)
+      this.timer = 0;
+      this.huntCover = this.t.hunt.coverEvery;
+      this.huntSight = 0;
+      this.waypoint = null;
     }
+    this.runShots = 0;
+    this.runTimer = rand(this.t.runFire.every) * 0.5;
   }
 
-  #fire(target, dist) {
+  #fire(target, dist, extra = 0) {
     const from = this.muzzle.getWorldPosition(_v);
-    const spread = this.t.spreadBase + dist * this.t.spreadPerMeter;
+    const spread = this.t.spreadBase + dist * this.t.spreadPerMeter + extra;
     const dir = _w.copy(target);
     dir.x += (Math.random() - 0.5) * spread;
     dir.y += (Math.random() - 0.5) * spread;

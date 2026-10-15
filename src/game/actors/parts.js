@@ -100,12 +100,13 @@ export class DebrisBank {
   // Breaks the pieces on `bones` (default: the whole skeleton) into chunks pushed to `out`, added to `scene`.
   // The caller updated the world matrices; proxies are re-synced here (frozen rig proxies, see batch.js).
   // o: { dir?, push: [base, range] along dir, spread (x/z jitter), up: [base, range], spin, life }
-  burst(kind, skin, scene, out, o, bones = skin.skeleton.bones) {
+  // only: a Set of pieces to break off (the rest stay); without it, pieces marked `userData.dropped` (already shed) are skipped.
+  burst(kind, skin, scene, out, o, bones = skin.skeleton.bones, only = null) {
     skin.syncProxies();
     for (const bone of bones) {
       for (let i = 0; i < bone.children.length; i++) {
         const piece = bone.children[i];
-        if (piece.isBone) continue;
+        if (piece.isBone || (only ? !only.has(piece) : piece.userData.dropped)) continue;
         const geo = this.#geo(kind, skin, bone, i, piece);
         if (!geo) continue;
         const c = this.free.pop() ?? this.#chunk();

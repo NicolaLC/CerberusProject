@@ -40,7 +40,7 @@ export const SUN_DIR = new THREE.Vector3(0.45, 0.78, 0.43).normalize();
 // outdoor space seen through a door or by a cut camera is never under the day sky; roofs shade the sun indoors); only the hemisphere
 // fill and the outdoor exposure follow the camera (interiors keep their look: the fill is not shadowed by roofs), eased at SKY_RATE per second.
 export const SKIES = {
-  night: { top: '#020406', horizon: '#13262c', ground: '#040607', glow: 0, fog: '#0a1317', fogNear: 20, fogFar: 160, hemi: 0x3e5a6a, hemiGround: 0x0c0f10, hemiI: 0.75, sun: 0x86a6c8, sunI: 0.8, exposure: 1.45 },
+  night: { top: '#020406', horizon: '#13262c', ground: '#040607', glow: 0, fog: '#0a1317', fogNear: 20, fogFar: 160, hemi: 0x3e5a6a, hemiGround: 0x0c0f10, hemiI: 1.1, sun: 0x86a6c8, sunI: 0.8, exposure: 1.7 },
 };
 const SKY_RATE = 1.2;
 const _alarm = new THREE.Color();

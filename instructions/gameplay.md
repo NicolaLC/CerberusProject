@@ -49,10 +49,12 @@
 - **Loaner guns**: a `trigger.volume` with `loadout` takes back every gun not listed (unowned again, full magazine, empty reserve; the raised gun
   switches straight to the pistol). The Prologue's weapons range lends all five non-pistol guns this way.
 - **Armored targets** (`armored` puppets): only heavy rounds (SR, RG) damage them; light rounds and the pistol spark off.
-- **Plated troopers** (`armored` trooper, `TUNING.plateMult` 0.25): light rounds and the pistol do x0.25 on head, torso and limbs
-  (a hit still hurts, but emits `weapon:impact` sparks and `weapon:armored`: `Weapon.#hit` does that for any `armor()` below 1);
-  heavy rounds full; the glowing weak spot is never plated (every gun, full `weakMult`). `armor(zone, part, gun)` gets the gun def
-  from weapon.js (also in the aim probe and the pierce check).
+- **Plated troopers** (`armored` trooper): six bolted-on plate groups (looks.js `buildTrooper`: head, torso, each arm, each leg;
+  `PLATE_OF` in trooper.js maps every bone to one). A part under an intact plate takes nothing from light rounds and the pistol
+  (`armor()` 0: `weapon:impact` sparks and `weapon:armored`, the crosshair does not turn red) and `TUNING.plateHeavy` (x0.5) of a
+  heavy round, which knocks that whole group off (`enemy:plate`: the plates fly off as debris, sparks, a clank; the skin is re-baked).
+  A bare part takes every gun at full damage. The glowing weak spot is never plated (every gun, full `weakMult`; a plate on its bone
+  is left off). `armor(zone, part, gun)` gets the gun def from weapon.js (also in the aim probe and the pierce check).
 - Walk within 1.1m to collect; toast "LIGHT AMMO +n AR ..." / "HEAVY AMMO +n SR ...". If every gun of that class is
   full the pickup stays ("AMMO FULL").
 
@@ -180,8 +182,9 @@
   (`SHOOTER` in puppet.js). It only rises when its raised emitter would see the player: a player hiding behind cover gets no
   blind pop-ups, it stays down and looks again every 0.5-0.9 s. Up, the bursts are 0.6-1.1 s apart; losing sight keeps it up
   0.8 s more (a peeking player doesn't make it flicker), then 0.6 s after the last burst it hides for 2-3.6 s.
-- Weak spots: 2 random body parts per puppet get a pulsing magenta patch (zone `weak`, ×3 damage).
-- Bolts: 34 m/s, 7 dmg, collide with world and the player capsule.
+- Weak spots: 2 random body parts per puppet get an exposed power cell (a pulsing magenta core in a bolted ring housing of the
+  frame material, round halo; zone `weak`, ×3 damage; troopers get one). Only the core is a hit mesh.
+- Bolts: laser streaks (a thin violet-white core in a 1.9 m violet sheath, tip at the bolt), 44 m/s, 7 dmg, collide with world and the player capsule.
 - Death breaks the rig parts into debris that fades after 5s. Destroyed puppets stay destroyed until the page
   is reloaded; the HUD counts `down / total` and shows ARENA CLEAR when all are down. Spawn list: `SPAWNS`.
 - Shooters only engage a player within `ENGAGE_RANGE` (30 m) with line of sight.
@@ -255,8 +258,12 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
   sees the player (`CoverMap.sees`): no line of fire = stay down and look again every 0.6-1.0 s; 3 looks in a row without
   one (or no sight twice on peeking) → mark the spot bad for 6 s and move. A spot beyond the retreat limit (34 m) is left.
 - Relocate when flanked (spot stops protecting), the player is within 5 m, after 3-6 bursts, or once below
-  40% health (retreat farther). Hit while exposed for at least 0.6 s: 35% chance to duck back early (1.2-2 s). No cover reachable: fight
-  in the open and keep looking.
+  40% health (retreat farther). Hit while exposed for at least 0.6 s: 35% chance to duck back early (1.2-2 s). No cover reachable: hunt
+  (`TUNING.hunt`): walk at the player round walls on a 0.75 m grid over the box round both (+8 m, at most 140 m a side; `ai/nav.js`,
+  shared with the SX-6's pursuit; re-pathed every 1 s or on reaching the waypoint), look for cover every 1.5 s, and stop to fight in
+  the open once the player is in sight within 30 m; out of sight again, hunt again. Awake troopers never stand idle.
+- Fire on the run (`TUNING.runFire`): running to cover, flanking or hunting, a trooper with the player in sight from the muzzle
+  within 30 m fires 2-3 bolt bursts every 1-2 s at +0.35 spread, facing the player (strafing) while the burst lasts.
 - No protected spot within 28 m of the player: accept one up to 34 m (the retreat limit) rather than stand in the
   open; later relocations work closer.
 - Cover is re-checked continuously: a trooper hiding in a spot that stops protecting it moves at once, and one

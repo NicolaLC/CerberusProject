@@ -24,7 +24,8 @@ export function trooperMaterials(armored = false) {
 }
 
 // visor: the glowing material (optics, LEDs) that flares as the trooper aims.
-// armored: bigger pauldrons and a thick chest plate (same materials: no extra draw calls).
+// armored: bolted-on heavy plates over every body part (same materials: no extra draw calls), returned as
+// { [plate group]: [{ bone, object }] } (trooper.js PLATE_OF): a heavy round knocks a group off, the trooper drops the objects.
 export function buildTrooper(rig, M, visor, armored = false) {
   const L = (bone, ...children) => rig.attach(bone, look(...children));
 
@@ -63,7 +64,6 @@ export function buildTrooper(rig, M, visor, armored = false) {
     rb(visor, 0.08, 0.012, 0.006, 0.003, 0, 0.03, 0.165),
     rb(M.armor, 0.32, 0.07, 0.22, 0.025, 0, 0.27, -0.01), // collar
     rb(M.armor, 0.4, 0.28, 0.07, 0.03, 0, 0.12, -0.14), // back plate
-    ...(armored ? [rb(M.armor, 0.46, 0.3, 0.07, 0.03, 0, 0.13, 0.17, -0.08)] : []), // plated: thick chest plate over the breastplate
   );
   // back: power pack with twin exhausts and a stub antenna
   rig.attach(
@@ -110,7 +110,6 @@ export function buildTrooper(rig, M, visor, armored = false) {
       cap(M.frame, 0.052, 0.18, 0, -0.15, 0),
       rb(M.armor, 0.19, 0.13, 0.24, 0.05, 0.05 * s, 0.01, 0, 0, 0, 0.35 * s), // pauldron
       rb(M.plate, 0.2, 0.025, 0.25, 0.01, 0.055 * s, 0.07, 0, 0, 0, 0.35 * s), // ochre rim
-      ...(armored ? [rb(M.armor, 0.27, 0.16, 0.3, 0.06, 0.07 * s, 0.04, 0, 0, 0, 0.35 * s)] : []), // plated: oversized pauldron
       rb(M.armor, 0.11, 0.1, 0.12, 0.03, 0.02 * s, -0.17, 0), // bicep plate
       cyl(M.frame, 0.045, 0.045, 0.1, 0, -0.29, 0, 0, 0, R), // elbow joint
     );
@@ -156,6 +155,28 @@ export function buildTrooper(rig, M, visor, armored = false) {
       rb(M.frame, 0.15, 0.022, 0.11, 0.008, 0, -0.015, 0.04),
     );
   }
+  if (!armored) return null;
+
+  // heavy plates (bare plate steel, the plated look): bulky, bolted over the livery, the sensors and weak spots left clear
+  const plates = {};
+  const P = (group, bone, ...children) => {
+    const object = L(bone, ...children);
+    object.userData.plate = group; // the weak spot mounts under it (enemy.js), the trooper drops it (trooper.js)
+    (plates[group] ??= []).push({ bone, object });
+  };
+  const bolts = (w, y, z) => [-1, 1].map((k) => cyl(M.frame, 0.012, 0.012, 0.012, k * w, y, z, R, 0, 0, 6));
+  P('head', 'Head', rb(M.plate, 0.25, 0.09, 0.27, 0.04, 0, 0.21, -0.015), ...bolts(0.1, 0.2, 0.123)); // helmet shell over the dome
+  P('torso', 'Spine2', rb(M.armor, 0.46, 0.3, 0.07, 0.03, 0, 0.13, 0.17, -0.08), ...bolts(0.19, 0.24, 0.2)); // chest plate
+  P('torso', 'Spine1', rb(M.plate, 0.34, 0.13, 0.06, 0.02, 0, 0.08, 0.145)); // belly plate
+  for (const [side, s] of SIDES) {
+    const arm = side === 'Left' ? 'armL' : 'armR';
+    const leg = side === 'Left' ? 'legL' : 'legR';
+    P(arm, side + 'Arm', rb(M.armor, 0.27, 0.16, 0.3, 0.06, 0.07 * s, 0.04, 0, 0, 0, 0.35 * s)); // oversized pauldron
+    P(arm, side + 'ForeArm', rb(M.plate, 0.13, 0.17, 0.13, 0.03, 0, -0.13, 0)); // vambrace shell
+    P(leg, side + 'UpLeg', rb(M.plate, 0.18, 0.26, 0.07, 0.03, 0, -0.17, 0.085), ...bolts(0.06, -0.06, 0.12)); // thigh plate
+    P(leg, side + 'Leg', rb(M.plate, 0.14, 0.27, 0.07, 0.03, 0, -0.21, 0.08)); // shin guard
+  }
+  return plates;
 }
 
 // ---------------- training puppet: crash-test mannequin robot on a pneumatic post ----------------

@@ -79,7 +79,7 @@ const SLOW_EVERY = 3; // rigs far away or off screen pose every Nth frame
 const HURT = { amount: 0, dir: new THREE.Vector3() };
 const BOLT_HIT = { point: null, normal: new THREE.Vector3() };
 
-const BOLT = { speed: 34, life: 3, damage: 7, radius: 0.06 };
+const BOLT = { speed: 44, life: 3, damage: 7, radius: 0.06 };
 
 export class Enemies {
   // Permanent: bolt pool, stand geometry and material. Per level (load / unload): the spawn list, stands, cover map.
@@ -119,11 +119,12 @@ export class Enemies {
       takeStand: () => this.standCount++,
       setStand: (i, pos, postH) => this.setStand(i, pos, postH),
     };
-    const geo = new THREE.CapsuleGeometry(0.06, 0.5, 4, 8).rotateX(Math.PI / 2);
-    // HiveMind bolts: a violet-white core in a violet haze (art-style.md 5): never orange or amber, which is STEM-00's
+    // HiveMind bolts: a laser streak, a thin violet-white core in a long violet sheath (art-style.md 5): never orange or amber,
+    // which is STEM-00's. The tip sits at the bolt's position (lookAt points +Z along the flight), the streak trails behind it.
+    const geo = new THREE.CylinderGeometry(0.022, 0.022, 1.4, 6, 1, true).rotateX(Math.PI / 2).translate(0, 0, -0.7);
     const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(PROJECTILE.core).multiplyScalar(6) });
-    const glowGeo = new THREE.SphereGeometry(0.22, 12, 8);
-    const glowMat = new THREE.MeshBasicMaterial({ color: PROJECTILE.glow, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
+    const glowGeo = new THREE.CylinderGeometry(0.07, 0.03, 1.9, 8, 1, true).rotateX(Math.PI / 2).translate(0, 0, -0.95);
+    const glowMat = new THREE.MeshBasicMaterial({ color: PROJECTILE.glow, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
     this.boltPool = new Pool(
       () => {
         const m = new THREE.Mesh(geo, mat);

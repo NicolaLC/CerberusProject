@@ -71,6 +71,7 @@
  * @property {VaultRefused} player:vaultRefused
  * @property {PlayerStep} player:step
  * @property {Vector3} enemy:step
+ * @property {{ enemy: any, group: string, point: Vector3 }} enemy:plate a heavy round knocked a plated trooper's plate group off
  * @property {any} puppet:down puppet
  * @property {any} trooper:flank trooper
  * @property {TriggerFired} trigger:fired

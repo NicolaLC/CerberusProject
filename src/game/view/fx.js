@@ -152,6 +152,8 @@ export class FX {
       this.impact(b.point, up, b.kind === 'drone' || b.kind === 'death' ? 0xff6a2a : 0x9a5cff, b.kind === 'drone' ? 16 : b.kind === 'stomp' ? 26 : 34, b.kind !== 'stomp');
       this.shockwave(b.point);
     });
+    // a plated trooper's plate knocked off: a shower of hot sparks
+    events.on('enemy:plate', (p) => this.impact(p.point, up, 0xffc070, 22, false));
     events.on('boss:leg', (b) => {
       this.impact(b.point, up, 0xff2bd6, 30, false);
       this.shockwave(b.point);
