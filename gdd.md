@@ -79,12 +79,13 @@ is, the more the HiveMind escalates. They coordinate, because they share one min
 |---|---|---|---|---|
 | LEGION | Puppet | Training frame, remote-controlled calibration dummy | Glowing weak spots (x3) | Yes (8.1) |
 | LEGION | Trooper | Line infantry: uses cover, suppresses, flanks in pairs | Head, exposed power cell | Yes (8.2) |
+| LEGION | Plated trooper | Armored infantry: a trooper in heavy plate, light rounds do x0.25 | Heavy rounds; its unplated weak spot | Yes (8.2, `armored`) |
 | LEGION | Aegis | Shield bearer, advances behind a deployable energy shield | Flank, or overload the shield with sustained fire | No |
 | LEGION | Lancer | Sniper: long-range rail shots, relocates after firing | Low HP, loses track when line of sight breaks | No |
 | VIGIL | Seeker drone | Flanker and spotter, marks the player for other units | Eye and core (x3) | Close match to the drone (8.3) |
 | VIGIL | Swarm | Area denial: micro-drone clouds that flush you out of cover | Explosives, area damage | No |
 | VIGIL | Watcher | Support: hovering scanner that buffs or repairs units | Kill first, fragile | No |
-| COLOSSUS | Arachne | Spider mech miniboss, six-legged siege walker | Armor plates, legs, exposed core | Yes, as SX-6 Tarantula (8.4) |
+| COLOSSUS | Arachne | Spider mech miniboss, six-legged siege walker | Armor plates, legs (plated: heavy rounds), exposed core | Yes, as SX-6 Tarantula (8.4) |
 | COLOSSUS | Crusher | Slow armored brute that charges cover and destroys it | Back vents | No |
 | COLOSSUS | Titan | Building-sized set-piece boss, fought in stages | Scripted weak points | No |
 
@@ -174,8 +175,9 @@ too strong to beat. Each act then takes one of its heads.
 2. **Tutorial path (calibration rooms, range, drill hall, halls).** By the end STEM-00 has learned to move, take cover,
    vault, slide and use the guns. The weapons range teaches the two ammo classes: light rounds spark off armor, heavy
    rounds break it.
-3. **Armor makes it dynamic.** Plated troopers (8.2) shrug off light rounds and the pistol except on their back power
-   cell; a heavy gun (the KS-5 Farsight, found in hall B before them) breaks them. The SX-6's legs wear plate greaves
+3. **Armor makes it dynamic.** Plated troopers (8.2) shrug off light rounds and the pistol except on their glowing weak
+   spot; a heavy gun (the KS-5 Farsight, on a stand inside hall A's west door, before them) breaks them. A heavy-rounds
+   supply point waits by the boss arena door. The SX-6's legs wear plate greaves
    (8.4): light rounds barely scratch them, heavy rounds take them apart. The switch to a heavy gun is the lesson.
 4. **Miniboss.** The SX-6 Tarantula in the boss arena.
 5. **Breakout cut.** When the SX-6 falls, a cutscene: a last squad bursts through the exit gate; STEM-00 fights them on
@@ -422,7 +424,7 @@ Planned (#91), not in the code yet:
 |---|---|---|
 | Prologue (start) | KP-12 Ember | STEM-00's own sidearm |
 | Prologue (the purge) | KR-7 Warden | A calibration armoury rack, or the first destroyed trooper |
-| Prologue (hall B) | KS-5 Farsight | A stand on the way to the plated troopers and the SX-6: the heavy gun that breaks armor |
+| Prologue (hall A) | KS-5 Farsight | A stand inside hall A's west door, on the way to the plated troopers and the SX-6: the heavy gun that breaks armor |
 | The fall (end of the Prologue) | everything but the KP-12 is lost | Act 1 starts with the pistol only, in the sewers |
 | Act 1 (Underworks) | KR-7 Warden | Found again early: a Reject's cache or a LEGION patrol |
 | Act 1 (Foundry Belt) | KB-3 Tribune | LEGION patrols guarding the factory lines |
@@ -508,8 +510,8 @@ They are the cover-versus-cover test.
 
 **Plated trooper (`armored: true`, owner decision 2026-10-14):** the same soldier in heavy plate (bare dark plate steel,
 no ochre livery, bigger pauldrons and chest plate). Light rounds and the pistol do x0.25 on the head, torso and limbs
-(sparks, `weapon:armored`); heavy rounds (KS-5, KX-9) do full damage. The power cell on its back is not plated: every gun
-does full weak-spot damage there, so flanking still works with the pistol alone. The Prologue's hall troopers (beat 8)
+(sparks, `weapon:armored`); heavy rounds (KS-5, KX-9) do full damage. Its glowing weak spot is never plated: every gun
+does full weak-spot damage there (x3), so a plated trooper still falls to the pistol alone. The Prologue's hall troopers (beat 8)
 are plated.
 
 **Squad tactics:**
