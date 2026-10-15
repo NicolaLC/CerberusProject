@@ -94,6 +94,10 @@ Title (launch, and QUIT TO MAIN MENU): CONTINUE (only with a save) / NEW GAME (w
 DEVELOPMENT (scene buttons `#scenes`, debug keys) / CREDITS (static HTML in index.html, kept in sync with `credits.md`) / QUIT TO
 DESKTOP (desktop build, bottom-left; Esc / B on the title). Pause (Esc / pad Menu in play): RESUME (`#start`, re-locks the pointer)
 / SETTINGS / QUIT TO MAIN MENU / QUIT TO DESKTOP. Pages are `#overlay .page[data-page]`; items `data-go` (sub-page) or `data-act`.
+NEW GAME first plays the intro reel (`view/reel.js`, `Shell #intro`; narrative.md "The intro reel"): a full-screen 2D-canvas layer
+(`#reel`) over the hidden menu, about 95 s on its own wall clock, the bed and PA lines from `audio.reel` / `audio.reelLine`. A first
+press shows a skip hint, a second skips; the end holds on black with a prompt. The press that ends it loads the first campaign
+scene, so pointer lock still has its user activation (hence the prompt instead of loading on its own). CONTINUE skips the reel.
 Loading screen (`#loading`, `Shell #load`): NEW GAME / CONTINUE / a Development scene show it with the scene title, give it two
 frames to paint, then run the synchronous `loadScene` and start play; menu input is ignored meanwhile. `?debug` loads without it.
 Progress: `cerberus.progress` = { scene, checkpoint } (scenes.js), written when a campaign scene (`CAMPAIGN`) starts and on

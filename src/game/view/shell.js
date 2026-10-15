@@ -2,6 +2,7 @@ import { SCENES, CAMPAIGN, loadProgress, saveProgress, clearProgress } from '../
 import { bindSettingsUI } from '../settings.js';
 import { applyQuality } from './quality.js';
 import { MenuScene } from './menu-scene.js';
+import { Reel } from './reel.js';
 
 // The DOM shell around the game: main menu (title) and pause menu with their sub-pages (`#overlay .page`), pointer lock,
 // scene buttons, keyboard / controller navigation of the menus. Built by game.js with the objects it needs; knows nothing else.
@@ -64,6 +65,7 @@ export class Shell {
     this.setRunning(host.debug);
     document.addEventListener('pointerlockchange', () => this.setRunning(input.locked || input.free || this.padPlay || host.debug));
     addEventListener('keydown', (e) => {
+      if (this.reel?.active) return; // the intro reel takes every key (view/reel.js)
       if (!engine.paused) {
         // Esc pauses in free-mouse mode (pointer lock handles it otherwise)
         if (e.code === 'Escape' && input.free) {
@@ -118,8 +120,9 @@ export class Shell {
   update() {
     const { host } = this;
     const { engine, controls } = host;
-    if (engine.idle) this.backdrop?.render(engine.realDt); // the title's own set (menu-scene.js), never the level
     const input = engine.input;
+    if (this.reel?.active) return this.reel.update(input); // NEW GAME's intro reel covers everything, menus included
+    if (engine.idle) this.backdrop?.render(engine.realDt); // the title's own set (menu-scene.js), never the level
     // controller in use: no mouse cursor anywhere (body.pad, style.css) until the mouse really moves again (input.device)
     const pad = input.device === 'pad';
     if (pad !== this.padCursor) document.body.classList.toggle('pad', (this.padCursor = pad));
@@ -175,10 +178,7 @@ export class Shell {
     } else if (name === 'new-confirm') {
       this.#ui('start');
       clearProgress();
-      this.#load(CAMPAIGN[0], () => {
-        saveProgress(CAMPAIGN[0]);
-        this.#play(pad);
-      });
+      this.#intro();
     } else if (name === 'resume') {
       this.#ui('select');
       this.#play(pad);
@@ -193,6 +193,22 @@ export class Shell {
       this.#ui('select');
       window.cerberusDesktop.quit();
     }
+  }
+
+  // NEW GAME's intro reel (view/reel.js), over the title: the menu hides, the reel plays, and the press that ends it (skip, or
+  // its last prompt) loads the first campaign scene and starts play, so pointer lock still has that press's user activation.
+  #intro() {
+    const { audio } = this.host;
+    audio.init();
+    this.reel ??= new Reel({ audio });
+    this.overlay.style.display = 'none';
+    this.reel.start((pad) => {
+      this.overlay.style.display = 'flex'; // under the loading screen; the pause menu if the lock is refused
+      this.#load(CAMPAIGN[0], () => {
+        saveProgress(CAMPAIGN[0]);
+        this.#play(pad);
+      });
+    });
   }
 
   // Loading screen: a level load is synchronous (build, shader warm-up) and takes a moment, so #loading is shown and

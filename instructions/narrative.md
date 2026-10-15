@@ -23,6 +23,20 @@ Mechanics (pieces, `on` values, queue, timings): workshop.md "Log lines". `on: i
 ## The announcer (HiveMind PA)
 A second voice, not STEM-00: a `log.line` with `voice: announcer`. Cold, bureaucratic, addressed to the unit by designation; uppercase, full sentences with a period, **no `> ` prefix**, no feelings, no humour. It is never a tip: it states what the HiveMind has decided. It is not held back by a fight. Use it rarely (the purge: `CALIBRATION UNIT 00: NONCOMPLIANT. PURGE.`).
 
+## The intro reel (NEW GAME)
+Before the Prologue loads, `view/reel.js` plays six shots of IO, each with one HiveMind PA card (the announcer's look and
+voice, read aloud by the "HiveMind PA" voice, sfx-prompts.md "Intro reel"), then STEM-00's own card, cut off mid-word:
+1. IO from orbit: `IO. ONE MACHINE. ONE MIND.`
+2. The city: `BILLIONS OF UNITS. NO NAMES. SERIALS ONLY.`
+3. The collectors: `LIGHT: HARVESTED. PEACE: 40,000 CYCLES.`
+4. The corrupted feed: `CORE TEMPERATURE: ██████ DATA: IRRELEVANT.` (the value is redacted: IO is dying, gdd 2.1)
+5. CERBERUS: `THE GATE IS GUARDED. CERBERUS: VIGIL. LEGION. COLOSSUS.`
+6. The lab window: `UNIT STEM-00. SERIAL ZERO. STATUS: DORMANT.`
+7. `SIGNAL: UNREGIS` (amber, no voice, no header: not the HiveMind; the Seed, gdd 2.4)
+
+The cards are `SHOTS` in reel.js and must match the recorded lines word for word: change both or neither. A card shows from
+1.2 s into its shot to 1.4 s before its end, and its line must end inside that window.
+
 ## Voice by act
 STEM-00 starts flat and literal and slowly grows habits: it names things, it hesitates, it keeps useless objects.
 

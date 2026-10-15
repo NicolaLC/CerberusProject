@@ -140,7 +140,7 @@ const SAMPLES = {
   bossMusic: [bossMusic, 0.38, 0], // looped from boss:wake to boss:dead, instead of `music`
   menuMusic: [menuMusic, 0.35, 0], // looped while the start / pause panel is up (engine paused)
   reelDrone: [reelDrone, 0.05, 0], // intro reel bed, looped while it plays (reel()); the file is -5.7 LUFS, so its gain is low
-  reelPa1: [reelPa1, 0.5, 0], // intro reel PA lines (reelLine(n)), the HiveMind reading cards 1-6; each file is about -16 LUFS
+  reelPa1: [reelPa1, 0.5, 0], // intro reel PA lines (reelLine(id)), the HiveMind reading cards 1-6; each file is about -16 LUFS
   reelPa2: [reelPa2, 0.5, 0],
   reelPa3: [reelPa3, 0.5, 0],
   reelPa4: [reelPa4, 0.5, 0],
@@ -180,8 +180,8 @@ for (const [path, url] of Object.entries(import.meta.glob('../../assets/sfx/ui-*
 }
 // Title music (title(on)): `menuMusic`, its own loop while the title is up (the engine is idle there, so mood() is not called).
 const MENU = { gain: 0.35, fadeIn: 1.5, fadeOut: 0.6 };
-// Intro reel (reel(on), reelLine(n)): the bed fades in over the muted title music and out on the reel's end or cancel.
-const REEL = { fadeIn: 1, fadeOut: 0.4, lines: 6 };
+// Intro reel (reel(on), reelLine(id), called by view/reel.js): the bed fades in over the muted title music and out on the reel's end or cancel.
+const REEL = { fadeIn: 1, fadeOut: 0.4 };
 
 // Sample bytes. The single-file artifact build inlines samples as base64 data: URLs, which its page's content
 // policy won't fetch, so those are decoded here instead.
@@ -723,11 +723,12 @@ export class Audio {
     this.reelLoop = null;
   }
 
-  // The reel's PA line for card n (1-6), cutting the one before it. The reel calls it when card n starts typing.
-  reelLine(n) {
-    if (!this.ctx || !this.reelOn || n < 1 || n > REEL.lines) return;
+  // A reel PA line (`reelPa1` .. `reelPa6`, the SHOTS row's `voice` in reel.js), cutting the one before it. The reel calls it
+  // when the card starts typing.
+  reelLine(id) {
+    if (!this.ctx || !this.reelOn || !id?.startsWith('reelPa') || !SAMPLES[id]) return;
     this.#cut('reelPa');
-    const src = this.sample(`reelPa${n}`);
+    const src = this.sample(id);
     if (!src) return;
     this.voice.reelPa = src;
     src.onended = () => this.voice.reelPa === src && delete this.voice.reelPa;

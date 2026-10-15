@@ -37,10 +37,11 @@ the looping sounds. Add new rows here for the next missing sounds.
 
 ## Intro reel (NEW GAME)
 
-Recorded and in `audio.js`, but not called yet: the reel view (`view/reel.js`) is not in the repo. When it lands:
-`Shell #intro` calls `audio.reel(true)` (the title music fades out, `reel-drone` fades in), each shot calls
-`audio.reelLine(n)` when its card starts typing (`TUNING.cardAt`; card 7, `SIGNAL: UNREGIS`, has no line), and the
-reel's end or cancel calls `audio.reel(false)` (bed and line fade out). `reelLine` cuts the line before it.
+Wired through `view/reel.js`: its start calls `audio.reel(true)` (the title music fades out, `reel-drone` fades in), each
+shot calls `audio.reelLine(voice)` (its `SHOTS` row's sample id) when its card starts typing (`TUNING.cardAt`; the last
+card, `SIGNAL: UNREGIS`, has no line), and its end or skip calls `audio.reel(false)` (bed and line fade out). `reelLine`
+cuts the line before it. Visual beats keyed to the lines (`SHOTS[].at`): the feed tears over the redaction (0.94-1.86 s of
+line 4), CERBERUS's sensors flare on VIGIL / LEGION / COLOSSUS (2.74 / 3.52 / 4.39 s of line 5).
 
 | File | Use | Settings |
 |---|---|---|
