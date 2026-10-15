@@ -67,6 +67,13 @@ import ambientLoop from '../../assets/sfx/ambient-loop.mp3';
 import combatMusic from '../../assets/sfx/combat-music.mp3';
 import bossMusic from '../../assets/sfx/boss-music.mp3';
 import menuMusic from '../../assets/sfx/menu-music.mp3';
+import reelDrone from '../../assets/sfx/reel-drone.mp3';
+import reelPa1 from '../../assets/sfx/reel-pa-1.mp3';
+import reelPa2 from '../../assets/sfx/reel-pa-2.mp3';
+import reelPa3 from '../../assets/sfx/reel-pa-3.mp3';
+import reelPa4 from '../../assets/sfx/reel-pa-4.mp3';
+import reelPa5 from '../../assets/sfx/reel-pa-5.mp3';
+import reelPa6 from '../../assets/sfx/reel-pa-6.mp3';
 
 // SFX: synthesized at runtime, plus recorded samples (ElevenLabs, see credits.md) where one exists.
 // A sample replaces its synth sound once decoded; until then (or if loading fails) the synth plays.
@@ -132,6 +139,13 @@ const SAMPLES = {
   music: [combatMusic, 0.5, 0], // looped while fighting (mood())
   bossMusic: [bossMusic, 0.38, 0], // looped from boss:wake to boss:dead, instead of `music`
   menuMusic: [menuMusic, 0.35, 0], // looped while the start / pause panel is up (engine paused)
+  reelDrone: [reelDrone, 0.05, 0], // intro reel bed, looped while it plays (reel()); the file is -5.7 LUFS, so its gain is low
+  reelPa1: [reelPa1, 0.5, 0], // intro reel PA lines (reelLine(n)), the HiveMind reading cards 1-6; each file is about -16 LUFS
+  reelPa2: [reelPa2, 0.5, 0],
+  reelPa3: [reelPa3, 0.5, 0],
+  reelPa4: [reelPa4, 0.5, 0],
+  reelPa5: [reelPa5, 0.5, 0],
+  reelPa6: [reelPa6, 0.5, 0],
 };
 // Combat music: fades in on a combat signal (COMBAT_ON) and out `hold` s after the last one, sooner when the fight ends
 // (COMBAT_OFF). While the boss is awake its own track plays instead (crossfaded). The ambience ducks under the music.
@@ -166,6 +180,8 @@ for (const [path, url] of Object.entries(import.meta.glob('../../assets/sfx/ui-*
 }
 // Title music (title(on)): `menuMusic`, its own loop while the title is up (the engine is idle there, so mood() is not called).
 const MENU = { gain: 0.35, fadeIn: 1.5, fadeOut: 0.6 };
+// Intro reel (reel(on), reelLine(n)): the bed fades in over the muted title music and out on the reel's end or cancel.
+const REEL = { fadeIn: 1, fadeOut: 0.4, lines: 6 };
 
 // Sample bytes. The single-file artifact build inlines samples as base64 data: URLs, which its page's content
 // policy won't fetch, so those are decoded here instead.
@@ -202,6 +218,8 @@ export class Audio {
     this.ambientLoop = null;
     this.titleOn = false; // the title is up (title())
     this.menuLoop = null; // the title music's looping source, started once decoded
+    this.reelOn = false; // the intro reel is playing (reel())
+    this.reelLoop = null; // its bed's looping source, while it plays
     this.beds = {}; // id -> looping source of a bed (bayHum, consoleLoop, droneLoop), started once decoded
     this.bedLevel = {}; // id -> the 0..1 level last sent to its gain
     this.cinema = false; // an intro cinematic ran this run: the boot's wake cues are not scheduled
@@ -341,6 +359,7 @@ export class Audio {
           .then((buf) => {
             (this.samples[id] ??= []).push(buf);
             if (id === 'menuMusic') this.title(this.titleOn); // the title was up before it decoded
+            if (id === 'reelDrone' && this.reelOn) this.reel(true); // the reel started before its bed decoded
           })
           .catch(() => {}); // keep the synth sound
       }
@@ -681,7 +700,37 @@ export class Audio {
       this.track = undefined; // forces mood()'s music / ambience fade
       this.bedLevel = {}; // and the beds'
     }
-    this.menuLoop?.gain.gain.setTargetAtTime(on ? MENU.gain : 0, t, on ? MENU.fadeIn : MENU.fadeOut);
+    this.menuLoop?.gain.gain.setTargetAtTime(on && !this.reelOn ? MENU.gain : 0, t, on ? MENU.fadeIn : MENU.fadeOut); // silent under the reel
+  }
+
+  // The intro reel starts (on) or ends / is cancelled (off). On: the title music fades out and the bed fades in.
+  // Off: the bed and the PA line playing fade out; the title music is the Shell's (title()).
+  reel(on) {
+    this.reelOn = on;
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    if (on) {
+      this.menuLoop?.gain.gain.setTargetAtTime(0, t, MENU.fadeOut);
+      if (this.reelLoop) return;
+      this.reelLoop = this.#loop('reelDrone', 0); // null until decoded: init() calls back
+      this.reelLoop?.gain.gain.setTargetAtTime(SAMPLES.reelDrone[1], t, REEL.fadeIn);
+      return;
+    }
+    this.#cut('reelPa');
+    if (!this.reelLoop) return;
+    this.reelLoop.gain.gain.setTargetAtTime(0, t, REEL.fadeOut);
+    this.reelLoop.stop(t + REEL.fadeOut * 5);
+    this.reelLoop = null;
+  }
+
+  // The reel's PA line for card n (1-6), cutting the one before it. The reel calls it when card n starts typing.
+  reelLine(n) {
+    if (!this.ctx || !this.reelOn || n < 1 || n > REEL.lines) return;
+    this.#cut('reelPa');
+    const src = this.sample(`reelPa${n}`);
+    if (!src) return;
+    this.voice.reelPa = src;
+    src.onended = () => this.voice.reelPa === src && delete this.voice.reelPa;
   }
 
   #loop(id, volume) {

@@ -89,6 +89,8 @@ Most sounds are synthesized at runtime (`src/game/view/audio.js`). Recorded samp
 | Combat music (epic orchestral, choir and guitars, loop) | `src/assets/sfx/combat-music.mp3` | generated with ElevenLabs Music (eleven_music_v2_5) by the project owner | per the ElevenLabs plan used (commercial use of generated music needs a paid plan: see `before-shipping.md`) |
 | Boss music (SX-6 Tarantula fight, epic orchestral, choir and guitars, loop) | `src/assets/sfx/boss-music.mp3` | generated with ElevenLabs Music (eleven_music_v2_5) by the project owner | per the ElevenLabs plan used (commercial use of generated music needs a paid plan: see `before-shipping.md`) |
 | Menu music (title / pause, dark ambient, loop) | `src/assets/sfx/menu-music.mp3` | generated with ElevenLabs Music (eleven_music_v2_5) by the project owner | per the ElevenLabs plan used (commercial use of generated music needs a paid plan: see `before-shipping.md`) |
+| Intro reel bed (machine planet drone, loop) | `src/assets/sfx/reel-drone.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Intro reel PA lines (the HiveMind reading cards 1-6) | `src/assets/sfx/reel-pa-1.mp3` to `reel-pa-6.mp3` | generated with ElevenLabs Text to Speech (eleven_multilingual_v2) in the voice "HiveMind PA", designed with ElevenLabs Voice Design by the project owner; processed in post with ffmpeg | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 
 ## Libraries
 
