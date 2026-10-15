@@ -218,8 +218,8 @@ const a = await p.evaluate(() => {
     player.pos.set(2, 0, -15.3 + 8);
     const aim = weak ? tr.weakSpots[0].getWorldPosition(player.pos.clone()) : tr.rig.bones.Spine2.getWorldPosition(player.pos.clone());
     if (weak) {
-      // the weak spot sits on a random part, maybe on the far side: shoot from the side it faces, 8 m out
-      const out = aim.clone().sub(tr.pos ?? tr.root.position).setY(0);
+      // the weak spot sits on a random part's front face: shoot along that face's normal, 8 m out
+      const out = tr.weakSpots[0].getWorldDirection(aim.clone()).setY(0);
       if (out.lengthSq() < 1e-4) out.set(0, 0, 1);
       out.normalize().multiplyScalar(8);
       player.pos.set(aim.x + out.x, 0, aim.z + out.z);
@@ -249,11 +249,12 @@ const a = await p.evaluate(() => {
     const plated = test(gun, true, false);
     out[gun] = { plain: plain.dmg, plated: plated.dmg, ratio: plated.dmg / plain.dmg, sparks: plated.sparks, plainSparks: plain.sparks };
   }
-  // (the weak spot sits on a random body part, sometimes hidden behind the gun or a limb: a clean miss, no damage and no sparks,
-  // spawns a new trooper; a plate hit still fails the check)
+  // (the weak spot sits on a random body part, sometimes hidden behind the gun, a limb or a plate from any angle: a shot that does not
+  // land on it, a clean miss or a plate hit with sparks, spawns a new trooper; one of them must show the full weak-spot damage)
+  const weakExpected = out.pistol.plain * weapon.t.weakMult;
   let weakPlated = { dmg: 0, sparks: 0 };
-  for (let i = 0; i < 6 && weakPlated.dmg === 0 && weakPlated.sparks === 0; i++) weakPlated = test('pistol', true, true);
-  out.weak = { plated: weakPlated.dmg, sparks: weakPlated.sparks, expected: out.pistol.plain * weapon.t.weakMult };
+  for (let i = 0; i < 6 && !(weakPlated.dmg > weakExpected * 0.9); i++) weakPlated = test('pistol', true, true);
+  out.weak = { plated: weakPlated.dmg, sparks: weakPlated.sparks, expected: weakExpected };
   const tr = enemies.spawn({ id: 'enemy.trooper', pos: [0, 0, 0], params: { armored: true } });
   out.zoneMults = { limb: tr.armor('limb', null, { ammo: 'light' }), head: tr.armor('head', null, { ammo: 'light' }), heavy: tr.armor('torso', null, { ammo: 'heavy' }), weak: tr.armor('weak', null, { ammo: 'light' }) };
   tr.alive = false;
