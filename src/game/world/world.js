@@ -57,14 +57,15 @@ function faces(def, { px, nx, py, ny, pz, nz } = {}) {
 export const WORLD_PIECES = {
   ...KIT_PIECES,
   // params: size [w, h, d], mat (key of World.mats), faces? { px|nx|py|ny|pz|nz: mat key } (overrides one side),
-  // cover? 'low' | 'high' | 'wall', collide? (default true), shadow? (default true)
+  // cover? 'low' | 'high' | 'wall', collide? (default true), shadow? (default true),
+  // hidden? (false): a collision-only box (a bridge's invisible rail above its parapet): never drawn, no shadow, blocks walking but not bullets, sight or the camera
   'env.box': {
     example: { params: { size: [3, 1.1, 1], mat: 'low', cover: 'low' } },
     label: 'BOX any size, axis-aligned',
-    fields: [{ key: 'size', type: 'vec3', min: 0.1 }, { ...MAT, optional: false }, { key: 'cover', type: 'enum', options: ['low', 'high', 'wall'], optional: true }, { key: 'collide', type: 'bool', def: true }, { key: 'shadow', type: 'bool', def: true }],
+    fields: [{ key: 'size', type: 'vec3', min: 0.1 }, { ...MAT, optional: false }, { key: 'cover', type: 'enum', options: ['low', 'high', 'wall'], optional: true }, { key: 'collide', type: 'bool', def: true }, { key: 'shadow', type: 'bool', def: true }, { key: 'hidden', type: 'bool', def: false }],
     build: (world, d) => {
-      const { size, cover, collide, shadow } = d.params;
-      const opts = { cover: cover ?? null, collide: collide ?? true, shadow: shadow ?? true };
+      const { size, cover, collide, shadow, hidden } = d.params;
+      const opts = { cover: cover ?? null, collide: collide ?? true, shadow: shadow ?? true, hidden: hidden ?? false };
       return world.box(d.pos[0], d.pos[1], d.pos[2], ...size, world.material(d.params), opts);
     },
   },
@@ -837,7 +838,7 @@ export class World {
   }
 
   // Box from min corner style args: center x/z, bottom y, size w/h/d.
-  box(cx, y, cz, w, h, d, mat, { cover = null, collide = true, shadow = true } = {}) {
+  box(cx, y, cz, w, h, d, mat, { cover = null, collide = true, shadow = true, hidden = false } = {}) {
     // Walls standing on the ground floor sink 0.3 m into it (mesh only, the collider keeps y): a shadow caster that
     // only touches the floor leaks a thin line of sun at its foot (shadow bias), visible inside closed rooms.
     const sink = shadow && collide && Math.abs(y) < 1e-6 && h >= 1.5 ? 0.3 : 0;
@@ -850,8 +851,14 @@ export class World {
     mesh.receiveShadow = true;
     mesh.matrixAutoUpdate = false;
     mesh.updateMatrix();
-    this.scene.add(mesh);
-    this.staticMeshes.push(mesh);
+    if (hidden && collide) {
+      // collision only: kept in props (freed with the level), not in the scene, the batches or the raycast targets
+      mesh.visible = mesh.castShadow = false;
+      this.props.push(mesh);
+    } else {
+      this.scene.add(mesh);
+      this.staticMeshes.push(mesh);
+    }
     if (collide) {
       const box = new THREE.Box3(
         new THREE.Vector3(cx - w / 2, y, cz - d / 2),
@@ -861,8 +868,8 @@ export class World {
       mesh.userData.collider = col;
       this.colliders.push(col);
       this.gridDirty = true;
-      this.meshes.push(mesh);
-      if (cover) this.coverMeshes.push(mesh);
+      if (!hidden) this.meshes.push(mesh);
+      if (cover && !hidden) this.coverMeshes.push(mesh);
     }
     return mesh;
   }

@@ -20,6 +20,10 @@ import { wornMaterial } from '../world/textures.js';
 // destroy objectives (mission.js), `arena:clear` or the HUD kill counter (`Enemies.killable`), so it cannot block a level.
 // The drones LEGION calls are ordinary drones in its spawn group (kills count like any drone's).
 //
+// The volley (the Skyway's loss cut, level.md): a cut shot with `cue: 'volley'` makes all three heads charge together (glow rising for
+// `volley.charge` s) and then fire a violet beam each at where the player stands (`volley.beam` s) with a blast there. Visual only (no damage),
+// the last of the scripted loss; it also wakes a sleeping CERBERUS.
+//
 // Same interface as the other bosses (see enemy.js / spider.js): kind 'boss', name, awake, alive, pos, lift, debris,
 // hitMeshes, armor(), damage(), focusPoint(), aimPoints(), wake(), update(), dispose(); the HUD's boss bar reads `segments`
 // (three { name, value 0..1, floor }) instead of the spider's leg pips.
@@ -38,6 +42,7 @@ export const TUNING = {
   bolt: { charge: 0.9, shots: 8, gap: 0.14, cooldown: [3, 4.5], sweep: 3.2, spread: 0.02, damage: 8 }, // VIGIL: 8 x 8 dmg swept across +-3.2 m
   mortar: { every: [5, 7.5], coverBoost: 1.8, flight: 1.5, radius: 3.8, damage: 30, first: 4 }, // COLOSSUS (spider's lob; faster against a player in cover)
   drones: { max: 3, every: [7, 10], batch: 2, first: 3 }, // LEGION: calls up to `batch` drones when fewer than `max` live
+  volley: { charge: 1.5, beam: 0.9, radius: 0.45, blast: 6 }, // the loss cut: s of charging, s of beams, beam radius (m), blast radius (m)
 };
 
 const HEADS = [
@@ -61,6 +66,9 @@ const ORB_GEO = new THREE.SphereGeometry(0.28, 12, 8);
 const ORB_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(PROJECTILE.core).multiplyScalar(5) });
 const ORB_GLOW_GEO = new THREE.SphereGeometry(0.6, 12, 8);
 const ORB_GLOW_MAT = new THREE.MeshBasicMaterial({ color: PROJECTILE.glow, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
+const BEAM_GEO = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true).translate(0, 0.5, 0); // unit beam along +Y, scaled to (radius, length, radius)
+const BEAM_GLOW_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x8c3cff).multiplyScalar(2.2), transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+const BEAM_CORE_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xf2e8ff).multiplyScalar(3), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
 const RING_GEO = new THREE.RingGeometry(0.86, 1, 40);
 const RING_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(PROJECTILE.ring).multiplyScalar(2), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
 
@@ -95,6 +103,11 @@ export class Cerberus {
     this.orbs = [];
     this.drones = []; // the drones LEGION called
     this.vigil = { state: 'idle', timer: 2.5, shots: 0, dir: 1 };
+    this.volley = null; // { t, fired, target } while the loss cut's volley runs
+    this.beams = []; // [{ glow, core }] per head, built at the first volley
+    this.offShot = ctx.events.on('cinematic:shot', (e) => {
+      if (e.shot?.cue === 'volley' && !this.volley) this.volley = { t: 0, fired: false, target: new THREE.Vector3(), aimed: false };
+    });
     this.mortarTimer = TUNING.mortar.first;
     this.droneTimer = TUNING.drones.first;
     this.heads = HEADS.map((h) => ({ ...h, max: TUNING.head, health: TUNING.head, since: 99, flash: 0, flare: 0, weak: null, muzzle: null, bone: null, neckA: null, neckB: null }));
@@ -350,6 +363,9 @@ export class Cerberus {
       disposeTree(o.ring);
     }
     this.orbs.length = 0;
+    this.offShot?.();
+    for (const b of this.beams) b.glow.removeFromParent(), b.core.removeFromParent(); // shared geometry and materials stay
+    this.beams.length = 0;
     disposeTree(this.root);
     for (const m of [...this.matList, this.skin.lodMaterial]) m.dispose();
   }
@@ -429,7 +445,8 @@ export class Cerberus {
       this.#legion(dt, player);
     }
     this.#updateOrbs(dt, player);
-    this.#pose(dt, active ? player : null);
+    if (this.volley) this.#updateVolley(dt, player);
+    this.#pose(dt, active || this.volley ? player : null);
 
     // looks: hit flash per head, sensors (flare while VIGIL charges), pulsing weak spots
     const M = this.mats;
@@ -445,6 +462,55 @@ export class Cerberus {
   }
 
   // ----- behavior -----
+
+  // The loss cut's volley: the heads charge together, then fire a beam each at the player's place (captured when it starts) and a blast lands.
+  #updateVolley(dt, player) {
+    const v = this.volley;
+    const V = TUNING.volley;
+    if (!this.awake) this.#wake();
+    if (!v.aimed) {
+      player.chest(v.target);
+      v.aimed = true;
+    }
+    v.t += dt;
+    if (v.t < V.charge) {
+      const k = v.t / V.charge;
+      for (const h of this.heads) h.flare = Math.max(h.flare, k);
+      return;
+    }
+    if (!v.fired) {
+      v.fired = true;
+      BLAST.point.copy(v.target);
+      BLAST.radius = V.blast;
+      BLAST.kind = 'mortar';
+      this.ctx.events.emit('blast', BLAST);
+      for (const h of this.heads) h.flare = 1;
+      while (this.beams.length < this.heads.length) {
+        const glow = new THREE.Mesh(BEAM_GEO, BEAM_GLOW_MAT);
+        const core = new THREE.Mesh(BEAM_GEO, BEAM_CORE_MAT);
+        glow.frustumCulled = core.frustumCulled = false;
+        this.ctx.scene.add(glow, core);
+        this.beams.push({ glow, core });
+      }
+    }
+    const age = v.t - V.charge;
+    const live = age < V.beam;
+    const width = V.radius * (1 - 0.5 * (age / V.beam));
+    this.beams.forEach((b, i) => {
+      b.glow.visible = b.core.visible = live;
+      if (!live) return;
+      const from = this.heads[i].muzzle.getWorldPosition(_h);
+      _f.subVectors(v.target, from);
+      const len = _f.length();
+      b.glow.position.copy(from);
+      b.core.position.copy(from);
+      b.glow.quaternion.setFromUnitVectors(_yAxis, _f.divideScalar(len));
+      b.core.quaternion.copy(b.glow.quaternion);
+      b.glow.scale.set(width * 2.2, len, width * 2.2);
+      b.core.scale.set(width * 0.7, len, width * 0.7);
+    });
+    if (!live) this.volley = null;
+  }
 
   // VIGIL: a telegraphed burst swept across the player's position (needs line of sight from the eye).
   #bolts(dt, player) {

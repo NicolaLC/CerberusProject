@@ -1051,7 +1051,7 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
     cover: document.querySelector('#workshop-inspector [data-key="cover"]').value,
     shadow: document.querySelector('#workshop-inspector [data-key="shadow"]').checked,
   }));
-  expect('selecting a piece shows one field per `fields` entry (and its name)', shown.vis && JSON.stringify(shown.keys) === JSON.stringify(['name', 'size', 'mat', 'cover', 'collide', 'shadow']) && shown.size === '3, 1.1, 1' && shown.mat === 'low' && shown.cover === 'low' && shown.shadow === true, JSON.stringify(shown));
+  expect('selecting a piece shows one field per `fields` entry (and its name)', shown.vis && JSON.stringify(shown.keys) === JSON.stringify(['name', 'size', 'mat', 'cover', 'collide', 'shadow', 'hidden']) && shown.size === '3, 1.1, 1' && shown.mat === 'low' && shown.cover === 'low' && shown.shadow === true, JSON.stringify(shown));
   // every field of every piece id comes from the registry: ids without fields show only the name
   const meta = await ev(() => { const g = window.game; return g.registry.ids().map((id) => [id, (g.registry.meta(id).fields ?? []).map((f) => f.key)]); });
   expect('  every registry id has well-formed fields (or none)', await ev(() => window.game.registry.ids().every((id) => (window.game.registry.meta(id).fields ?? []).every((f) => f.key && ['number', 'vec2', 'vec3', 'text', 'bool', 'enum', 'list'].includes(f.type) && (f.type !== 'enum' || f.options)))), JSON.stringify(meta));
@@ -1157,7 +1157,7 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   const pl = await ev(() => { const t = T.tool(); const playing = t.playing; return { playing, hidden: getComputedStyle(document.querySelector('#workshop-inspector')).display === 'none' || document.querySelector('#workshop-inspector').offsetParent === null, focus: document.activeElement.tagName }; });
   await ev(() => T.tap('KeyP'));
   const back = await ev(() => ({ playing: T.tool().playing, vis: document.querySelector('#workshop-inspector').offsetParent !== null, n: document.querySelectorAll('#workshop-inspector [data-key]').length }));
-  expect('play hides the inspector and drops field focus; back to edit shows it again with the selection', pl.playing && pl.hidden && pl.focus === 'BODY' && !back.playing && back.vis && back.n === 6, JSON.stringify({ pl, back }));
+  expect('play hides the inspector and drops field focus; back to edit shows it again with the selection', pl.playing && pl.hidden && pl.focus === 'BODY' && !back.playing && back.vis && back.n === 7, JSON.stringify({ pl, back }));
 
   // leaks: select / deselect / play cycles, then leaving the scene
   const lk = await ev((i) => {
