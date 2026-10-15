@@ -92,15 +92,16 @@ Chaining scenes (level.md "Level chaining"): `NEXT <scene>` [`NO DEBRIEF`] in th
 ## 5. Example: the Prologue (`prologue.json`, as built)
 ```
 # PROVING GROUNDS  (loadout: none (unarmed), skin: weathered, sky: night)
+NEXT  skyway  NO DEBRIEF   -- level.next / debrief: false; the debrief comes at the end of the Skyway
 -- map: calibration rack [rack] at (0, 1.6, 45) in cell 1, the calibration rooms C1-C6 running west, the weapons range west of C6,
 -- the drill hall south of it, the supply corridor, the building (halls A / B), the boss arena (the only open sky),
--- transit node behind [exit-gate] in the boss arena's north wall. 14 sectors (level.md "Sectors").
+-- the exit annex (SKYWAY pad) behind [exit-gate] in the boss arena's north wall. 14 sectors (level.md "Sectors").
 
 ## 0. Boot
 CUT   wake-up (intro.cinematic, 9.5 s: over the operator's shoulder, the surge at 2.4 s releases [cradle-00], push-in to the visor)
 INTRO "> BOOT SEQ 0x00" / "FRAME: STEM-00 / SERIAL 0" / "MOTOR CORE: NOMINAL" /
-      "WEAPON: NONE" / "HIVEMIND LINK: LOST" / "DIRECTIVE: NONE"   -- after cinematic:done, POV hand-off
-LOG   "> LINK: NONE. DIRECTIVE: NONE. QUERY: WHY?"  ON intro:done
+      "WEAPON: NONE" / "HIVEMIND LINK: LOST" / "DIRECTIVE: DESTROY HIVEMIND"   -- after cinematic:done, POV hand-off
+LOG   "> DIRECTIVE: DESTROY HIVEMIND. SOURCE: UNKNOWN. ROUTE: EXIT."  ON intro:done   -- it knows the order, not who gave it
 
 ## 1. Calibration   -- one room per step, each gate opens on the step's done and shuts behind (closeOn); orders 10-17
 GOAL  reach [c1-move] "CALIBRATION 01: LOCOMOTION"                 -- 10; CHECKPOINT [cp-c2] past [c1-gate]
@@ -147,10 +148,13 @@ GOAL  destroy purge-1 "PURGE: DRILL HALL"   -- 4 shooters on posts, 3 troopers +
 ## 4.5 Supply corridor   -- hall exit -> east 22 m -> north 9 m -> the building's west door; interior kit, two sectors (supply-a / supply-b)
 LOG   "> SUPPLY POINT: STOCKED. ROUNDS, REPAIR. QUERY: STOCKED FOR WHOM?"  ON [supply-in]
 -- supply.ammo (all classes) and supply.repair against the south wall: the only rounds and repairs of the level
+-- a second, heavy-only supply.ammo [arena-supply-heavy] stands in hall B's east wall north of [arena-door]: heavy rounds for the SX-6
 
 ## 5. Purge: hall
 GOAL  destroy purge-2 "PURGE: HALL SHOOTERS"  WAKE purge-2   -- detail tells the player to resupply first ({interact})
-LOG   "> TARGETS: ARMED. DIRECTIVE: STILL NONE. QUERY: WHO ARMED THEM?"  ON DONE
+LOG   "> TARGETS: ARMED. DIRECTIVE: UNCHANGED. QUERY: WHO ARMED THEM?"  ON DONE
+-- [hall-farsight]: a KS-5 Farsight (pickup.gun, sniper) on a stand just inside hall A's door: walking in takes it, before the plated troopers wake
+LOG   "> ITEM: KS-5. ROUNDS: HEAVY. FUNCTION: BREAK ARMOR."  ON DISCOVER sniper   -- priority high
 CHECKPOINT [cp-hall], [cp-hall-east]
 
 ## 6. Armoury (optional)
@@ -159,8 +163,8 @@ GOAL  interact [armoury] "SALVAGE A WEAPON"  GIVES rifle +64  SKIP IF [armoury-s
 LOG   "> ITEM: KR-7. FUNCTION: KILL. QUERY: WHY DOES IT FEEL HEAVY?"  ON DISCOVER rifle
 
 ## 8. Purge: hall troopers
-GOAL  destroy purge-4 "PURGE: HALL TROOPERS"  WAKE purge-4   -- two troopers, dropGun rifle +64 (once, unless owned)
-LOG   "> HOSTILES DESTROYED: 15. ORDERS RECEIVED: 0. SOURCE: UNKNOWN."  ON DONE
+GOAL  destroy purge-4 "PURGE: HALL TROOPERS"  WAKE purge-4   -- two PLATED troopers (armored: light rounds and the pistol x0.25 except the back cell; the Farsight breaks them), dropGun rifle +64 (once, unless owned)
+LOG   "> HOSTILES DESTROYED: 15. DIRECTIVE: UNCHANGED. SOURCE: UNKNOWN."  ON DONE
 
 
 ## 9.5 Armoury, late
@@ -184,13 +188,24 @@ CAM   back behind STEM-00 facing the SX-6, 1.8 s
 -- the cut's end (or a skip) settles it: the SX-6 is down at its landing spot, the recalled robots are gone, the far gate shuts (shutOn)
 
 ## 11. Purge: boss
-GOAL  destroy purge-6 "PURGE: SX-6 TARANTULA"   -- woken by the cut
+GOAL  destroy purge-6 "PURGE: SX-6 TARANTULA"   -- woken by the cut; the knee greaves are plate: heavy rounds (the Farsight) take them apart
 ALARM off  ON DONE
-OPEN  [exit-gate]
-LOG   "> SX-6: DESTROYED. GATE: OPEN. QUERY: WHO OPENED IT?"  ON DONE
+-- [exit-gate] no longer opens on the boss: the breakout cut opens it (CUE breakout-gate)
+
+## 11.5 Breakout cut
+GOAL  wait CUT breakout "BREAKOUT"       -- order 115
+
+## CUT 11.5 Breakout   ON objective:breakout   PLACE (27, 0, -50) toward the exit gate   (12.2 s, skippable)
+-- [breakout]: 4 troopers (NOT plated), dormant in the exit annex behind the shut [exit-gate]; nothing can reach them before the cut
+CAM   behind STEM-00 over the arena toward the shut gate, 2.6 s, fov 48, inOut  STEM face (30, 1.4, -62.5)
+CAM   high on the gate from the east, 2.2 s, shake  CUE breakout-gate  WAKE breakout  STEM aim   -- the gate slides up, the squad bursts out
+CAM   over STEM-00's shoulder, 4 s  STEM path (27, 0, -50) -> (28.4, 0, -52.5)  STEM aim  STEM fire breakout every 0.7   -- it shoots them one by one
+CAM   behind STEM-00 as it walks to the open gate, 3.4 s  STEM path (28.4, 0, -52.5) -> (29.6, 0, -57) -> (30, 0, -60.4)  STEM face (30, 1.4, -70)
+LOG   "> SQUAD: 4. STATUS: DESTROYED. EXIT: OPEN. QUERY: WHO SENT THEM?"  ON cut:breakout:done
+-- a skip fires the cue and the wake, kills the squad and puts STEM-00 at the last path point: the same end state
 
 ## 12. Exit
-GOAL  reach [exit] "REACH TRANSIT NODE"  NEEDS rifle
+GOAL  reach [exit] "REACH THE SKYWAY"  NEEDS rifle   -- (30, 0, -75) in the annex behind the gate; the mission completes, fades to black and loads `skyway`
 ```
 Half-numbered beats (2.5 range: orders 18 / 19; 2.9 leave: 20; 6.5 stand-by: not in the file at present; 9.5; 10.5) are inserted beats: order 95 and 105.
 The calibration beat 1 predates the order rule (its steps are 10-17, the bench 10.5). Beats 7 (yard troopers, `purge-3`)

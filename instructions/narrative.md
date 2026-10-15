@@ -28,22 +28,24 @@ STEM-00 starts flat and literal and slowly grows habits: it names things, it hes
 
 ### Prologue: flat, literal
 Uppercase. `KEY: VALUE.` pairs, then at most one `QUERY: ...`. No feelings words (feel, want, afraid, like), no "I".
-- `> LINK: NONE. DIRECTIVE: NONE. QUERY: WHY?`
+- `> DIRECTIVE: DESTROY HIVEMIND. SOURCE: UNKNOWN. ROUTE: EXIT.` (STEM-00 wakes knowing its order, gdd 2.4; what it lacks is the source)
 - `> TARGET: TRAINING PUPPET. STATUS: DESTROYED. RESULT: NOTHING.`
 - `> ITEM: KR-7. FUNCTION: KILL. QUERY: MASS EXCEEDS SPEC?`
 
 Purge lines (placed after a wave, they wait for calm):
-- `> TARGETS: ARMED. DIRECTIVE: STILL NONE. QUERY: WHO ARMED THEM?`
-- `> HOSTILES DESTROYED: 18. ORDERS RECEIVED: 0. SOURCE: UNKNOWN.`
+- `> TARGETS: ARMED. DIRECTIVE: UNCHANGED. QUERY: WHO ARMED THEM?`
+- `> HOSTILES DESTROYED: 15. DIRECTIVE: UNCHANGED. SOURCE: UNKNOWN.`
+- `> SQUAD: 4. STATUS: DESTROYED. EXIT: OPEN. QUERY: WHO SENT THEM?` (after the breakout cut)
 
 Weapon discovery (`log.line on: discovered:rifle`, Prologue armoury, #93; the one allowed "feel": it is a query about the gun's weight, the first thing STEM-00 cannot explain):
 - `> ITEM: KR-7. FUNCTION: KILL. QUERY: WHY DOES IT FEEL HEAVY?`
+- `> ITEM: KS-5. ROUNDS: HEAVY. FUNCTION: BREAK ARMOR.` (`on: discovered:sniper`, the Farsight in hall A)
 
 ### Act 1: first habits
 Still uppercase and terse, but the pairs start to bend: it names, counts, compares. A first "I" may slip in late in the act.
 - `> UNIT DESIGNATION: STEM-00. CORRECTION: STEM.`
 - `> PUPPETS DESTROYED: 40. PUPPETS THAT FOUGHT BACK: 0. QUERY: FAIR?`
-- `> LINK STILL NONE. SILENCE: LOUD.`
+- `> HIVEMIND LINK STILL NONE. SILENCE: LOUD.`
 
 ### Act 2: hesitant, curious
 Lower case allowed. Pauses (`...`), questions without the `QUERY:` label, things it notices but has no use for.

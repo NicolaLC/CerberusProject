@@ -34,7 +34,7 @@ async function open() {
     engine.events.on('weapon:discovered', (e) => T.disc.push(e.gun));
     engine.events.on('mission:failed', () => T.failed++);
     engine.events.on('mission:complete', () => T.complete++);
-    T.guns = () => g.pickups.items.filter((i) => i.gun && i.pos.x > -45); // pickups outside the range racks and the landing stand
+    T.guns = () => g.pickups.items.filter((i) => i.gun && i.gun !== 'sniper' && i.pos.x > -45); // trooper drops: not the range racks, the landing stand or the Farsight stand in hall A
     T.lines = () => g.log.entries.map((e) => e.text);
     T.slots = () => [...document.querySelectorAll('.slots span')].filter((s) => s.style.display !== 'none').map((s) => s.id).join();
   });
