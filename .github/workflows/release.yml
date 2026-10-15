@@ -44,12 +44,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm test
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser
-      - run: npm run build && npm run build:artifact
+        with: { node-version: 22 } # node runs the test and build scripts
+      - uses: oven-sh/setup-bun@v2 # bun installs and runs package scripts
+        with: { bun-version: 1.4.2 }
+      - run: bun install --frozen-lockfile
+      - run: bun run test
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run test:browser
+      - run: bun run build && bun run build:artifact
       - name: Package web build
         run: |
           V=$(node -p "require('./package.json').version")
@@ -70,10 +72,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
+        with: { node-version: 22 } # node runs the test and build scripts
+      - uses: oven-sh/setup-bun@v2 # bun installs and runs package scripts
+        with: { bun-version: 1.4.2 }
+      - run: bun install --frozen-lockfile
       - name: Build installer
-        run: npm run desktop:dist -- --publish never
+        run: bun run desktop:dist --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false' # unsigned builds (no certificates yet)
       - uses: actions/upload-artifact@v4

@@ -28,7 +28,7 @@ const TUNING = {
 };
 const TINT = { wall: 0xe8f0ff, high: 0x3aa0ff, low: 0xff9a3a, none: 0xffe14a }; // box helper by cover class
 const font = '11px/1.45 monospace';
-const VOLUME = new Set(['trigger.volume', 'zone.interior', 'objective.reach']);
+const VOLUME = new Set(['trigger.volume', 'zone.interior', 'zone.sector', 'zone.portal', 'objective.reach', 'objective.action']);
 const FIELD = /^(INPUT|SELECT|TEXTAREA)$/;
 const FALLBACK = new THREE.Box3(new THREE.Vector3(-0.45, 0, -0.45), new THREE.Vector3(0.45, 1.9, 0.45)); // enemy / pickup stand-in
 // What posed enemies see instead of the player: nobody to fight (`dead` stops every enemy from waking, aiming and firing).
@@ -826,7 +826,7 @@ export class WorkshopEditor {
     this.#guard(() => this.move(this.sel, [p[0] + sign * dx * step, p[1], p[2] + sign * dz * step]));
   }
 
-  // Esc: drop what is armed, then the selection, then pause (the start panel has the scene picker).
+  // Esc: drop what is armed, then the selection, then pause (the main menu DEVELOPMENT page has the scene picker).
   #cancel() {
     if (this.armed) this.arm(null);
     else if (this.sel >= 0) this.select(-1);

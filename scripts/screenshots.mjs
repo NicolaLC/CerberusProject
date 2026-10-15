@@ -1,5 +1,5 @@
 // Art-review screenshot set: the same angles every run, for before/after comparisons (issue #87, book/screenshots).
-// Needs the dev server (`npm run dev`) and Playwright + Chromium (like the browser suites).
+// Needs the dev server (`bun run dev`) and Playwright + Chromium (like the browser suites).
 //   node scripts/screenshots.mjs [outDir] [name ...]     default outDir: shots/, default: every shot
 // Each shot opens a scene, places the player, steps the engine, optionally moves the camera off the rig,
 // renders one frame through the post stack and saves the canvas (no DOM HUD) as a PNG.

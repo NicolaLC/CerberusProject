@@ -1,7 +1,7 @@
 // Scene switcher: every scene opens through ?scene=, and switching scenes at runtime unloads the old level
 // completely (no leaked geometry, textures or scene objects), puts the player at the new spawn and resets
 // per-level state (boss bar, kill counter, lock-on).
-// Needs the dev server: `npm run dev`, then `node tests/scenes.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/scenes.browser.mjs` (Playwright + Chromium).
 // Unlike the other suites this one RENDERS a few frames per scene: renderer.info.memory only counts what was
 // uploaded to the GPU, which is what a leak would pile up.
 import { chromium } from 'playwright';
@@ -13,7 +13,7 @@ const withScene = (scene) => {
   else u.searchParams.delete('scene'); // the runner's URL pins the arena; null = no ?scene at all
   return u.href;
 };
-const SCENES = ['arena', 'gym', 'gym-range', 'gym-ai', 'gym-stress', 'library', 'workshop', 'prologue'];
+const SCENES = ['arena', 'gym', 'gym-range', 'gym-ai', 'gym-stress', 'library', 'workshop', 'prologue', 'skyway', 'underworks'];
 const CYCLES = 3;
 
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader'] });
@@ -137,10 +137,15 @@ for (const name of SCENES) {
   p.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   await p.goto(withScene('arena'));
   await p.waitForFunction(() => window.game?.engine);
-  const first = await p.evaluate(probe, 3);
+  const atStart = await p.evaluate(probe, 3);
 
+  // Cycle 0 is a warm-up, not counted: the permanent world materials (World.keep: the interior kit, prop dressing, backdrop towers)
+  // upload their textures the first time a level draws them, and their shared env map gets its PMREM (three's cubeUV cache: ~10
+  // geometries, a few targets) then. Built once, kept for the page's life: the first arena reads lower than every later one.
+  // After the warm-up the counts must not move at all.
   const cycles = [];
-  for (let c = 0; c < CYCLES; c++) {
+  let first = atStart;
+  for (let c = -1; c < CYCLES; c++) {
     const visits = [];
     for (const name of [...SCENES.slice(1), 'arena']) {
       // headless load: skips the shader warm-up (halves this suite on SwiftShader); the probe still renders everything
@@ -157,7 +162,8 @@ for (const name of SCENES) {
       const r = await p.evaluate(probe, 3);
       visits.push({ name, atLoad, ...r });
     }
-    cycles.push(visits);
+    if (c < 0) first = visits.at(-1);
+    else cycles.push(visits);
   }
   const SAME = (a, b2) => a.geometries === b2.geometries && a.textures === b2.textures && a.objects === b2.objects && a.children === b2.children;
 
@@ -167,7 +173,9 @@ for (const name of SCENES) {
   expect(`${CYCLES} cycles: right scene, player at its spawn, enemy/pickup counts match the level files`, bad.length === 0, JSON.stringify(bad.slice(0, 2)));
 
   // leak check: back in the arena after each cycle = same GPU memory and scene size as the first arena
-  console.log('arena at start      ', JSON.stringify({ geometries: first.geometries, textures: first.textures, objects: first.objects }));
+  console.log('arena at start      ', JSON.stringify({ geometries: atStart.geometries, textures: atStart.textures, objects: atStart.objects }));
+  console.log('arena after warm-up ', JSON.stringify({ geometries: first.geometries, textures: first.textures, objects: first.objects }));
+  expect('warm-up: only GPU memory grows (permanent caches), the scene object count is the first arena\'s', first.objects === atStart.objects && first.children === atStart.children && first.geometries - atStart.geometries <= 16 && first.textures - atStart.textures <= 24, JSON.stringify({ atStart, first }));
   cycles.forEach((visits, i) => {
     const a = visits[visits.length - 1];
     console.log(`arena after cycle ${i + 1}`, JSON.stringify({ geometries: a.geometries, textures: a.textures, objects: a.objects }));
@@ -227,7 +235,7 @@ for (const name of SCENES) {
   p.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   await p.goto(withScene(null));
   await p.waitForFunction(() => window.game?.engine);
-  const r = await p.evaluate((names) => {
+  const r = await p.evaluate(async (names) => {
     const g = window.game;
     const { engine, player, enemies } = g;
     engine.stop();
@@ -238,7 +246,7 @@ for (const name of SCENES) {
     for (const n of names) {
       g.loadScene(n);
       step(2);
-      out.zones[n] = [document.getElementById('zone').textContent, g.level.title];
+      out.zones[n] = [document.getElementById('zone').textContent, g.world.isInterior(player.pos) ? 'INTERIOR' : g.level.title, g.level.title];
       const bar = document.getElementById('keyhints');
       out.hints[n] = { shown: !bar.hidden, keys: [...bar.querySelectorAll('b')].map((x) => x.textContent), tool: g.tool?.constructor.KEYS.map(([k]) => k) ?? [] };
     }
@@ -265,6 +273,9 @@ for (const name of SCENES) {
     out.options = buttons.map((b) => b.dataset.scene);
     out.pickerFollows = buttons.filter((b) => b.classList.contains('on')).map((b) => b.dataset.scene).join() === 'library';
     buttons.find((b) => b.dataset.scene === 'gym').click();
+    // the click shows the loading screen first and loads two animation frames later (view/shell.js #load)
+    const t0 = performance.now();
+    while (g.sceneName !== 'gym' && performance.now() - t0 < 5000) await new Promise((res) => requestAnimationFrame(res));
     out.pickedScene = g.sceneName;
     out.url = new URL(location.href).searchParams.get('scene');
     g.loadScene('arena');
@@ -272,8 +283,8 @@ for (const name of SCENES) {
     return out;
   }, SCENES);
   for (const n of SCENES) {
-    const [shown, title] = r.zones[n];
-    expect(`HUD zone label in "${n}" is its title "${title}"`, !!title && shown === title, shown);
+    const [shown, want, title] = r.zones[n];
+    expect(`HUD zone label in "${n}" at the spawn: its title "${title}" outdoors, INTERIOR indoors (${want})`, !!title && shown === want, shown);
   }
   // key bar: with ?debug the global debug keys, plus every key of the scene's Gym tool
   for (const n of SCENES) {

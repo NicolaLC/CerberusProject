@@ -5,8 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cerberus — Training Arena</title>
     <link rel="stylesheet" href="/src/style.css" />
+    <!-- first paint (before the CSS / JS arrive, injected late in dev): black, the title state only, no game UI, no menu page but the title -->
+    <style>
+      html, body { margin: 0; background: #000; }
+      body.title > :not(#overlay):not(#game):not(#loading), #overlay .page[hidden] { display: none !important; }
+      body.title #overlay { opacity: 0; }
+    </style>
   </head>
-  <body>
+  <body class="title">
     <canvas id="game"></canvas>
 
     <div id="hud">
@@ -23,6 +29,7 @@
       <div id="boss">
         <div class="name" id="boss-name"></div>
         <div class="bar"><div id="boss-fill"></div></div>
+        <div class="segs" id="boss-segs"></div>
         <div class="row"><span class="legs" id="boss-legs"></span><span class="state" id="boss-state"></span></div>
       </div>
 
@@ -40,9 +47,11 @@
 
       <div id="top">
         <span id="zone">TRAINING YARD</span>
-        <span>TARGETS DOWN <b id="kills">0</b></span>
+        <span id="kills-wrap">TARGETS DOWN <b id="kills">0</b></span>
       </div>
-      <div id="objective"></div>
+      <div id="objective"><div id="obj-head"></div><div id="obj-detail"></div><div id="obj-prog"></div></div>
+      <div id="prompt"></div>
+      <div id="pin"><i class="arrow"></i><i class="mark"></i><span class="dist"></span></div>
 
       <div id="areload"><div class="track"><i class="good"></i><i class="perfect"></i><i class="cursor"></i></div><div class="label">R</div></div>
       <div id="toast"></div>
@@ -51,14 +60,55 @@
 
     <div id="boot" hidden></div>
     <div id="summary" hidden></div>
+    <div id="fade" hidden></div>
+    <!-- loading screen while a level is built (view/shell.js #load) -->
+    <div id="loading" hidden><p class="label">LOADING</p><p class="scene"></p><div class="bar"></div></div>
 
+    <!-- main menu (title), pause menu and their sub-pages; view/shell.js shows one .page at a time, over the menu set (title) or the paused scene -->
     <div id="overlay">
-      <div class="panel">
-        <h1>CERBERUS</h1>
-        <h2>combat training arena · prototype</h2>
-        <div id="scenes" class="scenes" role="group" aria-label="Scene"></div>
-        <button id="start">CLICK TO DEPLOY · A / MENU ON A CONTROLLER</button>
-        <button id="quit" hidden>QUIT TO DESKTOP</button>
+      <p class="status">UNIT STEM-00 · LINK LOST · PROTOTYPE BUILD</p>
+      <header class="brand"><h1>CERBERUS</h1></header>
+
+      <section class="page" data-page="title">
+        <nav class="menu">
+          <button class="item" id="continue" data-act="continue" hidden>CONTINUE</button>
+          <button class="item" data-act="new">NEW GAME</button>
+          <button class="item" data-go="settings">SETTINGS</button>
+          <button class="item" data-go="dev">DEVELOPMENT</button>
+          <button class="item" data-go="credits">CREDITS</button>
+        </nav>
+        <aside class="info"><h4>SERVICE RECORD</h4><p id="save-info">NO SAVE DATA</p><p class="pad-status">Controller: press any button to connect.</p></aside>
+        <button class="quit" id="quit" data-act="quit" hidden><kbd class="glyph">Esc</kbd>QUIT TO DESKTOP</button>
+      </section>
+
+      <section class="page frame" data-page="confirm" hidden data-back="title">
+        <p class="warn">OVERWRITE PROGRESS?</p>
+        <nav class="menu">
+          <button class="item" data-act="back">CANCEL</button>
+          <button class="item warn" data-act="new-confirm">NEW GAME</button>
+        </nav>
+      </section>
+
+      <section class="page frame" data-page="pause" hidden>
+        <h3>PAUSED</h3>
+        <nav class="menu">
+          <button class="item" id="start" data-act="resume">RESUME</button>
+          <button class="item" data-go="settings">SETTINGS</button>
+          <button class="item" data-act="title">QUIT TO MAIN MENU</button>
+          <button class="item quit" data-act="quit" hidden>QUIT TO DESKTOP</button>
+        </nav>
+      </section>
+
+      <section class="page frame" data-page="settings" hidden data-back="root">
+        <h3>SETTINGS</h3>
+        <div class="settings">
+          <label class="row" for="sens"><span>Look sensitivity</span><input id="sens" type="range" min="0.3" max="3" step="0.1" /><output id="sens-out">1.0×</output></label>
+          <label class="row" for="trackpad"><input id="trackpad" type="checkbox" /><span>Trackpad mode: two-finger swipe to look, E toggles aim</span></label>
+          <label class="row" for="assist"><input id="assist" type="checkbox" /><span>Aim assist</span></label>
+          <label class="row" for="quality"><span>Graphics</span><select id="quality"><option value="low">Low · fastest</option><option value="high">High</option><option value="ultra">Ultra · supersampled, 8× MSAA</option></select></label>
+          <label class="row" for="invert"><input id="invert" type="checkbox" /><span>Invert look Y (controller)</span></label>
+        </div>
+        <p class="note">Keyboard plus mouse or trackpad, or a controller. <span id="pad-status" class="pad-status">Controller: press any button to connect.</span></p>
         <table>
           <tr class="head"><td>keys</td><td>pad</td><td></td></tr>
           <tr><td>WASD</td><td>L stick</td><td>move</td></tr>
@@ -72,19 +122,47 @@
           <tr><td>Q</td><td>LB</td><td>swap shoulder</td></tr>
           <tr><td>G</td><td>B</td><td>use a terminal (objective levels)</td></tr>
           <tr><td>←↑↓→</td><td></td><td>look (keyboard)</td></tr>
-          <tr><td>H / F3</td><td>View</td><td>skeleton debug / performance stats</td></tr>
           <tr><td>Esc</td><td>Menu</td><td>pause</td></tr>
         </table>
         <p class="note">Ammo: walk over the glowing cases: cyan = light ammo (AR, MG, BR, pistol), orange = heavy ammo (sniper, railgun). Broken puppets sometimes drop clips. Shoot the pulsing magenta weak spots for triple damage.</p>
-        <div class="settings">
-          <label class="row" for="sens"><span>Look sensitivity</span><input id="sens" type="range" min="0.3" max="3" step="0.1" /><output id="sens-out">1.0×</output></label>
-          <label class="row" for="trackpad"><input id="trackpad" type="checkbox" /><span>Trackpad mode: two-finger swipe to look, E toggles aim</span></label>
-          <label class="row" for="assist"><input id="assist" type="checkbox" /><span>Aim assist</span></label>
-          <label class="row" for="quality"><span>Graphics</span><select id="quality"><option value="low">Low · fastest</option><option value="high">High</option><option value="ultra">Ultra · supersampled, 8× MSAA</option></select></label>
-          <label class="row" for="invert"><input id="invert" type="checkbox" /><span>Invert look Y (controller)</span></label>
-        </div>
-        <p class="note">Keyboard plus mouse or trackpad, or a controller. <span id="pad-status">Controller: press any button to connect.</span></p>
-      </div>
+        <nav class="menu"><button class="item" data-act="back">BACK</button></nav>
+      </section>
+
+      <section class="page frame" data-page="dev" hidden data-back="title">
+        <h3>DEVELOPMENT</h3>
+        <p class="note">Load a scene and deploy into it: the Gym rooms, the Library, the Workshop editor, the arena, the Prologue.</p>
+        <div id="scenes" class="scenes" role="group" aria-label="Scene"></div>
+        <table>
+          <tr class="head"><td>debug</td><td>pad</td><td></td></tr>
+          <tr><td>H</td><td></td><td>skeleton debug</td></tr>
+          <tr><td>F3 / `</td><td>View</td><td>performance stats</td></tr>
+          <tr><td>?debug</td><td></td><td>URL flag: skips the menu, stats on, <code>window.game</code> in the console</td></tr>
+          <tr><td>?scene=</td><td></td><td>URL flag: opens a scene by name</td></tr>
+        </table>
+        <nav class="menu"><button class="item" data-act="back">BACK</button></nav>
+      </section>
+
+      <!-- keep in sync with credits.md -->
+      <section class="page frame credits" data-page="credits" hidden data-back="title">
+        <h3>CREDITS</h3>
+        <p class="owner">CERBERUS — Nicola Castellani</p>
+        <dl>
+          <dt>Fonts</dt>
+          <dd>Chakra Petch — Cadson Demak · SIL Open Font License 1.1</dd>
+          <dd>Space Nova — Maknastudio · freeware, licence under evaluation</dd>
+          <dt>Sound</dt>
+          <dd>Weapon, robot, facility and interface effects, combat and boss music: generated with ElevenLabs Sound Effects and Music by the project owner</dd>
+          <dd>Everything else synthesized at runtime</dd>
+          <dt>Libraries</dt>
+          <dd>three.js — MIT</dd>
+          <dd>Electron — MIT (desktop build)</dd>
+          <dt>Tools</dt>
+          <dd>Vite, esbuild, electron-builder, Bun</dd>
+        </dl>
+        <nav class="menu"><button class="item" data-act="back">BACK</button></nav>
+      </section>
+
+      <p class="hint">↑ ↓ select · Enter / A confirm · Esc / B back</p>
     </div>
 
     <div id="death"><div>SHIELDS DOWN — RESPAWNING</div></div>

@@ -2,7 +2,7 @@
 // params) and shown in the showroom (from the file, or by the tool's auto aisle), the captions carry id + label meta,
 // the wake key (V) makes the nearest enemy exhibit fight and a second press calms it, the panel names the nearest
 // exhibit, and a piece registered later shows up by itself without leaks.
-// Needs the dev server: `npm run dev`, then `node tests/library.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/library.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
@@ -88,7 +88,7 @@ const spawn = await p.evaluate((NEEDS_PARAMS) => {
     }
   }
   return out;
-}, ['env.box', 'env.strip', 'env.label', 'light.point', 'prop.gun', 'pickup.gun', 'log.line', 'env.alarm', 'intro.boot', 'kit.gate']);
+}, ['env.box', 'env.strip', 'env.label', 'light.point', 'prop.gun', 'pickup.gun', 'log.line', 'env.alarm', 'intro.boot', 'intro.cinematic', 'kit.gate', 'prop.cables', 'prop.panel', 'zone.sector', 'zone.portal', 'objective.action', 'cinematic.cut']);
 const bad = spawn.filter((s) => s.ok === false);
 expect(`${spawn.filter((s) => s.ok).length} spawns (every id, example and bare) without errors`, bad.length === 0, JSON.stringify(bad));
 expect('  every id that needs params carries an example (skipped: ' + spawn.filter((s) => s.skipped).map((s) => s.id).join(' ') + ')', true);

@@ -1,6 +1,6 @@
 // Mission framework (#12): `objective.*` encounter pieces, the Mission system (order, destroy / reach / survive / interact,
 // limit, actions), the HUD state line, restart / edit / scene switch, and parameter errors.
-// Needs the dev server: `npm run dev`, then `node tests/mission.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/mission.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
@@ -44,7 +44,12 @@ await p.evaluate(() => {
     T.step(0.1);
     return t;
   };
-  T.hud = () => { const el = document.getElementById('objective'); return { text: el.textContent, shown: el.style.display === 'block' }; };
+  // the panel's head and progress (#obj-head / #obj-prog), as Mission.hudText() joins them; the detail line is left out
+  T.hud = () => {
+    const el = document.getElementById('objective');
+    const part = (id) => document.getElementById(id).textContent;
+    return { text: [part('obj-head'), part('obj-prog')].filter(Boolean).join('  '), shown: el.style.display === 'block' };
+  };
   T.kill = (e) => { for (let i = 0; i < 80 && e.alive; i++) e.damage(100, e.pos.clone().setY(1), new e.pos.constructor(0, 0, -1), 'body'); };
   T.press = (code) => { engine.input.keys.add(code); engine.input.pressed.add(code); T.step(1 / 30); engine.input.keys.delete(code); };
   T.at = (x, y, z) => g.player.pos.set(x, y, z);

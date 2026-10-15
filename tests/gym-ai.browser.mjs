@@ -3,7 +3,7 @@
 // MEASURES the open items of instructions/metrics.md section 8 (13, 14, 15, 17) and prints them. Only rules that
 // follow from the code are asserted; the measurements are printed, not asserted, because they depend on dice rolls
 // (AI timers) and would flake under SwiftShader. The engine is stopped and stepped, frame counts rather than time.
-// Needs the dev server: `npm run dev`, then `node tests/gym-ai.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/gym-ai.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
@@ -320,7 +320,8 @@ const rooms = await p.evaluate(() => {
   out.droneHidden = drone.awake;
   T.key('KeyL');
   T.bolts = 0;
-  T.hold(0, 26, 6);
+  // it strafes round the room and fires only with a clear line (cover sits between): wait for the first burst, up to 30 s
+  for (let s = 0; s < 30 && !T.bolts; s++) T.hold(0, 26, 1);
   out.droneAwake = drone.awake;
   out.droneFire = T.bolts;
   // spider: dormant in the corridor (> 28 m, no line of sight), wakes the moment the player is in the arena

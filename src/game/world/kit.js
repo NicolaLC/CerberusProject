@@ -9,6 +9,7 @@
 // World.mats), the hook for region skins. Bad params and bad yaw throw a readable error (a level file is data).
 // Library meta on every entry: `example` ({ params, yaw? }, what the Library spawns) and `label` (one line of stats).
 
+import * as THREE from 'three';
 import { onProblem } from './encounter.js';
 
 // Material key per role: the only place a kit piece names a material.
@@ -51,10 +52,11 @@ function pair(id, params, key, def) {
   return v.map((n, i) => num(id, { [key]: n }, key, def[i]));
 }
 
-// Yaw in whole quarter turns (0..3). Anything that is not a multiple of 90 degrees throws.
-function quarters(id, yaw = 0) {
+// Yaw in whole quarter turns (0..3). Anything that is not a multiple of 90 degrees throws. Tolerance 1e-4 of a turn:
+// saved levels round numbers to 4 decimals (workshop/io.js), so PI/2 comes back as 1.5708.
+export function quarters(id, yaw = 0) {
   const q = yaw / (Math.PI / 2);
-  if (typeof yaw !== 'number' || !Number.isFinite(yaw) || Math.abs(q - Math.round(q)) > 1e-6) {
+  if (typeof yaw !== 'number' || !Number.isFinite(yaw) || Math.abs(q - Math.round(q)) > 1e-4) {
     fail(id, `yaw must be a multiple of 90 degrees (PI/2), got ${yaw}`);
   }
   return ((Math.round(q) % 4) + 4) % 4;
@@ -62,7 +64,7 @@ function quarters(id, yaw = 0) {
 
 // Rotates local boxes { x, y, z, w, h, d } (x/z center, y bottom) by q quarter turns about the vertical axis, with the
 // same handedness as THREE's rotation.y (q = 1 sends local +X to -Z and local -Z to -X).
-function turn(boxes, q) {
+export function turn(boxes, q) {
   if (!q) return boxes;
   return boxes.map((b) => {
     let { x, z, w, d } = b;
@@ -81,6 +83,38 @@ function emit(world, id, data, boxes) {
     const mat = world.material({ mat: b.mat });
     return world.box(px + b.x, py + b.y, pz + b.z, b.w, b.h, b.d, mat, { cover: b.cover ?? null, collide: b.collide ?? true });
   });
+}
+
+// Shared gate look (art-style "Gates"): dark heavy metal, ochre chevron bands, status lamp red while sealed and cyan once open
+// (emissive only, MeshBasicMaterial: no lights). Built once per world and kept across levels.
+function gateMats(world) {
+  if (world.gateMats) return world.gateMats;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#1b1d1f';
+  g.fillRect(0, 0, 64, 64);
+  g.strokeStyle = '#C9A23A';
+  g.lineWidth = 14;
+  g.beginPath();
+  g.moveTo(0, 56);
+  g.lineTo(32, 16);
+  g.lineTo(64, 56);
+  g.stroke();
+  const map = new THREE.CanvasTexture(c);
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.colorSpace = THREE.SRGBColorSpace;
+  const m = (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.8 });
+  world.gateMats = {
+    door: m(0x24282b),
+    frame: m(0x16181a),
+    seam: new THREE.MeshStandardMaterial({ color: 0x08090a, roughness: 0.9 }),
+    band: new THREE.MeshStandardMaterial({ map, roughness: 0.7, metalness: 0.3 }),
+    sealed: new THREE.MeshBasicMaterial({ color: 0xd8341c }),
+    open: new THREE.MeshBasicMaterial({ color: 0x3fe0ff }),
+  };
+  for (const x of Object.values(world.gateMats)) world.keep.add(x);
+  return world.gateMats;
 }
 
 // Material key of a piece: params.mat overrides the role default.
@@ -174,13 +208,16 @@ export const KIT_PIECES = {
   // then slides into the lintel ('up') or the floor ('down') in `time` seconds. pos = center of the opening at the floor, like
   // kit.doorway, so the two share the same pos / yaw. params: on (an `on` form, encounter.js: objective:<id>:done, trigger:<id>, ...),
   // width (4, clamped up to 2.0), height (4, clamped up to 1.8), thickness (0.3), slide ('up'), time (1.2 s), mat (role high).
+  // plain (false): a breakaway slab, no frame, lamp or dressing: a deck plate that drops away on its `on` (the Skyway's broken deck).
   // Opens once per run; a restart, a scene load and the editor's play / edit rebuild it shut. In the editor and the Library it is inert and
   // draws a ghost of the space it slides into (sliding up needs a lintel at least `height` tall above it: wallHeight >= 2 * height).
+  // closeOn (optional, an `on` form): after it happened the gate shuts again for good once the player is through (World.addGate).
+  // shutOn (optional, an `on` form): after it happened the open gate shuts for good wherever the player is (still never on an enemy).
   'kit.gate': {
     example: { params: { on: 'trigger:gate', width: 4, height: 4 } },
     label: 'GATE 4.0 × 4.0, opens on an event',
-    fields: [{ key: 'on', type: 'text' }, { key: 'width', type: 'number', min: 0.1 }, { key: 'height', type: 'number', min: 0.1 }, { key: 'thickness', type: 'number', min: 0.05 }, { key: 'slide', type: 'enum', options: ['up', 'down'], optional: true }, { key: 'time', type: 'number', min: 0.1, optional: true }, MAT],
-    check: (p, registry) => onProblem(p.on, 'on', registry.guns) ?? (p.slide != null && p.slide !== 'up' && p.slide !== 'down' ? 'slide must be up or down' : null),
+    fields: [{ key: 'on', type: 'text' }, { key: 'closeOn', type: 'text', optional: true }, { key: 'shutOn', type: 'text', optional: true }, { key: 'width', type: 'number', min: 0.1 }, { key: 'height', type: 'number', min: 0.1 }, { key: 'thickness', type: 'number', min: 0.05 }, { key: 'slide', type: 'enum', options: ['up', 'down'], optional: true }, { key: 'time', type: 'number', min: 0.1, optional: true }, { key: 'plain', type: 'bool', optional: true }, MAT],
+    check: (p, registry) => gateProblem(p, registry.guns),
     build(world, d) {
       const id = 'kit.gate';
       const p = d.params ?? {};
@@ -189,10 +226,45 @@ export const KIT_PIECES = {
       const t = num(id, p, 'thickness', M.gateThickness);
       const time = num(id, p, 'time', M.gateTime);
       const slide = p.slide ?? 'up';
-      const problem = onProblem(p.on, 'on', world.registry?.guns) ?? (slide !== 'up' && slide !== 'down' ? 'slide must be up or down' : null);
+      const problem = gateProblem(p, world.registry?.guns);
       if (problem) fail(id, problem);
       const [mesh] = emit(world, id, d, [{ x: 0, y: 0, z: 0, w: width, h: height, d: t, mat: matOf(p, 'high') }]);
-      return world.addGate(mesh, { on: p.on, height, slide, time });
+      // `plain`: a breakaway slab (a deck plate that drops on an event): no frame, lamp or dressing, only the sliding box
+      if (p.plain) return world.addGate(mesh, { on: p.on, closeOn: p.closeOn ?? null, shutOn: p.shutOn ?? null, height, slide, time });
+      const gm = gateMats(world);
+      if (p.mat == null) mesh.material = gm.door;
+      // static frame (jambs + lintel trim, no collision) and the status lamp (one emissive strip poking out of both lintel faces)
+      // The trim pokes 2 cm into the opening: flush with the doorway's own faces it z-fights with them.
+      const ft = M.wallThickness + 0.16;
+      const lip = 0.02;
+      const [jl, jr, lintel, lamp] = emit(world, id, d, [
+        { x: -(width / 2 + 0.15 - lip), y: 0, z: 0, w: 0.3, h: height + 0.3, d: ft, mat: 'high', collide: false },
+        { x: width / 2 + 0.15 - lip, y: 0, z: 0, w: 0.3, h: height + 0.3, d: ft, mat: 'high', collide: false },
+        { x: 0, y: height - lip, z: 0, w: width, h: 0.3, d: ft, mat: 'high', collide: false },
+        { x: 0, y: height + 0.1, z: 0, w: width * 0.5, h: 0.1, d: ft + 0.04, mat: 'high', collide: false },
+      ]);
+      for (const m of [jl, jr, lintel]) m.material = gm.frame;
+      world.staticMeshes.splice(world.staticMeshes.indexOf(lamp), 1); // the lamp changes material on gate:open: out of the merged batches
+      lamp.material = gm.sealed;
+      // slab dressing as children (they ride with it): two chevron bands and vertical seams, facing along the thin axis
+      const dress = new THREE.Group();
+      dress.rotation.y = quarters(id, d.yaw) % 2 ? Math.PI / 2 : 0;
+      for (const y of [-height / 2 + 0.3, height / 2 - 0.3]) {
+        const geo = new THREE.BoxGeometry(width, 0.4, t + 0.03);
+        const uv = geo.attributes.uv;
+        for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * width / 0.8);
+        const band = new THREE.Mesh(geo, gm.band);
+        band.position.y = y;
+        dress.add(band);
+      }
+      const seams = Math.max(0, Math.floor(width) - 1);
+      for (let i = 1; i <= seams; i++) {
+        const seam = new THREE.Mesh(new THREE.BoxGeometry(0.05, height - 1.2, t + 0.03), gm.seam);
+        seam.position.x = -width / 2 + (width * i) / (seams + 1);
+        dress.add(seam);
+      }
+      mesh.add(dress);
+      return world.addGate(mesh, { on: p.on, closeOn: p.closeOn ?? null, shutOn: p.shutOn ?? null, height, slide, time, lamps: [lamp], lampOpen: gm.open });
     },
   },
 
@@ -327,3 +399,7 @@ export const KIT_PIECES = {
     },
   },
 };
+
+function gateProblem(p, guns) {
+  return onProblem(p.on, 'on', guns) ?? (p.closeOn != null ? onProblem(p.closeOn, 'closeOn', guns) : null) ?? (p.shutOn != null ? onProblem(p.shutOn, 'shutOn', guns) : null) ?? (p.slide != null && p.slide !== 'up' && p.slide !== 'down' ? 'slide must be up or down' : null);
+}

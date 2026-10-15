@@ -1,6 +1,6 @@
 // STEM-00 log lines (#40): `log.line` pieces fire on start / trigger / objective / discovery, `once`, `delay`, the Log view's
 // priority queue and entries, and validation. Built in the Workshop and played in place, headless stepping.
-// Needs the dev server: `npm run dev`, then `node tests/log.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/log.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

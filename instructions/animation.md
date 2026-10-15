@@ -114,7 +114,7 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
   - Tuning = editing key numbers; check side views (walk, jog 4.6, sprint 7.4, strafe, backpedal).
 - Sprint style (`run`: player sprinting, blended in over ~0.15s), deliberately anime: `RUN` table — 0.42 rad forward
   lean, hips twist with shoulders counter-rotating, extra heel kick, head kept level. The left hand lets go of the
-  gun and pumps; the right hand carries it low. Unarmed rigs swing their arms against the legs (more when running).
+  gun and pumps; the right hand carries it low. Unarmed rigs swing their arms against the legs (more when running; the relaxed pose is arms slightly out, elbows bent 0.2 rad). The player rig toggles `animator.armed` in `PlayerView.setGun(null | id)`: STEM-00 is unarmed until her first gun (gameplay.md Owned guns).
 - Jetpack burst (`air`, eased in ~0.1 s): gait off, knees bent 0.5 rad, hips forward, foot locks and feet IK skipped.
 - Kneel (low cover) blends over everything with `crouch`.
 - Arms: two-bone IK to the grip sockets, elbows down and slightly out. `lower` (weapon switch) drops the gun.
@@ -123,6 +123,9 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
   bends it in ("knees forward" only for a near-straight leg: forced on a sprint's heel kick it swung the leg out
   sideways), planted feet kept flat.
 - `lookYaw` turns neck + head (used in cover: back to the wall, head toward the camera).
+- Dormant (`dormant` 0..1 in the state; the player's `view.dormant`, set by the intro cinematic, view/cinematic.js): a powered-down slump layered after the arms and
+  before the legs (`#dormant`, `DORMANT` in rig.js): hips drop 9 cm (the feet IK bends the knees, feet stay planted), spine and head fold forward,
+  arms hang (overrides the gun hold). 1 = slumped, 0 = off; the cinematic eases it out over `wake.rise`. The core is darkened by the cinematic, not the animator.
 - `animator.impulse(pitch, roll)` kicks the hit-reaction spring.
 - Check pose changes from the side and front (see project.md testing), not only from behind.
 

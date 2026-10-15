@@ -18,6 +18,7 @@ export class PlayerView {
     this.kickDef = null;
     this.muzzle = null;
     this.animDt = 0; // time of the substeps since the last pose(), see pose()
+    this.dormant = 0; // 0..1 powered-down slump (Animator layer), set by the wake-up cinematic (view/cinematic.js)
     this.animState = { // pose input of the last substep (reused)
       speed: 0, run: false, crouch: 0, aimPitch: 0, combat: false, recoil: 0, kickBack: 0, kickClimb: 0, lean: 0, leftHanded: false,
       lookYaw: 0, hunch: 0, air: 0, vault: null, vaultT: 0, lower: 0, slideAim: 0, aimTwist: 0, vel: player.vel, yaw: 0,
@@ -59,9 +60,15 @@ export class PlayerView {
   }
 
   // Show the gun and move hand/muzzle sockets to it.
+  // id null = unarmed: no model, no muzzle, the animator swings the arms.
   setGun(id) {
-    const def = GUNS[id];
     for (const [k, g] of Object.entries(this.gunModels)) g.visible = k === id;
+    this.animator.armed = !!id;
+    if (!id) {
+      this.muzzle = null;
+      return;
+    }
+    const def = GUNS[id];
     const s = def.sockets;
     this.rigModel.socket('Weapon', 'gripR', ...s.gripR);
     this.rigModel.socket('Weapon', 'gripL', ...s.gripL);
@@ -81,6 +88,7 @@ export class PlayerView {
   // Poses the rig once per frame (late phase) with the time of all the substeps since the last pose.
   pose() {
     if (this.animDt <= 0) return;
+    this.animState.dormant = this.dormant;
     this.animator.update(this.animDt, this.animState);
     this.animDt = 0;
   }
@@ -108,7 +116,7 @@ export class PlayerView {
     st.speed = alive ? Math.hypot(p.vel.x, p.vel.z) : 0;
     st.run = p.sprinting && alive; // sprint plays the anime run
     st.crouch = p.crouchBlend;
-    st.aimPitch = camRig.pitch;
+    st.aimPitch = p.aimPitch ?? camRig.pitch; // a scripted cut aims at its target
     st.combat = combat && alive;
     st.recoil = this.recoil * this.recoil; // eased: sharp snap back, quick settle
     st.kickBack = this.kickDef?.back;

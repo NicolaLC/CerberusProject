@@ -1,6 +1,6 @@
 // Enemy rules: destroyed enemies stay destroyed; shooters only engage inside their range; troopers take
 // cover that actually blocks the player, relocate when flanked, and shoot back.
-// Needs the dev server: `npm run dev`, then `node tests/enemies.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/enemies.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const URL = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
@@ -109,6 +109,7 @@ const r = await p.evaluate(() => {
     out.flankerFired = fired;
   }
   out.allInRange = enemies.all.filter((t) => t.kind === 'trooper' && t.alive && t.alerted && t.spot).every((t) => t.spot.pos.distanceTo(player.pos) <= 34.5);
+  out.spotRanges = enemies.all.filter((t) => t.kind === 'trooper' && t.alive && t.alerted && t.spot).map((t) => `${t.state} ${t.spot.pos.distanceTo(player.pos).toFixed(1)} nos ${t.noSight}`);
   return out;
 });
 
@@ -147,6 +148,30 @@ const d = await p.evaluate(() => {
   out.awake = sh.awake && tr.awake && !sh.dormant && !tr.dormant && live.awake && !plain.awake;
   step(8);
   out.fires = fired > 0;
+  // a woken shooter with the player behind a wall stays down (no blind pop-ups), and comes up once the player is in sight
+  for (const e of [tr, live]) e.alive = false;
+  enemies.dirty = true;
+  step(4); // its current exposure ends
+  const wall = g.world.box(2, 0, -9.3, 6, 4, 0.6, g.world.meshes[0].material);
+  wall.updateMatrixWorld();
+  step(1);
+  let ups = 0;
+  let last = sh.state;
+  for (let i = 0; i < 8 * 60; i++) {
+    engine.step(1 / 60);
+    if (last === 'hidden' && sh.state === 'up') ups++;
+    last = sh.state;
+  }
+  out.blindUps = ups;
+  wall.position.y = -50; // out of the way (the collider no longer matters to a sight ray once the mesh moved)
+  wall.updateMatrix();
+  wall.updateMatrixWorld();
+  let rose = false;
+  for (let i = 0; i < 5 * 60; i++) {
+    engine.step(1 / 60);
+    rose ||= sh.state === 'up';
+  }
+  out.upInSight = rose;
   // dormant enemies can die
   const dead = mk('enemy.shooter', 6, { group: 'dz2', dormant: true });
   for (let i = 0; i < 10 && dead.alive; i++) dead.damage(50, dead.pos.clone().setY(1), new dead.pos.constructor(0, 0, 1), 'body');
@@ -166,8 +191,82 @@ expect('dormant: a shooter in range and a trooper in sight stay inert for 15 s',
 expect('dormant: they take damage without waking, nothing fires', d.hit && d.plainNotAwake);
 expect('dormant: wakeGroup wakes the dormant ones (3), not an ordinary puppet', d.woke === 3 && d.awake);
 expect('dormant: the woken shooter / trooper now fire', d.fires);
+expect('shooter: the player behind a wall -> it stays down (no blind pop-ups), in sight -> it comes up', d.blindUps === 0 && d.upInSight);
 expect('dormant: a dormant enemy can be killed', d.dies);
 expect('dormant: without a group it fails validation with a clear message', /dormant/.test(d.noGroup ?? '') && /group/.test(d.noGroup ?? '') && d.okGroup === null && d.okPlain === null);
+
+// plated trooper (armored: true): light rounds and the pistol do x0.25 on the body, heavy rounds and the weak spot full. Real shots
+// through the weapon, measured against an ordinary trooper hit in the same spot from the same distance.
+const a = await p.evaluate(() => {
+  const { engine, enemies, player, camRig, weapon } = window.game;
+  const events = engine.events;
+  const keys = engine.input.keys;
+  const step = (n = 1) => { for (let i = 0; i < n; i++) engine.step(1 / 60); };
+  const out = {};
+  for (const e of enemies.all) e.alive = false;
+  enemies.dirty = true;
+  player.respawn();
+  player.shields = player.health = 1e6;
+  for (const id of ['rifle', 'sniper']) weapon.grant(id, { ammo: 40 });
+  let armoredEvents = 0;
+  events.on('weapon:armored', () => armoredEvents++);
+  const test = (gun, armored, weak) => {
+    weapon.switchTo(gun);
+    step(60);
+    const tr = enemies.spawn({ id: 'enemy.trooper', pos: [2, 0, -15.3], params: { group: 'pl', dormant: true, armored } });
+    step(2);
+    player.pos.set(2, 0, -15.3 + 8);
+    const aim = weak ? tr.weakSpots[0].getWorldPosition(player.pos.clone()) : tr.rig.bones.Spine2.getWorldPosition(player.pos.clone());
+    if (weak) {
+      // the weak spot sits on a random part's front face: shoot along that face's normal, 8 m out
+      const out = tr.weakSpots[0].getWorldDirection(aim.clone()).setY(0);
+      if (out.lengthSq() < 1e-4) out.set(0, 0, 1);
+      out.normalize().multiplyScalar(8);
+      player.pos.set(aim.x + out.x, 0, aim.z + out.z);
+      step(2);
+    }
+    keys.add('Mouse2');
+    for (let i = 0; i < 60; i++) {
+      const c = camRig.camera.position;
+      camRig.yaw = Math.atan2(-(aim.x - c.x), -(aim.z - c.z));
+      camRig.pitch = Math.atan2(aim.y - c.y, Math.hypot(aim.x - c.x, aim.z - c.z));
+      step();
+    }
+    const hp = tr.health;
+    const ev = armoredEvents;
+    weapon.cooldown = 0;
+    keys.add('Mouse0'); engine.input.pressed.add('Mouse0'); step(); keys.delete('Mouse0');
+    step(2);
+    keys.delete('Mouse2');
+    const res = { dmg: hp - tr.health, sparks: armoredEvents - ev };
+    tr.alive = false;
+    enemies.dirty = true;
+    step(2);
+    return res;
+  };
+  for (const gun of ['pistol', 'rifle', 'sniper']) {
+    const plain = test(gun, false, false);
+    const plated = test(gun, true, false);
+    out[gun] = { plain: plain.dmg, plated: plated.dmg, ratio: plated.dmg / plain.dmg, sparks: plated.sparks, plainSparks: plain.sparks };
+  }
+  // (the weak spot sits on a random body part, sometimes hidden behind the gun, a limb or a plate from any angle: a shot that does not
+  // land on it, a clean miss or a plate hit with sparks, spawns a new trooper; one of them must show the full weak-spot damage)
+  const weakExpected = out.pistol.plain * weapon.t.weakMult;
+  let weakPlated = { dmg: 0, sparks: 0 };
+  for (let i = 0; i < 6 && !(weakPlated.dmg > weakExpected * 0.9); i++) weakPlated = test('pistol', true, true);
+  out.weak = { plated: weakPlated.dmg, sparks: weakPlated.sparks, expected: weakExpected };
+  const tr = enemies.spawn({ id: 'enemy.trooper', pos: [0, 0, 0], params: { armored: true } });
+  out.zoneMults = { limb: tr.armor('limb', null, { ammo: 'light' }), head: tr.armor('head', null, { ammo: 'light' }), heavy: tr.armor('torso', null, { ammo: 'heavy' }), weak: tr.armor('weak', null, { ammo: 'light' }) };
+  tr.alive = false;
+  return out;
+});
+console.log(a);
+const near = (x, y) => Math.abs(x - y) < 0.02;
+expect('plated trooper: pistol body hit does x0.25', a.pistol.plain > 0 && near(a.pistol.ratio, 0.25) && a.pistol.sparks === 1 && a.pistol.plainSparks === 0);
+expect('plated trooper: rifle body hit does x0.25 (sparks too)', a.rifle.plain > 0 && near(a.rifle.ratio, 0.25) && a.rifle.sparks >= 1);
+expect('plated trooper: the Farsight does full damage, no sparks', a.sniper.plain > 0 && near(a.sniper.ratio, 1) && a.sniper.sparks === 0);
+expect('plated trooper: the weak spot takes full damage from the pistol', a.weak.plated > 0 && near(a.weak.plated, a.weak.expected) && a.weak.sparks === 0);
+expect('plated trooper: head and limbs x0.25 for light rounds, heavy full, weak spot full', a.zoneMults.limb === 0.25 && a.zoneMults.head === 0.25 && a.zoneMults.heavy === 1 && a.zoneMults.weak === 1);
 console.log(r);
 expect('destroyed puppet stays destroyed after 15 s', r.stillDead);
 expect('its debris is cleaned up', r.debrisCleared);

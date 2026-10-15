@@ -69,6 +69,10 @@ const GradeShader = {
 
 // Post stack + auto exposure. Follows the engine's dynamic resolution through 'engine:resize'.
 const EXPOSURE = { outside: 1.0, inside: 1.9, rate: 1.2 };
+// Owner decision (2026-10-13): post effects off for now (grain and bloom turned dark rooms to mush). The composer
+// still runs for MSAA, HDR and tone mapping; bloom and the grade pass (vignette, CA, grain, flashes) are skipped.
+// ponytail: one switch, make it a graphics setting if effects come back per user choice.
+export const EFFECTS = false;
 
 export class Post {
   constructor(renderer, scene, camera, events) {
@@ -86,6 +90,7 @@ export class Post {
     this.grade = new ShaderPass(GradeShader);
     this.composer.addPass(this.grade);
     this.composer.addPass(new OutputPass());
+    this.grade.enabled = EFFECTS;
     this.u = this.grade.uniforms;
     this.flash = 0;
     this.damage = 0;
@@ -112,7 +117,7 @@ export class Post {
       rt.samples = want;
       rt.dispose(); // reallocated with the new sample count on the next render
     }
-    this.bloom.enabled = bloom;
+    this.bloom.enabled = bloom && EFFECTS;
   }
 
   setSize(w, h, pixelRatio = this.renderer.getPixelRatio()) {
@@ -120,9 +125,9 @@ export class Post {
     this.composer.setSize(w, h);
   }
 
-  render(dt, { player, inside }) {
+  render(dt, { player, inside, outside = 1 }) {
     // eyes open up indoors, clamp down in the sun
-    this.exposure += ((inside ? EXPOSURE.inside : EXPOSURE.outside) - this.exposure) * (1 - Math.exp(-dt * EXPOSURE.rate));
+    this.exposure += ((inside ? EXPOSURE.inside : EXPOSURE.outside * outside) - this.exposure) * (1 - Math.exp(-dt * EXPOSURE.rate));
     this.renderer.toneMappingExposure = this.exposure * this.boost;
     this.flash = Math.max(0, this.flash - dt * 6);
     this.damage = Math.max(0, this.damage - dt * 2.2);

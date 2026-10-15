@@ -26,7 +26,7 @@ const _probeDir = new THREE.Vector3();
 const _passed = [];
 const _bestHit = [];
 // payloads are reused: listeners must copy what they keep
-const SHOT = { from: _muz, to: new THREE.Vector3(), dir: _toAim, right: null, heavy: false, beam: false, gun: '', flash: 1, mag: 1 };
+const SHOT = { from: _muz, to: new THREE.Vector3(), dir: _toAim, right: null, heavy: false, beam: false, gun: '', flash: 1, mag: 1, scripted: false }; // scripted: a cut's round (shotAt): stats and objectives ignore it
 const HIT = { point: null, normal: new THREE.Vector3(), dir: _toAim, zone: '', amount: 0, crit: false, weak: false, killed: false, distance: 0 };
 const IMPACT = { point: null, normal: new THREE.Vector3(), decal: true }; // decal: false on a moving enemy's armor
 
@@ -40,16 +40,17 @@ export class Weapon {
   }
 
   // Fresh loadout and no running action (new level): full magazines, nothing reloading or charging.
-  // `loadout`: the guns owned at the start (level file `loadout`, absent = all six); the pistol is always owned.
+  // `loadout`: the guns owned at the start (level file `loadout`, absent = all six); the pistol is always owned, except for `[]`: unarmed (current = null).
   // Owned guns start with their default reserve, the others with a full magazine and an empty reserve (grant() fills it).
-  // The rifle is raised if owned, else the first owned gun in GUN_ORDER.
+  // The rifle is raised if owned, else the first owned gun in GUN_ORDER; none owned = unarmed: `current` is null, update()
+  // does nothing and `t` / `ammo` / `reserve` read the pistol (safe values for readers; the HUD hides the block).
   reset(loadout = GUN_ORDER) {
-    this.owned = new Set(['pistol', ...loadout]);
+    this.owned = new Set(loadout.length ? ['pistol', ...loadout] : []);
     this.state = {};
     for (const id of GUN_ORDER) this.state[id] = { ammo: GUNS[id].mag, reserve: this.owned.has(id) ? GUNS[id].reserve : 0, boost: false };
     this.active = null; // { total, attempted, result } while a reload runs
     this.result = null; // last active-reload result for the HUD: { kind, time }
-    this.current = this.owned.has('rifle') ? 'rifle' : GUN_ORDER.find((id) => this.owned.has(id));
+    this.current = this.owned.has('rifle') ? 'rifle' : GUN_ORDER.find((id) => this.owned.has(id)) ?? null;
     this.cooldown = 0;
     this.reloading = 0;
     this.switching = 0; // > 0 while lowering / raising
@@ -60,6 +61,7 @@ export class Weapon {
     this.sinceShot = 99; // seconds since the last round left
     this.burst = 0; // rounds in the current burst (recoil pattern index)
     this.queued = 0; // semi-auto: seconds a click stays buffered
+    this.latched = false; // a gun just raised (switch, pickup, grant) waits for the trigger to be released or pressed anew
     this.charging = 0; // railgun: seconds left before the charged shot leaves
     this.burstLeft = 0; // burst rifle: rounds still to fire in this burst
     this.player.setGun(this.current);
@@ -67,23 +69,23 @@ export class Weapon {
   }
 
   get t() {
-    return GUNS[this.current];
+    return GUNS[this.current ?? 'pistol'];
   }
 
   get ammo() {
-    return this.state[this.current].ammo;
+    return this.state[this.current ?? 'pistol'].ammo;
   }
 
   set ammo(v) {
-    this.state[this.current].ammo = v;
+    this.state[this.current ?? 'pistol'].ammo = v;
   }
 
   get reserve() {
-    return this.state[this.current].reserve;
+    return this.state[this.current ?? 'pistol'].reserve;
   }
 
   set reserve(v) {
-    this.state[this.current].reserve = v;
+    this.state[this.current ?? 'pistol'].reserve = v;
   }
 
   // 0 = gun up, 1 = fully lowered (drives the switch animation)
@@ -114,7 +116,7 @@ export class Weapon {
   probe() {
     const a = this.aim;
     a.enemy = a.weak = a.blocked = false;
-    if (this.player.dead || !this.player.muzzle) return;
+    if (this.player.dead || !this.current || !this.player.muzzle) return;
     const camPos = this.camera.position;
     _probeDir.copy(this.rig.forward);
     this.#targets();
@@ -142,7 +144,7 @@ export class Weapon {
     }
     const enemy = final?.object.userData.enemy;
     // armored parts (the mech's hull) read as cover, not as a target
-    if (enemy && enemy.alive && (!enemy.armor || enemy.armor(final.object.userData.zone, final.object) > 0)) {
+    if (enemy && enemy.alive && (!enemy.armor || enemy.armor(final.object.userData.zone, final.object, this.t) > 0)) {
       a.enemy = true;
       a.weak = final.object.userData.zone === 'weak';
     }
@@ -170,21 +172,62 @@ export class Weapon {
     return parts ? `${type.toUpperCase()} AMMO${parts}` : '';
   }
 
+  // A supply point (supply.ammo): every owned, non-infinite gun of the `types` ammo classes gets its reserve topped up to max.
+  // Returns a short label ('AMMO RESUPPLIED  +n AR ...'), or '' when all were full.
+  refill(types) {
+    let parts = '';
+    for (const id of GUN_ORDER) {
+      const g = GUNS[id];
+      if (!types.includes(g.ammo) || g.infinite || !this.owned.has(id)) continue;
+      const s = this.state[id];
+      const got = Math.max(0, g.maxReserve - s.reserve);
+      s.reserve += got;
+      if (got > 0) parts += `  +${got} ${g.short}`;
+    }
+    return parts ? `AMMO RESUPPLIED${parts}` : '';
+  }
+
   // Gives the player a gun (pickup.gun) and `ammo` rounds into its reserve, capped at its max. The first time a gun is
-  // owned in this level it emits 'weapon:discovered' { gun }. Returns the rounds added.
-  grant(id, { ammo = 0 } = {}) {
+  // owned in this level it emits 'weapon:discovered' { gun, trial }. `trial`: a range rack's gun, lent for the range only
+  // (taken back at its exit): toast and sound still play, but it is no discovery for the level (no discovered:<gun>). Returns the rounds added.
+  grant(id, { ammo = 0, trial = false } = {}) {
     const g = GUNS[id];
     const s = this.state[id];
     const got = g.infinite ? 0 : Math.max(0, Math.min(ammo, g.maxReserve - s.reserve));
     s.reserve += got;
     if (!this.owned.has(id)) {
       this.owned.add(id);
-      this.events.emit('weapon:discovered', { gun: id });
+      this.events.emit('weapon:discovered', { gun: id, trial });
     }
     return got;
   }
 
-  // Next owned gun from `from` in GUN_ORDER, stepping `dir` (+1 / -1). The pistol is always owned, so it ends.
+  // Takes back every gun not in `guns` (a trigger.volume `loadout`, e.g. the Prologue range's exit): those guns are unowned
+  // again with a full magazine and an empty reserve (as at a level start), the raised gun switches to the first kept one in
+  // GUN_ORDER (the pistol). `[]` leaves the player unarmed. A gun granted later counts as discovered again (toast).
+  // Returns the guns taken back.
+  setLoadout(guns) {
+    const keep = new Set(guns.length ? ['pistol', ...guns] : []);
+    const taken = [...this.owned].filter((id) => !keep.has(id));
+    for (const id of taken) {
+      this.owned.delete(id);
+      this.state[id] = { ammo: GUNS[id].mag, reserve: 0, boost: false };
+    }
+    if (this.current && !keep.has(this.current)) {
+      const next = GUN_ORDER.find((id) => keep.has(id)) ?? null;
+      this.charging = this.burstLeft = this.reloading = 0;
+      this.active = null;
+      this.pending = null;
+      this.switching = 0;
+      this.current = next; // straight to it: the taken gun is not lowered first
+      this.player.setGun(next);
+      this.rig.zoom = next ? this.t.zoom ?? null : null;
+      this.events.emit('weapon:switch', next);
+    }
+    return taken;
+  }
+
+  // Next owned gun from `from` in GUN_ORDER, stepping `dir` (+1 / -1). Only called armed (the pistol is always owned then), so it ends.
   #nextOwned(from, dir) {
     const n = GUN_ORDER.length;
     let i = GUN_ORDER.indexOf(from);
@@ -194,6 +237,16 @@ export class Weapon {
   }
 
   switchTo(id) {
+    if (!this.current) {
+      // unarmed: the gun is raised at once (no lowering), whatever the slot
+      this.current = id;
+      this.latched = true;
+      this.queued = 0;
+      this.player.setGun(id);
+      this.rig.zoom = this.t.zoom ?? null;
+      this.events.emit('weapon:switch', id);
+      return;
+    }
     if (id === this.current && !this.pending) return;
     if (this.switching > 0 && this.pending === id) return;
     this.pending = id;
@@ -205,7 +258,7 @@ export class Weapon {
   }
 
   get boosted() {
-    return this.state[this.current].boost;
+    return this.state[this.current ?? 'pistol'].boost;
   }
 
   // 0..1 position of the active-reload marker
@@ -257,6 +310,11 @@ export class Weapon {
   }
 
   update(dt, controls) {
+    if (!this.current) {
+      // unarmed: fire, aim, reload, slots and the wheel do nothing
+      this.firing = false;
+      return;
+    }
     // switching: number keys, or the mouse wheel (not in trackpad mode, where the wheel looks around); owned guns only
     const slot = controls.slotPressed;
     if (slot >= 0 && slot < GUN_ORDER.length && this.owned.has(GUN_ORDER[slot])) this.switchTo(GUN_ORDER[slot]);
@@ -271,6 +329,8 @@ export class Weapon {
         this.bloom = 0;
         this.spin = 0;
         this.cooldown = 0; // the last gun's fire cycle doesn't carry over
+        this.latched = true; // nor its trigger: a held trigger or a buffered click doesn't fire the gun coming up
+        this.queued = 0;
         this.player.setGun(this.current);
         this.rig.zoom = this.t.zoom ?? null;
         if (this.ammo === 0) this.switchedEmpty = true;
@@ -301,10 +361,13 @@ export class Weapon {
     }
 
     const p = this.player;
-    const trigger = controls.firing;
+    // interact (G / B: terminals, supply points) never fires: its frame drops the trigger and any buffered click
+    const interact = controls.pressed('interact');
+    if (this.latched && (!controls.firing || controls.firePressed) && this.switching <= 0) this.latched = false;
+    const trigger = controls.firing && !interact && !this.latched;
     // semi-auto: one round per click; a click shortly before the bolt is back is buffered, not lost
-    this.queued = controls.firePressed ? 0.25 : this.queued - dt;
-    const pull = t.semi ? this.queued > 0 : trigger;
+    this.queued = controls.firePressed && !interact ? 0.25 : interact ? 0 : this.queued - dt;
+    const pull = t.semi ? this.queued > 0 && !this.latched : trigger;
     this.spin = t.spinUp > 0 ? THREE.MathUtils.clamp(this.spin + (trigger ? dt / t.spinUp : -dt * 2), 0, 1) : 1;
     const canFire = !p.dead && (!p.snap || p.isSliding()) && !p.sprinting && !p.pinned && this.reloading <= 0 && this.switching <= 0;
     // a started charge or burst finishes whether or not the trigger is still held
@@ -393,6 +456,34 @@ export class Weapon {
     }
   }
 
+  // A scripted round for a cut (view/cinematic.js, a shot's `stem.fire`): the raised gun fires at `to` from its muzzle with the real
+  // shot event (tracer, muzzle flash, casing, sound, visual kick) plus a spark where it lands. No ammo, no input, no spread, no hit:
+  // the cut kills the target itself (Enemies.scriptKill). `weapon:shot.scripted` is true so run stats and `objective.action fire` skip it.
+  shotAt(to) {
+    const t = this.t;
+    if (this.player.muzzle) this.player.muzzle.getWorldPosition(_muz);
+    else this.player.chest(_muz);
+    _toAim.subVectors(to, _muz);
+    const dist = _toAim.length();
+    if (dist < 1e-3) return;
+    _toAim.divideScalar(dist);
+    this.player.notifyShot();
+    SHOT.to.copy(to);
+    SHOT.right = this.rig.right;
+    SHOT.heavy = this.current === 'mg';
+    SHOT.gun = this.current ?? 'pistol';
+    SHOT.flash = t.flash;
+    SHOT.beam = !!t.beam;
+    SHOT.mag = 1;
+    SHOT.scripted = true;
+    this.events.emit('weapon:shot', SHOT);
+    this.player.kick(t.kick);
+    IMPACT.point = to;
+    IMPACT.normal.copy(_toAim).negate();
+    IMPACT.decal = false;
+    this.events.emit('weapon:impact', IMPACT);
+  }
+
   #fire() {
     const t = this.t;
     this.ammo--;
@@ -450,6 +541,7 @@ export class Weapon {
     SHOT.flash = t.flash;
     SHOT.beam = !!t.beam;
     SHOT.mag = this.ammo / t.mag;
+    SHOT.scripted = false;
     this.events.emit('weapon:shot', SHOT);
     const r = t.recoil;
     recoilKick(r, this.burst++, _kick, this.rng.next(), this.rng.next());
@@ -465,7 +557,7 @@ export class Weapon {
   // A pierceable hit: a live enemy's part that isn't armored.
   #passes(h) {
     const e = h.object.userData.enemy;
-    return !!e && (!e.armor || e.armor(h.object.userData.zone, h.object) > 0);
+    return !!e && (!e.armor || e.armor(h.object.userData.zone, h.object, this.t) > 0);
   }
 
   #zoneMult(h) {
@@ -476,15 +568,16 @@ export class Weapon {
 
   #hit(hit, toAim, enemy) {
     const t = this.t;
-    const armor = enemy?.armor ? enemy.armor(hit.object.userData.zone, hit.object) : 1;
-    if (enemy && armor <= 0) {
-      // armor: the round glances off (sparks, no damage) and the HUD hints where to shoot
+    const armor = enemy?.armor ? enemy.armor(hit.object.userData.zone, hit.object, t) : 1; // armor(zone, part, gun def): an armored puppet only yields to heavy rounds
+    if (enemy && armor < 1) {
+      // armor: the round glances off (sparks) and the HUD hints where to shoot; a partial multiplier (plate) still hurts
       IMPACT.point = hit.point;
       IMPACT.normal.copy(toAim).negate();
       IMPACT.decal = false; // decals live in world space: on a walking boss they'd hang in the air where it was
       this.events.emit('weapon:impact', IMPACT);
       this.events.emit('weapon:armored', enemy);
-    } else if (enemy) {
+    }
+    if (enemy && armor > 0) {
       const zone = hit.object.userData.zone;
       const boost = this.boosted ? ACTIVE.boostMult : 1;
       const mult = boost * this.#zoneMult(hit);
@@ -497,7 +590,7 @@ export class Weapon {
       HIT.weak = zone === 'weak';
       HIT.crit = zone === 'head' || HIT.weak;
       this.events.emit('weapon:hit', HIT);
-    } else {
+    } else if (!enemy) {
       IMPACT.point = hit.point;
       if (hit.face) IMPACT.normal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
       else IMPACT.normal.copy(_back.copy(toAim).negate());

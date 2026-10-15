@@ -20,9 +20,11 @@ export class Log {
     this.time = 0;
     this.shown = '';
     this.voice = 'stem'; // of the line being shown
+    this.glitch = 0;
   }
 
   listen(events) {
+    this.events = events;
     events.on('log:say', (e) => this.say(e.text, e));
     return this;
   }
@@ -47,10 +49,15 @@ export class Log {
 
   #show(text, voice = 'stem') {
     const n = text.length;
-    this.line = { text, t: 0, life: n / TUNING.cps + Math.max(TUNING.hold, TUNING.holdPerChar * n) + TUNING.fade };
+    this.line = { text, t: 0, n: 0, life: n / TUNING.cps + Math.max(TUNING.hold, TUNING.holdPerChar * n) + TUNING.fade };
     this.entries.push(voice === 'stem' ? { text, t: this.time } : { text, t: this.time, voice });
     this.voice = voice;
     this.el.classList.toggle('announcer', voice === 'announcer');
+    const m = Math.floor(this.time / 60), sec = Math.floor(this.time % 60);
+    this.el.dataset.t = `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`; // header time (CSS ::before)
+    this.glitch ^= 1; // alternate two identical keyframes so the glitch restarts without a reflow
+    this.el.classList.remove('glitch-a', 'glitch-b');
+    this.el.classList.add(this.glitch ? 'glitch-a' : 'glitch-b');
   }
 
   update(dt) {
@@ -64,7 +71,10 @@ export class Log {
       else this.#draw('', 0);
       return;
     }
-    this.#draw(l.text.slice(0, Math.floor(l.t * TUNING.cps)), Math.min(1, (l.life - l.t) / TUNING.fade));
+    const n = Math.min(l.text.length, Math.floor(l.t * TUNING.cps));
+    if (n > l.n) this.events?.emit('ui:type', { end: n === l.text.length });
+    l.n = n;
+    this.#draw(l.text.slice(0, n), Math.min(1, (l.life - l.t) / TUNING.fade));
   }
 
   #draw(text, opacity) {

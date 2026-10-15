@@ -210,6 +210,15 @@ const RUN = {
 };
 const HIP_YAW = 0.9; // rad: strafing turns the hips (and legs) toward the movement, the chest keeps facing
 const LOCK_RELEASE = 0.45; // m: a planted foot this far from its pose (spinning on the spot, a shove) lets go
+// Dormant (powered down: the wake-up cinematic, `s.dormant` 1 slumped .. 0 normal): hips drop (the feet IK bends the knees),
+// spine and head fold forward, arms hang. Radians per bone, added on top of the pose.
+const DORMANT = { drop: 0.09, spine: 0.12, neck: 0.35, head: 0.4, arm: 0.08, armOut: 0.1, fore: -0.15 };
+// Seated (`s.seated` 0..1; the main menu: STEM-00 on a roof edge, menu-scene.js), a tired human on a ledge: the root stays at the
+// ledge top, the hips drop until the seat and the thighs' armour rest on it, thighs level, shins hanging (one a little forward, one
+// back), toes down; the back rounds forward, the neck and head lift to look out; forearms forward, hands resting over the
+// knees. Radians per bone ([thigh, knee, splay] per leg; arm [pitch, twist in, out]; forearm [flex, 0, 0]). The owner places the
+// root so the backs of the knees sit at the edge (knees ~0.4 m ahead of the root). Unarmed. Applied last, over everything.
+export const SEATED = { drop: 0.79, spine: 0.2, neck: -0.42, head: -0.22, foot: 0.35, legs: { Left: [-1.5, 1.45, 0.08], Right: [-1.57, 1.76, -0.04] }, arm: [-0.75, -0.15, -0.1], fore: [-1.3, 0, 0] };
 
 export class Animator {
   // ground(x, z, maxY) -> floor height; enables feet IK
@@ -252,15 +261,17 @@ export class Animator {
   }
 
   // s: { speed, run, crouch, aimPitch, combat, recoil, lean, lookYaw, lower, kickBack, kickClimb,
-  //      vel (world velocity, optional), yaw (facing, with vel), leftHanded (mirror the gun hold) }
+  //      vel (world velocity, optional), yaw (facing, with vel), leftHanded (mirror the gun hold), dormant (0..1, slumped powered-down pose) }
   update(dt, s) {
     this.rig.resetPose();
     this.#hitSpring(dt);
     this.#locomotion(dt, s);
     this.#torso(dt, s);
     this.#arms(dt, s);
+    if (s.dormant > 0.001) this.#dormant(s.dormant);
     this.#legs(dt);
     this.#layers(dt, s);
+    if (s.seated > 0.001) this.#seated(s.seated);
   }
 
   #hitSpring(dt) {
@@ -463,6 +474,46 @@ export class Animator {
       this.#refresh();
     }
 
+  }
+
+  // Dormant layer (DORMANT): after the arms (it overrides the gun hold / swing), before the legs and feet IK.
+  #dormant(w) {
+    const B = this.rig.bones;
+    const D = DORMANT;
+    B.Hips.position.y -= D.drop * w;
+    for (const b of [B.Spine, B.Spine1, B.Spine2]) b.rotation.x += D.spine * w;
+    B.Neck.rotation.x += D.neck * w;
+    B.Head.rotation.x += D.head * w;
+    for (const side of SIDES) {
+      const out = side === 'Left' ? 1 : -1;
+      blendTo(B[side + 'Shoulder'], 0, 0, 0, w);
+      blendTo(B[side + 'Arm'], D.arm, 0, D.armOut * out, w);
+      blendTo(B[side + 'ForeArm'], D.fore, 0, 0, w);
+      blendTo(B[side + 'Hand'], 0, 0, 0, w);
+    }
+    this.#refresh();
+  }
+
+  // Seated layer (SEATED), after everything else: the gait, feet IK and gun hold are overridden.
+  #seated(w) {
+    const B = this.rig.bones;
+    const S = SEATED;
+    B.Hips.position.y -= S.drop * w;
+    for (const b of [B.Spine, B.Spine1, B.Spine2]) b.rotation.x += S.spine * w;
+    B.Neck.rotation.x += S.neck * w;
+    B.Head.rotation.x += S.head * w;
+    for (const side of SIDES) {
+      const out = side === 'Left' ? 1 : -1;
+      const [thigh, knee, splay] = S.legs[side];
+      blendTo(B[side + 'UpLeg'], thigh, 0, splay, w);
+      blendTo(B[side + 'Leg'], knee, 0, 0, w);
+      blendTo(B[side + 'Foot'], S.foot, 0, 0, w);
+      blendTo(B[side + 'Shoulder'], 0, 0, 0, w);
+      blendTo(B[side + 'Arm'], S.arm[0], S.arm[1] * out, S.arm[2] * out, w);
+      blendTo(B[side + 'ForeArm'], S.fore[0], S.fore[1] * out, S.fore[2] * out, w);
+      blendTo(B[side + 'Hand'], 0.2, 0, 0, w);
+    }
+    this.#refresh();
   }
 
   // Legs: planted feet locked in place (IK), kneel blended over everything.

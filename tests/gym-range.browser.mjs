@@ -1,7 +1,7 @@
 // Gym weapon range (?scene=gym-range, #65) as a fixture for gunplay: damage falloff of every gun against the
 // dummies on the lane, dummies that survive, the tool's markers / dots / keys, spread per gun, and metric item 16
 // (do troopers fire across 30-40 m?). Engine stopped and stepped at exact 1/60 s, seeded RNG.
-// Needs the dev server: `npm run dev`, then `node tests/gym-range.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/gym-range.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

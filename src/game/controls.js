@@ -25,7 +25,8 @@ export const BINDINGS = {
   slot6: ['Digit6', 'Pad13'], // d-pad down: sidearm
   interact: ['KeyG', 'Pad1'], // objective terminals
   pause: ['Pad9'],
-  restart: ['Enter', 'Pad0'], // the mission complete screen (view/summary.js)
+  restart: ['Enter', 'Pad0'], // the mission complete screen (view/summary.js): its primary button (CONTINUE when the level has a `next`, else RESTART)
+  retry: ['KeyR', 'Pad2'], // the same screen's RESTART when CONTINUE is the primary (also works without a `next`)
   lookLeft: ['ArrowLeft'],
   lookRight: ['ArrowRight'],
   lookUp: ['ArrowUp'],
@@ -69,12 +70,26 @@ export const BINDINGS = {
   edLower: ['PageDown'],
 };
 
+// Short names for sign text (env.label tokens). Keys: the code minus Key / Digit; the rest listed.
+const CODE_NAMES = { Mouse0: 'LMB', Mouse1: 'MMB', Mouse2: 'RMB', Space: 'SPACE', ShiftLeft: 'SHIFT', ShiftRight: 'SHIFT', Enter: 'ENTER', Pad0: 'A', Pad1: 'B', Pad2: 'X', Pad3: 'Y', Pad4: 'LB', Pad5: 'RB', Pad6: 'LT', Pad7: 'RT', Pad10: 'L3', Pad11: 'R3' };
+// Sign token -> action. Pad sprint is its own action; trackpad mode aims with the toggle key.
+const TOKEN_ACTIONS = { jump: 'jump', aim: 'aim', fire: 'fire', sprint: 'run', interact: 'interact', reload: 'reload' };
+const SCHEME_ACTIONS = { pad: { sprint: 'padSprint' }, trackpad: { aim: 'aimToggle' } };
+
+// Key / button name of a sign token for an input scheme ('kbm' | 'pad' | 'trackpad'); throws on an unknown token.
+export function inputName(token, scheme = 'kbm') {
+  const action = SCHEME_ACTIONS[scheme]?.[token] ?? TOKEN_ACTIONS[token];
+  if (!action) throw new Error(`unknown input token {${token}} (use ${Object.keys(TOKEN_ACTIONS).map((t) => `{${t}}`).join(' ')})`);
+  const code = BINDINGS[action].find((c) => c.startsWith('Pad') === (scheme === 'pad'));
+  return CODE_NAMES[code] ?? code.replace(/^(Key|Digit)/, '').toUpperCase();
+}
+
 // Does this device code (a KeyboardEvent.code) trigger `action`? For keydown listeners and held-key sets.
 export const bound = (action, code) => BINDINGS[action].includes(code);
 export const boundIn = (action, codes) => BINDINGS[action].some((c) => codes.has(c));
 
 // Actions that still work while the input is locked (the boot intro, view/boot.js): the panel and debug toggles.
-const UNLOCKED = new Set(['pause', 'stats', 'skeleton', 'restart']);
+const UNLOCKED = new Set(['pause', 'stats', 'skeleton', 'restart', 'retry']);
 
 const KEY_LOOK = { x: 900, y: 500 }; // px/s equivalent for arrow-key look
 // Right stick look, in mouse px/s at full tilt: a curve for fine aim near the center, and a turn boost when the
@@ -98,6 +113,11 @@ export class Controls {
 
   get pad() {
     return this.input.device === 'pad';
+  }
+
+  // Input scheme for signs: 'pad' | 'trackpad' | 'kbm'.
+  get scheme() {
+    return this.pad ? 'pad' : this.settings.trackpad ? 'trackpad' : 'kbm';
   }
 
   // Once per frame, before gameplay (pre phase).

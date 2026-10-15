@@ -70,40 +70,64 @@ export function makeLodMaterial() {
 // A textured material may set userData.lodColor (its average look) since the texture is dropped;
 // userData.lodGlow overrides emissiveIntensity (e.g. brighter, to stand in for a dropped transparent halo).
 function lodBucket(buckets, material) {
-  const out = { material, pos: [], nor: [], uv: [], skin: [], idx: [], col: [], emi: [] };
+  const out = concat(buckets, material, (b) => !b.material.transparent);
+  if (!out) return null;
   const c = new THREE.Color();
   const e = new THREE.Color();
-  for (const b of buckets.values()) {
+  out.col = new Float32Array(out.pos.length);
+  out.emi = new Float32Array(out.pos.length);
+  let v = 0;
+  for (const b of out.list) {
     const mat = b.material;
-    if (mat.transparent) continue;
     c.copy(mat.userData.lodColor ?? mat.color ?? c.setScalar(1));
     if (mat.emissive) e.copy(mat.emissive).multiplyScalar(mat.userData.lodGlow ?? mat.emissiveIntensity ?? 1);
     else e.setScalar(0);
-    append(out, b);
-    const n = b.pos.length / 3;
-    for (let i = 0; i < n; i++) {
-      out.col.push(c.r, c.g, c.b);
-      out.emi.push(e.r, e.g, e.b);
+    for (let end = v + b.pos.length; v < end; v += 3) {
+      out.col[v] = c.r;
+      out.col[v + 1] = c.g;
+      out.col[v + 2] = c.b;
+      out.emi[v] = e.r;
+      out.emi[v + 1] = e.g;
+      out.emi[v + 2] = e.b;
     }
   }
-  return out.pos.length ? out : null;
+  return out;
 }
 
-// Appends bucket `b` to `out`, offsetting its indices.
-function append(out, b) {
-  const base = out.pos.length / 3;
-  for (const k of ['pos', 'nor', 'uv', 'skin']) for (let i = 0; i < b[k].length; i++) out[k].push(b[k][i]);
-  for (let i = 0; i < b.idx.length; i++) out.idx.push(b.idx[i] + base);
+// The buckets passing `keep`, concatenated into one bucket of typed arrays (indices offset), or null. (Was an element-by-element
+// push of every vertex: ~40% of a Prologue load, every rig's shadow and far-LOD bucket copies all of its vertices.)
+function concat(buckets, material, keep) {
+  const list = [];
+  let nv = 0, nu = 0, ns = 0, ni = 0;
+  for (const b of buckets.values()) {
+    if (!keep(b)) continue;
+    list.push(b);
+    nv += b.pos.length;
+    nu += b.uv.length;
+    ns += b.skin.length;
+    ni += b.idx.length;
+  }
+  if (!nv) return null;
+  const out = { material, list, pos: new Float32Array(nv), nor: new Float32Array(nv), uv: new Float32Array(nu), skin: ns ? new Uint16Array(ns) : [], idx: new Uint32Array(ni) };
+  let pv = 0, pu = 0, ps = 0, pi = 0;
+  for (const b of list) {
+    const base = pv / 3;
+    out.pos.set(b.pos, pv);
+    out.nor.set(b.nor, pv);
+    out.uv.set(b.uv, pu);
+    if (ns) out.skin.set(b.skin, ps);
+    for (let i = 0; i < b.idx.length; i++) out.idx[pi + i] = b.idx[i] + base;
+    pv += b.pos.length;
+    pu += b.uv.length;
+    ps += b.skin.length;
+    pi += b.idx.length;
+  }
+  return out;
 }
 
 // Concatenates every opaque casting bucket into one bucket for the shadow-only mesh (null if none).
 function shadowBucket(buckets) {
-  const out = { material: SHADOW_MAT, pos: [], nor: [], uv: [], skin: [], idx: [] };
-  for (const b of buckets.values()) {
-    if (!b.castShadow || b.material.transparent) continue;
-    append(out, b);
-  }
-  return out.pos.length ? out : null;
+  return concat(buckets, SHADOW_MAT, (b) => b.castShadow && !b.material.transparent);
 }
 
 function shadowOnly(mesh) {
@@ -211,41 +235,66 @@ const _c = new THREE.Vector3();
 
 // Merges static meshes (world space) into one mesh per material per chunk under `parent`. Sources become proxies.
 // Returns the colour meshes; `.shadows` holds the shadow-only mesh of each chunk.
-export function mergeStatic(meshes, parent) {
-  const chunks = new Map();
-  const centres = meshes.map((m) => {
+// groupOf(mesh) (optional): a key (e.g. a sector mask, game/world/sectors.js); meshes of different keys never share a merged mesh,
+// every output mesh carries `userData.group` = its key, and chunking is decided per group. Without it: one group (key null).
+export function mergeStatic(meshes, parent, groupOf = null) {
+  const steps = mergeStaticSteps(meshes, parent, groupOf);
+  let r = steps.next();
+  while (!r.done) r = steps.next();
+  return r.value;
+}
+
+// The same as a generator that yields after every source mesh collected and every merged mesh built (time-sliced building:
+// the caller runs it a few ms per frame); its return value is mergeStatic's. Output meshes are added to `parent` as they are built.
+export function* mergeStaticSteps(meshes, parent, groupOf = null) {
+  const groups = new Map(); // key -> { list: [[mesh, centre]], chunks: Map }
+  for (const m of meshes) {
     m.updateWorldMatrix(true, false);
     if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
-    return _box.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld).getCenter(new THREE.Vector3());
-  });
-  _box.makeEmpty().setFromPoints(centres).getSize(_c);
-  const single = Math.max(_c.x, _c.z) < CHUNK_MIN_EXTENT;
-  for (const [i, m] of meshes.entries()) {
-    const key = single ? '' : `${Math.floor(centres[i].x / CHUNK)}|${Math.floor(centres[i].z / CHUNK)}`;
-    let buckets = chunks.get(key);
-    if (!buckets) chunks.set(key, (buckets = new Map()));
-    collect(buckets, m, m.matrixWorld);
-    hideAsProxy(m);
+    const key = groupOf ? groupOf(m) : null;
+    let g = groups.get(key);
+    if (!g) groups.set(key, (g = { list: [], chunks: new Map() }));
+    g.list.push([m, _box.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld).getCenter(new THREE.Vector3())]);
+  }
+  for (const g of groups.values()) {
+    _box.makeEmpty();
+    for (const [, c] of g.list) _box.expandByPoint(c);
+    _box.getSize(_c);
+    const single = Math.max(_c.x, _c.z) < CHUNK_MIN_EXTENT;
+    for (const [m, c] of g.list) {
+      const key = single ? '' : `${Math.floor(c.x / CHUNK)}|${Math.floor(c.z / CHUNK)}`;
+      let buckets = g.chunks.get(key);
+      if (!buckets) g.chunks.set(key, (buckets = new Map()));
+      collect(buckets, m, m.matrixWorld);
+      hideAsProxy(m);
+      yield;
+    }
   }
   const out = [];
   out.shadows = [];
-  for (const buckets of chunks.values()) {
-    for (const b of buckets.values()) {
-      const mesh = new THREE.Mesh(toGeometry(b), b.material);
-      mesh.castShadow = false; // the shadow-only mesh below casts for all of them
-      mesh.receiveShadow = b.receiveShadow;
-      mesh.matrixAutoUpdate = false;
-      mesh.raycast = noRaycast;
-      mesh.userData.batch = true;
-      parent.add(mesh);
-      out.push(mesh);
-    }
-    const sb = shadowBucket(buckets);
-    if (sb) {
-      const shadow = shadowOnly(new THREE.Mesh(toGeometry(sb), SHADOW_MAT));
-      shadow.matrixAutoUpdate = false;
-      parent.add(shadow);
-      out.shadows.push(shadow);
+  for (const [key, g] of groups) {
+    for (const buckets of g.chunks.values()) {
+      for (const b of buckets.values()) {
+        const mesh = new THREE.Mesh(toGeometry(b), b.material);
+        mesh.castShadow = false; // the shadow-only mesh below casts for all of them
+        mesh.receiveShadow = b.receiveShadow;
+        mesh.matrixAutoUpdate = false;
+        mesh.raycast = noRaycast;
+        mesh.userData.batch = true;
+        mesh.userData.group = key;
+        parent.add(mesh);
+        out.push(mesh);
+        yield;
+      }
+      const sb = shadowBucket(buckets);
+      if (sb) {
+        const shadow = shadowOnly(new THREE.Mesh(toGeometry(sb), SHADOW_MAT));
+        shadow.matrixAutoUpdate = false;
+        shadow.userData.group = key;
+        parent.add(shadow);
+        out.shadows.push(shadow);
+        yield;
+      }
     }
   }
   return out;

@@ -1,6 +1,6 @@
 // Locomotion: the key-pose gait plants its feet (no sliding while a foot carries weight) at walk, jog, sprint,
 // strafe and backpedal speeds, and the swing foot actually leaves the ground.
-// Needs the dev server: `npm run dev`, then `node tests/animation.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/animation.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const URL = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
@@ -134,8 +134,13 @@ expect('moving along low cover: crouch-run facing the move, feet on the floor', 
 expect('Space + forward in cover jumps a thin block', pl.coverVault.kind === 'hop' && pl.coverVault.z < -0.7 && pl.coverVault.y < 0.05);
 expect('running at a deep block slides over it (not over the head)', pl.runVault.kind === 'slide' && pl.runVault.z < 2.6 && pl.runVault.peak < 1.4);
 // enemy rigs pose once per frame (late phase), not per substep; far or off-screen ones every few frames, no terrain IK
-await p.reload(); // fresh arena: the runs above leave the enemies dead
-await p.waitForFunction(() => window.game?.engine);
+// fresh arena (the runs above leave the enemies dead): a scene load, not a page reload, which on a loaded CI machine can miss the
+// 30 s navigation timeout (the page's first frame builds the level and compiles every shader synchronously)
+await p.evaluate(() => {
+  const { engine } = window.game;
+  engine.headless = true;
+  window.game.loadScene('arena');
+});
 const cadence = await p.evaluate(() => {
   const { engine, enemies, player } = window.game;
   engine.stop();

@@ -1,16 +1,16 @@
 import * as THREE from 'three';
 import { GUNS } from '../combat/guns.js';
 import { disposeTree } from '../../engine/dispose.js';
+import { SUPPLY } from './props.js';
 
-// Ammo pickups ("thermal clips"): fixed crates that respawn, plus clips dropped by destroyed puppets.
+// Ammo pickups ("thermal clips"): fixed crates that respawn (level data; the Prologue has none: supply points only). Enemies drop no clips.
+// Supply points (supply.ammo / supply.repair, props.js) are used here too: prompt + interact.
 // Two ammo classes (guns.js `ammo`): light (cyan: AR, MG, BR) and heavy (orange: SR, RG); the pistol is infinite. A pickup only
 // refills its own class. Walk over one to collect it; every gun of the class full = not collected.
 // Emits 'pickup:collected' / 'pickup:full'. A gun pickup (pickup.gun) gives a gun the player doesn't own yet (weapon.grant:
 // 'weapon:discovered', auto-switch), or that gun's ammo if it is owned; it never respawns.
+// Destroyed enemies drop no ammo (owner, 2026-10-14: ammo comes from supply points and placed crates only); `dropGun` drops stay.
 const TUNING = {
-  dropChance: 0.45,
-  heavyDropChance: 0.25, // share of drops that are heavy ammo
-  dropLife: 25,
   respawn: 15,
   radius: 1.1,
 };
@@ -20,12 +20,13 @@ const TUNING = {
 export const PICKUP_PIECES = {
   'pickup.light': { example: { params: {} }, label: `light ammo (AR MG BR) | respawns in ${TUNING.respawn} s`, build: (pickups, d) => pickups.addCrate(d.pos, 'light') },
   'pickup.heavy': { example: { params: {} }, label: `heavy ammo (SR RG) | respawns in ${TUNING.respawn} s`, build: (pickups, d) => pickups.addCrate(d.pos, 'heavy') },
-  // params: gun (key of GUNS), ammo? (rounds into the reserve, default the gun's crate refill). `yaw` turns the stand.
+  // params: gun (key of GUNS), ammo? (rounds into the reserve, default the gun's crate refill), rack? (lies on a prop.gunRack shelf at pos:
+  // no stand, no ring). `yaw` turns it.
   'pickup.gun': {
     example: { params: { gun: 'rifle' } },
-    label: 'gun on a stand: discovers it, else gives its ammo | no respawn',
-    fields: [{ key: 'gun', type: 'enum', options: Object.keys(GUNS) }, { key: 'ammo', type: 'number', min: 0, optional: true }],
-    build: (pickups, d) => pickups.addGun(d.pos, d.params ?? {}, d.yaw),
+    label: 'gun on a stand (or a rack): discovers it, else gives its ammo | no respawn',
+    fields: [{ key: 'gun', type: 'enum', options: Object.keys(GUNS) }, { key: 'ammo', type: 'number', min: 0, optional: true }, { key: 'rack', type: 'bool', def: false }],
+    build: (pickups, d) => pickups.addGun(d.pos, d.params ?? {}, d.yaw, !d.params?.rack, !!d.params?.rack),
   },
 };
 
@@ -41,6 +42,8 @@ export class Pickups {
     this.dropped = new Set(); // guns already dropped by an enemy this level (dropGun with dropOnce)
     this.time = 0;
     this.fullCooldown = 0;
+    this.prompt = { label: '', at: null }; // the supply point in reach (HUD interact prompt), see supplyPrompt()
+    this.near = null;
 
     const caseMat = new THREE.MeshStandardMaterial({ color: 0x2a2e35, metalness: 0.6, roughness: 0.4 });
     caseMat.userData.shared = true; // gun stands use it too: disposeTree leaves it alone
@@ -98,7 +101,7 @@ export class Pickups {
   // a gun on a stand (pickup.gun). Stand and gun geometry are the item's own, freed with it: a shared stand geometry would
   // upload on the first gun stand drawn and break the exact GPU memory check in scenes.browser.mjs.
   // `stand: false` lays the bare gun on the floor (an enemy drop).
-  addGun(pos, { gun, ammo }, yaw = 0, stand = true) {
+  addGun(pos, { gun, ammo }, yaw = 0, stand = true, rack = false) {
     if (ammo != null && !(typeof ammo === 'number' && ammo >= 0)) throw new Error(`pickup.gun: ammo must be a number >= 0, got ${JSON.stringify(ammo)}`);
     const gunModel = this.world.gunModel(gun, 'pickup.gun');
     gunModel.position.set(0, 0.82, -0.45);
@@ -108,15 +111,16 @@ export class Pickups {
       post.castShadow = true;
       gunModel.add(post);
       post.position.set(0, -0.82, 0.45);
-    } else gunModel.position.y = 0.3;
+    } else gunModel.position.y = rack ? 0.1 : 0.3; // rack: lying on the shelf at pos
     const model = new THREE.Group().add(gunModel);
     model.position.set(...pos);
     model.rotation.y = yaw;
     const ring = new THREE.Mesh(this.ringGeo, this.ringMats.gun);
     ring.position.set(pos[0], pos[1] + 0.02, pos[2]);
     ring.scale.setScalar(1.5);
+    ring.visible = !rack; // the rack's class band marks it
     this.scene.add(model, ring);
-    const item = { pos: new THREE.Vector3(...pos), model, ring, gunModel, gun, ammo: ammo ?? GUNS[gun].pickup?.crate ?? 0, crate: false, active: true };
+    const item = { pos: new THREE.Vector3(...pos), model, ring, gunModel, gun, ammo: ammo ?? GUNS[gun].pickup?.crate ?? 0, crate: false, active: true, trial: rack };
     this.items.push(item);
     return item;
   }
@@ -140,16 +144,10 @@ export class Pickups {
     return item;
   }
 
-  // a broken puppet may leave a clip behind
-  drop(pos) {
-    if (Math.random() > this.t.dropChance) return;
-    const item = this.#spawn(new THREE.Vector3(pos.x, pos.y, pos.z), { crate: false, type: Math.random() < this.t.heavyDropChance ? 'heavy' : 'light' });
-    item.timer = this.t.dropLife;
-  }
-
-  update(dt, player, weapon) {
+  update(dt, player, weapon, interact = false) {
     this.time += dt;
     this.fullCooldown -= dt;
+    this.#supplies(dt, player, weapon, interact);
     this.ringMats.gun.opacity = 0.35 + 0.25 * Math.sin(this.time * 1.6); // slow highlight on every gun stand
 
     for (let i = this.items.length - 1; i >= 0; i--) {
@@ -168,14 +166,6 @@ export class Pickups {
       }
       it.model.position.y = it.pos.y + 0.45 + Math.sin(this.time * 2.5 + it.phase) * 0.08;
       it.model.rotation.y += dt * 1.5;
-      if (!it.crate) {
-        it.timer -= dt;
-        if (it.timer <= 0) {
-          this.#remove(i);
-          continue;
-        }
-        it.model.visible = it.timer > 4 || Math.sin(this.time * 20) > 0; // blink before vanishing
-      }
 
       if (!this.#reached(player, it)) continue;
       const got = weapon.addAmmo(it.crate ? 'crate' : 'drop', it.type);
@@ -195,6 +185,48 @@ export class Pickups {
     }
   }
 
+  // Supply points (props.js supply.ammo / supply.repair, world.supplies): the nearest one in reach sets the HUD prompt; interact uses it.
+  // Ammo refills the owned guns of its classes to max (weapon.refill), repair restores health and shields; both toast and play the
+  // pickup sound (pickup:collected), nothing to do = pickup:full ("AMMO FULL") / "SYSTEMS NOMINAL".
+  #supplies(dt, player, weapon, interact) {
+    this.near = null;
+    let best = SUPPLY.reach ** 2;
+    for (const o of this.world.supplies) {
+      const s = o.userData.supply;
+      s.cool -= dt;
+      const dx = player.pos.x - o.position.x;
+      const dz = player.pos.z - o.position.z;
+      const d = dx * dx + dz * dz;
+      if (d <= best && Math.abs(player.pos.y - o.position.y) < 1.5) {
+        best = d;
+        this.near = s;
+      }
+    }
+    const s = this.near;
+    if (!s || player.dead || !interact || s.cool > 0) return;
+    s.cool = SUPPLY.cooldown;
+    if (s.kind === 'ammo') {
+      const got = weapon.refill(s.ammo);
+      if (got) this.events.emit('pickup:collected', got);
+      else this.events.emit('pickup:full');
+    } else {
+      const hp = player.t.maxHealth - player.health + player.t.maxShields - player.shields;
+      if (hp < 1) return void this.events.emit('pickup:collected', 'SYSTEMS NOMINAL');
+      player.health = player.t.maxHealth;
+      player.shields = player.t.maxShields;
+      this.events.emit('pickup:collected', `REPAIRED  +${Math.round(hp)}`);
+      this.events.emit('player:repaired');
+    }
+  }
+
+  // The HUD interact prompt for the supply point in reach, else null (reused object).
+  supplyPrompt(player) {
+    if (!this.near || player.dead) return null;
+    this.prompt.label = this.near.prompt;
+    this.prompt.at = this.near.at;
+    return this.prompt;
+  }
+
   #reached(player, it) {
     const dx = player.pos.x - it.pos.x;
     const dz = player.pos.z - it.pos.z;
@@ -212,7 +244,7 @@ export class Pickups {
       }
       this.events.emit('pickup:collected', `${GUNS[it.gun].short} AMMO  +${got}`);
     } else {
-      weapon.grant(it.gun, { ammo: it.ammo });
+      weapon.grant(it.gun, { ammo: it.ammo, trial: it.trial });
       weapon.switchTo(it.gun);
     }
     this.#remove(i);

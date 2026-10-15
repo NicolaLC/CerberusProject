@@ -33,7 +33,7 @@ export class RunStats {
   // Permanent listeners (never per level): they count while the stats are not frozen.
   listen(events) {
     const live = (f) => (a) => !this.frozen && f(a);
-    events.on('weapon:shot', live(() => this.shots++));
+    events.on('weapon:shot', live((s) => !s.scripted && this.shots++)); // a cut's scripted round is no shot of the player's
     events.on('weapon:hit', live((h) => {
       this.hits++;
       if (h.zone === 'head') this.headshots++;

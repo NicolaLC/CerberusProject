@@ -37,10 +37,10 @@ export class Input {
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.releaseAll());
     addEventListener('mousemove', (e) => {
+      if (Math.abs(e.movementX) + Math.abs(e.movementY) > 3) this.device = 'kbm'; // also in menus: a real move brings the cursor back
       if (!active()) return;
       this.dx += e.movementX;
       this.dy += e.movementY;
-      if (Math.abs(e.movementX) + Math.abs(e.movementY) > 3) this.device = 'kbm';
     });
     addEventListener('mousedown', (e) => {
       if (active()) press(`Mouse${e.button}`);

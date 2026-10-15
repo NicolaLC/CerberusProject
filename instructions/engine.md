@@ -27,7 +27,7 @@ Goal: hold 60 fps, never freeze on a bug, scale to a much bigger game.
   (`intersectObjects(list, false, hits)`, `hits.length = 0` first).
 - DOM HUD writes go through `text()` / `css()`, which skip unchanged values.
 - Dynamic resolution (`perf.js`): smoothed CPU work time of the frame (tick, measured in `engine.#frame`) > 1.12× budget for 0.75 s → pixel ratio −0.1 (min 0.5);
-  < 0.8× budget for 4 s → +0.1 (up to `perf.maxScale`). Also "slow": the rAF gap over budget AND >1.25× the best gap seen (GPU-bound frame on a display that can go faster); 30/50 Hz displays never count as slow. After a gap-triggered step down there is no step up for 30 s (`gpuHold`, avoids GPU-bound oscillation); then one probe. `perf.fps` is the real fps from the gap. Emits `engine:resize`; post follows.
+  < 0.8× budget for 4 s → +0.1 (up to `perf.maxScale`). Also "slow": the rAF gap over budget AND >1.25× the best gap seen (GPU-bound frame on a display that can go faster); 30/50 Hz displays never count as slow. After a gap-triggered step down there is no step up for 30 s (`gpuHold`, avoids GPU-bound oscillation); then one probe. `perf.fps` is the real fps from the gap. Emits `engine:resize`; post follows. A scale step or window resize only marks the size dirty; the canvas is resized at the start of the next frame, before its render (resizing after the render clears the canvas and flashes a black frame).
 - Graphics presets (`game/view/quality.js`, setting `quality`, panel "Graphics", applied live):
   | preset | max pixel ratio | MSAA | bloom | sun shadow map | anisotropy |
   |---|---|---|---|---|---|
@@ -48,6 +48,17 @@ repeats every caster). Budget: ≤ 140 calls per frame at the spawn view, ≤ 25
   goes to the chunk of its world bbox centre), frustum-culled by three; one shadow-only mesh per chunk
   (`batches.shadows`). The level cost scales with what is in view, not with level size.
   Changing a level material (e.g. flickering strip) still works: the merged mesh shares the material object.
+  `mergeStatic(meshes, parent, groupOf)`: `groupOf(mesh)` keys groups that never share a merged mesh (a sectored level: the sector mask, level.md
+  "Sectors"); each output mesh carries `userData.group`; chunking is decided per group. `mergeStaticSteps` is the same as a generator (time-sliced).
+  Rig shadow / far-LOD buckets are concatenated into typed arrays (`concat`): an element-by-element push was ~40% of a Prologue load.
+- **Sectors** (level.md "Sectors"): a sectored level draws only the rooms the camera can see into (portal culling, three.js layers: colour and
+  shadow pass both). Prologue, measured on an Intel MTL iGPU (Vulkan ANGLE, 1280x720; GPU ms by timer query are noisy on a shared machine):
+  calibration rooms 105-272 draws / 256-648k tris / 6-15.5 GPU ms -> 71-95 draws / 46-118k tris / 4.2-4.9 ms; drill hall 151-208 draws /
+  461-573k tris / 10-15 ms -> 85-149 / 119-164k / 5.5-7.5 ms (fresh gates, `sector-measure` views); loadScene 1.37 s -> 0.54 s (world 344 -> 120 ms,
+  enemy rigs 970 -> 370 ms), JS heap 404 -> 386 MB, level batches at load 17 -> 7.5 MB.
+  All gates open at once (never in the Prologue: its doors close behind the player) can cost more draws than one merged chunk (up to +75 in
+  a view seeing six rooms): every visible sector repeats its materials. Static shadow map: not cached (the sun's map follows the player in 2 m
+  snaps and three has one depth map per light; the level's shadow pass is ~6-10 draws per view).
 - `RigidSkin(root, skeleton, { exclude })`: every mesh on a rig's bones → one SkinnedMesh per material,
   vertices fully weighted to their bone. Bound at the current pose. Adding/removing parts later needs
   `skin.rebuild()` (puppet weak spots do this on respawn). Culling uses one padded sphere per rig.
@@ -88,7 +99,7 @@ Costs are WORST CASE per unit: in view, near LOD, sun shadow pass included (draw
 | puppet (`enemy.static`) | 7 | 15.3k | 8 | 1 / 7.5k | + 22 draws for 5 s (debris, was 75 before #75), then the stand sinks |
 | trooper (`enemy.trooper`) | 9 | 47.4k | 10 | 1 / 23.7k | + 23 draws for 5 s (was 119) |
 | drone (`enemy.drone`) | 4 | 9.2k | 5 | 1 / 9.2k (shadow stays) | + 2 (falls in one piece) |
-| point light (`light.point`) | 0 | 0 | 0 | | cost is per lit fragment, not per draw; takes a pool light (no recompile, below) |
+| point light (`light.point`) | 0 | 0 | 0 | | cost is per lit fragment, not per draw; a record, shown by a pool light while among the nearest N (below) |
 | effect burst (`blast`: sparks, smoke, ring) | 3 | 0.4k | 0 | | sparks capped at 256 (16 bursts); lives 0.3-0.6 s |
 
 Triangles are doubled by the shadow pass (a trooper is ~23.7k triangles drawn twice). The empty room (floor, 16 cover boxes, the
@@ -119,12 +130,19 @@ Assumptions, stated plainly:
 If kills must get denser still: merge a whole body's chunks into one moving batch, or shorten `DEBRIS_LIFE`.
 **Rule: the number of lights in the scene never changes while a level is loaded, edited or played.** three.js recompiles every lit material when the light
 count changes (a hitch; measured in the Workshop: +5 programs per light placed). `World` therefore owns a fixed pool of point lights sized by the quality
-tier: `QUALITY[tier].lights` in `view/quality.js` (4 / 8 / 12, the point-light column above; that constant is the single source). `light.point` takes one
-(colour, intensity, distance, position) and gives it back on unload / despawn (`releaseLight`: intensity 0, parked below the floor). Scene loads, editor
-placement and play do not recompile. Only a quality change resizes the pool (`applyQuality` -> `world.setLightPool`, one recompile, a settings action; lit lights
-that no longer fit stay as temporary ones, temporary ones are adopted when it grows). A dynamic light is still a permanent light switched with its intensity,
-like the muzzle flash in `fx.js`. The pool is the level's light budget and depends on the tier: past it a temporary extra light is added with a console
-warning (the count changes, so it recompiles, once on the way in and once out; the stress room's 64-light sweep does this). Parked lights are NOT free:
+tier: `QUALITY[tier].lights` in `view/quality.js` (4 / 8 / 12, the point-light column above; that constant is the single source).
+
+**Light pool.** A level may hold any number of `light.point` pieces: each is a record in `world.lights` (`world.pointLight`: position, colour,
+intensity, distance, flicker; not a scene object). `World.update(t, focus)` (focus = camera position, `game.js`) hands the N pool lights to the N records
+that matter most: score = intensity x r^2 / (r^2 + d^2) (r = the light's distance, d = from the focus), x1.2 for a record already live (no flip-flop),
+re-evaluated every 0.2 s, when the focus moves more than 2 m, or when a record comes or goes (`LIGHT_PICK` in `world.js`). A record entering or leaving
+fades its pool light over 0.25 s, so swaps never pop; a level load or a quality change assigns at once (no fade). No sort, no per-frame allocation: N passes
+of max over the records on a reselect, a copy of position / colour / distance / intensity x fade per pool light per frame. Unused pool lights sit at intensity 0,
+parked below the floor. Flicker and the alarm tint act on the record, so a flickering light's strip keeps flickering while its light is not live.
+`releaseLight` drops a record (its pool light goes dark at once). `pointLight(..., flicker, { pin: true })` always keeps a record live (a tool's light);
+more pins than the pool is the only warning, the extras stay dark. No occlusion test: a bright light behind a wall still competes for the pool.
+Scene loads, editor placement and play do not recompile. Only a quality change resizes the pool (`applyQuality` -> `world.setLightPool`, one recompile,
+a settings action). A dynamic light is still a permanent light switched with its intensity, like the muzzle flash in `fx.js`. Parked lights are NOT free:
 three (0.180) does not skip a light with intensity 0 or no colour, every light in the scene stays in the shader's point-light loop for every lit fragment; that is
 why low and high do not get 12. `tests/workshop.browser.mjs` section 15 asserts the pool size per tier and equal `renderer.info.programs` through place / play / restart.
 

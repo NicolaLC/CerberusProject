@@ -25,7 +25,15 @@ the looping sounds. Add new rows here for the next missing sounds.
 | `reload-perfect.mp3` | same | Perfect weapon reload confirm: an instant hard metallic magazine slam and bolt snap, layered with a bright rising electric charge-up ping, very satisfying and punchy, sci-fi, close, dry (0.6 s, influence 0.5) |
 | `reload-jam.mp3` | same | Weapon reload jamming: a magazine grinding and catching in the receiver with a harsh scraping metal crunch and a dull failed clunk, frustrating, close, dry (0.6 s, influence 0.5) |
 | `boss-music.mp3` | boss fight music, boss:wake to boss:dead (crossfades from the combat track). Replaced the drum and bass take with the same orchestral style | ElevenLabs Music v2.5, 75 s, instrumental: Massive dark epic boss battle score for a military sci-fi robot war video game, a colossal three-headed war machine, 150 BPM, full orchestra with relentless low string ostinatos, menacing brass stabs and huge horn melodies, a powerful wordless male choir chanting in dark minor key, pounding taiko and orchestral war drums with a heavy rock drum kit, crushing distorted electric guitar riffs locked to the low strings, ominous and heroic, heavier and more threatening than regular combat, constant full intensity from start to end, no intro and no outro so it loops seamlessly, instrumental with wordless choir only, no lyrics. Tempo measured at 150.0 BPM; baked loop: bars 1-45 of the take, the last one crossfaded with bar 0, 72 s. -11.8 LUFS, gain 0.38. |
-| `menu-music.mp3` | title / pause menu music: plays while the engine is paused (start / pause panel), crossfades with the combat and boss tracks | ElevenLabs Music v2.5, 75 s, instrumental: Slow, vast and ominous dark sci-fi ambient score for the title screen of a grim industrial robot war game, 70 BPM, a lone mechanical soldier watching a ruined machine city at dusk under a colossal three-headed war machine. Deep sustained analog synth drones and sub-bass swells, distant metallic resonances like wind through steel girders, a slow mournful low cello-like synth melody of a few notes, sparse heavy industrial percussion hits far away, faint radio static and servo textures, melancholic and lonely but powerful, restrained, no drums groove, no vocals, constant intensity with no intro and no outro so it loops seamlessly. The take still faded in and out, so the file is baked into a seamless loop: bars 3-19 (70 BPM, bar = 240/70 s), with its last bar crossfaded (equal power) into bar 2, 58.3 s; it loops whole, no `loopEnd`. |
+| `alarm-siren.mp3` | the old take (a continuous high wail, ~2.7 kHz, no gaps) was too annoying across the long Prologue purge | Seamless loop of a distant low industrial facility alarm: a deep muffled two-tone horn blast, low pitched and soft, followed by a long pause of silence, repeating slowly, heard from far away through thick metal walls, ominous not shrill, no high frequencies, no fast wail, no voices (8 s, influence 0.5, loop; flow `LetqmDVTuXh60AaojYa8`, take 1 of 4) |
+| `menu-music.mp3` | title / pause menu music: its own loop on the title (`Audio.title(on)`, from `Shell`, the game audio silent under it), and while the engine is paused (pause panel, `mood()`), crossfaded with the combat and boss tracks | ElevenLabs Music v2.5, 75 s, instrumental: Slow, vast and ominous dark sci-fi ambient score for the title screen of a grim industrial robot war game, 70 BPM, a lone mechanical soldier watching a ruined machine city at dusk under a colossal three-headed war machine. Deep sustained analog synth drones and sub-bass swells, distant metallic resonances like wind through steel girders, a slow mournful low cello-like synth melody of a few notes, sparse heavy industrial percussion hits far away, faint radio static and servo textures, melancholic and lonely but powerful, restrained, no drums groove, no vocals, constant intensity with no intro and no outro so it loops seamlessly. The take still faded in and out, so the file is baked into a seamless loop: bars 3-19 (70 BPM, bar = 240/70 s), with its last bar crossfaded (equal power) into bar 2, 58.3 s; it loops whole, no `loopEnd`. |
+
+## Recorded, wired outside the event table
+
+- `drone-loop.mp3`, `console-loop.mp3`: one looped voice each (`Audio.mood` -> `#beds`), gain by the nearest alive drone (silent beyond 25 m) / `prop.console` (`world.consoles`, silent beyond 6 m). No per-drone voices.
+- `bay-hum-loop.mp3`: bed that fades in while the camera is inside an interior zone (`world.isInterior`, the Prologue's `bay-zone`).
+- `arm-retract.mp3`: `prop:retract` { pos } (a `prop.arm` `retractOn` fires), positional (fades out by 20 m).
+- Wake-up cues (`wake-surge`, `wake-core`, `wake-rise`): on the intro cinematic. Surge on `cinematic:wake`, core 1 s later, rise stretched to `wake.rise`; a skip (`cinematic:done` { skipped }) cuts them. A level with an `intro.boot` and no cinematic keeps the old schedule off `intro:start` (`Audio.wake`, `WAKE`: surge 2.4 s, core 1 s later, rise ending with the intro); it is ignored once a cinematic ran this run.
 
 ## Footstep levels
 
@@ -33,15 +41,9 @@ ElevenLabs takes of the same prompt can come out 15-25 dB apart, and a quiet tak
 (walk take 4, metal 2 and 4, robot 2 were near silent). Every `step-*.mp3` is now trimmed to 5 ms before its onset and
 peak-normalised to -3 dBFS; do the same to any new take before adding it (the gain per list stays in `SAMPLES`).
 
-## Recorded and wired after the first pass
-
-- `drone-loop.mp3`: done. One looped voice (`Audio.mood` -> `#beds`), gain by the nearest alive drone (silent beyond
-  `DRONE_RANGE`, 25 m), silent on pause. One shared voice, not one per drone.
-
 ## Menu UI
 
-Recorded, waiting for the menu sound code: `Audio.ui(kind)` / event `ui:sfx` { kind } (title, pause menu, sub-pages,
-confirm dialog) is not on any pushed branch yet. Once it lands, the files are picked up on their own (globbed `ui-*.mp3`,
+Wired: `Audio.ui(kind)` / event `ui:sfx` { kind } (title, pause menu, sub-pages, confirm dialog). The files are picked up on their own (globbed `ui-*.mp3`,
 id `ui-<kind>`, gain 0.6, on the UI bus) with the synth as fallback. Same style as the rest: grim industrial military
 hardware, no arcade bleeps, dry. `move` plays at most every 40 ms, `slider` every 30 ms.
 
@@ -60,17 +62,16 @@ out. All are peak-normalised to -3 dBFS, except `move` and `slider` at -6 dBFS.
 | `ui-start.mp3` | NEW GAME / CONTINUE / scene launch | 1.2 s | A deep powerful power-up thrum of a combat machine's reactor spinning up, rising low hum and air rush, ending in a heavy metal latch clamping shut, ominous industrial sci-fi, close, dry | recorded |
 | `ui-warn.mp3` | overwrite-progress confirm | 0.5 s | Military console caution alert: two short separate low electronic warning pulses with a brief silence between them, each pulse a soft muffled synthetic tone with a metallic relay click at its start, dark, serious and restrained, like a cockpit caution signal, not a game show buzzer, no horn, no brass, close, dry (0.6 s, influence 0.7). The model gives one hit, not two: the file is the first 0.2 s of the lowest take (energy at 75-80 Hz), played twice 220 ms apart, peak -3 dBFS. Replaced the first take (a high-low buzzy klaxon), which sounded like a clown trumpet. | recorded |
 
-## Recorded, not wired yet
 
-| File | Event | Notes |
-|---|---|---|
-| `arm-retract.mp3` | maintenance arm folds up (`prop.arm` `retractOn`) | the prop does not exist on main yet (it is on `feat/prologue-calibration`) |
-| `bay-hum-loop.mp3` | calibration bay ambience, inside `bay-zone` | the zone does not exist on main yet (same branch) |
-| `console-loop.mp3` | `prop.console`, positional | the prop does not exist on main yet (same branch) |
 
-The Prologue wake-up cues (`wake-surge`, `wake-core`, `wake-rise`) play off the boot intro today (`Audio.wake`, `WAKE` in
-`audio.js`: surge 2.4 s after `intro:start`, core 1 s later, rise timed to end with the intro; cut on a skip). Move them
-to the `intro.cinematic` timeline (`wake.at`, `wake.rise`) once it exists.
+## Terminal typing (boot intro, STEM-00 log)
+
+Synthesized (`Audio.type`, event `ui:type`). Wire as `SAMPLES` entries (`typeKey`, `typeEnd`), keep the synth as fallback. Played at most every 25 ms, pitch and volume varied.
+
+| File | Event | Length | Prompt |
+|---|---|---|---|
+| `type-key.mp3` | each typed character | 0.08 s | Single key press on an old mechanical computer terminal keyboard, short dry electronic tick with a faint plastic clack, close, no reverb |
+| `type-end.mp3` | end of a typed line | 0.2 s | Old computer terminal carriage return, softer low mechanical thunk followed by a tiny electronic blip, dry, no reverb |
 
 ## Music loops
 

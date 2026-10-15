@@ -1,7 +1,7 @@
 // Owned guns and weapon discovery (#91, #93): a level's `loadout`, switching only reaches owned guns (keys, wheel, pad),
 // `pickup.gun` discovers a gun once (event, auto-switch, toast) and gives ammo after that, levels without `loadout` keep
 // all six, and bad ids fail validation. Built in the Workshop and played in place (the Prologue's path).
-// Needs the dev server: `npm run dev`, then `node tests/loadout.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/loadout.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
@@ -241,6 +241,51 @@ await ev(() => {
   expect('  G at the rack grants the Warden: full magazine, the ammo, selected, discovered once, objective done', r.take.after.owned === 'pistol,rifle' && r.take.after.reserve === 64 && r.take.after.mag === 32 && r.take.after.disc.join() === 'rifle' && r.take.after.grants.join() === 'rifle' && r.take.after.gun === 'rifle' && r.take.objective === 1, JSON.stringify(r.take));
   expect('  skipOn: reaching the trigger completes it without a gun (no grant, no discovery) and the next objective starts', r.skip.after.owned === 'pistol' && !r.skip.after.grants.length && !r.skip.after.disc.length && r.skip.index === 1, JSON.stringify(r.skip));
   expect('  validation: unknown gun, ammo without gun, negative ammo, empty skipOn', /grantGun "laser"/.test(r.errs.gun) && /grantAmmo needs grantGun/.test(r.errs.ammo) && /grantAmmo must be/.test(r.errs.neg) && /skipOn/.test(r.errs.skip) && r.errs.ok === null, JSON.stringify(r.errs));
+}
+
+// ---- interact never fires: a gun raised by a pickup ignores a held trigger (keyboard and pad), G / B never shoot ----
+{
+  const r = await ev(() => {
+    const g = window.game;
+    const { engine, weapon } = g;
+    let shots = 0;
+    const off = engine.events.on('weapon:shot', () => shots++);
+    const out = {};
+    // trigger held (LMB, pad RT) while walking onto a gun: raised, no shot until the trigger is pressed again
+    for (const [label, hold, release] of [
+      ['mouse', () => engine.input.keys.add('Mouse0'), () => engine.input.keys.delete('Mouse0')],
+      ['pad', () => (window.__pad.buttons[7] = { pressed: true, value: 1 }), () => (window.__pad.buttons[7] = { pressed: false, value: 0 })],
+    ]) {
+      T.play({ loadout: ['pistol'] }, [['pickup.gun', [3, 0, 0], { gun: 'rifle' }]]);
+      hold();
+      T.step(0.1); // the press itself may fire the pistol in hand: that one is fine
+      shots = 0;
+      g.player.pos.set(3, 0, 0);
+      T.step(1.2);
+      const held = { gun: weapon.current, shots };
+      release();
+      T.step(0.1);
+      hold();
+      T.step(0.3);
+      release();
+      out[label] = { held, again: shots };
+    }
+    // G and pad B alone, and G pressed in the same frame as a click: nothing fires
+    T.play({ loadout: ['pistol'] }, []);
+    T.step(0.6);
+    shots = 0;
+    T.key('KeyG');
+    T.pad(1);
+    for (const code of ['Mouse0', 'KeyG']) { engine.input.keys.add(code); engine.input.pressed.add(code); }
+    T.step(1 / 60);
+    for (const code of ['Mouse0', 'KeyG']) engine.input.keys.delete(code);
+    T.step(0.5);
+    out.interact = shots;
+    off?.();
+    return out;
+  });
+  expect('a gun raised by a pickup with the trigger held does not fire until pressed again (mouse, pad RT)', ['mouse', 'pad'].every((k) => r[k].held.gun === 'rifle' && r[k].held.shots === 0 && r[k].again > 0), JSON.stringify(r));
+  expect('  interact (G, pad B) never fires, not even with a click in the same frame', r.interact === 0, JSON.stringify(r));
 }
 
 expect('no page or console errors', errors.length === 0, errors.join(' | '));

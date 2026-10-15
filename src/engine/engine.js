@@ -40,7 +40,7 @@ export class Engine {
     this.events = new Events();
     this.input = new Input(canvas);
 
-    this.perf = new Perf({ maxScale: Math.min(devicePixelRatio, 2), onScale: () => this.resize() });
+    this.perf = new Perf({ maxScale: Math.min(devicePixelRatio, 2), onScale: () => (this.sizeDirty = true) });
     this.stats = new StatsPanel();
     this.timings = {}; // smoothed ms per system
 
@@ -49,12 +49,13 @@ export class Engine {
     this.time = 0; // scaled seconds since start
     this.realDt = 0; // unscaled seconds of the current frame
     this.paused = false;
+    this.idle = false; // a menu with nothing behind it: only the 'pre' phase runs, nothing is simulated or drawn
     this.mode = 'play'; // active system group (setMode): systems of another group are skipped
     this.headless = false; // tests: step the simulation without rendering (see #tick)
     this.contextLost = false;
     this.last = 0;
 
-    addEventListener('resize', () => this.resize());
+    addEventListener('resize', () => (this.sizeDirty = true));
     canvas.addEventListener('webglcontextlost', (e) => {
       e.preventDefault(); // allow restore
       this.contextLost = true;
@@ -130,6 +131,12 @@ export class Engine {
     this.last = now;
     const realDt = ms / 1000;
     if (realDt <= 0) return;
+    // Resizing clears the canvas: done right before this frame's render, never after it (a cleared canvas would be
+    // presented for one frame: a black flash on every resolution-scale step or window resize).
+    if (this.sizeDirty) {
+      this.sizeDirty = false;
+      this.resize();
+    }
     const t0 = performance.now();
     this.#tick(realDt);
     // fps comes from the rAF gap, the resolution scaler judges the CPU work of the frame (see Perf.sample)
@@ -143,6 +150,10 @@ export class Engine {
     const input = this.input;
     input.poll();
     this.#run('pre', realDt);
+    if (this.idle) {
+      input.endFrame();
+      return;
+    }
 
     if (this.paused) {
       this.#run('late', realDt);

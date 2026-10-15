@@ -3,7 +3,7 @@
 // are violet / magenta only (never red, orange or amber: amber is STEM-00's), STEM-00's glows are amber only and its
 // core follows Player.setCore, the arena wears the weathered skin while the Library keeps the grids, an unknown skin
 // throws, and no point light in the arena is red. Pure simulation (engine stopped, headless). Needs the dev server:
-// `npm run dev`, then `node tests/art.browser.mjs`.
+// `bun run dev`, then `node tests/art.browser.mjs`.
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

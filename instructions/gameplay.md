@@ -7,6 +7,9 @@
 
 ## Input (bindings: `BINDINGS` in `game/controls.js`)
 - Aim (zoom): hold RMB. Sprint: Shift. Jump / vault: Space. Fire: LMB or F. Interact (objective terminals): G / B. Arrow keys look. F3: performance stats.
+- Interact never fires: on an interact frame the weapon drops the trigger and any buffered click. A gun just raised (switch,
+  `pickup.gun`, `grantGun`) is latched (`weapon.latched`): a trigger still held from before (LMB, RT) fires nothing until it
+  is released or pressed again, so walking onto a rack gun with the trigger down doesn't shoot.
 - Trackpad mode: two-finger swipe (wheel events) looks; E toggles aim (right click and LT always aim only while held); aim assist
   stronger (1.6 vs 0.8). E does nothing outside trackpad mode.
 - Aim assist (`camRig.assist`): within ~4-8° of a visible puppet's chest the look slows (friction) and eases toward it.
@@ -14,8 +17,8 @@
 - Input lock during the boot intro (`intro.boot`, workshop.md "Boot intro"): `controls.locked` makes move, look, aim, sprint, fire, jump, reload, interact, shoulder and weapon switch read idle; pause and the debug toggles still work. When the intro ends, `controls.ease` brings move and look back over 0.6 s (no camera snap). Skip (fire / jump / interact / pad A) only after the intro was seen once.
 - Controller (standard mapping, Xbox names): L stick move (analog: partial tilt walks slower), R stick look,
   LT aim, RT fire, X reload, A jump / vault, B interact, LB swap shoulder, Y or RB next gun, d-pad ← ↑ → ↓ = AR / MG / SR / pistol,
-  L3 click sprints until the stick is released or pulled back, View = stats, Menu = pause (A or Menu deploys from
-  the start panel, no pointer lock needed). Look: 15% radial dead zone, response curve ^2.2, ×1.7 turn boost after
+  L3 click sprints until the stick is released or pulled back, View = stats, Menu = pause (menus: d-pad / left stick select, A confirm,
+  B back, Menu resumes from the pause menu; play started from a pad needs no pointer lock). Look: 15% radial dead zone, response curve ^2.2, ×1.7 turn boost after
   0.25 s at the rim (`PAD_LOOK`), optional invert Y. Aim assist uses the stronger trackpad profile (friction + pull).
   Rumble on shots (sniper hardest), hits taken, nearby blasts and boss footsteps.
 
@@ -37,8 +40,19 @@
   in `GUNS`): pickups skip it and it never counts as needing ammo. A pickup refills only its own
   class, each gun by its own `pickup.crate` / `pickup.drop` amounts (AR 96/32, MG 135/45, SR 10/3, RG 8/2...).
   Light is the cyan glow (small case, one band), heavy the orange/amber glow (taller case, two bands, brighter).
-- Cases at fixed `SPOTS` in `game/world/pickups.js` (7 light, 3 heavy: range, interior west, boss arena back) respawn after 15s.
-- Broken puppets drop a clip 45% of the time (25% of drops are heavy; vanishes after 25s, blinks at the end).
+- Loose cases are level data (`pickup.light` / `pickup.heavy` pieces, opt-in per level: the arena keeps its 7 light + 3 heavy) and respawn after 15 s.
+- Enemies drop no ammo (owner, 2026-10-14). An enemy's `dropGun` still leaves that gun.
+- **Rule (Prologue / campaign): ammo and repair only come from supply zones** (`supply.ammo`, `supply.repair`), never from loose pickups or
+  enemy drops. Regeneration (Player above) stays. The arena may differ (it keeps its loose crates as opt-in level data).
+- **Supply points** (`supply.ammo`, level.md): interact (G / B) at the cabinet tops the owned guns of its class(es) up to their max reserve, unlimited
+  uses. **Repair stations** (`supply.repair`): interact restores health and shields. Prompt over the cabinet like an objective terminal.
+- **Loaner guns**: a `trigger.volume` with `loadout` takes back every gun not listed (unowned again, full magazine, empty reserve; the raised gun
+  switches straight to the pistol). The Prologue's weapons range lends all five non-pistol guns this way.
+- **Armored targets** (`armored` puppets): only heavy rounds (SR, RG) damage them; light rounds and the pistol spark off.
+- **Plated troopers** (`armored` trooper, `TUNING.plateMult` 0.25): light rounds and the pistol do x0.25 on head, torso and limbs
+  (a hit still hurts, but emits `weapon:impact` sparks and `weapon:armored`: `Weapon.#hit` does that for any `armor()` below 1);
+  heavy rounds full; the glowing weak spot is never plated (every gun, full `weakMult`). `armor(zone, part, gun)` gets the gun def
+  from weapon.js (also in the aim probe and the pierce check).
 - Walk within 1.1m to collect; toast "LIGHT AMMO +n AR ..." / "HEAVY AMMO +n SR ...". If every gun of that class is
   full the pickup stays ("AMMO FULL").
 
@@ -59,7 +73,7 @@
   hunched run (`snap.run`, the cover-move animation with real velocity, hips 0.45 behind low cover) at `coverRunSpeed`
   6.8 m/s, event `player:coverRun` ({ to, type, collider }) once, then cover on the new face (type from its height,
   `player:coverSlam`). Like the entry snap, input is ignored until it lands: no aiming, shooting or jump. Rotated boxes are skipped.
-- No on-screen hints or button prompts: the HUD shows state (ammo, health, boss bar, warnings), never instructions.
+- No on-screen hints or button prompts: the HUD shows state (ammo, health, boss bar, warnings), never instructions. The one exception is the objective panel (top left, `#objective`): it states the current objective and how to do it (`detail`, with input tokens as key caps). The objective pin (`#pin`, workshop.md "Missions") marks where that objective is, with its distance. HUD text sizes in `em` off `#hud`'s `clamp()` font size (14 px at 1280x720, about 19 px at 1080p), so panels scale with the screen. Diegetic signs in the world (`env.label`) may show input tokens (`{jump}`...: SPACE / A, aim is E in trackpad mode); names live next to `BINDINGS` (`inputName`, `Controls.scheme`).
   Jump (`Space`) during the run or a corner move cancels it: the snap and its pending cover are dropped, the velocity stays,
   and the normal jet burst fires (none while `jetTimer` runs: plain free movement); auto cover waits its cooldown. The cover
   entry snap and vaults can't be cancelled.
@@ -109,7 +123,8 @@
 - 1–6 (AR, MG, SR, BR burst, RG railgun, PS pistol) or mouse wheel switches (0.45s lower/raise, model swaps at the bottom). Ammo is tracked per gun.
 - Owned guns (`weapon.owned`, a Set): keys, wheel, d-pad and next gun only reach owned guns (unowned keys do nothing, cycling
   skips them); the HUD shows a slot only for an owned gun. The level's `loadout` sets them at load (level.md; absent = all six,
-  the pistol always). `weapon.grant(id, { ammo })` adds a gun and rounds to its reserve (capped at max) and emits
+  the pistol always unless `[]`).
+  **Unarmed** (`loadout: []`, the Prologue start): `weapon.current` is null (`weapon.t` / `ammo` / `reserve` then read the pistol, so readers never crash); `weapon.update` does nothing (fire, reload, slots, wheel), `player.aiming` stays false (no zoom, no aim assist), the HUD hides the weapon block and the crosshair, there is no gun model or muzzle, and the animator runs unarmed (arms swing). Movement, sprint, cover and vault are unchanged. The first `weapon.grant` + `switchTo` (pickup.gun or an objective's `grantGun`) raises that gun at once, no lowering. `weapon.grant(id, { ammo })` adds a gun and rounds to its reserve (capped at max) and emits
   `weapon:discovered { gun }` the first time it is owned in the level; the HUD toasts `<NAME> ACQUIRED` for 3 s. `pickup.gun`
   calls it and raises the new gun. Ammo crates refill only owned guns. Planned: STEM-00 log line on discovery (#40), 2-primary
   limit and swapping (#34), hideout armoury (#39), owned guns in the save (#53), enemy gun drops (done, #93: enemy param `dropGun`, workshop.md).
@@ -140,7 +155,7 @@
 - Add a gun: new entry in `GUNS` (stats, sockets, `build()` model) and its id in `GUN_ORDER`.
 - Hit = camera ray (starts at player distance), then re-cast from muzzle; muzzle hit wins.
 
-## Gunplay (math in `combat/ballistics.js`, unit-tested by `npm test`)
+## Gunplay (math in `combat/ballistics.js`, unit-tested by `bun run test`)
 - Spread is a cone half-angle; rounds are uniform over the cone's disc (`coneDir`). The crosshair gap draws
   exactly `weapon.spread()`.
 - `spread = lerp(hip, aim, aimBlend) + spreadMove × speed/walk (×0.4 aimed) + bloom`. `aimBlend` follows the
@@ -161,7 +176,10 @@
   trackpad = friction + pull.
 
 ## Puppets (`game/actors/enemies.js`)
-- static 100hp, mover 100hp (rail), shooter 120hp: hidden → up → telegraph (visor glow 0.45s) → 3 bolts → hide.
+- static 100hp, mover 100hp (rail), shooter 120hp: hidden → up → (telegraph (visor glow 0.45s) → 3 bolts) × 2-3 → hide
+  (`SHOOTER` in puppet.js). It only rises when its raised emitter would see the player: a player hiding behind cover gets no
+  blind pop-ups, it stays down and looks again every 0.5-0.9 s. Up, the bursts are 0.6-1.1 s apart; losing sight keeps it up
+  0.8 s more (a peeking player doesn't make it flicker), then 0.6 s after the last burst it hides for 2-3.6 s.
 - Weak spots: 2 random body parts per puppet get a pulsing magenta patch (zone `weak`, ×3 damage).
 - Bolts: 34 m/s, 7 dmg, collide with world and the player capsule.
 - Death breaks the rig parts into debris that fades after 5s. Destroyed puppets stay destroyed until the page
@@ -185,7 +203,9 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
   player enters the arena or comes within 28 m with line of sight, or shoots it. Boss bar: core health, leg pips.
 - Armor: the hull, turret and closed shutters take no damage (`armor()` returns 0: sparks only and no decal, since decals
   stay in world space and would hang in the air once the mech moves; the crosshair
-  doesn't turn red; `weapon:armored` is emitted but nothing shows a hint). Legs take damage (limb ×0.8), the glowing knee joints are weak spots (×3).
+  doesn't turn red; `weapon:armored` is emitted but nothing shows a hint). Legs take damage (limb ×0.8), the glowing knee joints are weak spots (×3), but plate greaves cut light rounds and the pistol
+  to ×0.3 on any leg, knees included (`GREAVES` in spider.js; heavy rounds full),
+  except while the core is open (`coreOpen`: collapsed, hatch up): then the legs are armored too, so the collapse is the time to shoot the core.
   Legs have 160 HP; a broken leg falls off and the body tilts toward the gap; it slows 12% per lost leg.
 - Every second leg lost (and the 5th) collapses it for 7 s (forever with none left): the shutters open and the
   core (900 HP, weak ×3) rises 1.2 m out of the hatch, 30% bigger (`coreRise`), so it can be shot from the ground. Destroying the core kills it.
@@ -194,9 +214,34 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
 - Attacks: cannon bursts (0.7 s eye charge, 6 bolts × 9 dmg, cooldown 2.2-3.4 s, needs line of sight);
   plasma mortar every 6-8.5 s (×1.8 faster while the player is in cover) lobbed at the player's position with a ground
   ring telegraph, 3.6 m blast, 34 dmg; stomp when the player is within 6.5 m (0.75 s rear-up, 7 m blast, 24 dmg).
-- Movement: keeps 11-20 m, circles the player, turns round when blocked; collision radius 4.2 m (the whole leg
+- Movement: pursues. In sight and 8-15 m away it circles the player, drifting in; out of sight (behind cover), farther than 15 m
+  or charging it walks at them on a path round the cover (`nav`: a 0.5 m grid over the arena, free where the collision circle
+  fits, breadth-first every 0.4 s, heading for the path cell 2 m on). Charge (`rush`): every 7-11 s, in sight and over 7 m off,
+  it rushes in at ×2 speed until 5 m away (max 4 s), where the stomp takes over. Circling uses local steering (`steer`: probes
+  3.5 m ahead over a fan of angles, keeps its detour side); no progress for 0.8 s flips the detour side. Collision radius 4.2 m (the whole leg
   span, so legs don't reach into walls), walks over low cover, not through walls. A foot whose spot is behind or on
   a wall is pulled in toward the body. Legs: tripod gait, IK (femur 2.4, tibia 3.8, knees up), a foot steps when 1.3 m from home.
+
+## CERBERUS (`game/actors/cerberus.js` TUNING, scripted loss, gdd.md 8.5)
+- `boss.cerberus`: a colossal machine (about 22 m across, hull 7 m up) clamped to the tower beside the Skyway, out of reach (no walkable
+  collision). Three heads on booms: VIGIL (one great sensor eye), LEGION (voice / emitter array), COLOSSUS (heavy jaw cannon). It cannot be destroyed.
+- Health: 1000 per head, one bar segment each (boss bar `segments`, a tick marks the floor). The hull, booms and shoulders are armor (sparks,
+  no damage, they block bullets and the railgun line); only the heads take damage, and a hit on the glowing eye / node / bore is `weak` (the gun's x3).
+  A hit flashes its head. A head never drops below `floor` (0.65, so 650 HP) and starts repairing `repair` (0.08, 80 HP/s) once it has been left alone for 1.5 s.
+  `damage()` always returns false: no kill, no `puppet:down`, no `boss:dead`.
+- Counting: `unkillable = true`. Not a destroy target (mission.js skips it in the target count and the pin), not part of `arena:clear` or the
+  HUD kill counter (`Enemies.killable`), so it never blocks a level. The drones it calls are normal drones in its group (their kills count).
+- Wakes (`boss:wake` { name: 'CERBERUS' }: toast, boss music) when the player enters `arena`, on damage, or through `wakeGroup`; `dormant` + `group` waits for the cut.
+  Dormant: heads folded down, sensors dim. Awake: the heads track the player, the hull sways.
+- Attacks (all wait while `enemies.holdFire` is set, i.e. during cinematics; nothing new fires or hurts):
+  - VIGIL: 0.9 s eye flare (`boss:charge`), then 8 bolts x 8 dmg, 0.14 s apart, swept across +-3.2 m of the player; cooldown 3-4.5 s; needs line of sight from the eye.
+  - COLOSSUS: the SX-6's plasma mortar from the cannon muzzle, first after 4 s, then every 5-7.5 s (x1.8 faster while the player is in cover), 1.5 s flight, 3.8 m blast, 30 dmg (falls off to half at the rim).
+  - LEGION: first after 3 s, then every 7-10 s, calls up to 2 awake drones (of its group, flying over `arena`) when fewer than 3 of its drones live.
+  - Intended pressure (not measured with a player): a player standing in the open dies in well under a minute, one using cover and moving survives the ~45 s of the scripted fight.
+- Camera lock-on and the diamond marker are the generic boss behaviour (`focusPoint`: the hull, forward and up). The boss bar follows the engaged boss when a level has several (`Enemies.#followBoss`).
+- Art: heads follow the livery rule (VIGIL light ochre, LEGION ochre on dark grey, COLOSSUS faded to bone with rust); sensors violet, weak spots magenta and the brightest glow (`tests/art.browser.mjs`).
+- Cost: one skinned draw per material (12 materials) plus one shadow draw, far LOD with the other rigs. The sector cull (`dormant` out of sight) uses `pos`.
+- Test: `tests/cerberus.browser.mjs`.
 
 ## Troopers (`game/actors/trooper.js`, cover in `game/ai/cover.js`)
 - Armed soldiers (150 hp, 1 weak spot, rifle). Idle until they see the player (32 m + line of sight), get
@@ -205,10 +250,12 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
   6-28 m from the player (34 m when retreating: never out of the fight), ideally ~15 m, reachable in a straight line or around the spot's own box (one corner
   waypoint; no general pathfinding, same floor level only). Spots are reserved, one trooper each.
 - Low cover: crouch, stand up to shoot over it. High cover: hide at an end, step 0.8 m out to shoot.
-- Cycle: cover 1-2.2 s → peek → aim (visor flares 0.5 s) → 3-4 bolts → cover. No line of sight twice →
-  mark the spot bad for 6 s and move.
-- Relocate when flanked (spot stops protecting), the player is within 5 m, after 2-4 bursts, or once below
-  40% health (retreat farther). Hit while exposed: 50% chance to duck back early. No cover reachable: fight
+- Cycle (`TUNING` in trooper.js): cover 1.8-3.4 s → peek → aim (visor flares 0.5 s) → 3-4 bolts, 1-3 bursts per peek
+  (0.5-0.9 s re-aim between them, each needs the player still in sight) → cover. It only peeks when the firing position
+  sees the player (`CoverMap.sees`): no line of fire = stay down and look again every 0.6-1.0 s; 3 looks in a row without
+  one (or no sight twice on peeking) → mark the spot bad for 6 s and move. A spot beyond the retreat limit (34 m) is left.
+- Relocate when flanked (spot stops protecting), the player is within 5 m, after 3-6 bursts, or once below
+  40% health (retreat farther). Hit while exposed for at least 0.6 s: 35% chance to duck back early (1.2-2 s). No cover reachable: fight
   in the open and keep looking.
 - No protected spot within 28 m of the player: accept one up to 34 m (the retreat limit) rather than stand in the
   open; later relocations work closer.

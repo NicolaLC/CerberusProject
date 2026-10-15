@@ -37,6 +37,80 @@ const HITBOX_MAT = new THREE.MeshBasicMaterial(); // never drawn
 // front sensor cluster: [x, y, radius] on the sensor housing
 const SENSORS = [[0.03, 0.045, 0.022], [-0.045, 0.03, 0.016], [0.0, -0.02, 0.026], [0.065, -0.01, 0.012], [-0.05, -0.045, 0.014], [0.035, -0.07, 0.012], [-0.015, 0.08, 0.01]];
 
+// rotor positions [x, z] on the body
+export const ROTORS = [[0.6, 0.55], [-0.6, 0.55], [0.6, -0.55], [-0.6, -0.55]];
+
+export function droneMaterials() {
+  const M = {
+    shell: wornMaterial(0x3a3d40, { roughness: 0.6, metalness: 0.5, wear: 'metal' }), // dark metal pod
+    plate: wornMaterial(0xc9a23a, { roughness: 0.85, metalness: 0.15 }), // matte ochre livery, chipped
+    eye: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: VISOR, emissiveIntensity: 1.2 }), // violet sensors
+    weak: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2bd6, emissiveIntensity: 3 }),
+  };
+  M.weak.userData.lodGlow = 5;
+  M.eye.userData.lodGlow = 4;
+  return M;
+}
+
+// The drone's look without bones or hitboxes: `body` parts (in the body bone's space) and `blades()` (one rotor's, in its
+// bone's space, at ROTORS [x, 0.12, z]). The Drone hangs them on its bones; the menu set (view/menu-scene.js) merges them.
+export function droneLook(M) {
+  const R = Math.PI / 2;
+  const body = [];
+  // look: armored pod with an ochre spine plate, a small violet sensor cluster in front, a slung cannon, the glowing core
+  // underneath, four ducted rotors on struts
+  body.push(
+    look(
+      rb(M.shell, 0.62, 0.26, 0.74, 0.09, 0, 0, 0), // hull
+      rb(M.shell, 0.5, 0.12, 0.6, 0.05, 0, -0.14, -0.02), // belly
+      rb(M.plate, 0.44, 0.07, 0.52, 0.03, 0, 0.15, -0.05), // spine plate
+      rb(M.shell, 0.05, 0.075, 0.5, 0.015, 0.1, 0.16, -0.05), // plate stripes
+      rb(M.shell, 0.05, 0.075, 0.5, 0.015, -0.1, 0.16, -0.05),
+      rb(M.plate, 0.64, 0.05, 0.1, 0.02, 0, 0.06, 0.3), // front bumper
+      rb(M.shell, 0.18, 0.1, 0.12, 0.03, 0, 0.12, -0.38), // rear sensor block
+      cyl(M.shell, 0.006, 0.006, 0.26, 0.12, 0.28, -0.38, -0.35, 0, 0, 5), // antennas
+      cyl(M.shell, 0.006, 0.006, 0.2, -0.12, 0.25, -0.38, -0.35, 0, 0, 5),
+    ),
+    look(
+      cyl(M.shell, 0.13, 0.15, 0.1, 0, 0.02, 0.38, R, 0, 0, 16), // sensor housing
+      // an asymmetric cluster of small lenses (never one big eye): insect-like, no face
+      ...SENSORS.map(([x, y, r]) => cyl(M.eye, r, r, 0.02, x, 0.02 + y, 0.435, R, 0, 0, 8)),
+      cyl(M.eye, 0.016, 0.016, 0.02, 0.19, 0.05, 0.37, R, 0, 0, 8), // side sensors (one side heavier)
+      cyl(M.eye, 0.011, 0.011, 0.02, 0.19, 0.0, 0.37, R, 0, 0, 8),
+      cyl(M.eye, 0.011, 0.011, 0.02, -0.19, 0.03, 0.37, R, 0, 0, 8),
+    ),
+    look(
+      rb(M.shell, 0.12, 0.08, 0.16, 0.02, 0, -0.17, 0.3), // gun mount
+      cyl(M.shell, 0.032, 0.036, 0.4, 0, -0.1, 0.5, R, 0, 0, 10), // barrel
+      cyl(M.plate, 0.045, 0.045, 0.06, 0, -0.1, 0.66, R, 0, 0, 10), // muzzle brake
+      cyl(M.shell, 0.042, 0.042, 0.02, 0, -0.1, 0.42, R, 0, 0, 10),
+    ),
+    look(
+      cyl(M.shell, 0.19, 0.17, 0.05, 0, -0.2, 0, 0, 0, 0, 16), // core housing
+      cyl(M.weak, 0.14, 0.12, 0.08, 0, -0.22, 0, 0, 0, 0, 16), // core
+    ),
+  );
+  for (const [x, z] of ROTORS) {
+    body.push(
+      look(
+        rb(M.shell, Math.hypot(x, z) - 0.1, 0.05, 0.07, 0.02, x * 0.5, 0.05, z * 0.5, 0, Math.atan2(-z, x), 0), // strut
+        cyl(M.shell, 0.055, 0.065, 0.14, x, 0.07, z, 0, 0, 0, 12), // motor
+        cyl(M.plate, 0.067, 0.067, 0.02, x, 0.04, z, 0, 0, 0, 12),
+        ring(M.shell, 0.29, 0.025, x, 0.12, z, R, 0, 0), // duct
+        ring(M.plate, 0.29, 0.012, x, 0.155, z, R, 0, 0), // duct rim
+        cyl(M.eye, 0.016, 0.016, 0.016, x * 1.39, 0.12, z * 1.39, 0, 0, 0, 8), // nav light
+      ),
+    );
+  }
+  const blades = () =>
+    look(
+      rb(M.shell, 0.52, 0.012, 0.06, 0.006, 0, 0, 0, 0.15, 0, 0), // blades
+      rb(M.shell, 0.06, 0.012, 0.52, 0.006, 0, 0, 0, 0, 0, 0.15),
+      cyl(M.plate, 0.035, 0.035, 0.03, 0, 0.01, 0, 0, 0, 0, 10), // hub
+    );
+  return { body, blades };
+}
+
 export class Drone {
   constructor(ctx, def) {
     this.ctx = ctx;
@@ -46,6 +120,7 @@ export class Drone {
     this.home = this.pos.clone();
     this.alt = TUNING.hover[0] + Math.random() * (TUNING.hover[1] - TUNING.hover[0]);
     this.yaw = def.yaw ?? 0;
+    this.bounds = def.bounds ?? TUNING.bounds; // { minX, maxX, minZ, maxZ }: where it may fly (CERBERUS passes its arena; levels leave it)
     this.maxHealth = this.health = TUNING.health;
     this.alive = true;
     this.lift = 0;
@@ -60,14 +135,7 @@ export class Drone {
     this.falling = null; // { vel, spin } once shot down
     this.debris = [];
 
-    const M = {
-      shell: wornMaterial(0x3a3d40, { roughness: 0.6, metalness: 0.5, wear: 'metal' }), // dark metal pod
-      plate: wornMaterial(0xc9a23a, { roughness: 0.85, metalness: 0.15 }), // matte ochre livery, chipped
-      eye: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: VISOR, emissiveIntensity: 1.2 }), // violet sensors
-      weak: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2bd6, emissiveIntensity: 3 }),
-    };
-    M.weak.userData.lodGlow = 5;
-    M.eye.userData.lodGlow = 4;
+    const M = droneMaterials();
     this.mats = M;
 
     // bones: the body (tilts) and four rotors (spin). Invisible boxes are the hitboxes; the look is separate.
@@ -100,8 +168,6 @@ export class Drone {
     this.muzzle.position.set(0, -0.1, 0.72);
     this.body.add(this.muzzle);
     this.rotors = [];
-    const R = Math.PI / 2;
-    const ROTORS = [[0.6, 0.55], [-0.6, 0.55], [0.6, -0.55], [-0.6, -0.55]];
     for (const [x, z] of ROTORS) {
       const arm = hitbox(this.body, Math.hypot(x, z), 0.06, 0.08, x / 2, 0.05, z / 2, 'torso');
       arm.rotation.y = Math.atan2(-z, x); // from the center out to the rotor
@@ -110,60 +176,9 @@ export class Drone {
       this.rotors.push(r);
     }
 
-    // look: armored pod with an ochre spine plate, a small violet sensor cluster in front, a slung cannon, the glowing core
-    // underneath, four ducted rotors on struts
-    this.body.add(
-      look(
-        rb(M.shell, 0.62, 0.26, 0.74, 0.09, 0, 0, 0), // hull
-        rb(M.shell, 0.5, 0.12, 0.6, 0.05, 0, -0.14, -0.02), // belly
-        rb(M.plate, 0.44, 0.07, 0.52, 0.03, 0, 0.15, -0.05), // spine plate
-        rb(M.shell, 0.05, 0.075, 0.5, 0.015, 0.1, 0.16, -0.05), // plate stripes
-        rb(M.shell, 0.05, 0.075, 0.5, 0.015, -0.1, 0.16, -0.05),
-        rb(M.plate, 0.64, 0.05, 0.1, 0.02, 0, 0.06, 0.3), // front bumper
-        rb(M.shell, 0.18, 0.1, 0.12, 0.03, 0, 0.12, -0.38), // rear sensor block
-        cyl(M.shell, 0.006, 0.006, 0.26, 0.12, 0.28, -0.38, -0.35, 0, 0, 5), // antennas
-        cyl(M.shell, 0.006, 0.006, 0.2, -0.12, 0.25, -0.38, -0.35, 0, 0, 5),
-      ),
-      look(
-        cyl(M.shell, 0.13, 0.15, 0.1, 0, 0.02, 0.38, R, 0, 0, 16), // sensor housing
-        // an asymmetric cluster of small lenses (never one big eye): insect-like, no face
-        ...SENSORS.map(([x, y, r]) => cyl(M.eye, r, r, 0.02, x, 0.02 + y, 0.435, R, 0, 0, 8)),
-        cyl(M.eye, 0.016, 0.016, 0.02, 0.19, 0.05, 0.37, R, 0, 0, 8), // side sensors (one side heavier)
-        cyl(M.eye, 0.011, 0.011, 0.02, 0.19, 0.0, 0.37, R, 0, 0, 8),
-        cyl(M.eye, 0.011, 0.011, 0.02, -0.19, 0.03, 0.37, R, 0, 0, 8),
-      ),
-      look(
-        rb(M.shell, 0.12, 0.08, 0.16, 0.02, 0, -0.17, 0.3), // gun mount
-        cyl(M.shell, 0.032, 0.036, 0.4, 0, -0.1, 0.5, R, 0, 0, 10), // barrel
-        cyl(M.plate, 0.045, 0.045, 0.06, 0, -0.1, 0.66, R, 0, 0, 10), // muzzle brake
-        cyl(M.shell, 0.042, 0.042, 0.02, 0, -0.1, 0.42, R, 0, 0, 10),
-      ),
-      look(
-        cyl(M.shell, 0.19, 0.17, 0.05, 0, -0.2, 0, 0, 0, 0, 16), // core housing
-        cyl(M.weak, 0.14, 0.12, 0.08, 0, -0.22, 0, 0, 0, 0, 16), // core
-      ),
-    );
-    for (const [x, z] of ROTORS) {
-      this.body.add(
-        look(
-          rb(M.shell, Math.hypot(x, z) - 0.1, 0.05, 0.07, 0.02, x * 0.5, 0.05, z * 0.5, 0, Math.atan2(-z, x), 0), // strut
-          cyl(M.shell, 0.055, 0.065, 0.14, x, 0.07, z, 0, 0, 0, 12), // motor
-          cyl(M.plate, 0.067, 0.067, 0.02, x, 0.04, z, 0, 0, 0, 12),
-          ring(M.shell, 0.29, 0.025, x, 0.12, z, R, 0, 0), // duct
-          ring(M.plate, 0.29, 0.012, x, 0.155, z, R, 0, 0), // duct rim
-          cyl(M.eye, 0.016, 0.016, 0.016, x * 1.39, 0.12, z * 1.39, 0, 0, 0, 8), // nav light
-        ),
-      );
-    }
-    for (const r of this.rotors) {
-      r.add(
-        look(
-          rb(M.shell, 0.52, 0.012, 0.06, 0.006, 0, 0, 0, 0.15, 0, 0), // blades
-          rb(M.shell, 0.06, 0.012, 0.52, 0.006, 0, 0, 0, 0, 0, 0.15),
-          cyl(M.plate, 0.035, 0.035, 0.03, 0, 0.01, 0, 0, 0, 0, 10), // hub
-        ),
-      );
-    }
+    const L = droneLook(M);
+    this.body.add(...L.body);
+    for (const r of this.rotors) r.add(L.blades());
     this.skeleton = new THREE.Skeleton(bones);
     ctx.scene.add(this.root);
     this.#place();
@@ -192,6 +207,14 @@ export class Drone {
     if (!this.alive) return;
     this.dormant = false;
     this.awake = true;
+  }
+
+  // Recalled (Enemies.recall): flies along `path` (Vector3 list), ignoring the player; `recalled` at its end (Enemies removes it).
+  recall(path) {
+    if (!this.alive) return;
+    this.dormant = false;
+    this.awake = false;
+    this.recallPath = path.slice();
   }
 
   // Returns true if this hit destroyed it.
@@ -248,7 +271,16 @@ export class Drone {
   #move(dt, player, active) {
     const t = this.t;
     _a.set(0, 0, 0);
-    if (active) {
+    if (this.recallPath) {
+      const goal = this.recallPath[0];
+      if (!goal) this.recalled = true;
+      else {
+        _a.subVectors(goal, this.pos).setY(0);
+        const left = _a.length();
+        if (left < 1) this.recallPath.shift();
+        _a.multiplyScalar(t.speed * 1.4 / Math.max(left, 0.01));
+      }
+    } else if (active) {
       const dx = player.pos.x - this.pos.x;
       const dz = player.pos.z - this.pos.z;
       const dist = Math.hypot(dx, dz) || 1;
@@ -274,7 +306,7 @@ export class Drone {
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     // stay outdoors, inside the yard, and out of walls at flight height
-    const b = t.bounds;
+    const b = this.bounds;
     this.pos.x = THREE.MathUtils.clamp(this.pos.x, b.minX, b.maxX);
     this.pos.z = THREE.MathUtils.clamp(this.pos.z, b.minZ, b.maxZ);
     const world = this.ctx.world;

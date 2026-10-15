@@ -162,7 +162,7 @@ export class CoverMap {
       if (!r || r.length > maxTravel * 1.3) continue;
       const score = r.length + c.cost;
       if (score >= bestScore) continue;
-      if (opts.needSight && !this.#sees(c.s, opts.needSight.eye)) continue;
+      if (opts.needSight && !this.sees(c.s, opts.needSight.eye)) continue;
       bestScore = score;
       best = { spot: c.s, path: r.path };
     }
@@ -170,7 +170,7 @@ export class CoverMap {
   }
 
   // Line of sight from a spot's firing position (standing chest height) to a point.
-  #sees(spot, eye) {
+  sees(spot, eye) {
     this.firingPos(spot, _c);
     _c.y += 1.45;
     _d.subVectors(eye, _c);

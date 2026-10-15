@@ -100,5 +100,10 @@
     "name": "NicolaLC",
     "email": "3704156+NicolaLC@users.noreply.github.com"
   },
-  "homepage": "https://github.com/NicolaLC/CerberusProject"
+  "homepage": "https://github.com/NicolaLC/CerberusProject",
+  "packageManager": "bun@1.4.2",
+  "trustedDependencies": [
+    "electron",
+    "esbuild"
+  ]
 }

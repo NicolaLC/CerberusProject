@@ -2,7 +2,7 @@
 // by stepping the engine (stopped, headless: deterministic) and measures the metrics.md section 8 items it covers,
 // printing every value (lines starting with "item"). Asserts the current intended behaviour only: things that are
 // pure simulation (no rendering), so they do not move with SwiftShader.
-// Needs the dev server: `npm run dev`, then `URL='http://localhost:5173/?debug&scene=arena' node tests/gym-traversal.browser.mjs`.
+// Needs the dev server: `bun run dev`, then `URL='http://localhost:5173/?debug&scene=arena' node tests/gym-traversal.browser.mjs`.
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';

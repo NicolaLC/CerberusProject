@@ -2,11 +2,11 @@ import { loadJSON, saveJSON } from '../../engine/storage.js';
 
 // Boot intro (#13, `intro.boot` piece in encounter.js): a full-screen overlay over the live scene while STEM-00 boots.
 // Black -> scanlines and static -> diagnostic lines typed in (cold white, monospace) -> the view fades in from black with an
-// exposure ramp (the optics coming online). A line containing HIVEMIND LINK: LOST flickers violet-magenta (art-style.md).
+// exposure ramp (the optics coming online). A line containing HIVEMIND LINK: LOST (or SEVERED) flickers violet-magenta (art-style.md).
 // Presentation plus the input lock: while `active`, `controls.locked` is set (controls.js); when it ends, `controls.ease`
 // ramps 0 -> 1 over TUNING.ease s so move and look return smoothly (the camera never snaps). Ends emit `intro:done` { skipped }.
 //
-// Started by the `intro:start` event { lines, duration, skippable } (Encounter, first play frame, after Game.resetRun) and
+// Started by the `intro:start` event { lines, duration, skippable, pov } (Encounter, first play frame, after Game.resetRun) and
 // updated in the `present` phase with the game's scaled dt, so pause freezes it and headless stepping drives it.
 // Skip: only when `skippable` and the intro was seen once before (localStorage `cerberus.introSeen`); the game passes the
 // press (fire / jump / interact / pad A) to `update`. The flag is set when an intro completes or is skipped.
@@ -25,11 +25,11 @@ export const TUNING = {
   maxLines: 18, // lines kept on screen
 };
 export const STORAGE_KEY = 'cerberus.introSeen';
-export const HIVE = 'HIVEMIND LINK: LOST';
+export const HIVE = /HIVEMIND LINK: (LOST|SEVERED)/; // the link line that flickers violet (Prologue: LOST, Underworks: SEVERED)
 
 export class Boot {
-  constructor({ controls, post }) {
-    Object.assign(this, { controls, post });
+  constructor({ controls, post, camRig = null }) {
+    Object.assign(this, { controls, post, camRig });
     this.el = document.getElementById('boot');
     this.active = false;
     this.inputLocked = false;
@@ -51,9 +51,11 @@ export class Boot {
     return this;
   }
 
-  // Begins an intro. params { lines, duration?, skippable? } are validated by the piece (encounter.js introBootProblem).
-  start({ lines, duration = TUNING.duration, skippable = true }) {
+  // Begins an intro. params { lines, duration?, skippable?, pov? } are validated by the piece (encounter.js introBootProblem).
+  // pov (true | { release, timeout, blend }): the camera holds STEM-00's eye under the overlay and eases out after the end (CameraRig.holdPov).
+  start({ lines, duration = TUNING.duration, skippable = true, pov = null }) {
     this.reset();
+    if (pov) this.camRig?.holdPov(pov);
     const { el, controls } = this;
     this.lines = lines.slice();
     this.duration = duration;
@@ -61,6 +63,7 @@ export class Boot {
     this.canSkip = skippable && this.seen;
     this.active = this.inputLocked = true;
     this.t = 0;
+    this.typedN = this.doneN = 0; // characters / finished lines already ticked (ui:type)
     controls.locked = true;
     controls.ease = 0;
     // pacing: every line costs its characters plus a short pause; all of it fits between the lead and the hold + fade
@@ -132,6 +135,7 @@ export class Boot {
     this.controls.locked = false;
     this.controls.ease = 0; // update() ramps it back
     this.easing = true;
+    if (this.camRig?.hold) this.camRig.hold.armed = true; // the POV hold may release from now on
     saveJSON(STORAGE_KEY, true);
     this.events?.emit('intro:done', { skipped });
   }
@@ -141,12 +145,20 @@ export class Boot {
     // typed text: characters of each line reached by now
     const typed = Math.max(0, (t - this.lead) * this.rate);
     let from = 0;
+    let chars = 0;
+    let done = 0;
     for (let i = 0; i < this.lines.length; i++) {
       const n = Math.min(this.lines[i].length, Math.max(0, Math.floor(typed - from)));
+      chars += n;
+      if (n === this.lines[i].length) done++;
       from += this.units[i];
       if (n <= 0 && !this.rows[i]) break;
       this.#row(i, n, typed < from && typed >= from - this.units[i]);
     }
+    // one typing tick per frame that typed something (the audio throttles); `end` when a line finished
+    if (chars > this.typedN) this.events?.emit('ui:type', { end: done > this.doneN });
+    this.typedN = chars;
+    this.doneN = done;
     // the picture: static and scanlines come up first, then everything clears while the exposure settles
     const p = t < this.fadeStart ? 0 : Math.min(1, (t - this.fadeStart) / this.fadeLen);
     this.fade = p * p * (3 - 2 * p);
@@ -171,8 +183,9 @@ export class Boot {
     if (row.n === n) return;
     row.n = n;
     const text = this.lines[i];
-    const a = text.toUpperCase().indexOf(HIVE);
-    const b = a + HIVE.length;
+    const m = HIVE.exec(text.toUpperCase());
+    const a = m ? m.index : -1;
+    const b = m ? a + m[0].length : -1;
     const parts = [];
     if (a < 0 || n <= a) parts.push(text.slice(0, n));
     else {

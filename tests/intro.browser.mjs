@@ -1,6 +1,6 @@
 // Boot intro (#13): the `intro.boot` piece, the Boot view (view/boot.js), the input lock, `intro:done`, skip (only once seen),
 // pause, restart / edit, `log.line` on intro:done, and validation. Built in the Workshop and played in place, headless stepping.
-// Needs the dev server: `npm run dev`, then `node tests/intro.browser.mjs` (Playwright + Chromium).
+// Needs the dev server: `bun run dev`, then `node tests/intro.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL ?? 'http://localhost:5173/?debug&scene=arena';
@@ -295,7 +295,7 @@ const LINES = ['> STEM-00 BOOT SEQUENCE', '> POWER: 87%', 'HIVEMIND LINK: LOST',
   });
   expect('validation: lines must be a non-empty list of non-empty strings', [r.none, r.empty, r.blank, r.nonString, r.notList].every((m) => /intro\.boot.*lines must be a non-empty list of non-empty strings/.test(m ?? '')), JSON.stringify(r));
   expect('  duration in (0, 20], skippable boolean', /duration/.test(r.zero ?? '') && /duration/.test(r.big ?? '') && /duration/.test(r.str ?? '') && /skippable/.test(r.skip ?? ''), JSON.stringify(r));
-  expect('  valid params pass; log.line accepts on: intro:done; the builder throws; Workshop fields', r.ok.every((x) => x === null) && r.on === null && /lines/.test(r.build ?? '') && r.fields.join() === 'lines,duration,skippable', JSON.stringify(r));
+  expect('  valid params pass; log.line accepts on: intro:done; the builder throws; Workshop fields', r.ok.every((x) => x === null) && r.on === null && /lines/.test(r.build ?? '') && r.fields.join() === 'lines,duration,skippable,after,pov', JSON.stringify(r));
 }
 
 expect('no page or console errors', errors.length === 0, errors.join(' | '));

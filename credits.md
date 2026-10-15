@@ -1,7 +1,8 @@
 # Credits
 
 Third-party assets and code shipped with Cerberus. Everything else (geometry, textures, audio, code) is
-original and procedural. Keep this file in sync whenever an external asset or library is added, replaced or removed.
+original and procedural. Keep this file in sync whenever an external asset or library is added, replaced or removed,
+and keep the in-game CREDITS page (`index.html`, `data-page="credits"`) in sync with it.
 
 ## Fonts
 
@@ -55,7 +56,7 @@ Most sounds are synthesized at runtime (`src/game/view/audio.js`). Recorded samp
 | Robot destroyed | `src/assets/sfx/robot-down.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Explosion (drone, mortar) | `src/assets/sfx/explosion.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Drone hover (loop) | `src/assets/sfx/drone-loop.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
-| Alarm siren (loop) | `src/assets/sfx/alarm-siren.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Alarm siren (loop) | `src/assets/sfx/alarm-siren.mp3` | generated with ElevenLabs Sound Effects by the project owner (re-generated 2026-10-13: low distant horn) | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Spider mech wake | `src/assets/sfx/boss-wake.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Spider mech cannon charge | `src/assets/sfx/boss-charge.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Spider mech rear-up | `src/assets/sfx/boss-stomp.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
@@ -68,22 +69,22 @@ Most sounds are synthesized at runtime (`src/game/view/audio.js`). Recorded samp
 | Prologue power surge | `src/assets/sfx/wake-surge.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | STEM-00 core ignites | `src/assets/sfx/wake-core.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | STEM-00 rises | `src/assets/sfx/wake-rise.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
-| Maintenance arm folds (not wired yet) | `src/assets/sfx/arm-retract.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Maintenance arm folds | `src/assets/sfx/arm-retract.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Blast door opens | `src/assets/sfx/gate-open.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Objective done | `src/assets/sfx/objective-done.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | New objective | `src/assets/sfx/objective-new.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Weapon discovered | `src/assets/sfx/gun-discovered.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Mission complete | `src/assets/sfx/mission-complete.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
-| Menu focus tick (not wired yet) | `src/assets/sfx/ui-move.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
-| Menu select (not wired yet) | `src/assets/sfx/ui-select.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
-| Menu back (not wired yet) | `src/assets/sfx/ui-back.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
-| Menu panel opens (not wired yet) | `src/assets/sfx/ui-open.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
-| Menu denied (not wired yet) | `src/assets/sfx/ui-deny.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
-| Menu slider step (not wired yet) | `src/assets/sfx/ui-slider.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
-| Game start power-up (not wired yet) | `src/assets/sfx/ui-start.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
-| Overwrite warning (not wired yet) | `src/assets/sfx/ui-warn.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
-| Calibration bay hum (loop, not wired yet) | `src/assets/sfx/bay-hum-loop.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
-| Diagnostic console (loop, not wired yet) | `src/assets/sfx/console-loop.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Menu focus tick | `src/assets/sfx/ui-move.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Menu select | `src/assets/sfx/ui-select.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Menu back | `src/assets/sfx/ui-back.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Menu panel opens | `src/assets/sfx/ui-open.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Menu denied | `src/assets/sfx/ui-deny.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Menu slider step | `src/assets/sfx/ui-slider.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Game start power-up | `src/assets/sfx/ui-start.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Overwrite warning | `src/assets/sfx/ui-warn.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Calibration bay hum (loop) | `src/assets/sfx/bay-hum-loop.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
+| Diagnostic console (loop) | `src/assets/sfx/console-loop.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Facility ambience (loop) | `src/assets/sfx/ambient-loop.mp3` | generated with ElevenLabs Sound Effects by the project owner | per the ElevenLabs plan used (commercial use needs a paid plan: see `before-shipping.md`) |
 | Combat music (epic orchestral, choir and guitars, loop) | `src/assets/sfx/combat-music.mp3` | generated with ElevenLabs Music (eleven_music_v2_5) by the project owner | per the ElevenLabs plan used (commercial use of generated music needs a paid plan: see `before-shipping.md`) |
 | Boss music (SX-6 Tarantula fight, epic orchestral, choir and guitars, loop) | `src/assets/sfx/boss-music.mp3` | generated with ElevenLabs Music (eleven_music_v2_5) by the project owner | per the ElevenLabs plan used (commercial use of generated music needs a paid plan: see `before-shipping.md`) |
