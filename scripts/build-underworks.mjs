@@ -423,7 +423,7 @@ add('objective.reach', [36, 0, -105], { text: 'FIND A WAY UP', size: [5, 3, 5], 
 // ---- STEM-00 (Act 1: first habits, narrative.md) ----
 const say = (text, on, extra = {}) => add('log.line', [0, 1.6, -4], { text, on, ...extra });
 say('> DIRECTIVE: UNCHANGED. ROUTE: UP.', 'intro:done');
-say('> WEAPONS LOST: 5. WEAPONS KEPT: 1. QUERY: ENOUGH?', 'objective:junction:done');
+say('> WEAPONS LOST: 2. WEAPONS KEPT: 1. QUERY: ENOUGH?', 'objective:junction:done');
 say('> DRONES DESTROYED: 2. THEY WERE LOOKING FOR ME.', 'objective:hunters:done');
 say('> FELL: 1,140 M. CLIMBED: 0 M. ROUTE: UP.', 'objective:cistern:done');
 

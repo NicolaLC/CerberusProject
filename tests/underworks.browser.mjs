@@ -252,7 +252,7 @@ const CHAIN = 'junction,hunters,cistern-gate,cistern,exit';
   });
   expect('the chain is junction, hunters, cistern-gate, cistern, exit, in that order (orders 10..50)', r.chain === CHAIN && r.orders === '10,20,30,40,50', r.chain + ' / ' + r.orders);
   expect('  the junction ends the first stage; nothing is awake (the drones sleep until the trigger)', r.snaps.start.cur === 'junction' && r.snaps.start.awake.length === 0 && r.snaps['junction done'].cur === 'hunters' && r.snaps['junction done'].awake.length === 0 && r.snaps['before the hall'].awake.length === 0, JSON.stringify(r.snaps));
-  expect('  checkpoint cp-hall; the weapons line follows the junction', r.cpHall && r.line2.includes('> WEAPONS LOST: 5. WEAPONS KEPT: 1. QUERY: ENOUGH?'), JSON.stringify(r.line2));
+  expect('  checkpoint cp-hall; the weapons line follows the junction', r.cpHall && r.line2.includes('> WEAPONS LOST: 2. WEAPONS KEPT: 1. QUERY: ENOUGH?'), JSON.stringify(r.line2));
   expect('  entering the hall fires drones-wake: exactly the sewer drones wake', r.trigger && r.snaps['hall entered'].awake.join() === 'sewer-drones', JSON.stringify(r.snaps['hall entered']));
   expect('  the drones hunt 12 s between 3 m and under the 6.5 m roof, inside the hall', r.flight.inside && r.flight.minY > 3 && r.flight.maxY < 6.2 && r.flight.alive === 2, JSON.stringify(r.flight));
   expect('  killing them ends the hunt (cistern-gate next, nothing awake) and the drone line follows', r.snaps['hunters done'].cur === 'cistern-gate' && r.snaps['hunters done'].awake.length === 0 && r.line3.includes('> DRONES DESTROYED: 2. THEY WERE LOOKING FOR ME.'), JSON.stringify([r.snaps['hunters done'], r.line3]));

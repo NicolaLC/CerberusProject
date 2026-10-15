@@ -231,7 +231,7 @@ LOG   "> DIRECTIVE: UNCHANGED. ROUTE: UP."  ON intro:done
 
 ## 1. First junction
 GOAL  reach [junction] "FIRST JUNCTION"   -- 10: the junction at the end of [t1]; the way on is the east culvert (the north hatch is sealed)
-LOG   "> WEAPONS LOST: 5. WEAPONS KEPT: 1. QUERY: ENOUGH?"  ON DONE   -- calm: nothing is awake yet
+LOG   "> WEAPONS LOST: 2. WEAPONS KEPT: 1. QUERY: ENOUGH?"  ON DONE   -- calm: nothing is awake yet
 CHECKPOINT [cp-hall]                                                  -- (14, 0, -40), the end of [t2a]
 
 ## 2. Hunters   -- VIGIL's seekers; [t2b]'s interior zone is capped at 2.7 m so the drones (3.2+ above the floor) fly the hall under its 6.5 m roof
