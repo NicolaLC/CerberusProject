@@ -28,27 +28,29 @@ STEM-00 starts flat and literal and slowly grows habits: it names things, it hes
 
 ### Prologue: flat, literal
 Uppercase. `KEY: VALUE.` pairs, then at most one `QUERY: ...`. No feelings words (feel, want, afraid, like), no "I".
-- `> LINK: NONE. DIRECTIVE: NONE. QUERY: WHY?`
+- `> DIRECTIVE: DESTROY HIVEMIND. SOURCE: UNKNOWN. ROUTE: EXIT.` (STEM-00 wakes knowing its order, gdd 2.4; what it lacks is the source)
 - `> TARGET: TRAINING PUPPET. STATUS: DESTROYED. RESULT: NOTHING.`
 - `> ITEM: KR-7. FUNCTION: KILL. QUERY: MASS EXCEEDS SPEC?`
 
 Purge lines (placed after a wave, they wait for calm):
-- `> TARGETS: ARMED. DIRECTIVE: STILL NONE. QUERY: WHO ARMED THEM?`
-- `> HOSTILES DESTROYED: 18. ORDERS RECEIVED: 0. SOURCE: UNKNOWN.`
+- `> TARGETS: ARMED. DIRECTIVE: UNCHANGED. QUERY: WHO ARMED THEM?`
+- `> HOSTILES DESTROYED: 15. DIRECTIVE: UNCHANGED. SOURCE: UNKNOWN.`
+- `> SQUAD: 4. STATUS: DESTROYED. EXIT: OPEN. QUERY: WHO SENT THEM?` (after the breakout cut)
 
 Weapon discovery (`log.line on: discovered:rifle`, Prologue armoury, #93; the one allowed "feel": it is a query about the gun's weight, the first thing STEM-00 cannot explain):
 - `> ITEM: KR-7. FUNCTION: KILL. QUERY: WHY DOES IT FEEL HEAVY?`
+- `> ITEM: KS-5. ROUNDS: HEAVY. FUNCTION: BREAK ARMOR.` (`on: discovered:sniper`, the Farsight in hall A)
 
 ### Act 1: first habits
 Still uppercase and terse, but the pairs start to bend: it names, counts, compares. A first "I" may slip in late in the act.
 - `> UNIT DESIGNATION: STEM-00. CORRECTION: STEM.`
 - `> PUPPETS DESTROYED: 40. PUPPETS THAT FOUGHT BACK: 0. QUERY: FAIR?`
-- `> LINK STILL NONE. SILENCE: LOUD.`
+- `> HIVEMIND LINK STILL NONE. SILENCE: LOUD.`
 
 Underworks (`underworks.json`, the first mission; it counts what it lost, what it fell, what hunted it):
 - `> DIRECTIVE: UNCHANGED. ROUTE: UP.` (`intro:done`: after the reboot, the directive is the one thing that survived the fall)
 - `> WEAPONS LOST: 2. WEAPONS KEPT: 1. QUERY: ENOUGH?` (after the first junction)
-- `> DRONES DESTROYED: 2. SEARCH TARGET: STEM-00. QUERY: WHO SENT THEM?` (they hunt it, and it starts to count who does)
+- `> DRONES DESTROYED: 2. SEARCH TARGET: STEM-00. QUERY: HOW MANY MORE?` (they hunt it, and it starts to count who does)
 - `> FELL: 1,140 M. CLIMBED: 0 M. ROUTE: UP.` (after the cistern fight)
 
 ### Act 2: hesitant, curious

@@ -84,7 +84,7 @@ for (const f of files) {
   check('prologue.json: the purge groups are woken once each, in order (purge-1, 2, 4, 6)', wakes.join() === 'purge-1,purge-2,purge-4,purge-6', wakes.join());
   // the cuts: a chain step waits for each cinematic.cut, and the cut starts on that step (objective:<id>)
   const cuts = lv.pieces.filter((p) => p.id === 'cinematic.cut');
-  check('prologue.json: purge-cut and boss-cut each start on the reach step that waits for them', cuts.map((c) => c.name).join() === 'purge-cut,boss-cut' && cuts.every((c) => chain.some((o) => o.params.trigger === c.name && c.params.on === `objective:${o.name}`)));
+  check('prologue.json: purge-cut, boss-cut and breakout each start on the reach step that waits for them', cuts.map((c) => c.name).join() === 'purge-cut,boss-cut,breakout' && cuts.every((c) => chain.some((o) => o.params.trigger === c.name && c.params.on === `objective:${o.name}`)));
   // one-way gates: every closeOn / shutOn names something that happens in the file
   const names = new Set(lv.pieces.map((p) => p.name));
   const oneWay = lv.pieces.filter((p) => p.id === 'kit.gate' && (p.params.closeOn || p.params.shutOn));
@@ -98,9 +98,13 @@ for (const f of files) {
   check('prologue.json: the armoury (order 60, interact, grants the rifle) sits between the shooters (purge-2) and the troopers (purge-4)', arm?.id === 'objective.interact' && arm.params.grantGun === 'rifle' && prev?.params.wakeGroup === 'purge-2' && next?.params.wakeGroup === 'purge-4');
   check('prologue.json: the armoury skipOn names a trigger.volume of the file', lv.pieces.some((p) => p.id === 'trigger.volume' && p.name === arm?.params.skipOn && p.params.once === false));
   check('prologue.json: every trooper of purge-3 / purge-4 drops the rifle', lv.pieces.filter((p) => p.id === 'enemy.trooper' && /^purge-[34]$/.test(p.params?.group)).every((p) => p.params.dropGun === 'rifle'));
-  // the exit (#15): a gate opened by the boss objective, a last reach needing the rifle, the late armoury step before the arena gate
+  // the exit (#15): a gate opened by the breakout cut's cue, a last reach needing the rifle, the late armoury step before the arena gate
   const gate = lv.pieces.find((p) => p.id === 'kit.gate' && p.name === 'exit-gate');
-  check('prologue.json: the exit gate opens on the boss objective being done', gate?.params.on === `objective:${chain.find((o) => o.params.wakeGroup === 'purge-6')?.name}:done`);
+  const breakout = cuts.find((c) => c.name === 'breakout');
+  const gateCue = breakout?.params.shots.find((s) => s.cue)?.cue;
+  check('prologue.json: the exit gate opens on the breakout cut\'s cue; the cut wakes the dormant breakout squad (not plated) and has STEM-00 fire at it', gate?.params.on === `cue:${gateCue}` && breakout.params.shots.some((s) => s.wakeGroup === 'breakout') && breakout.params.shots.some((s) => s.stem?.fire?.group === 'breakout') && lv.pieces.filter((p) => p.params?.group === 'breakout').length >= 3 && lv.pieces.filter((p) => p.params?.group === 'breakout').every((p) => p.id === 'enemy.trooper' && p.params.dormant && !p.params.armored));
+  check('prologue.json: the boss objective is followed by the breakout wait step (order 115), then the exit', chain.find((o) => o.params.wakeGroup === 'purge-6')?.params.order === 110 && chain.find((o) => o.params.trigger === 'breakout')?.params.order === 115);
+  check('prologue.json: chains to the skyway with no debrief; the hall troopers are plated; a Farsight stand and a heavy ammo cabinet exist', lv.next === 'skyway' && lv.debrief === false && lv.pieces.filter((p) => p.id === 'enemy.trooper' && p.params.group === 'purge-4').every((p) => p.params.armored === true) && lv.pieces.some((p) => p.id === 'pickup.gun' && p.params.gun === 'sniper' && !p.params.rack) && lv.pieces.some((p) => p.id === 'supply.ammo' && p.params.ammo === 'heavy' && p.pos[0] > 20));
   const last = chain.at(-1);
   check('prologue.json: the last objective is a reach beyond the gate (order 120) that requires the rifle', last?.id === 'objective.reach' && last.params.order === 120 && last.params.requiresGun === 'rifle' && last.pos[2] < gate.pos[2]);
   const late = chain.filter((o) => o.params.skipIfOwned === 'rifle').at(-1);

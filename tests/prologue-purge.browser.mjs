@@ -15,7 +15,7 @@ const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftsha
 const fail = [];
 const expect = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` ${extra}`}`); if (!ok) fail.push(name); };
 
-const CHAIN = 'c1-move,c2-arm,c2-aim,c3-jet,c4-cover,c4-fire,c5-hop,c5-slide,c6-transfer,range-light,range-heavy,leave-bay,purge-start,purge-yard,purge-hall,armoury,purge-troopers-hall,armoury-late,purge-gate,boss-cut,purge-boss,exit';
+const CHAIN = 'c1-move,c2-arm,c2-aim,c3-jet,c4-cover,c4-fire,c5-hop,c5-slide,c6-transfer,range-light,range-heavy,leave-bay,purge-start,purge-yard,purge-hall,armoury,purge-troopers-hall,armoury-late,purge-gate,boss-cut,purge-boss,breakout,exit';
 
 // A fresh page on the prologue (intro seen), stepped by hand, past the intro.
 async function open() {
@@ -103,9 +103,13 @@ async function open() {
     T.kill(boss);
     T.step(0.5);
     out.end = { state: g.mission.state, cur: T.cur(), complete: T.complete, failed: T.failed, alarmTarget: g.world.alarm.target, siren: g.audio.sirenWanted };
+    T.step(0.3);
+    out.breakout = { cur: T.cur(), cut: g.cinematic.id, active: g.cinematic.active, squad: T.group('breakout').map((e) => e.alive) };
+    T.finish(); // skip the breakout cut: the squad is dead, the gate is open
+    out.afterBreakout = { cur: T.cur(), squad: T.group('breakout').filter((e) => e.alive).length };
     T.step(4);
     out.after = light();
-    T.finish(); // the transit node beyond the open gate ends the mission (prologue-exit.browser.mjs covers the gate itself)
+    T.finish(); // the Skyway exit beyond the open gate ends the mission (prologue-exit.browser.mjs covers the gate itself)
     out.done = { state: g.mission.state, complete: T.complete, failed: T.failed };
     out.objectives = [...T.objectives];
     out.checkpoints = [...T.checkpoints];
@@ -113,7 +117,7 @@ async function open() {
     return out;
   });
   const S = r.snaps;
-  expect('chain: calibration C1-C6, the range, leave-bay, the cut, the purge stages around the armoury steps, the boss cut, the exit', r.chain.join() === CHAIN, r.chain.join());
+  expect('chain: calibration C1-C6, the range, leave-bay, the cut, the purge stages around the armoury steps, the boss cut, the breakout cut, the exit', r.chain.join() === CHAIN, r.chain.join());
   expect('nothing is awake, no alarm before the purge', S.boot.cur === 'c1-move' && !S.boot.awake.length && r.light0.target === 0 && !r.light0.siren && S['idle 5 s'].cur === 'c1-move' && !S['idle 5 s'].awake.length, JSON.stringify([S.boot, r.light0, S['idle 5 s']]));
   expect('  through calibration nothing scripted stays awake (the calib shooter is dead), no alarm', S.range.cur === 'range-light' && !S.range.awake.length, JSON.stringify(S.range));
   expect('the range lends its guns; its door takes them back (loadout pistol), the landing KR-7 is picked up after it', r.rangeOwned.split(',').length >= 3 && r.afterRange.owned === 'pistol,rifle' && r.afterRange.door === 1, JSON.stringify([r.rangeOwned, r.afterRange]));
@@ -124,10 +128,10 @@ async function open() {
   expect('  with the KR-7 owned the armoury (60) and the late armoury (95) pass silently', r.slot.includes(60) && r.slot.includes(95) && !r.armoury && r.beforeGate.cur === 'purge-gate' && !r.beforeGate.awake.length, JSON.stringify([r.slot, r.beforeGate]));
   expect('reaching the arena starts the boss cut', r.cut.cur === 'boss-cut' && r.cut.active && r.cut.id === 'boss-cut', JSON.stringify(r.cut));
   expect('  skipped, the cut ends as played: the SX-6 down at its landing spot and awake (purge-6 alone), the rush gone, the far gate shut, STEM-00 at cp-gate', r.boss.cur === 'purge-boss' && r.boss.awake.join() === 'purge-6' && !r.boss.leaping && Math.abs(r.boss.at[0] - 30.5) < 1 && Math.abs(r.boss.at[2] + 57) < 1 && r.boss.rush === 0 && r.boss.farClosed && r.boss.alarmTarget === 1 && Math.abs(r.boss.player[0] - 26.5) < 0.2 && Math.abs(r.boss.player[2] + 50) < 0.2, JSON.stringify(r.boss));
-  expect('killing the spider ends the alarm and siren but not the mission (the exit is next); reaching the transit node completes it once, no failure', r.end.state === 'active' && r.end.cur === 'exit' && r.end.complete === 0 && r.done.state === 'complete' && r.done.complete === 1 && r.done.failed === 0 && r.end.failed === 0 && r.end.alarmTarget === 0 && !r.end.siren && r.after.level === 0 && r.after.fog === r.after.base && JSON.stringify(r.alarmEvents) === '[["on","purge-alarm",true],["off","purge-alarm"]]', JSON.stringify([r.end, r.done, r.after, r.alarmEvents]));
+  expect('killing the spider ends the alarm and siren but not the mission; the breakout cut plays (its squad alive and waiting), then the exit is next; reaching it completes the mission once, no failure', r.end.state === 'active' && r.end.cur === 'breakout' && r.breakout.cur === 'breakout' && r.breakout.cut === 'breakout' && r.breakout.active && r.breakout.squad.length === 4 && r.afterBreakout.cur === 'exit' && r.afterBreakout.squad === 0 && r.end.complete === 0 && r.done.state === 'complete' && r.done.complete === 1 && r.done.failed === 0 && r.end.failed === 0 && r.end.alarmTarget === 0 && !r.end.siren && r.after.level === 0 && r.after.fog === r.after.base && JSON.stringify(r.alarmEvents) === '[["on","purge-alarm",true],["off","purge-alarm"]]', JSON.stringify([r.end, r.breakout, r.afterBreakout, r.done, r.after, r.alarmEvents]));
   expect('every objective became current exactly once, in chain order', r.objectives.join() === r.chain.slice(1).join(), r.objectives.join());
   expect('  checkpoints between the stages were reached: yard, hall, hall-east, gate', ['cp-yard', 'cp-hall', 'cp-hall-east', 'cp-gate'].every((c) => r.checkpoints.includes(c)), r.checkpoints.join());
-  expect('  the announcer and the STEM-00 lines after the hall shooters and the troopers played; every STEM-00 line is at most 70 characters', r.lines.includes('CALIBRATION UNIT 00: NONCOMPLIANT. PURGE.') && r.lines.some((t) => t.startsWith('> TARGETS: ARMED')) && r.lines.some((t) => t.startsWith('> HOSTILES DESTROYED')) && r.lines.filter((t) => t.startsWith('> ')).every((t) => t.length <= 70), JSON.stringify(r.lines));
+  expect('  the announcer and the STEM-00 lines after the hall shooters and the troopers played (the directive is known, its source is not); every STEM-00 line is at most 70 characters', r.lines.includes('CALIBRATION UNIT 00: NONCOMPLIANT. PURGE.') && r.lines.some((t) => t.startsWith('> TARGETS: ARMED. DIRECTIVE: UNCHANGED')) && r.lines.some((t) => t.startsWith('> HOSTILES DESTROYED')) && !r.lines.some((t) => /DIRECTIVE: (NONE|STILL NONE)|ORDERS RECEIVED/.test(t)) && r.lines.filter((t) => t.startsWith('> ')).every((t) => t.length <= 70), JSON.stringify(r.lines));
   expect('no page errors', errors.length === 0, errors.join(' | '));
   await p.close();
 }
@@ -158,6 +162,7 @@ async function open() {
     T.advanceTo('purge-boss');
     out.boss = { cur: T.cur(), awake: T.awake() };
     T.finish();
+    T.finish(); // the breakout cut, skipped
     out.preExit = g.mission.state;
     T.finish();
     out.end = { state: g.mission.state, failed: T.failed, alarm: g.world.alarm.target };
@@ -168,7 +173,7 @@ async function open() {
   expect('pistol only past the range (the landing KR-7 left); yard stage: purge-1 awake alone', r.owned === 'pistol' && r.yard.cur === 'purge-yard' && r.yard.awake.join() === 'purge-1', JSON.stringify([r.owned, r.yard]));
   expect('hall shooters already dead: their stage passes at once; the armoury is current and walking on skips it', r.armoury === 'armoury', r.armoury);
   expect('hall troopers already dead: the chain stops at the late armoury step (no KR-7 yet) until G at the rack gives it', r.late.cur === 'armoury-late' && r.late.owned === 'pistol' && !r.late.awake.length && r.lateStill === 'armoury-late' && r.gate.cur === 'purge-gate' && r.gate.owned === 'pistol,rifle', JSON.stringify([r.late, r.lateStill, r.gate]));
-  expect('the spider stage still works; the mission ends at the transit node', r.boss.cur === 'purge-boss' && r.boss.awake.join() === 'purge-6' && r.preExit === 'active' && r.end.state === 'complete' && r.end.failed === 0 && r.end.alarm === 0, JSON.stringify([r.boss, r.preExit, r.end]));
+  expect('the spider stage still works; the breakout cut follows and the mission ends at the Skyway exit', r.boss.cur === 'purge-boss' && r.boss.awake.join() === 'purge-6' && r.preExit === 'active' && r.end.state === 'complete' && r.end.failed === 0 && r.end.alarm === 0, JSON.stringify([r.boss, r.preExit, r.end]));
   expect('no objective skipped, none repeated', r.objectives.join() === CHAIN.split(',').slice(1).join(), r.objectives.join());
   expect('no page errors', errors.length === 0, errors.join(' | '));
   await p.close();

@@ -1,6 +1,7 @@
-// The Prologue's exit (#15): the sealed arena gate (kit.gate `exit-gate`) opens when the spider falls, the last objective REACH TRANSIT NODE
-// (requiresGun: rifle, #93) ends the mission, the mission complete screen shows the run stats and RESTART reloads the scene,
-// and a death respawns at the last checkpoint. Pure level data, headless stepping; the stats come from real shots and a real reload.
+// The Prologue's exit (#15): the sealed arena gate (kit.gate `exit-gate`) opens in the breakout cut after the spider falls (a dormant squad
+// behind it bursts out and STEM-00 shoots it in the cut), the last objective REACH THE SKYWAY (requiresGun: rifle, #93) ends the mission and
+// chains to the `skyway` scene with no debrief (fade to black, load, progress). The mission complete screen (run stats, RESTART / CONTINUE, kept
+// for levels with a debrief) is exercised on the Prologue by dropping its `next` / `debrief` fields, and a death respawns at the last checkpoint. Pure level data, headless stepping; the stats come from real shots and a real reload.
 // Needs the dev server: `bun run dev`, then `node tests/prologue-exit.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
 import { prologueHelpers } from './prologue-helpers.mjs';
@@ -38,10 +39,10 @@ async function open() {
     T.mortal = false;
     T.step = (s) => { for (let i = 0; i < Math.round(s * 60); i++) { if (!T.mortal) g.player.health = 100; engine.step(1 / 60); } };
     T.press = (code) => { engine.input.keys.add(code); engine.input.pressed.add(code); T.step(1 / 60); engine.input.keys.delete(code); };
-    T.gate = () => g.world.gates.find((x) => x.on === 'objective:purge-boss:done');
+    T.gate = () => g.world.gates.find((x) => x.on === 'cue:breakout-gate');
     engine.events.on('mission:complete', () => T.complete++);
     engine.events.on('mission:failed', () => T.failed++);
-    engine.events.on('gate:open', (e) => e.on === 'objective:purge-boss:done' && T.opened++); // the exit gate only (the chain opens many)
+    engine.events.on('gate:open', (e) => e.on === 'cue:breakout-gate' && T.opened++); // the exit gate only (the chain opens many)
   });
   await p.evaluate(prologueHelpers);
   await p.evaluate(() => {
@@ -52,7 +53,7 @@ async function open() {
   return { p, errors };
 }
 
-// ---- 1: the gate is shut and blocks until the spider falls, then opens ----
+// ---- 1: the gate is shut and blocks through the fight; the breakout cut opens it and the squad behind it dies ----
 {
   const { p, errors } = await open();
   const r = await p.evaluate(() => {
@@ -76,14 +77,25 @@ async function open() {
     };
     out.walkShut = walk(-59, 120);
     out.sightShut = !world.segmentClear(player.pos.clone().set(30, 0, -60), player.pos.clone().set(30, 0, -66), 0.3);
-    // the spider falls: the objective is done, the gate opens (about 1.5 s), the alarm ends
+    // the spider falls: the alarm ends, the breakout cut starts; the gate stays shut and the squad behind it sleeps until the cut's gate cue
+    const squad = () => T.group('breakout');
+    out.squadBefore = { n: squad().length, dormant: squad().every((e) => e.alive && !e.awake), armored: squad().some((e) => e.armored), behind: squad().every((e) => e.pos.z < -63) };
     T.kill(g.enemies.boss);
     T.step(0.1);
-    out.fell = { cur: T.cur(), opening: G.opening, events: T.opened, open: +G.open.toFixed(2) };
-    T.step(0.6);
-    out.half = +G.open.toFixed(2);
-    T.step(1.2);
-    out.openNow = { open: G.open, visible: G.mesh.visible, solid: world.meshes.includes(G.mesh), top: G.col.box.max.y };
+    out.fell = { cur: T.cur(), cut: g.cinematic.id, active: g.cinematic.active, opening: G.opening, events: T.opened, open: G.open, awake: squad().filter((e) => e.awake).length };
+    // play the cut: when does the gate open, when does the squad wake and die, where does STEM-00 end
+    const seen = { openAt: null, wakeAt: null, shots: 0, scripted: 0 };
+    engine.events.on('weapon:shot', (e) => { seen.shots++; if (e.scripted) seen.scripted++; });
+    let t = 0;
+    for (let i = 0; i < 1000 && g.cinematic.active; i++) {
+      T.step(1 / 30);
+      t += 1 / 30;
+      if (seen.openAt === null && G.opening) seen.openAt = +t.toFixed(1);
+      if (seen.wakeAt === null && squad().some((e) => e.awake)) seen.wakeAt = +t.toFixed(1);
+    }
+    out.cut = { ...seen, total: +t.toFixed(1), alive: squad().filter((e) => e.alive).length, pos: player.pos.toArray().map((n) => +n.toFixed(1)), cur: T.cur(), owned: [...g.weapon.owned].join() };
+    T.step(1.8);
+    out.openNow = { open: G.open, visible: G.mesh.visible, solid: world.meshes.includes(G.mesh), top: G.col.box.max.y, events: T.opened };
     out.walkOpen = walk(-59, 150);
     out.exitState = { cur: T.cur(), z: player.pos.z, state: g.mission.state };
     return out;
@@ -91,9 +103,11 @@ async function open() {
   expect('the arena has a doorway in its north wall and the exit gate, shut with a collider', r.piece.found && r.piece.shut && r.piece.collider && r.piece.doorway && r.piece.box[2] === 0 && r.piece.box[3] === 4, JSON.stringify(r.piece));
   expect('the gate stays shut through the whole purge and while the spider fights (no event)', r.boss.cur === 'purge-boss' && r.boss.awake === true && r.boss.open === 0 && !r.boss.opening && r.boss.events === 0, JSON.stringify(r.boss));
   expect('  shut: walking forward stops at the slab (z stays south of the wall) and it blocks sight', r.walkShut > -62.2 && r.sightShut, JSON.stringify([r.walkShut, r.sightShut]));
-  expect('the moment the spider dies the gate starts to open (one gate:open), mid-way after 0.6 s', r.fell.opening && r.fell.events === 1 && r.fell.open < 0.2 && r.half > 0.3 && r.half < 0.9, JSON.stringify([r.fell, r.half]));
-  expect('  fully open: out of the way (no collider, not drawn, not shot at); the player walks through into the annex', r.openNow.open === 1 && !r.openNow.visible && !r.openNow.solid && r.openNow.top < 0 && r.walkOpen < -64, JSON.stringify([r.openNow, r.walkOpen]));
-  expect('  the mission is not over at the gate: the exit objective is current (the node is further on)', r.exitState.cur === 'exit' && r.exitState.state === 'active' && r.exitState.z > -76, JSON.stringify(r.exitState));
+  expect('the breakout squad (4 plated-free troopers) waits dormant behind the shut gate, out of reach', r.squadBefore.n === 4 && r.squadBefore.dormant && !r.squadBefore.armored && r.squadBefore.behind, JSON.stringify(r.squadBefore));
+  expect('the spider\'s death starts the breakout cut; the gate stays shut and the squad asleep until the cut\'s cue', r.fell.cur === 'breakout' && r.fell.cut === 'breakout' && r.fell.active && !r.fell.opening && r.fell.open === 0 && r.fell.events === 0 && r.fell.awake === 0, JSON.stringify(r.fell));
+  expect('  in the cut the gate opens (one gate:open) after the first shot, the squad wakes, STEM-00 shoots them all (scripted shots) and the cut ends in 10-14 s', r.cut.openAt > 2 && r.cut.openAt < 3.5 && r.cut.wakeAt > 2 && r.cut.wakeAt < 3.5 && r.cut.alive === 0 && r.cut.scripted >= 4 && r.openNow.events === 1 && r.cut.total >= 10 && r.cut.total <= 14.5, JSON.stringify(r.cut));
+  expect('  STEM-00 ends at the gate, the exit objective is current, the gate is fully open (no collider, not drawn)', r.cut.cur === 'exit' && Math.abs(r.cut.pos[0] - 30) < 0.3 && r.cut.pos[2] < -60 && r.cut.pos[2] > -61 && r.openNow.open === 1 && !r.openNow.visible && !r.openNow.solid && r.openNow.top < 0, JSON.stringify([r.cut, r.openNow]));
+  expect('  the player walks through into the annex; the mission is not over at the gate (the exit is further on)', r.walkOpen < -64 && r.exitState.cur === 'exit' && r.exitState.state === 'active' && r.exitState.z > -76, JSON.stringify([r.walkOpen, r.exitState]));
   expect('no page errors', errors.length === 0, errors.join(' | '));
   await p.close();
 }
@@ -125,7 +139,7 @@ async function open() {
     return out;
   });
   expect('with the pistol alone the chain halts at the late armoury step; the node does not end it', r.pistol.cur === 'armoury-late' && r.pistol.owned === 'pistol' && r.pistolAtNode.cur === 'armoury-late' && r.pistolAtNode.state === 'active' && r.pistolAtNode.complete === 0, JSON.stringify([r.pistol, r.pistolAtNode]));
-  expect('REACH TRANSIT NODE is the last objective (order 120), it requires the rifle', r.exit.cur === 'exit' && /^REACH TRANSIT NODE/.test(r.exit.hud) && r.exit.params.order === 120 && r.exit.params.requiresGun === 'rifle' && r.exit.pos[2] < -70, JSON.stringify(r.exit));
+  expect('REACH THE SKYWAY is the last objective (order 120), it requires the rifle', r.exit.cur === 'exit' && /^REACH THE SKYWAY/.test(r.exit.hud) && r.exit.params.order === 120 && r.exit.params.requiresGun === 'rifle' && r.exit.pos[2] < -70, JSON.stringify(r.exit));
   expect('  standing in the node without the rifle owned: not complete, the HUD names the missing Warden', r.noGun.state === 'active' && r.noGun.held && r.noGun.complete === 0 && /KR-7 WARDEN: NOT FOUND/.test(r.noGun.hud), JSON.stringify(r.noGun));
   expect('  with it owned the mission completes, once, no failure', r.withGun.state === 'complete' && r.withGun.complete === 1 && r.withGun.failed === 0 && r.withGun.hud === 'MISSION COMPLETE', JSON.stringify(r.withGun));
   expect('no page errors', errors.length === 0, errors.join(' | '));
@@ -158,6 +172,8 @@ async function open() {
       keys.delete('Mouse2');
       return stats.shots - before;
     };
+    // the Prologue chains on with no debrief: drop those fields so the report itself (stats, RESTART) is exercised here
+    delete g.activeLevel.next; delete g.activeLevel.debrief;
     T.advanceTo('c2-aim'); // the bench's KP-12 in hand, the three calibration targets
     out.fired = [shoot('Spine2'), shoot('Head')];
     // a miss: the sky
@@ -243,6 +259,32 @@ async function open() {
   await p.close();
 }
 
+// ---- 3a: the real end: no report, fade to black, the Skyway loads (progress follows) ----
+{
+  const { p, errors } = await open();
+  const r = await p.evaluate(async () => {
+    const g = window.game;
+    const out = {};
+    try { localStorage.removeItem('cerberus.progress'); } catch {}
+    out.fields = { next: g.activeLevel.next, debrief: g.activeLevel.debrief };
+    T.advanceTo('exit'); T.step(2);
+    T.finish();
+    out.done = { state: g.mission.state, complete: T.complete, summary: g.summary.state, locked: g.controls.locked };
+    T.step(0.5);
+    out.half = { fade: g.fade.value, open: g.summary.open, scene: g.sceneName };
+    T.step(0.7);
+    await new Promise((res) => setTimeout(res, 50));
+    out.after = { scene: g.sceneName, level: g.activeLevel.name, title: g.activeLevel.title, fade: g.fade.value, summary: g.summary.state, locked: g.controls.locked };
+    out.progress = JSON.parse(localStorage.getItem('cerberus.progress') ?? 'null');
+    return out;
+  });
+  expect('the Prologue chains to the skyway with no debrief', r.fields.next === 'skyway' && r.fields.debrief === false, JSON.stringify(r.fields));
+  expect('  the mission completes at the exit: no report, input locked, the screen fades to black', r.done.state === 'complete' && r.done.complete === 1 && r.done.summary === 'leaving' && r.done.locked && r.half.fade > 0.3 && !r.half.open && r.half.scene === 'prologue', JSON.stringify([r.done, r.half]));
+  expect('  then the skyway is loaded clean and recorded as the progress', r.after.scene === 'skyway' && r.after.level === 'skyway' && r.after.fade === 0 && r.after.summary === 'idle' && !r.after.locked && r.progress?.scene === 'skyway', JSON.stringify([r.after, r.progress]));
+  expect('no page errors', errors.length === 0, errors.join(' | '));
+  await p.close();
+}
+
 // ---- 3b: the Enter key restarts too (and only when the screen is open) ----
 {
   const { p, errors } = await open();
@@ -251,6 +293,7 @@ async function open() {
     let restarts = 0;
     const load = g.loadScene.bind(g);
     g.loadScene = (n) => { restarts++; return load(n); };
+    delete g.activeLevel.next; delete g.activeLevel.debrief; // see part 3: the report path
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Enter' }));
     const closed = restarts;
     T.advanceTo('exit'); T.step(2);

@@ -110,7 +110,7 @@ async function open(seen) {
   expect('  input is locked: W for 3 s does not move the player', r.lockedMove < 0.01, String(r.lockedMove));
   expect('  intro:done fires within the duration, not skipped, overlay gone', r.stillActive && r.done.length === 1 && r.done[0].skipped === false && r.doneAt > 11.5 && r.doneAt <= 12.1 && !r.activeAfter, JSON.stringify(r));
   expect('  movement works after intro:done', r.freeMove > 2, String(r.freeMove));
-  expect('first log line appears after intro:done, not before', r.logBefore === 0 && r.log[0] === '> LINK: NONE. DIRECTIVE: NONE. QUERY: WHY?', JSON.stringify([r.logBefore, r.log]));
+  expect('first log line appears after intro:done, not before', r.logBefore === 0 && r.log[0] === '> DIRECTIVE: DESTROY HIVEMIND. SOURCE: UNKNOWN. ROUTE: EXIT.', JSON.stringify([r.logBefore, r.log]));
   expect('  the first objective CALIBRATION 01: LOCOMOTION is current at start and shown in the HUD', r.objectiveAtStart.state === 'active' && r.objectiveAtStart.current === 'c1-move' && r.objectiveAtStart.head === 'CALIBRATION 01: LOCOMOTION' && r.objective.current === 'c1-move', JSON.stringify([r.objectiveAtStart, r.objective]));
   expect('unarmed at start (loadout []): keys 1-6 raise nothing', Array.isArray(r.loadout) && r.loadout.length === 0 && r.owned.length === 0 && r.seenGuns.join() === '', JSON.stringify([r.owned, r.seenGuns]));
   expect('  the bench (CALIBRATION 02: ARM, G) gives the KP-12 and raises it; the aim step is next', r.armed.owned === 'pistol' && r.armed.gun === 'pistol' && r.armed.cur === 'c2-aim', JSON.stringify(r.armed));
@@ -179,7 +179,7 @@ for (const seen of [true, false]) {
   });
   expect('passive calibration targets fire nothing in 20 s (no bolts, no hurt)', r.bolts === 0 && r.hurt === 0 && r.hp === 0, JSON.stringify(r));
   expect('  the only enemies not dormant are the calib and range puppets (static)', r.openKinds.join() === 'calib:static,range:static', JSON.stringify(r.openKinds));
-  expect('  every scripted group is dormant and asleep, none woken, the mission waits on c1-move, no alarm', r.groups.join() === 'arena-rush,calib-shooter,purge-1,purge-2,purge-4,purge-6' && r.awake === 0 && r.woken.length === 0 && r.current === 'c1-move' && r.alarm === 0, JSON.stringify(r));
+  expect('  every scripted group is dormant and asleep, none woken, the mission waits on c1-move, no alarm', r.groups.join() === 'arena-rush,breakout,calib-shooter,purge-1,purge-2,purge-4,purge-6' && r.awake === 0 && r.woken.length === 0 && r.current === 'c1-move' && r.alarm === 0, JSON.stringify(r));
   expect('  the drill hall troop is culled (hidden, not ticked) from the calibration bay, and still takes hits', r.culled && r.culledHit, JSON.stringify(r));
   await p.close();
 }
