@@ -116,7 +116,7 @@ export class PlayerView {
     st.speed = alive ? Math.hypot(p.vel.x, p.vel.z) : 0;
     st.run = p.sprinting && alive; // sprint plays the anime run
     st.crouch = p.crouchBlend;
-    st.aimPitch = camRig.pitch;
+    st.aimPitch = p.aimPitch ?? camRig.pitch; // a scripted cut aims at its target
     st.combat = combat && alive;
     st.recoil = this.recoil * this.recoil; // eased: sharp snap back, quick settle
     st.kickBack = this.kickDef?.back;

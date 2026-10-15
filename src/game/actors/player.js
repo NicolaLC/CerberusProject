@@ -118,6 +118,8 @@ export class Player {
     this.sinceHit = 99;
     this.dead = false;
     this.deadTime = 0;
+    this.scripted = false; // a cinematic.cut acts for STEM-00 (act()): no intent, no motor, no collision
+    this.aimPitch = null; // scripted aim pitch (rad, up positive); null = the camera's pitch
     this.hitCapsule = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: TUNING.radius };
     this.view = new PlayerView({ scene, world, events, player: this, tune: { vault: VAULT, peek: PEEK } });
   }
@@ -220,6 +222,8 @@ export class Player {
     this.shields = this.t.maxShields;
     this.health = this.t.maxHealth;
     this.dead = false;
+    this.scripted = false;
+    this.aimPitch = null;
     this.facing = at ? at.yaw : this.spawnYaw;
     this.view.root.rotation.set(0, this.facing, 0);
   }
@@ -240,6 +244,28 @@ export class Player {
     this.jetTimer = 0;
     this.edgeTime = 0;
     this.deadTime = 0;
+  }
+
+  // Scripted acting (view/cinematic.js, a cut shot's `stem`): while `on` the motor does nothing (no intent, gravity or collision);
+  // the cut writes pos / vel / facing / aiming / aimPitch / airborne / sprinting each step and only the pose is made from them.
+  // Off: the motor takes over where the cut left the player (`respawn` / `place` also end it). Cover and moves in progress end.
+  act(on) {
+    this.scripted = on;
+    if (!on) {
+      this.aimPitch = null;
+      this.aiming = this.sprinting = this.airborne = false;
+      this.vel.set(0, 0, 0);
+      this.vy = 0;
+      return;
+    }
+    this.cover = null;
+    this.snap = null;
+    this.jetting = 0;
+    this.sliding = 0;
+    this.peek.set(0, 0, 0);
+    this.crouched = false;
+    this.crouchBlend = 0;
+    this.sprinting = false;
   }
 
   // Visual gun kick on the model (per-gun back / climb); camera recoil is separate.
@@ -266,6 +292,11 @@ export class Player {
       this.jetting = 0;
       this.deadTime += dt;
       this.#present(dt, rig, 0);
+      return;
+    }
+
+    if (this.scripted) {
+      this.#present(dt, rig, 1, weapon.lowered());
       return;
     }
 

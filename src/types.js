@@ -18,7 +18,7 @@
  * @property {number} [fails] consecutive failures
  */
 
-/** 'weapon:shot' (reused) @typedef {{ from: Vector3, to: Vector3, dir: Vector3, right: Vector3, heavy: boolean, beam: boolean, gun: string, flash: number, mag: number }} WeaponShot */
+/** 'weapon:shot' (reused) @typedef {{ from: Vector3, to: Vector3, dir: Vector3, right: Vector3, heavy: boolean, beam: boolean, gun: string, flash: number, mag: number, scripted: boolean }} WeaponShot */
 /** 'weapon:hit' (reused) @typedef {{ point: Vector3, normal: Vector3, dir: Vector3, zone: string, amount: number, crit: boolean, weak: boolean, killed: boolean, distance: number }} WeaponHit */
 /** 'weapon:impact', 'bolt:impact' (reused) @typedef {{ point: Vector3, normal: Vector3, decal?: boolean }} Impact */
 /** 'weapon:reload' @typedef {'start' | 'done' | 'good' | 'perfect' | 'jam'} ReloadEvent */

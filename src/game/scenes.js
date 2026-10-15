@@ -22,8 +22,14 @@ export function resolveScene(name) {
   return DEFAULT_SCENE;
 }
 
-// Campaign: the missions of a new game, in order (`NEW GAME` opens the first). Only these write progress.
-export const CAMPAIGN = ['prologue'];
+// Campaign: the missions of a new game, in order (`NEW GAME` opens the first): the first scene and every scene its `next` field chains to
+// (level.md "Level chaining"). Only these write progress; a chained load (`Game` on `mission:complete`) records the scene it enters.
+const chain = (first) => {
+  const out = [];
+  for (let s = first; s && Object.hasOwn(SCENES, s) && !out.includes(s); s = SCENES[s].next) out.push(s);
+  return out;
+};
+export const CAMPAIGN = chain(DEFAULT_SCENE);
 
 // Progress (main menu CONTINUE): the campaign scene played last and the last checkpoint reached there.
 // ponytail: CONTINUE restarts the scene; the checkpoint is kept for a later mid-mission resume (mission state is not saved).

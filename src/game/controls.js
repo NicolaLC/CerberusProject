@@ -25,7 +25,8 @@ export const BINDINGS = {
   slot6: ['Digit6', 'Pad13'], // d-pad down: sidearm
   interact: ['KeyG', 'Pad1'], // objective terminals
   pause: ['Pad9'],
-  restart: ['Enter', 'Pad0'], // the mission complete screen (view/summary.js)
+  restart: ['Enter', 'Pad0'], // the mission complete screen (view/summary.js): its primary button (CONTINUE when the level has a `next`, else RESTART)
+  retry: ['KeyR', 'Pad2'], // the same screen's RESTART when CONTINUE is the primary (also works without a `next`)
   lookLeft: ['ArrowLeft'],
   lookRight: ['ArrowRight'],
   lookUp: ['ArrowUp'],
@@ -88,7 +89,7 @@ export const bound = (action, code) => BINDINGS[action].includes(code);
 export const boundIn = (action, codes) => BINDINGS[action].some((c) => codes.has(c));
 
 // Actions that still work while the input is locked (the boot intro, view/boot.js): the panel and debug toggles.
-const UNLOCKED = new Set(['pause', 'stats', 'skeleton', 'restart']);
+const UNLOCKED = new Set(['pause', 'stats', 'skeleton', 'restart', 'retry']);
 
 const KEY_LOOK = { x: 900, y: 500 }; // px/s equivalent for arrow-key look
 // Right stick look, in mouse px/s at full tilt: a curve for fine aim near the center, and a turn boost when the
