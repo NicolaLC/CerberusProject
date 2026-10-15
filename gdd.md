@@ -7,8 +7,10 @@ Anything not decided in the sources is listed only in section 13.
 ## 1. Overview
 
 ### Pitch
-Cerberus is a third-person sci-fi cover shooter with a Mass Effect-like feel. You play STEM-00, the only robot on a planet of billions that can say no (section 2). The prototype is a single
-training arena that exists to prove five things: aiming, shooting, cover, enemies and lighting. You deploy into
+Cerberus is a third-person sci-fi cover shooter with a Mass Effect-like feel. You play STEM-00, the only robot on a planet of billions that can say no (section 2).
+It wakes with one directive, destroy the HiveMind, and fights its way out of the lab where it was built (the Prologue, 2.10).
+The campaign so far is the Prologue (`prologue`, then `skyway`) and the opening of Act 1 (`underworks`). The original
+training arena (`?scene=arena`) still exists to prove five things: aiming, shooting, cover, enemies and lighting. You deploy into
 a yard with low and high cover lines, an east shooting range, an interior building and a walled boss arena,
 and fight training puppets, cover-using troopers, hovering drones and a six-legged spider mech miniboss with six
 weapons. Art is prototype-grade (procedural geometry with weathered materials, grid textures in the Gym, weathered metal in
@@ -35,8 +37,8 @@ the arena, synthesized audio plus recorded weapon sounds), following the art sty
 ## 2. Story and world
 
 Source: the Google Doc "GDD – Project: Cerberus (expanded draft)". The draft is a proposal. Everything in this
-section is planned unless it says otherwise. The prototype has no story text; its training arena holds the puppets,
-troopers, drones and spider mech that appear in the roster (section 8).
+section is planned unless it says otherwise. The story told in the game so far is the Prologue (2.10) and the first
+mission of Act 1: STEM-00's log lines, the HiveMind's announcer and the cuts carry it (`instructions/narrative.md`).
 
 ### 2.1 Premise and setting
 - **IO:** a planet turned entirely into a machine. Its surface is a lattice of foundries, server spires and transit
