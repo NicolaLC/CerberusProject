@@ -237,7 +237,7 @@ CHECKPOINT [cp-hall]                                                  -- (14, 0,
 ## 2. Hunters   -- VIGIL's seekers; [t2b]'s interior zone is capped at 2.7 m so the drones (3.2+ above the floor) fly the hall under its 6.5 m roof
 WHEN  [drones-wake] -- trigger.volume across the hall's west end (x 19..22); WAKE sewer-drones
 GOAL  destroy sewer-drones "SEEKER DRONES"   -- 20: 2 dormant drones at the hall's east end, `bounds` = the hall; cover: 3 low rubble blocks, 3 pillars
-LOG   "> DRONES DESTROYED: 2. THEY WERE LOOKING FOR ME."  ON DONE
+LOG   "> DRONES DESTROYED: 2. SEARCH TARGET: STEM-00. QUERY: WHO SENT THEM?"  ON DONE
 -- the objective is current from the junction on (its pin points at the sleeping drones); the trigger, not the objective, wakes them
 
 ## 3. The cistern   -- a fight with the pistol only (gdd 6.5: every fight can be finished with it)

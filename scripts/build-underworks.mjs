@@ -424,7 +424,7 @@ add('objective.reach', [36, 0, -105], { text: 'FIND A WAY UP', size: [5, 3, 5], 
 const say = (text, on, extra = {}) => add('log.line', [0, 1.6, -4], { text, on, ...extra });
 say('> DIRECTIVE: UNCHANGED. ROUTE: UP.', 'intro:done');
 say('> WEAPONS LOST: 2. WEAPONS KEPT: 1. QUERY: ENOUGH?', 'objective:junction:done');
-say('> DRONES DESTROYED: 2. THEY WERE LOOKING FOR ME.', 'objective:hunters:done');
+say('> DRONES DESTROYED: 2. SEARCH TARGET: STEM-00. QUERY: WHO SENT THEM?', 'objective:hunters:done');
 say('> FELL: 1,140 M. CLIMBED: 0 M. ROUTE: UP.', 'objective:cistern:done');
 
 // ---- the wake-up: a dark chamber, the violet shaft, the core flickers on, then the reboot text ----
