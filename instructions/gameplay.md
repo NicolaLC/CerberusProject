@@ -222,6 +222,27 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
   span, so legs don't reach into walls), walks over low cover, not through walls. A foot whose spot is behind or on
   a wall is pulled in toward the body. Legs: tripod gait, IK (femur 2.4, tibia 3.8, knees up), a foot steps when 1.3 m from home.
 
+## CERBERUS (`game/actors/cerberus.js` TUNING, scripted loss, gdd.md 8.5)
+- `boss.cerberus`: a colossal machine (about 22 m across, hull 7 m up) clamped to the tower beside the Skyway, out of reach (no walkable
+  collision). Three heads on booms: VIGIL (one great sensor eye), LEGION (voice / emitter array), COLOSSUS (heavy jaw cannon). It cannot be destroyed.
+- Health: 1000 per head, one bar segment each (boss bar `segments`, a tick marks the floor). The hull, booms and shoulders are armor (sparks,
+  no damage, they block bullets and the railgun line); only the heads take damage, and a hit on the glowing eye / node / bore is `weak` (the gun's x3).
+  A hit flashes its head. A head never drops below `floor` (0.65, so 650 HP) and starts repairing `repair` (0.08, 80 HP/s) once it has been left alone for 1.5 s.
+  `damage()` always returns false: no kill, no `puppet:down`, no `boss:dead`.
+- Counting: `unkillable = true`. Not a destroy target (mission.js skips it in the target count and the pin), not part of `arena:clear` or the
+  HUD kill counter (`Enemies.killable`), so it never blocks a level. The drones it calls are normal drones in its group (their kills count).
+- Wakes (`boss:wake` { name: 'CERBERUS' }: toast, boss music) when the player enters `arena`, on damage, or through `wakeGroup`; `dormant` + `group` waits for the cut.
+  Dormant: heads folded down, sensors dim. Awake: the heads track the player, the hull sways.
+- Attacks (all wait while `enemies.holdFire` is set, i.e. during cinematics; nothing new fires or hurts):
+  - VIGIL: 0.9 s eye flare (`boss:charge`), then 8 bolts x 8 dmg, 0.14 s apart, swept across +-3.2 m of the player; cooldown 3-4.5 s; needs line of sight from the eye.
+  - COLOSSUS: the SX-6's plasma mortar from the cannon muzzle, first after 4 s, then every 5-7.5 s (x1.8 faster while the player is in cover), 1.5 s flight, 3.8 m blast, 30 dmg (falls off to half at the rim).
+  - LEGION: first after 3 s, then every 7-10 s, calls up to 2 awake drones (of its group, flying over `arena`) when fewer than 3 of its drones live.
+  - Intended pressure (not measured with a player): a player standing in the open dies in well under a minute, one using cover and moving survives the ~45 s of the scripted fight.
+- Camera lock-on and the diamond marker are the generic boss behaviour (`focusPoint`: the hull, forward and up). The boss bar follows the engaged boss when a level has several (`Enemies.#followBoss`).
+- Art: heads follow the livery rule (VIGIL light ochre, LEGION ochre on dark grey, COLOSSUS faded to bone with rust); sensors violet, weak spots magenta and the brightest glow (`tests/art.browser.mjs`).
+- Cost: one skinned draw per material (12 materials) plus one shadow draw, far LOD with the other rigs. The sector cull (`dormant` out of sight) uses `pos`.
+- Test: `tests/cerberus.browser.mjs`.
+
 ## Troopers (`game/actors/trooper.js`, cover in `game/ai/cover.js`)
 - Armed soldiers (150 hp, 1 weak spot, rifle). Idle until they see the player (32 m + line of sight), get
   shot, or a squadmate within 22 m alerts them.

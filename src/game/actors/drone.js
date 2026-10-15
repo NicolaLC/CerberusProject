@@ -120,6 +120,7 @@ export class Drone {
     this.home = this.pos.clone();
     this.alt = TUNING.hover[0] + Math.random() * (TUNING.hover[1] - TUNING.hover[0]);
     this.yaw = def.yaw ?? 0;
+    this.bounds = def.bounds ?? TUNING.bounds; // { minX, maxX, minZ, maxZ }: where it may fly (CERBERUS passes its arena; levels leave it)
     this.maxHealth = this.health = TUNING.health;
     this.alive = true;
     this.lift = 0;
@@ -305,7 +306,7 @@ export class Drone {
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     // stay outdoors, inside the yard, and out of walls at flight height
-    const b = t.bounds;
+    const b = this.bounds;
     this.pos.x = THREE.MathUtils.clamp(this.pos.x, b.minX, b.maxX);
     this.pos.z = THREE.MathUtils.clamp(this.pos.z, b.minZ, b.maxZ);
     const world = this.ctx.world;

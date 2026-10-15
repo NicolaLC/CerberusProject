@@ -73,7 +73,7 @@ export class Hud {
     addEventListener('resize', () => (this.pinStale = true));
     this.el.log = $('log');
     this.el.status = $('status');
-    this.el.boss = { root: $('boss'), name: $('boss-name'), fill: $('boss-fill'), legs: $('boss-legs'), state: $('boss-state') };
+    this.el.boss = { root: $('boss'), name: $('boss-name'), fill: $('boss-fill'), legs: $('boss-legs'), segs: $('boss-segs'), state: $('boss-state') };
     this.hitTime = 0;
     this.hitMax = 1;
     this.hitPop = 0;
@@ -88,7 +88,8 @@ export class Hud {
     this.hitTime = this.dmgTime = this.toastTime = this.pinO = 0;
     this.pinStale = true;
     this.bossLegs = null;
-    this.el.boss.root.classList.remove('on');
+    this.bossSegs = null;
+    this.el.boss.root.classList.remove('on', 'seg');
   }
 
   // HUD reactions to gameplay events. camRig: for the damage direction indicator.
@@ -221,6 +222,18 @@ export class Hud {
     e.root.classList.toggle('on', on);
     if (!on) return;
     text(e.name, b.name);
+    // a boss with `segments` (CERBERUS: one per head, { name, value 0..1, floor }) shows those bars instead of the core bar and leg pips
+    e.root.classList.toggle('seg', !!b.segments);
+    if (b.segments) {
+      if (this.bossSegs !== b.segments) {
+        this.bossSegs = b.segments;
+        e.segs.innerHTML = b.segments.map((s) => `<i style="--floor:${(s.floor * 100).toFixed(0)}%"><b></b><u>${s.name}</u></i>`).join('');
+        this.bossFills = [...e.segs.querySelectorAll('b')];
+      }
+      b.segments.forEach((s, i) => css(this.bossFills[i], 'width', `${(100 * s.value).toFixed(1)}%`));
+      text(e.state, '');
+      return;
+    }
     css(e.fill, 'width', `${((100 * Math.max(0, b.health)) / b.maxHealth).toFixed(1)}%`);
     const legs = b.legs.map((l) => (l.alive ? 1 : 0)).join('');
     if (legs !== this.bossLegs) {
@@ -341,7 +354,7 @@ export class Hud {
     css(e.health, 'width', `${player.health}%`);
 
 
-    text(e.kills, `${enemies.kills} / ${enemies.all.length}`);
+    text(e.kills, `${enemies.kills} / ${enemies.killable}`);
     text(e.zone, world.isInterior(player.pos) ? 'INTERIOR' : this.zoneName);
     this.#objective(mission.hudPanel(), scheme);
     this.#prompt(mission.interactPrompt(player) ?? pickups?.supplyPrompt(player) ?? null, scheme, camRig.camera); // an objective terminal, else a supply point

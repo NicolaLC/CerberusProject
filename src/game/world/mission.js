@@ -151,7 +151,7 @@ export class Mission {
       let best = Infinity;
       let hit = null;
       for (const a of this.enemies.all) {
-        if (!a.alive || !this.#matches(r, a)) continue;
+        if (!a.alive || a.unkillable || !this.#matches(r, a)) continue;
         const d = (a.pos.x - from.x) ** 2 + (a.pos.z - from.z) ** 2;
         if (d < best) {
           best = d;
@@ -211,7 +211,7 @@ export class Mission {
     const r = (this.current = this.objectives[(this.index = i)]);
     this.elapsed = this.progress = 0;
     this.held = false;
-    this.target = r.obj === 'action' ? r.params.count ?? 1 : r.obj === 'destroy' ? r.params.count ?? this.enemies.all.filter((a) => a.alive && (r.params.group == null || a.squad === r.params.group)).length : 0;
+    this.target = r.obj === 'action' ? r.params.count ?? 1 : r.obj === 'destroy' ? r.params.count ?? this.enemies.all.filter((a) => a.alive && !a.unkillable && (r.params.group == null || a.squad === r.params.group)).length : 0;
     if (r.params.wakeGroup != null) this.events.emit('encounter:wake', r.params.wakeGroup);
     if (r.params.spawnGroup != null) this.events.emit('encounter:spawn', r.params.spawnGroup);
     this.events.emit('mission:objective', this.#info(r));

@@ -26,6 +26,8 @@
     {"id":"env.label","pos":[14,0,29.2],"params":{"text":"enemy.drone\nHP 55 | wakes at 36 m, hovers 3.5-5 m","size":0.22,"flat":true}},
     {"id":"boss.spider","name":"ex:boss.spider","pos":[28,0,22],"params":{"arena":{"minX":19,"maxX":37,"minZ":10,"maxZ":34}}},
     {"id":"env.label","pos":[28,0,30],"params":{"text":"boss.spider\nHP 900 core | wakes at 28 m or in its arena","size":0.22,"flat":true}},
+    {"id":"boss.cerberus","name":"ex:boss.cerberus","pos":[0,0,50],"yaw":3.1416,"params":{"arena":{"minX":-14,"maxX":14,"minZ":20,"maxZ":48}}},
+    {"id":"env.label","pos":[0,0,38],"params":{"text":"boss.cerberus\n3 heads x 1000 HP | never destroyed, repairs to full above 65%, hull is armor","size":0.22,"flat":true}},
     {"id":"env.label","pos":[-36,2.4,10],"params":{"text":"2 GUNS","size":0.8,"color":"#ffe14a"}},
     {"id":"env.box","pos":[-22.5,0,10],"params":{"size":[1.6,0.8,0.5],"mat":"platform"}},
     {"id":"prop.gun","name":"ex:prop.gun","pos":[-23,0.97,10],"yaw":1.5708,"params":{"gun":"rifle"}},

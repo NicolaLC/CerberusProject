@@ -568,6 +568,10 @@ calls troops and drones) and **COLOSSUS** (a heavy jaw-cannon). It speaks for th
   head repairs back up; the bar never drops below a floor. It cannot be destroyed in the Prologue.
 - **Attacks:** VIGIL's sweeping sensor bolts (needs line of sight), COLOSSUS mortar rings at the player's position (like
   the SX-6's, faster against a player in cover), LEGION calling drones.
+- **Numbers (code wins, `actors/cerberus.js`):** 1000 HP per head; floor 65% (650 HP), repair 8% of a head's health per second after 1.5 s
+  untouched. VIGIL: 0.9 s flare, 8 bolts x 8 damage swept across +-3.2 m, every 3 to 4.5 s. COLOSSUS: mortar every 5 to 7.5 s (x1.8 faster
+  against a player in cover), 1.5 s flight, 3.8 m blast, 30 damage. LEGION: up to 2 drones every 7 to 10 s while fewer than 3 live. About 22 m
+  across, hull 7 m above the deck line. It is excluded from destroy objectives, ARENA CLEAR and the kill counter.
 - **Script:** the fight is a `survive` objective (about 45 s). At its end the loss cut plays: the three heads fire
   together, the deck breaks, STEM-00 falls (2.10, step 8).
 
