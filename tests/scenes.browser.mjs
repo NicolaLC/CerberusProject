@@ -13,7 +13,7 @@ const withScene = (scene) => {
   else u.searchParams.delete('scene'); // the runner's URL pins the arena; null = no ?scene at all
   return u.href;
 };
-const SCENES = ['arena', 'gym', 'gym-range', 'gym-ai', 'gym-stress', 'library', 'workshop', 'prologue'];
+const SCENES = ['arena', 'gym', 'gym-range', 'gym-ai', 'gym-stress', 'library', 'workshop', 'prologue', 'skyway', 'underworks'];
 const CYCLES = 3;
 
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader'] });

@@ -249,6 +249,32 @@ const D = await ev(() => {
 });
 expect('the spider keeps its bar (core bar, six leg pips); the bar follows the engaged boss to CERBERUS', D.first && D.spiderBar.on && !D.spiderBar.seg && D.spiderBar.legs === 6 && D.spiderBar.name === 'SX-6 TARANTULA' && D.cerberusBar.on && D.cerberusBar.seg && D.cerberusBar.boss && D.cerberusBar.name === 'CERBERUS', JSON.stringify(D));
 
+// ---- 5. the volley (the Skyway's loss cut): a shot with cue 'volley' charges the heads together, then three beams and a blast ----
+const E = await ev(() => {
+  const g = window.game;
+  const { enemies, engine } = g;
+  T.play([['boss.cerberus', [0, 0, 0], { group: 'cb', dormant: true, arena: { minX: -14, maxX: 14, minZ: 30, maxZ: 60 } }]]);
+  const boss = enemies.all.find((e) => e.kind === 'boss');
+  const blasts = [];
+  engine.events.on('blast', (b) => blasts.push({ kind: b.kind, radius: b.radius, x: b.point.x, z: b.point.z }));
+  const out = { dormant: !boss.awake };
+  const beamsVisible = () => boss.beams.filter((x) => x.glow.visible && x.core.visible).length;
+  engine.events.emit('cinematic:shot', { id: 'x', index: 0, shot: { from: [0, 1, 0], look: [0, 1, 1], time: 1 } }); // no cue: nothing
+  T.hold(0, 40, 0.2);
+  out.noCue = boss.volley === null;
+  engine.events.emit('cinematic:shot', { id: 'x', index: 1, shot: { from: [0, 1, 0], look: [0, 1, 1], time: 1, cue: 'volley' } });
+  T.hold(0, 40, 0.7);
+  out.charging = { volley: !!boss.volley, awake: boss.awake, fired: boss.volley?.fired, beams: beamsVisible(), flare: boss.heads.map((h) => Math.round(h.flare * 10) / 10), blasts: blasts.length };
+  T.hold(0, 40, 1.0); // 1.7 s: past the 1.5 s charge
+  out.firing = { fired: boss.volley?.fired, beams: beamsVisible(), blasts: blasts.slice(), health: g.player.health };
+  T.hold(0, 40, 1.2); // past the 0.9 s of beams
+  out.done = { volley: boss.volley, beams: beamsVisible(), blasts: blasts.length };
+  return out;
+});
+expect('cerberus/volley: a shot without the cue does nothing; the cue wakes a dormant one and starts charging (no beams, no blast yet)', E.dormant && E.noCue && E.charging.volley && E.charging.awake && E.charging.beams === 0 && E.charging.blasts === 0 && E.charging.flare.every((f) => f > 0.3), JSON.stringify(E));
+expect('cerberus/volley: after the charge three beams show and one blast lands where the player stands (visual only: no damage)', E.firing.fired && E.firing.beams === 3 && E.firing.blasts.length === 1 && E.firing.blasts[0].kind === 'mortar' && E.firing.blasts[0].radius >= 5 && Math.abs(E.firing.blasts[0].z - 40) < 0.5 && E.firing.health >= 100, JSON.stringify(E.firing));
+expect('cerberus/volley: the beams end, the volley is over, one blast in all', E.done.volley === null && E.done.beams === 0 && E.done.blasts === 1, JSON.stringify(E.done));
+
 expect('no page errors', errors.length === 0, errors.join(' | '));
 await b.close();
 console.log(fail.length ? `${fail.length} failed` : 'all passed');

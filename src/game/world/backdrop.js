@@ -7,6 +7,7 @@ import { Rng } from '../../engine/random.js';
 // searchlight beams sweeping the haze and the HiveMind's faint presence in the sky (breathing violet eyes). No collision, no shadows,
 // no fog (it stands past the fog's far end: it reads as a silhouette against the dark sky). A deferred piece (sectors.js): built with
 // the sector its pos lies in and drawn only with it; its objects are `live` (their own draws, animated by World.update via animateProps).
+// pos.y lowers the whole city (towers, beacons, searchlights, drone patrols) for a space high above it (the Skyway: pos.y -420); the HiveMind's eyes stay in the sky.
 // Cost: 4 draws (towers instanced, beams instanced, two point sets).
 const LOOK = { fog: new THREE.Color(0x0b1215), density: 0.00045, scale: 600 };
 const VIOLET = new THREE.Color(0x8c3cff);
@@ -24,7 +25,7 @@ export function buildBackdrop(world, d) {
   const R = () => rng.next();
   const [near, far] = p.radius ?? [260, 650];
   const n = p.towers ?? 70;
-  const [cx, , cz] = d.pos;
+  const [cx, cy, cz] = d.pos; // pos.y: where the city's ground is (towers stand from cy - 40); very negative = a city far below the playable deck
   const root = new THREE.Group();
   root.userData.live = true;
 
@@ -46,8 +47,8 @@ export function buildBackdrop(world, d) {
     const ruined = R() < 0.5;
     if (ruined) h *= 0.45 + R() * 0.35;
     const lean = ruined && R() < 0.3 ? (R() - 0.5) * 0.25 : 0;
-    parts.push([x, -40, z, w, h + 40, dd, lean, R() * 0.6, tone, ruined ? 0.08 : 0.4]); // window light: sparse
-    if (ruined && !lean) parts.push([x + (R() - 0.5) * w * 0.3, h - 6, z + (R() - 0.5) * dd * 0.3, w * 0.6, 10 + R() * 12, dd * 0.5, (R() - 0.5) * 0.6, R(), tone * 0.8, 0]);
+    parts.push([x, cy - 40, z, w, h + 40, dd, lean, R() * 0.6, tone, ruined ? 0.08 : 0.4]); // window light: sparse
+    if (ruined && !lean) parts.push([x + (R() - 0.5) * w * 0.3, cy + h - 6, z + (R() - 0.5) * dd * 0.3, w * 0.6, 10 + R() * 12, dd * 0.5, (R() - 0.5) * 0.6, R(), tone * 0.8, 0]);
   }
   const geo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
   const towers = new THREE.InstancedMesh(geo, towerMat, parts.length);
@@ -67,7 +68,7 @@ export function buildBackdrop(world, d) {
   const tall = parts.filter((t) => t[4] > 200 && t[9] > 0.3).slice(0, 8);
   const pts = makePoints(tall.length + 7 + drones, true, LOOK);
   for (const t of tall) pts.put(t[0], t[1] + t[4] + 4, t[2], 10, CYAN, 0.9, 1);
-  const hive = [cx + 300, 260, cz - 1500];
+  const hive = [cx + 300, 260, cz - 1500]; // the HiveMind's eyes: in the sky, whatever the city's height
   for (let i = 0; i < 7; i++) pts.put(hive[0] + (R() - 0.5) * 220, hive[1] + (R() - 0.5) * 60, hive[2] + (R() - 0.5) * 80, i ? 30 + R() * 30 : 520, VIOLET, i ? 0.8 : 0.35, 4, R());
   const patrol = [];
   for (let i = 0; i < drones; i++) {
@@ -89,7 +90,7 @@ export function buildBackdrop(world, d) {
   const pos = pts.geometry.attributes.position;
   root.userData.backdrop = (t) => {
     pts.material.uniforms.time.value = t;
-    for (const dr of patrol) pos.setXYZ(dr.k, cx + Math.sin(dr.a + t * dr.w) * dr.r, dr.y + Math.sin(t * 0.3 + dr.a) * 6, cz + Math.cos(dr.a + t * dr.w) * dr.r);
+    for (const dr of patrol) pos.setXYZ(dr.k, cx + Math.sin(dr.a + t * dr.w) * dr.r, cy + dr.y + Math.sin(t * 0.3 + dr.a) * 6, cz + Math.cos(dr.a + t * dr.w) * dr.r);
     pos.needsUpdate = true;
     lamps.forEach((l, i) => {
       _e.set(-0.35 - 0.25 * Math.sin(t * 0.21 + l.phase), t * 0.17 + l.phase, 0, 'YXZ');

@@ -208,6 +208,7 @@ export const KIT_PIECES = {
   // then slides into the lintel ('up') or the floor ('down') in `time` seconds. pos = center of the opening at the floor, like
   // kit.doorway, so the two share the same pos / yaw. params: on (an `on` form, encounter.js: objective:<id>:done, trigger:<id>, ...),
   // width (4, clamped up to 2.0), height (4, clamped up to 1.8), thickness (0.3), slide ('up'), time (1.2 s), mat (role high).
+  // plain (false): a breakaway slab, no frame, lamp or dressing: a deck plate that drops away on its `on` (the Skyway's broken deck).
   // Opens once per run; a restart, a scene load and the editor's play / edit rebuild it shut. In the editor and the Library it is inert and
   // draws a ghost of the space it slides into (sliding up needs a lintel at least `height` tall above it: wallHeight >= 2 * height).
   // closeOn (optional, an `on` form): after it happened the gate shuts again for good once the player is through (World.addGate).
@@ -215,7 +216,7 @@ export const KIT_PIECES = {
   'kit.gate': {
     example: { params: { on: 'trigger:gate', width: 4, height: 4 } },
     label: 'GATE 4.0 × 4.0, opens on an event',
-    fields: [{ key: 'on', type: 'text' }, { key: 'closeOn', type: 'text', optional: true }, { key: 'shutOn', type: 'text', optional: true }, { key: 'width', type: 'number', min: 0.1 }, { key: 'height', type: 'number', min: 0.1 }, { key: 'thickness', type: 'number', min: 0.05 }, { key: 'slide', type: 'enum', options: ['up', 'down'], optional: true }, { key: 'time', type: 'number', min: 0.1, optional: true }, MAT],
+    fields: [{ key: 'on', type: 'text' }, { key: 'closeOn', type: 'text', optional: true }, { key: 'shutOn', type: 'text', optional: true }, { key: 'width', type: 'number', min: 0.1 }, { key: 'height', type: 'number', min: 0.1 }, { key: 'thickness', type: 'number', min: 0.05 }, { key: 'slide', type: 'enum', options: ['up', 'down'], optional: true }, { key: 'time', type: 'number', min: 0.1, optional: true }, { key: 'plain', type: 'bool', optional: true }, MAT],
     check: (p, registry) => gateProblem(p, registry.guns),
     build(world, d) {
       const id = 'kit.gate';
@@ -228,6 +229,8 @@ export const KIT_PIECES = {
       const problem = gateProblem(p, world.registry?.guns);
       if (problem) fail(id, problem);
       const [mesh] = emit(world, id, d, [{ x: 0, y: 0, z: 0, w: width, h: height, d: t, mat: matOf(p, 'high') }]);
+      // `plain`: a breakaway slab (a deck plate that drops on an event): no frame, lamp or dressing, only the sliding box
+      if (p.plain) return world.addGate(mesh, { on: p.on, closeOn: p.closeOn ?? null, shutOn: p.shutOn ?? null, height, slide, time });
       const gm = gateMats(world);
       if (p.mat == null) mesh.material = gm.door;
       // static frame (jambs + lintel trim, no collision) and the status lamp (one emissive strip poking out of both lintel faces)
