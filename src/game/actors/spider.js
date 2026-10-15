@@ -97,8 +97,8 @@ export class SpiderMech {
     this.orbs = [];
 
     const M = {
-      hull: wornMaterial(0x3a3d40, { roughness: 0.6, metalness: 0.5, wear: 'metal' }), // dark metal hull
-      plate: wornMaterial(0xc9a23a, { roughness: 0.85, metalness: 0.15 }), // matte ochre livery, chipped
+      hull: wornMaterial(0x34383c, { roughness: 0.6, metalness: 0.55, wear: 'metal' }), // dark grey hull
+      plate: wornMaterial(0xa9aca7, { roughness: 0.78, metalness: 0.2 }), // pale worn grey plates (the HiveMind livery), chipped
       trim: wornMaterial(0x17181b, { roughness: 0.5, metalness: 0.65, wear: 'metal' }), // black frame, rams
       eye: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: VISOR, emissiveIntensity: 1 }), // violet sensor cluster
       weak: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2bd6, emissiveIntensity: 3 }),

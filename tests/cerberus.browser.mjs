@@ -85,12 +85,12 @@ const A = await ev(async () => {
     segs: [...document.querySelectorAll('#boss-segs i')].map((i) => i.querySelector('u').textContent),
     coreHidden: getComputedStyle(document.querySelector('#boss .bar')).display === 'none',
   };
-  // the hull blocks a shot at the hull; a shot at the eye hits the eye
+  // the hull blocks a shot at the hull (its chest flank, past VIGIL's face pod); a shot at the eye hits the eye
   const ray = new Raycaster();
   const from = new Vector3(0, 1.6, 45);
   const shoot = (to) => { ray.set(from, to.clone().sub(from).normalize()); return ray.intersectObjects(enemies.hitMeshes(), false)[0]; };
   boss.hull.updateWorldMatrix(true, true);
-  const hullHit = shoot(boss.hull.getWorldPosition(new Vector3()));
+  const hullHit = shoot(boss.hull.getWorldPosition(new Vector3()).add(new Vector3(6.5, 1, 3)));
   out.hullHit = hullHit && { part: hullHit.object.userData.part, armor: boss.armor(hullHit.object.userData.zone, hullHit.object) };
   const eye = boss.heads[0].weak.getWorldPosition(new Vector3());
   const eyeHit = shoot(eye);
@@ -125,7 +125,7 @@ const A = await ev(async () => {
 console.log('footprint relative to pos, hitboxes: dormant', JSON.stringify(A.box), 'awake', JSON.stringify(A.awakeBox));
 expect('boss.cerberus: registered with label and example, builds a boss "CERBERUS", unkillable, three heads, the HUD boss', A.meta && A.isBoss, JSON.stringify(A));
 expect('  defaults: floor 0.65, repair 0.08', A.params.floor === 0.65 && A.params.repair === 0.08, JSON.stringify(A.params));
-expect('  colossal: about 21 m across, heads out in front', A.box.max[0] - A.box.min[0] >= 18 && A.box.max[0] - A.box.min[0] <= 25 && A.box.max[2] > 12, JSON.stringify(A.box));
+expect('  colossal: about 18 m across the pods, 21 m tall, heads out in front', A.box.max[0] - A.box.min[0] >= 16 && A.box.max[0] - A.box.min[0] <= 24 && A.box.max[1] > 18 && A.box.max[2] > 12, JSON.stringify(A.box));
 expect('  dormant until the player is in its arena, no boss bar before', A.asleepOutside && A.dormantBar, JSON.stringify([A.asleepOutside, A.dormantBar]));
 expect('  wakes in its arena and emits boss:wake { name } once', A.awake && A.wakes.length === 1 && A.wakes[0] === 'CERBERUS', JSON.stringify(A.wakes));
 expect('  boss bar: CERBERUS with three head segments instead of the core bar', A.bar.on && A.bar.seg && A.bar.name === 'CERBERUS' && A.bar.segs.join() === 'VIGIL,LEGION,COLOSSUS' && A.bar.coreHidden, JSON.stringify(A.bar));

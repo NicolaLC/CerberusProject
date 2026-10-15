@@ -12,8 +12,9 @@ in the repo (origin and licence unconfirmed); add it under `instructions/art/` o
 ## 1. Keep from the reference
 - **Function-first silhouettes.** Every part does a visible job: pistons, actuators, cable bundles, vents, gun
   mounts, sensor bands. If a shape has no purpose, cut it.
-- **Livery is paint, not light.** HiveMind war units wear matte industrial ochre paint, chipped at the edges down
-  to dark metal, with panel seams and small stencilled serials.
+- **Livery is paint, not light.** HiveMind war units wear pale worn grey plates (owner decision 2026-10-15, after Mass
+  Effect 2's robots and KEI-9: shape language only) over a dark grey / black frame, chipped and scuffed, with dark grooves
+  and the frame bare at the joints. Ochre is left to the calibration puppets and small warning markings.
 - **Sensors are the only saturated light on an enemy:** a cluster of small violet-magenta lenses set in a dark band.
 - **Cold, hazy world:** teal-cyan volumetric fog, dark interiors, cold strip lights, wet floors reflecting the
   glow, crates and infrastructure that give a sense of scale.
@@ -22,13 +23,14 @@ in the repo (origin and licence unconfirmed); add it under `instructions/art/` o
 
 ## 2. Push past the reference (serious, not cute)
 A round hull with a row of round lights can read as a friendly face. Avoid it:
-- **No faces.** Sensor clusters are small, numerous and insect-like or asymmetric. Never two big eyes, never a row
-  that reads as a smile, never anything shaped like an expression.
+- **No faces.** Sensor clusters are small and asymmetric, or ONE round lens ringed in violet (CERBERUS's heads, the
+  drones). Never two big eyes, never a row that reads as a smile, never anything shaped like an expression.
 - **Mass.** Legs and joints are thicker than the reference's, armour plates cover the joints, and weight shows
   (feet sink in, the floor cracks under them).
 - **Wear.** Soot, oil streaks, scorch marks around barrels, dents, welded patch plates and rivets.
   Nothing on a HiveMind war unit is ever new or clean.
-- **Real-world machinery proportions:** tanks, cranes, mining rigs, artillery. Never bulbous or chunky-cute.
+- **Real-world machinery proportions:** tanks, cranes, mining rigs, artillery. Rounded armor shells are fine (the KEI-9
+  language: few big plates, glowing joint rings); chunky-cute proportions are not.
 - **Gothic-industrial grandeur**, described rather than copied: monumental scale, layered plate, cathedrals of
   steel, ritual repetition, serial numbers worn like heraldry. Do **not** use other franchises' recognizable
   motifs (skulls on everything, double-headed eagles, purity seals, specific armour designs), and do not name
@@ -43,18 +45,19 @@ Facility signage only: floor stencils and wall panels of the calibration facilit
 | World haze, HiveMind network light | teal-cyan | `#2E6F78` haze, `#3FE0FF` glow | Fog, rails, screens, strip lights |
 | Cold light | white | `#EAF6FA` | Strip lights, skylights |
 | Shadow | blue-black | `#0B1118` | |
-| Enemy livery (all HiveMind war units) | worn ochre over dark metal | `#C9A23A` / `#3A3D40` | Matte, **never emissive** |
+| Enemy livery (all HiveMind war units) | pale worn grey over a dark grey / black frame | `#A9ACA7` / `#34383C` / `#1D1F23` | Matte, **never emissive** |
 | Enemy sensors = weak spots | violet-magenta | `#C04BFF` to `#FF3DCB` | **If it glows violet, shoot it** |
 | STEM-00 | olive drab, scratched | `#5D6849` | Matches the prototype (`soldier.js`) and the reference rifle |
 | STEM-00 core | amber | `#FFB347` | The only warm *light* on screen |
 | Rejects | rust and sodium orange | `#9C4A26` / `#FF7A1A` | Flickering, broken |
 
-- At least 80% of any frame is desaturated (teal, grey, black, dirty ochre). Each object gets at most one
+- At least 80% of any frame is desaturated (teal, grey, black). Each object gets at most one
   saturated light colour.
-- Ochre (enemy paint) and amber (STEM-00's light) must never be confused. Ochre is dirty and matte, amber glows.
+- Ochre (puppet paint, warning markings) and amber (STEM-00's light) must never be confused. Ochre is dirty and matte,
+  amber glows.
 - Variation per head of CERBERUS stays within the livery: **VIGIL** units are light and sleek, with more sensors;
-  **LEGION** units are identical and mass-produced, in ochre with dark grey; **COLOSSUS** units are old, their ochre
-  faded almost to bone, with rust and frost.
+  **LEGION** units are identical and mass-produced, pale grey with dark grey; **COLOSSUS** units are old, their grey
+  faded and stained, with rust and frost.
 
 ### Lighting rule: a dark world
 The HiveMind devoured the sunlight (gdd.md 2.1), so every open sky is near-night: a black zenith over a dim teal horizon
@@ -66,7 +69,7 @@ preset, level.md). Distant skylines are black silhouettes against the horizon ha
 city. Interiors keep their look (cold white and cyan strips).
 
 ## 4. Never (the "childish" checklist)
-Bright flat or rainbow colours · glossy toy plastic · big heads or chunky toy proportions · bubbly rounded shapes ·
+Bright flat or rainbow colours · glossy toy plastic · big heads or chunky toy proportions · bubbly cartoon shapes ·
 outlines or cel shading · faces, smiles or expressive eyes on machines · clean new surfaces · chrome bling ·
 comedic poses. PATCH is the only comic element, and even PATCH is built from real broken parts.
 
@@ -81,11 +84,14 @@ empty now. Decisions taken in the pass (keep them unless the rule changes):
   emissive 0.4 to 5) for #49 to drive by story progress. Small amber LEDs stay: they are STEM-00's own light.
 - **Gun furniture: STEM-00 repaints the guns olive as it claims them** (the reference rifle is olive). The K-series
   bodies stay worn dark metal with scorched muzzles; player models and Library props are olive. In a trooper's hands the
-  same rifle keeps the HiveMind's worn ochre and has no glows (sensors are the only saturated light on an enemy).
+  same rifle keeps the HiveMind's dark grey furniture and has no glows (sensors are the only saturated light on an enemy).
   Gun glows stay amber/orange (STEM-00's power), never violet. Every gun shows a receiver, a magazine and a heat shroud.
-- **Enemies:** ochre livery `#C9A23A`, matte, over dark metal `#3A3D40`; sensors violet (`VISOR` `#8C3CFF`, bluer
-  than the spec's `#C04BFF` end so it never reads as the magenta weak spots). Sensors are small uneven clusters (drone,
-  spider turret, trooper and puppet visors): no eye slits, never two big eyes. At rest a sensor is dimmer than the weak
+- **Enemies:** pale worn grey plates `#A9ACA7` over a black frame `#1D1F23`, dark grey trim `#34383C` (troopers:
+  `looks.js`, slim, a few big plates, violet rings at the shoulders and hips; plated troopers bolt on bare dark plate steel
+  `#50565C`; drones: `drone.js`, a rounded pod, one ringed lens, ducted rotors, few parts; CERBERUS: cerberus-model.js).
+  Sensors violet (`VISOR` `#8C3CFF`, bluer than the spec's `#C04BFF` end so it never reads as the magenta weak spots):
+  small uneven clusters (trooper face plate, spider turret, puppet visors) or one ringed lens; no eye slits, never two
+  big eyes. The SX-6 wears the same pale grey plates over its dark grey hull. At rest a sensor is dimmer than the weak
   spots; only the shot telegraph flares it brighter, for a moment, on purpose.
 - **Spider miniboss (SX-6):** rebuilt after the owner's walker concept: saucer hull, sensor band with lens clusters
   (clusters of 2-3 small lenses at uneven spacing, not a row of round eyes), twin-barrel side pods, tall splayed legs.
@@ -97,11 +103,16 @@ empty now. Decisions taken in the pass (keep them unless the rule changes):
 - **World:** teal-cyan haze sky and heavy fog (the default `sky`; a level that opts into the `night` preset follows the dark-world rule above); cold sun and fill; interiors lit cold white and cyan, red only for story
   beats (a Rejects or alarm room) and the `env.alarm` lighting state (workshop.md "Alarm": the whole scene fades to amber (`#ff9a2a`, 0.4: never damage red, which made the purge read as low health) and pulses while the alarm runs; the HiveMind announcer line is cold white with a network-cyan glow, never red). The arena wears weathered metal (`skin: "weathered"`, level.md); the Gym rooms,
   Library and Workshop keep the grid textures because metrics read off them.
-- **CERBERUS on the horizon** (main menu backdrop, `view/menu-scene.js`): a colossal quadruped war mech, standing three
-  quarters toward the city: low wide hull under rounded armour shells (carapace, pauldrons, haunches) with dark seam bands, a launcher tube on its back, digitigrade legs (rounded
-  thighs, joint discs, thin piston shins, splayed claws), three heads (VIGIL the forward sensor head with its gun, LEGION and
-  COLOSSUS the shoulder gun pods). Never sharp: a tone darker than the sky, lighter on top, a backlit rim, its legs sunk
-  in the haze; its only light the violet eyes that breathe. Sensed more than seen, but always readable as a mech dog.
+- **CERBERUS** (owner decision 2026-10-15: inspired by Mass Effect 2's KEI-9 robot dog for its shape language only: no
+  names, markings, glyphs or meshes taken). ONE body, `actors/cerberus-model.js`, used by the Skyway boss (×1.5), the title's
+  horizon (×46, `view/menu-scene.js`) and the intro reel (rendered once to an image, `view/reel.js`). A hunched war hound: a high
+  rounded chest, the back sloping to the haunches, raised plates and dark grooves breaking the shells; four digitigrade legs on big
+  joint discs ringed in violet, armor cowls over the shoulder and hip discs, plated upper limbs, wheel-like foot hubs and claws.
+  Heads: VIGIL low at the front (a rounded face pod round ONE great lens: violet rings, the magenta iris), LEGION (its left
+  shoulder pod: an emitter dish) and COLOSSUS (its right: a heavy cannon). Livery: pale worn grey plates (`#A9ACA7`) over a dark
+  grey frame (`#34383C`) and black joints; the first unit in the new HiveMind livery (the other units follow). On the horizon it
+  wears the title's haze shader instead (a tone darker than the sky, a backlit rim, its legs sunk in the haze, only the lenses
+  and joint rings lit): sensed more than seen, always readable as a mech dog.
 - **Grade** (`post.js`): surfaces desaturated, shadows teal, HDR emissives keep their colour; bloom only above 1.0.
 - **HUD:** the crosshair's weak-spot state stays magenta, the kill shockwave stays cyan. The enemy state and damage
   feedback **stay red, as UI-only colours**: red appears nowhere in the world, so it can't be confused with a sensor,

@@ -1,4 +1,8 @@
+import * as THREE from 'three';
 import { Rng } from '../../engine/random.js';
+import { Rig, Animator } from '../actors/rig.js';
+import { buildSoldier, CORE } from '../actors/soldier.js';
+import { buildCerberus } from '../actors/cerberus-model.js';
 
 // Intro reel (NEW GAME, before the Prologue loads): six shots of IO, each with a HiveMind PA card typed in and read aloud,
 // then STEM-00's own card, `SIGNAL: UNREGIS`, cut off mid-word (not the HiveMind speaking: no voice, amber, glitched).
@@ -45,7 +49,6 @@ const C = {
   violet: '192, 75, 255', // #C04BFF
   magenta: '255, 61, 203', // #FF3DCB
   amber: '255, 179, 71', // #FFB347
-  olive: '#12160e', // STEM-00 in the dark: olive drab, nearly black
 };
 const reduce = matchMedia('(prefers-reduced-motion: reduce)');
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
@@ -53,8 +56,9 @@ const smooth = (x) => (x = clamp01(x)) * x * (3 - 2 * x);
 const rgba = (rgb, a) => `rgba(${rgb}, ${a})`;
 
 export class Reel {
-  constructor({ audio }) {
+  constructor({ audio, renderer }) {
     this.audio = audio;
+    this.renderer = renderer; // the game's, used once: the lab shot's STEM-00 (#stemSprite)
     this.el = document.getElementById('reel');
     this.canvas = this.el.querySelector('canvas');
     this.g = this.canvas.getContext('2d');
@@ -553,37 +557,14 @@ export class Reel {
     g.save();
     g.translate(cx, base);
     g.scale(k / 1000, k / 1000);
-    // silhouette in body units: x -500..500, y up negative; a quadruped mech, a sensor head and two shoulder gun pods
-    g.fillStyle = '#081014';
-    g.strokeStyle = rgba(C.glow, 0.14);
-    g.lineWidth = 2;
-    const P = (pts) => {
-      g.beginPath();
-      pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-      g.closePath();
-      g.fill();
-      g.stroke();
-    };
-    // legs: armoured pillars, knees forward
-    for (const lx of [-300, -150, 150, 300]) {
-      P([[lx - 30, -330], [lx + 30, -330], [lx + 38, -200], [lx + 30, 0], [lx - 36, 0], [lx - 40, -200]]);
-      g.fillRect(lx - 48, -225, 96, 40); // knee plate
-    }
-    P([[-380, -330], [380, -330], [340, -440], [120, -480], [-120, -480], [-340, -440]]); // hull
-    P([[-60, -470], [60, -470], [90, -540], [30, -600], [-30, -600], [-90, -540]]); // VIGIL: the sensor head
-    P([[-330, -450], [-170, -470], [-160, -560], [-320, -545]]); // LEGION: left gun pod
-    g.fillRect(-470, -530, 150, 14);
-    g.fillRect(-470, -505, 150, 14);
-    P([[170, -470], [330, -450], [320, -545], [160, -560]]); // COLOSSUS: right gun pod
-    g.fillRect(320, -530, 150, 14);
-    g.fillRect(320, -505, 150, 14);
-    // sensors: small, uneven clusters (no faces); each flares when its head is named
+    // the shared body (#cerberusSprite), feet on the base line, 1500 units wide; its lenses flare when their head is named
+    const S = (this.cerb ??= this.renderer ? this.#cerberusSprite() : null); // none: a standalone reel (tests)
+    const sw = 1500;
+    const sh = S ? (sw * S.img.height) / S.img.width : 0;
+    const top = S ? -sh * S.feet : 0;
+    if (S) g.drawImage(S.img, -sw / 2, top, sw, sh);
     const v = t - TUNING.cardAt;
-    const heads = [
-      { at: shot.at.heads[0], pts: [[-22, -560], [-8, -572], [10, -556], [24, -568], [2, -545], [-14, -540], [18, -540]] },
-      { at: shot.at.heads[1], pts: [[-300, -520], [-288, -530], [-276, -515], [-262, -526]] },
-      { at: shot.at.heads[2], pts: [[262, -526], [276, -514], [290, -530], [300, -518]] },
-    ];
+    const heads = [0, 1, 2].map((i) => ({ at: shot.at.heads[i], pts: (S?.sensors ?? []).filter((x) => x.head === i).map((x) => [-sw / 2 + x.x * sw, top + x.y * sh]) }));
     for (const h of heads) {
       const since = v - h.at;
       const flare = since >= 0 ? Math.max(0.35, Math.exp(-since * 1.4)) : 0;
@@ -641,38 +622,21 @@ export class Reel {
       g.fillRect(cx - 175 * s, H * y, 50 * s, 26 * s);
       g.fillRect(cx + 125 * s, H * y, 50 * s, 26 * s);
     }
-    // STEM-00: a humanoid frame, arms down, head bowed
-    g.fillStyle = C.olive;
+    // STEM-00: the real model, powered down in the cradle (#stemSprite), feet on the cradle's base
     const top = H * 0.26;
-    g.beginPath();
-    g.ellipse(cx, top + 42 * s, 24 * s, 30 * s, 0, 0, Math.PI * 2); // head, bowed
-    g.fill();
-    g.beginPath(); // shoulder plates
-    g.moveTo(cx - 112 * s, top + 118 * s);
-    g.lineTo(cx - 70 * s, top + 66 * s);
-    g.lineTo(cx + 70 * s, top + 66 * s);
-    g.lineTo(cx + 112 * s, top + 118 * s);
-    g.fill();
-    g.fillRect(cx - 58 * s, top + 115 * s, 116 * s, 190 * s); // torso
-    g.fillRect(cx - 105 * s, top + 80 * s, 30 * s, 250 * s); // arms
-    g.fillRect(cx + 75 * s, top + 80 * s, 30 * s, 250 * s);
-    g.fillRect(cx - 55 * s, top + 300 * s, 45 * s, 330 * s); // legs
-    g.fillRect(cx + 10 * s, top + 300 * s, 45 * s, 330 * s);
-    g.strokeStyle = rgba(C.white, 0.12); // rim from the strip light
-    g.lineWidth = 2 * this.dpr;
-    g.beginPath();
-    g.moveTo(cx - 80 * s, top + 70 * s);
-    g.lineTo(cx + 80 * s, top + 70 * s);
-    g.stroke();
+    const h = H * 0.92 - top + 20 * s;
+    const img = this.renderer && (this.stemImg ??= this.#stemSprite()); // none: a standalone reel (tests)
+    if (img) g.drawImage(img, cx - (h * img.width) / img.height / 2, H * 0.92 - h, (h * img.width) / img.height, h);
     // the core: dormant, then one amber flicker in the last second (the Seed)
     const late = shot.len - t;
     const wake = !still && late < 1.1 && Math.sin(t * 31) > 0.2 ? 0.9 : 0;
     const core = 0.12 + wake;
-    const gl = g.createRadialGradient(cx, top + 160 * s, 0, cx, top + 160 * s, 60 * s);
+    const cy = H * 0.92 - h * (1.35 / 2.1); // its chest in the sprite
+    const gl = g.createRadialGradient(cx, cy, 0, cx, cy, 60 * s);
     gl.addColorStop(0, rgba(C.amber, core));
     gl.addColorStop(1, rgba(C.amber, 0));
     g.fillStyle = gl;
-    g.fillRect(cx - 60 * s, top + 100 * s, 120 * s, 120 * s);
+    g.fillRect(cx - 60 * s, cy - 60 * s, 120 * s, 120 * s);
     g.fillStyle = '#c9a23a'; // stencilled serial on the cradle base (ochre, matte)
     g.font = `${Math.round(22 * s)}px ui-monospace, Consolas, monospace`;
     g.textAlign = 'center';
@@ -700,6 +664,90 @@ export class Reel {
       g.fillRect(x, bar * 0.45, 3 * this.dpr, 3 * this.dpr); // rivets
       g.fillRect(x, H - bar * 0.55, 3 * this.dpr, 3 * this.dpr);
     }
+  }
+
+  // STEM-00 for the lab shot: the player's rig and soldier parts in the wake-up cinematic's dormant pose (slumped, head bowed),
+  // lit by the cold strip light above and its own dim core, rendered once into a transparent image with the game's renderer
+  // (#snapshot).
+  #stemSprite() {
+    const w = 400;
+    const h = 700; // frames x -0.6..0.6, y -0.05..2.05 m
+    const scene = new THREE.Scene();
+    const rig = new Rig({ dummy: false });
+    const M = buildSoldier(rig);
+    M.core.emissiveIntensity = CORE.min;
+    const anim = new Animator(rig, { armed: false });
+    const pose = { speed: 0, run: false, crouch: 0, aimPitch: 0, combat: false, recoil: 0, lean: 0, lookYaw: 0, lower: 0, dormant: 1, seated: 0 };
+    for (let i = 0; i < 90; i++) anim.update(1 / 30, pose); // settle into the slump
+    scene.add(rig.root);
+    scene.add(new THREE.HemisphereLight(0x9fc4cc, 0x05080a, 0.35));
+    const strip = new THREE.DirectionalLight(0xeaf6fa, 2.6); // the strip light, above and a little in front
+    strip.position.set(0.3, 4, 1.4);
+    scene.add(strip);
+    const rim = new THREE.DirectionalLight(0x3fe0ff, 1.2); // haze behind it
+    rim.position.set(-1, 1.5, -2);
+    scene.add(rim);
+    const core = new THREE.PointLight(0xffb347, 0.15, 0.8, 2);
+    core.position.set(0, 1.25, 0.35);
+    scene.add(core);
+    const cam = new THREE.OrthographicCamera(-0.6, 0.6, 2.05, -0.05, 0.1, 20);
+    cam.position.set(0, 0, 5);
+    const out = this.#snapshot(scene, cam, w, h);
+    for (const m of Object.values(M)) m.dispose?.(); // the part geometry is shared (parts.js cache): kept
+    return out;
+  }
+
+  // CERBERUS for its shot: the shared body (cerberus-model.js) three quarters on, a dark silhouette backlit by the haze, rendered
+  // once like STEM-00. Returns { img, sensors: [{ x, y (0..1 of the image), size, head }] (the lens flares), feet (y, 0..1) }.
+  #cerberusSprite() {
+    const w = 1200;
+    const h = 800;
+    const scene = new THREE.Scene();
+    const dark = new THREE.MeshStandardMaterial({ color: 0x0b1519, roughness: 0.7, metalness: 0.3 });
+    const black = new THREE.MeshStandardMaterial({ color: 0x040708, roughness: 0.6, metalness: 0.4 });
+    const model = buildCerberus({ shell: dark, frame: black, trim: black, eye: black, heads: [dark, dark, dark], weak: [black, black, black] });
+    model.root.rotation.y = -0.6; // three quarters, its right flank toward us
+    scene.add(model.root);
+    scene.add(new THREE.HemisphereLight(0x2e6f78, 0x020304, 0.6));
+    const rim = new THREE.DirectionalLight(0x9fe8ff, 3); // the haze behind it
+    rim.position.set(6, 10, -14);
+    scene.add(rim);
+    const cam = new THREE.PerspectiveCamera(30, w / h, 1, 200);
+    cam.position.set(-5, 4, 38);
+    cam.lookAt(0, 7.5, 0);
+    cam.updateMatrixWorld();
+    scene.updateMatrixWorld(true);
+    const at = (p) => (p.project(cam), { x: (p.x + 1) / 2, y: (1 - p.y) / 2 });
+    const sensors = model.sensors.map((x) => ({ ...at(x.obj.localToWorld(x.pos.clone())), size: x.size, head: x.head }));
+    const feet = at(new THREE.Vector3(0, 0, 0)).y;
+    const img = this.#snapshot(scene, cam, w, h);
+    dark.dispose();
+    black.dispose();
+    return { img, sensors, feet };
+  }
+
+  // Renders `scene` once with the game's renderer into a transparent w x h image (an sRGB render target: the screen canvas has no
+  // alpha; no tone mapping off screen, so the scenes keep their lights low).
+  #snapshot(scene, cam, w, h) {
+    const r = this.renderer;
+    const target = new THREE.WebGLRenderTarget(w, h, { samples: 4, colorSpace: THREE.SRGBColorSpace });
+    const clear = r.getClearColor(new THREE.Color());
+    const alpha = r.getClearAlpha();
+    r.setRenderTarget(target);
+    r.setClearColor(0x000000, 0);
+    r.clear();
+    r.render(scene, cam);
+    const px = new Uint8Array(w * h * 4);
+    r.readRenderTargetPixels(target, 0, 0, w, h, px);
+    r.setRenderTarget(null);
+    r.setClearColor(clear, alpha);
+    target.dispose();
+    const out = new OffscreenCanvas(w, h);
+    const x = out.getContext('2d');
+    const img = x.createImageData(w, h);
+    for (let y = 0; y < h; y++) img.data.set(px.subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4); // rows come bottom up
+    x.putImageData(img, 0, 0);
+    return out;
   }
 
   // 7. The signal: black, one amber point where the core is, the card typed slowly and cut off.

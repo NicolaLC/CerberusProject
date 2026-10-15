@@ -34,17 +34,14 @@ const DEBRIS = { push: [0, 0], spread: 6, up: [2, 4], spin: 12, life: 4 }; // se
 const BLAST = { point: new THREE.Vector3(), radius: 1.5, kind: 'drone' };
 const HITBOX_MAT = new THREE.MeshBasicMaterial(); // never drawn
 
-// front sensor cluster: [x, y, radius] on the sensor housing
-const SENSORS = [[0.03, 0.045, 0.022], [-0.045, 0.03, 0.016], [0.0, -0.02, 0.026], [0.065, -0.01, 0.012], [-0.05, -0.045, 0.014], [0.035, -0.07, 0.012], [-0.015, 0.08, 0.01]];
-
 // rotor positions [x, z] on the body
 export const ROTORS = [[0.6, 0.55], [-0.6, 0.55], [0.6, -0.55], [-0.6, -0.55]];
 
 export function droneMaterials() {
   const M = {
-    shell: wornMaterial(0x3a3d40, { roughness: 0.6, metalness: 0.5, wear: 'metal' }), // dark metal pod
-    plate: wornMaterial(0xc9a23a, { roughness: 0.85, metalness: 0.15 }), // matte ochre livery, chipped
-    eye: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: VISOR, emissiveIntensity: 1.2 }), // violet sensors
+    shell: wornMaterial(0xa9aca7, { roughness: 0.78, metalness: 0.2 }), // pale worn grey plates (art-style.md: the HiveMind livery)
+    plate: wornMaterial(0x34383c, { roughness: 0.6, metalness: 0.55, wear: 'metal' }), // dark grey frame, ducts, gun
+    eye: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: VISOR, emissiveIntensity: 1.2 }), // violet lens rings
     weak: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2bd6, emissiveIntensity: 3 }),
   };
   M.weak.userData.lodGlow = 5;
@@ -52,61 +49,46 @@ export function droneMaterials() {
   return M;
 }
 
-// The drone's look without bones or hitboxes: `body` parts (in the body bone's space) and `blades()` (one rotor's, in its
-// bone's space, at ROTORS [x, 0.12, z]). The Drone hangs them on its bones; the menu set (view/menu-scene.js) merges them.
+// The drone's look without bones or hitboxes: `body` parts (in the body bone's space; [hull, sensor, gun, core, ...rotor
+// mounts], the title's far drones take the hull and the core) and `blades()` (one rotor's, in its own space).
+// A few big parts (CERBERUS's language, cerberus-model.js): a rounded pale pod on a dark frame, one round lens ringed in violet,
+// a slung cannon, the glowing core underneath, four ducted rotors.
 export function droneLook(M) {
   const R = Math.PI / 2;
-  const body = [];
-  // look: armored pod with an ochre spine plate, a small violet sensor cluster in front, a slung cannon, the glowing core
-  // underneath, four ducted rotors on struts
-  body.push(
+  const body = [
     look(
-      rb(M.shell, 0.62, 0.26, 0.74, 0.09, 0, 0, 0), // hull
-      rb(M.shell, 0.5, 0.12, 0.6, 0.05, 0, -0.14, -0.02), // belly
-      rb(M.plate, 0.44, 0.07, 0.52, 0.03, 0, 0.15, -0.05), // spine plate
-      rb(M.shell, 0.05, 0.075, 0.5, 0.015, 0.1, 0.16, -0.05), // plate stripes
-      rb(M.shell, 0.05, 0.075, 0.5, 0.015, -0.1, 0.16, -0.05),
-      rb(M.plate, 0.64, 0.05, 0.1, 0.02, 0, 0.06, 0.3), // front bumper
-      rb(M.shell, 0.18, 0.1, 0.12, 0.03, 0, 0.12, -0.38), // rear sensor block
-      cyl(M.shell, 0.006, 0.006, 0.26, 0.12, 0.28, -0.38, -0.35, 0, 0, 5), // antennas
-      cyl(M.shell, 0.006, 0.006, 0.2, -0.12, 0.25, -0.38, -0.35, 0, 0, 5),
+      rb(M.shell, 0.62, 0.3, 0.76, 0.14, 0, 0.02, -0.02), // pod
+      rb(M.plate, 0.5, 0.12, 0.6, 0.05, 0, -0.14, -0.02), // frame under it
+      rb(M.plate, 0.64, 0.04, 0.06, 0.02, 0, 0.12, 0.05), // groove across the top
     ),
     look(
-      cyl(M.shell, 0.13, 0.15, 0.1, 0, 0.02, 0.38, R, 0, 0, 16), // sensor housing
-      // an asymmetric cluster of small lenses (never one big eye): insect-like, no face
-      ...SENSORS.map(([x, y, r]) => cyl(M.eye, r, r, 0.02, x, 0.02 + y, 0.435, R, 0, 0, 8)),
-      cyl(M.eye, 0.016, 0.016, 0.02, 0.19, 0.05, 0.37, R, 0, 0, 8), // side sensors (one side heavier)
-      cyl(M.eye, 0.011, 0.011, 0.02, 0.19, 0.0, 0.37, R, 0, 0, 8),
-      cyl(M.eye, 0.011, 0.011, 0.02, -0.19, 0.03, 0.37, R, 0, 0, 8),
+      cyl(M.plate, 0.15, 0.15, 0.08, 0, 0.02, 0.38, R, 0, 0, 20), // lens housing
+      cyl(M.plate, 0.1, 0.1, 0.02, 0, 0.02, 0.425, R, 0, 0, 20),
+      ring(M.eye, 0.085, 0.012, 0, 0.02, 0.43), // violet ring
+      cyl(M.eye, 0.025, 0.025, 0.02, 0, 0.02, 0.43, R, 0, 0, 10), // pupil
     ),
     look(
-      rb(M.shell, 0.12, 0.08, 0.16, 0.02, 0, -0.17, 0.3), // gun mount
-      cyl(M.shell, 0.032, 0.036, 0.4, 0, -0.1, 0.5, R, 0, 0, 10), // barrel
-      cyl(M.plate, 0.045, 0.045, 0.06, 0, -0.1, 0.66, R, 0, 0, 10), // muzzle brake
-      cyl(M.shell, 0.042, 0.042, 0.02, 0, -0.1, 0.42, R, 0, 0, 10),
+      cyl(M.plate, 0.035, 0.035, 0.42, 0, -0.1, 0.5, R, 0, 0, 10), // barrel
+      cyl(M.plate, 0.05, 0.05, 0.08, 0, -0.1, 0.68, R, 0, 0, 10), // muzzle brake
     ),
     look(
-      cyl(M.shell, 0.19, 0.17, 0.05, 0, -0.2, 0, 0, 0, 0, 16), // core housing
+      cyl(M.plate, 0.19, 0.17, 0.05, 0, -0.2, 0, 0, 0, 0, 16), // core housing
       cyl(M.weak, 0.14, 0.12, 0.08, 0, -0.22, 0, 0, 0, 0, 16), // core
     ),
-  );
+  ];
   for (const [x, z] of ROTORS) {
     body.push(
       look(
-        rb(M.shell, Math.hypot(x, z) - 0.1, 0.05, 0.07, 0.02, x * 0.5, 0.05, z * 0.5, 0, Math.atan2(-z, x), 0), // strut
-        cyl(M.shell, 0.055, 0.065, 0.14, x, 0.07, z, 0, 0, 0, 12), // motor
-        cyl(M.plate, 0.067, 0.067, 0.02, x, 0.04, z, 0, 0, 0, 12),
-        ring(M.shell, 0.29, 0.025, x, 0.12, z, R, 0, 0), // duct
-        ring(M.plate, 0.29, 0.012, x, 0.155, z, R, 0, 0), // duct rim
-        cyl(M.eye, 0.016, 0.016, 0.016, x * 1.39, 0.12, z * 1.39, 0, 0, 0, 8), // nav light
+        rb(M.plate, Math.hypot(x, z) - 0.1, 0.05, 0.07, 0.02, x * 0.5, 0.05, z * 0.5, 0, Math.atan2(-z, x), 0), // strut
+        cyl(M.plate, 0.06, 0.06, 0.12, x, 0.07, z, 0, 0, 0, 12), // motor
+        ring(M.shell, 0.29, 0.035, x, 0.12, z, R, 0, 0), // duct
       ),
     );
   }
   const blades = () =>
     look(
-      rb(M.shell, 0.52, 0.012, 0.06, 0.006, 0, 0, 0, 0.15, 0, 0), // blades
-      rb(M.shell, 0.06, 0.012, 0.52, 0.006, 0, 0, 0, 0, 0, 0.15),
-      cyl(M.plate, 0.035, 0.035, 0.03, 0, 0.01, 0, 0, 0, 0, 10), // hub
+      rb(M.plate, 0.52, 0.012, 0.06, 0.006, 0, 0, 0, 0.15, 0, 0),
+      rb(M.plate, 0.06, 0.012, 0.52, 0.006, 0, 0, 0, 0, 0, 0.15),
     );
   return { body, blades };
 }

@@ -5,7 +5,7 @@
 // World (metres, +Z south, -Z north; deck top y = 0):
 //   the lab spire (Proving Grounds) stands at the south end (z >= 23.75) with the exit doorway shut behind a short roofed landing;
 //   the Skyway runs north from z 24 to the sealed Gate shutter at z -176 (200 m), 24 m wide (x -12..12), hundreds of metres above the city.
-//   Flanking skyscrapers stand 24+ m off the deck, their bases at y -420. CERBERUS hangs on the east tower beside the far third.
+//   Flanking skyscrapers stand 24+ m off the deck, their bases at y -420. CERBERUS crouches on a ledge of the east tower beside the far third.
 import { registerHooks } from 'node:module';
 import { writeFileSync } from 'node:fs';
 
@@ -34,7 +34,7 @@ const PARAPET = { x: 12.45, w: 0.9, h: 1.1 }; // the visible low parapet (outsid
 const HOLE = { x0: -6, x1: 6, z0: -102, z1: -114 }; // the 12 x 12 patch of deck that breaks in the fall cut (3 x 3 plates of 4 x 4)
 const CITY_Y = -500; // env.backdrop pos.y: the city lies far below
 const BASE = -420; // tower and pier bases
-const CERB = { pos: [33.5, 0, -118], yaw: -PI / 2 }; // heads face -X, over the deck's east edge
+const CERB = { pos: [35, 0, -118], yaw: -PI / 2 }; // heads face -X, over the deck's east edge
 const FALL_END = [-3, -380, -108];
 
 const pieces = [];
@@ -202,7 +202,7 @@ const TOWERS = [
   { face: -40, side: -1, w: 50, z0: -180, z1: -235, top: 210 },
   { face: 36, side: 1, w: 46, z0: 10, z1: -62, top: 220 },
   { face: 40, side: 1, w: 40, z0: -72, z1: -90, top: 150 },
-  { face: 46.3, side: 1, w: 56, z0: -98, z1: -142, top: 330, lit: 0.25 }, // the machine's tower: CERBERUS hangs on this face
+  { face: 46.3, side: 1, w: 56, z0: -98, z1: -142, top: 330, lit: 0.25 }, // the machine's tower: CERBERUS crouches on a ledge out of this face
   { face: 38, side: 1, w: 50, z0: -150, z1: -215, top: 200 },
 ];
 for (const t of TOWERS) tower(t);
@@ -288,6 +288,9 @@ const droneBounds = { minX: -11, maxX: 11, minZ: -91, maxZ: -52 };
 add('enemy.drone', [-3, 0, -86], { ...deck, bounds: droneBounds });
 add('enemy.drone', [5, 0, -82], { ...deck, bounds: droneBounds });
 // CERBERUS: beside the deck, heads over the east edge; its arena is the fight stretch of the deck
+// the shelf it crouches on: a loading ledge out of the tower face, level with the deck, 9 m short of it (no way across)
+box([33.15, -3, -118], [26.3, 3, 26], 'wall', { shadow: true });
+for (const z of [-128, -108]) box([33.15, -14, z], [26.3, 11, 1.2], 'wall', { collide: false }); // its brackets under it
 add('boss.cerberus', CERB.pos, { arena: { minX: -11.5, maxX: 11.5, minZ: -166, maxZ: -92 }, group: 'cerberus', dormant: true }, { yaw: CERB.yaw, name: 'cerberus' });
 
 // ---------------------------------------------------------------- start, markers, trigger

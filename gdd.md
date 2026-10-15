@@ -164,7 +164,7 @@ too strong to beat. Each act then takes one of its heads.
 - **Scale:** a tiny protagonist among colossal machines, cathedrals of steel and war machines the size of buildings.
 - **Style:** grim industrial military sci-fi, never childish: function-first war machines, heavy and weathered
   (rule: `instructions/art-style.md`).
-- **Palette:** teal-cyan haze and cold white light. HiveMind war units wear worn ochre livery over dark metal, and
+- **Palette:** teal-cyan haze and cold white light. HiveMind war units wear pale worn grey plates over a dark grey frame, and
   their sensors (their weak spots) glow violet. STEM-00 is olive drab and scratched, with a single warm amber light
   that grows brighter as it becomes more alive. The Rejects use warm, broken colours: rust, orange and flickering lights.
 - **Prototype art** is procedural grid geometry (section 9). The final art direction is not decided (section 13).
@@ -483,7 +483,7 @@ down. Destroyed enemies stay destroyed until the page is reloaded.
 - **Bolts:** 34 m/s, 7 damage, collide with the world and the player.
 
 ### 8.2 Troopers
-Armed assault robots (gunmetal frame, dark metal armor, worn ochre livery, a small violet sensor cluster), 150 HP, 1 weak spot.
+Armed assault robots (slim, a black frame under a few pale worn grey plates, violet rings at the shoulders and hips, a small violet sensor cluster on a dark face plate), 150 HP, 1 weak spot.
 They are the cover-versus-cover test.
 
 | Property | Value |
@@ -509,7 +509,7 @@ They are the cover-versus-cover test.
 - Faces narrower than 0.8 m get no spots (wall ends are for peeking, not hiding).
 
 **Plated trooper (`armored: true`, owner decision 2026-10-14):** the same soldier in heavy plate (bare dark plate steel,
-no ochre livery, bigger pauldrons and chest plate). Light rounds and the pistol do x0.25 on the head, torso and limbs
+bolted over the pale livery, bigger pauldrons and chest plate). Light rounds and the pistol do x0.25 on the head, torso and limbs
 (sparks, `weapon:armored`); heavy rounds (KS-5, KX-9) do full damage. Its glowing weak spot is never plated: every gun
 does full weak-spot damage there (x3), so a plated trooper still falls to the pistol alone. The Prologue's hall troopers (beat 8)
 are plated.
@@ -523,7 +523,7 @@ are plated.
   `trooper:flank` event has no listener on screen); the player has to notice it.
 
 ### 8.3 Drones
-- Ducted quad-rotors (dark metal pod, worn ochre spine plate, small violet sensor cluster, slung cannon) hovering 3.5 to 5 m up: four in the yard / range, two escorting the boss arena.
+- Ducted quad-rotors (a rounded pale grey pod on a dark frame, one round lens ringed in violet, slung cannon, few parts) hovering 3.5 to 5 m up: four in the yard / range, two escorting the boss arena.
 - Wake on sight within 36 m with line of sight, or when hit. Then circle the player at 9 to 18 m (speed 5.5 m/s),
   flipping direction every 2.5 to 5.5 s.
 - Fire 2-bolt bursts (6 damage, 0.16 s apart) after a 0.45 s eye flare; cooldown 1.6 to 2.8 s.
@@ -531,7 +531,7 @@ are plated.
   down they tumble and burst on landing (no damage). They stay in the yard and never enter the building.
 
 ### 8.4 Spider mech miniboss (SX-6 Tarantula)
-A six-legged saucer walker: ochre saucer hull, a sensor band of small violet lens clusters, twin-barrel gun pods on
+A six-legged saucer walker: pale grey saucer hull over dark grey, a sensor band of small violet lens clusters, twin-barrel gun pods on
 side pylons, tall splayed legs, the core under a hatch on top. Located in the north-east arena. Dormant (crouched, sensors dim) until the player enters the arena, comes within 28 m
 with line of sight, or shoots it. On wake: toast "(warning sign) SX-6 TARANTULA" and the boss bar appears.
 
@@ -567,8 +567,8 @@ overrides it; aiming is always free. A diamond marker sits on the boss. Footstep
 distance.
 
 ### 8.5 CERBERUS on the Skyway (scripted loss)
-The HiveMind's guardian protocol in one war-body: a colossal machine hanging off the towers beside the Skyway, out of
-reach, with three heads, one per sub-intelligence (2.2): **VIGIL** (a great sensor eye), **LEGION** (a voice array that
+The HiveMind's guardian protocol in one war-body: a colossal war hound (about 21 m tall) crouched on a ledge of the tower
+beside the Skyway, out of reach, with three heads, one per sub-intelligence (2.2): **VIGIL** (a great sensor eye), **LEGION** (a voice array that
 calls troops and drones) and **COLOSSUS** (a heavy jaw-cannon). It speaks for the HiveMind through the announcer.
 - **Health:** a three-segment boss bar (one per head). Shots chip it (heads flash, weak spots x3 on the eyes) but each
   head repairs back up; the bar never drops below a floor. It cannot be destroyed in the Prologue.
@@ -576,8 +576,8 @@ calls troops and drones) and **COLOSSUS** (a heavy jaw-cannon). It speaks for th
   the SX-6's, faster against a player in cover), LEGION calling drones.
 - **Numbers (code wins, `actors/cerberus.js`):** 1000 HP per head; floor 65% (650 HP), repair 8% of a head's health per second after 1.5 s
   untouched. VIGIL: 0.9 s flare, 8 bolts x 8 damage swept across +-3.2 m, every 3 to 4.5 s. COLOSSUS: mortar every 5 to 7.5 s (x1.8 faster
-  against a player in cover), 1.5 s flight, 3.8 m blast, 30 damage. LEGION: up to 2 drones every 7 to 10 s while fewer than 3 live. About 22 m
-  across, hull 7 m above the deck line. It is excluded from destroy objectives, ARENA CLEAR and the kill counter.
+  against a player in cover), 1.5 s flight, 3.8 m blast, 30 damage. LEGION: up to 2 drones every 7 to 10 s while fewer than 3 live. About 18 m
+  across its shoulder pods, 21 m tall, on a ledge level with the deck 8 m off its east edge. It is excluded from destroy objectives, ARENA CLEAR and the kill counter.
 - **Script:** the fight is a `survive` objective (about 45 s). At its end the loss cut plays: the three heads fire
   together, the deck breaks, STEM-00 falls (2.10, step 8).
 

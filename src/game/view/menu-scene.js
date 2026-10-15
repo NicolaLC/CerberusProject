@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { Rig, Animator } from '../actors/rig.js';
 import { buildSoldier } from '../actors/soldier.js';
+import { buildCerberus } from '../actors/cerberus-model.js';
 import { droneMaterials, droneLook, ROTORS } from '../actors/drone.js';
 import { GUNS, gunMaterials } from '../combat/guns.js';
 import { RigidSkin, mergeGroup } from '../../engine/batch.js';
 import { panelTexture, applyWorldUVs } from '../world/textures.js';
 import { propMaterials, PROP_PIECES } from '../world/props.js';
-import { cyl, part, group, rb, rbox } from '../actors/parts.js';
+import { cyl, group } from '../actors/parts.js';
 import { Rng } from '../../engine/random.js';
 import { cityMaterial, makePoints as skylinePoints } from './skyline.js';
 
@@ -30,6 +31,7 @@ const FIRE = new THREE.Color(0xff7a1a); // Rejects sodium orange
 const TOWER = { x: [-0.8, 27.2], z: [-2, 26] }; // the hero tower's footprint
 const STEM = new THREE.Vector3(TOWER.x[0] + 0.3, 0, TOWER.z[0] + 1.6); // STEM-00's root: seated on the roof's left edge, knees at the edge
 const HIVE = new THREE.Vector3(620, GROUND, -3400); // CERBERUS's feet, mid screen
+const HIVE_SCALE = 46; // the 14 m model as a ~640 m colossus on the horizon
 const HIVE_DIST = Math.hypot(HIVE.x, HIVE.z);
 const FACING = -2.17; // STEM-00's body: out over the left edge, turned toward the city ahead (a side view from the camera)
 const GAZE = Math.atan2(HIVE.x - STEM.x, HIVE.z - STEM.z); // where its head turns: the HiveMind
@@ -47,7 +49,6 @@ const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _down = new THREE.Vector3(0, -1, 0);
-const _yUp = new THREE.Vector3(0, 1, 0);
 const _size = new THREE.Vector2();
 const ZERO = new THREE.Vector2();
 const set3 = (a, i, x, y, z) => {
@@ -295,142 +296,22 @@ export class MenuScene {
       });
     const P = shade(0x1e2b31, 1.4); // armour plates
     const D = shade(0x05090b, 0.35); // frame, joints, pistons, barrels
-    // mech space: units (x 76 m), +Z = where it faces, y up from its feet
-    const V = (x, y, z) => new THREE.Vector3(x, y, z);
-    const OCT = new THREE.CylinderGeometry(1, 1, 1, 8).rotateY(Math.PI / 8).scale(1 / Math.cos(Math.PI / 8), 1, 1 / Math.cos(Math.PI / 8));
-    // a chamfered block (an octagonal prism, axis Y): w x h x d
-    const block = (m, w, h, d, x, y, z, rx = 0, ry = 0, rz = 0) => {
-      const o = part(OCT, m, x, y, z, rx, ry, rz);
-      o.scale.set(w / 2, h, d / 2);
-      return o;
-    };
-    // a rod from a to b (radius r, s sides)
-    const rod = (m, a, b, r, s = 8) => {
-      const o = part(new THREE.CylinderGeometry(r, r, 1, s), m);
-      _d.subVectors(b, a);
-      o.scale.y = _d.length();
-      o.position.addVectors(a, b).multiplyScalar(0.5);
-      o.quaternion.setFromUnitVectors(_yUp, _d.normalize());
-      return o;
-    };
-    const disc = (m, r, t, x, y, z, s = 16) => cyl(m, r, r, t, x, y, z, 0, 0, Math.PI / 2, s); // axis X
-    const tube = (m, r, len, x, y, z, s = 12) => cyl(m, r, r, len, x, y, z, Math.PI / 2, 0, 0, s); // axis Z
-    // a claw from the origin along +Z, tapering to its tip, dipping to the ground
-    const claw = (len) => new THREE.CylinderGeometry(0.08, 0.3, len, 4).translate(0, len / 2, 0).rotateX(Math.PI / 2 + 0.12);
-    // a rounded shell: a sphere scaled to (sx, sy, sz) at (x, y, z), tilted rx
-    const SPH = new THREE.SphereGeometry(1, 20, 12);
-    const shell = (m, sx, sy, sz, x, y, z, rx = 0) => {
-      const o = part(SPH, m, x, y, z, rx);
-      o.scale.set(sx, sy, sz);
-      return o;
-    };
-    // a capsule shell from a to b (radius r), flattened across X by f
-    const pod = (m, a, b, r, f = 1) => {
-      const l = a.distanceTo(b);
-      const o = rod(m, a, b, 1);
-      o.geometry = new THREE.CapsuleGeometry(r, Math.max(l - 2 * r, 0.01), 4, 14);
-      o.scale.set(f, 1, 1);
-      return o;
-    };
-    // a rounded slab from a to b: w across X, d across the limb, corner radius r
-    const slab = (m, a, b, w, d, r) => {
-      const o = rod(m, a, b, 1);
-      o.geometry = rbox(w, a.distanceTo(b), d, r);
-      o.scale.set(1, 1, 1);
-      return o;
-    };
-    const legs = [];
-    for (const sx of [1, -1]) {
-      const x = sx * 3.15;
-      // [hip, knee, ankle, foot] in (z, y): the forelegs' knees ahead, the hind legs' hocks behind
-      for (const [H, K, A, F] of [
-        [[2.4, 5.0], [3.1, 2.9], [2.45, 0.95], [2.7, 0.3]],
-        [[-2.5, 5.0], [-1.55, 3.05], [-3.0, 1.05], [-2.75, 0.3]],
-      ]) {
-        const [h, k, an] = [V(x, H[1], H[0]), V(x, K[1], K[0]), V(x, A[1], A[0])];
-        const back = Math.sign(K[0] - A[0]);
-        legs.push(
-          slab(P, h, k, 0.95, 1.9, 0.4), // thigh shell
-          disc(D, 0.72, 1.45, x, K[1], K[0]), // knee
-          disc(P, 0.42, 1.65, x, K[1], K[0], 10),
-          slab(P, k, an, 0.7, 1.0, 0.3), // shin shell
-          rod(D, V(x - sx * 0.05, K[1] + 0.1, K[0] - back * 0.5), V(x - sx * 0.05, A[1] + 0.2, A[0] - back * 0.4), 0.09), // piston
-          disc(D, 0.32, 0.8, x, A[1], A[0], 10), // ankle
-          rod(D, an, V(x, F[1], F[0]), 0.17), // pastern
-          block(D, 0.9, 0.32, 0.9, x, F[1], F[0]), // foot hub
-          rb(P, 0.75, 0.3, 1.1, 0.12, x, F[1] + 0.25, F[0] + 0.1), // its cap
-        );
-        for (const [yaw, len] of [[0.5, 1.2], [0, 1.35], [-0.5, 1.2], [Math.PI, 0.8]]) legs.push(part(claw(len), P, x, F[1] - 0.1, F[0], 0, yaw + sx * 0.12, 0));
-      }
-    }
-
-    // the hull: a pill (a lathe around Z, flattened) banded by dark seam rings, under a domed carapace
-    const pill = new THREE.LatheGeometry([[0, -3.9], [1.2, -3.8], [1.9, -3.35], [2.2, -2.5], [2.25, 1.0], [2.1, 2.6], [1.6, 3.5], [0.9, 3.85], [0, 3.95]].map(([r, z]) => new THREE.Vector2(r, z)), 20).rotateX(Math.PI / 2);
-    const body = group(part(pill, P), ...[-1.4, 0.4, 2.2].map((z) => part(new THREE.TorusGeometry(z > 2 ? 2.13 : 2.25, 0.07, 6, 28), D, 0, 0, z)));
-    body.position.y = 5.15;
-    body.scale.y = 0.62;
-    const hull = [
-      body,
-      rb(P, 4.7, 1.3, 6.4, 0.5, 0, 6.2, -0.3), // carapace
-      rb(P, 2.8, 1.8, 1.2, 0.45, 0, 4.9, 3.3, 0.3), // chest
-      ...[1, -1].flatMap((s) => [
-        rb(P, 1.6, 1.9, 2.4, 0.55, s * 2.45, 5.6, 2.3, -0.15, 0, s * 0.12), // shoulder pauldron
-        rb(P, 1.6, 2.0, 2.6, 0.55, s * 2.4, 5.45, -2.45, 0.15, 0, s * 0.12), // haunch
-      ]),
-      ...[-0.9, 0.9].map((x) => tube(D, 0.4, 0.8, x, 5.35, -3.7)), // exhausts
-      // the launcher: a long tube on a cradle, a rounded breech, dark bands, its muzzle forward; an ammunition pod beside it
-      tube(P, 0.8, 4.6, -0.6, 7.55, -0.8, 18),
-      shell(P, 0.8, 0.8, 0.5, -0.6, 7.55, -3.1),
-      ...[1.2, -2.2].map((z) => part(new THREE.TorusGeometry(0.8, 0.13, 6, 20), D, -0.6, 7.55, z)),
-      tube(D, 0.55, 0.4, -0.6, 7.55, 1.6, 14),
-      block(D, 1.0, 1.0, 2.8, -0.6, 6.85, -0.9, Math.PI / 2),
-      pod(P, V(1.25, 7.05, -2.6), V(1.25, 7.05, -0.3), 0.42),
-      rod(D, V(0, 5.4, 3.0), V(0, 6.0, 4.0), 0.4), // VIGIL's neck
-    ];
-
-    // the heads: groups around their pivots, so they can turn. [pivot, eyes [x, y, z, size]...]
-    const vigil = group(
-      rb(P, 1.5, 1.0, 2.0, 0.4, 0, 0.1, 0.7, 0.1), // skull
-      rb(P, 1.0, 0.6, 1.4, 0.25, 0, -0.35, 1.4, 0.1), // muzzle
-      rb(D, 1.2, 0.3, 0.5, 0.12, 0, 0.3, 1.65, -0.5), // visor
-      ...[1, -1].map((s) => rb(D, 0.2, 0.5, 0.8, 0.08, s * 0.78, 0, 0.6)), // cheek vents
-      tube(D, 0.14, 2.2, 0, -0.55, 2.4, 8), // gun barrel
-      tube(D, 0.24, 0.5, 0, -0.55, 3.55, 8), // muzzle brake
-    );
-    // LEGION and COLOSSUS: sleek gun pods on short arms
-    const turret = (s) =>
-      group(
-        block(D, 0.4, 0.7, 0.5, 0, -0.3, 0.3), // arm
-        pod(P, V(0, 0.15, -0.5), V(0, 0.15, 1.55), 0.42, 0.85),
-        tube(D, 0.1, 1.8, 0, 0.05, 2.2, 8), // barrel
-        tube(D, 0.17, 0.35, 0, 0.05, 3.1, 8),
-        shell(D, 0.16, 0.16, 0.16, -s * 0.3, 0.32, 1.2), // sensor
-      );
-    const HEADS = [
-      { g: turret(1), at: V(1.95, 7.0, 1.4), eyes: [[-0.32, 0.36, 1.3, 0.55]] }, // LEGION, the right shoulder
-      { g: vigil, at: V(0, 6.0, 4.0), eyes: [[0.25, 0.32, 1.92, 0.55], [-0.25, 0.32, 1.92, 0.55], [0, 0.38, 1.93, 0.4]] }, // VIGIL, the Eye
-      { g: turret(-1), at: V(-1.95, 7.0, 1.4), eyes: [[0.32, 0.36, 1.3, 0.55]] }, // COLOSSUS, the left shoulder
-    ];
-    const mech = mergeGroup(group(...legs));
-    const torso = mergeGroup(group(...hull)); // shifts its weight over the planted legs
-    mech.add(torso);
-    this.heads = HEADS.map(({ g, at }) => {
-      mergeGroup(g).position.copy(at);
-      torso.add(g);
-      return g;
-    });
-    this.torso = torso;
+    // the shared body (cerberus-model.js) in the haze shades: plates P, everything else D (its lenses are the point lights below)
+    const model = buildCerberus({ shell: P, frame: D, trim: D, eye: D, heads: [P, P, P], weak: [D, D, D] });
+    for (const g of model.looks) mergeGroup(g);
+    const mech = model.root;
     mech.position.copy(HIVE);
-    mech.scale.setScalar(76);
+    mech.scale.setScalar(HIVE_SCALE);
     mech.rotation.y = Math.atan2(-HIVE.x, -HIVE.z) + 0.7; // three quarters toward the city and STEM-00, its right flank to the camera
     scene.add(mech);
-    // sensor eyes; their own light fog (the haze is in the shade already)
-    const lights = (this.hiveLights = makePoints(8, true));
+    this.torso = model.body; // shifts its weight over the planted legs
+    this.torsoY = model.body.position.y;
+    const [vigil, legion, colossus] = model.heads.map((h) => h.bone);
+    this.heads = [legion, vigil, colossus];
+    // sensor eyes and joint rings; their own light fog (the haze is in the shade already)
+    const lights = (this.hiveLights = makePoints(model.sensors.length, true));
     lights.material.uniforms.fogDensity.value = 0.00028;
-    this.hiveSensors = [];
-    HEADS.forEach(({ g, eyes }, i) => {
-      for (const [x, y, z, size] of eyes) this.hiveSensors.push([g, new THREE.Vector3(x, y, z), lights.put(0, 0, 0, size * 76, VIOLET, 2.6, 4, i * 0.33)]);
-    });
+    this.hiveSensors = model.sensors.map((x) => [x.obj, x.pos, lights.put(0, 0, 0, x.size * HIVE_SCALE * 0.45, VIOLET, x.head < 0 ? 1.4 : 2.6, 4, Math.max(0, x.head) * 0.33)]);
     scene.add(lights);
   }
 
@@ -679,7 +560,7 @@ export class MenuScene {
     H[1].rotation.set(Math.sin(t * 0.05 + 2) * 0.05, Math.sin(t * 0.04) * 0.3, 0, 'YXZ');
     H[2].rotation.y = Math.sin(t * 0.06 + 1.5) * 0.35 - Math.sin(t * 0.19) * 0.05;
     const sway = still ? 0 : Math.sin(t * 0.09);
-    this.torso.position.set(sway * 0.06, Math.abs(sway) * -0.04, 0);
+    this.torso.position.set(sway * 0.12, this.torsoY + Math.abs(sway) * -0.08, 0);
     this.torso.rotation.z = sway * -0.012;
     for (const [h, local, i] of this.hiveSensors) {
       h.updateMatrixWorld(true);

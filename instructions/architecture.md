@@ -98,6 +98,8 @@ NEW GAME first plays the intro reel (`view/reel.js`, `Shell #intro`; narrative.m
 (`#reel`) over the hidden menu, about 95 s on its own wall clock, the bed and PA lines from `audio.reel` / `audio.reelLine`. A first
 press shows a skip hint, a second skips; the end holds on black with a prompt. The press that ends it loads the first campaign
 scene, so pointer lock still has its user activation (hence the prompt instead of loading on its own). CONTINUE skips the reel.
+The one 3D piece: the lab shot's STEM-00 is the real model (Rig + soldier parts, `DORMANT` pose), rendered once with the game's
+renderer into an sRGB render target (the screen canvas has no alpha) and drawn into the canvas as an image (`Reel #stemSprite`).
 Loading screen (`#loading`, `Shell #load`): NEW GAME / CONTINUE / a Development scene show it with the scene title, give it two
 frames to paint, then run the synchronous `loadScene` and start play; menu input is ignored meanwhile. `?debug` loads without it.
 Progress: `cerberus.progress` = { scene, checkpoint } (scenes.js), written when a campaign scene (`CAMPAIGN`) starts and on
@@ -109,8 +111,8 @@ DEVELOPMENT pick call `game.loadScene`, QUIT TO MAIN MENU calls `game.unloadScen
 while paused. Backdrop: `view/menu-scene.js` (`MenuScene`), built on the first title and drawn by `Shell.update` with the game's
 renderer only while idle, so it stops the moment play starts and resumes on QUIT TO MAIN MENU (kept, not disposed). It is a fixed
 set, not a level: STEM-00 (Rig + soldier parts, `SEATED` pose in rig.js) seated on a roof edge, a procedural instanced skyline (weathered
-`panelTexture`, shader windows, about half ruined), Spire Cathedrals, CERBERUS (a quadruped war mech standing on the horizon, three heads = a sensor
-head and two shoulder gun pods, its own haze/rim shader, breathing violet eyes; towers in its sightline are capped), drones from `droneLook` (drone.js) instanced per material, roof dressing from the prop builders (props.js), haze veils,
+`panelTexture`, shader windows, about half ruined), Spire Cathedrals, CERBERUS (the shared body, `actors/cerberus-model.js`, the same as the Skyway boss's and the reel's, scaled
+to ~640 m on the horizon in its own haze/rim shader, breathing violet lenses and joint rings; towers in its sightline are capped), drones from `droneLook` (drone.js) instanced per material, roof dressing from the prop builders (props.js), haze veils,
 smoke, searchlights. About 51 draws and 375k triangles; prefers-reduced-motion stops the camera drift and slows the rest. Menu sounds: `audio.ui(kind)`.
 Cursor: while a controller is the device in use (`input.device === 'pad'`) the shell sets `body.pad` and style.css hides the mouse cursor everywhere (menus, canvas); a real mouse move (> 3 px, menus included) switches back to `kbm` and shows it.
 

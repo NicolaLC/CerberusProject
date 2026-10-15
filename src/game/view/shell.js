@@ -200,7 +200,7 @@ export class Shell {
   #intro() {
     const { audio } = this.host;
     audio.init();
-    this.reel ??= new Reel({ audio });
+    this.reel ??= new Reel({ audio, renderer: this.host.engine.renderer });
     this.overlay.style.display = 'none';
     this.reel.start((pad) => {
       this.overlay.style.display = 'flex'; // under the loading screen; the pause menu if the lock is refused
