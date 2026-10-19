@@ -239,10 +239,10 @@ export class Weapon {
   // Returns the guns taken back.
   setLoadout(guns) {
     const keep = new Set(guns.length ? ['pistol', ...guns] : []);
+    for (const id of this.seen) if (!keep.has(id)) this.seen.delete(id); // also a gun the loadout limit swapped out on the way (seen, no longer owned)
     const taken = [...this.owned].filter((id) => !keep.has(id));
     for (const id of taken) {
       this.owned.delete(id);
-      this.seen.delete(id);
       this.trial.delete(id);
       this.state[id] = { ammo: GUNS[id].mag, reserve: 0, boost: false };
     }

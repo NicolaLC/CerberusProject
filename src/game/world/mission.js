@@ -5,7 +5,7 @@
 // `mission:complete` { total }, `mission:failed` { index, id, reason }. Actions on becoming current: `encounter:wake` / `encounter:spawn`.
 // Optional objectives: `skipOn` (a trigger / checkpoint id) completes the current one when it fires, flagged `skipped`.
 // Gun conditions (#93, #15): `skipIfOwned: <gun>` completes the objective as skipped, now or any time later, as soon as the player owns the gun (a "find it if you
-// have not" step); `requiresGun: <gun>` lets it finish only once the gun is owned (the condition is met, the objective waits: `held`). Both ask `owns(gun)`.
+// have not" step); `requiresGun: <gun>` lets it finish only once the gun is owned (the condition is met, the objective waits: `held`). skipIfOwned asks `owns(gun)` (owned), requiresGun asks `found(gun)` (owned, or found and dropped by a loadout swap).
 // On done: `grantGun` / `grantAmmo` emit `mission:grant` { gun, ammo } right after `mission:objective:done` (game.js hands it to the Weapon), never when skipped.
 
 import { GUNS } from '../combat/guns.js';
@@ -23,9 +23,9 @@ const clock = (s) => {
 };
 
 export class Mission {
-  // owns(gun): has the player found that gun (game.js: owned, or found and dropped by a loadout swap); a mission without gun conditions never calls it.
-  constructor({ events, enemies, owns = () => true }) {
-    Object.assign(this, { events, enemies, owns });
+  // owns(gun): has the player found that gun (game.js: owned, or found and dropped by a loadout swap); a mission without gun conditions never calls it. found(gun): the same, counting a gun dropped by a loadout swap; requiresGun asks it, skipIfOwned asks owns.
+  constructor({ events, enemies, owns = () => true, found = owns }) {
+    Object.assign(this, { events, enemies, owns, found });
     this.promptAt = { x: 0, y: 0, z: 0 }; // reused by interactPrompt
     this.pinAt = { x: 0, y: 0, z: 0, near: 0 }; // reused by pinTarget
     this.held = false; // the current objective's condition is met but its `requiresGun` is not owned yet
@@ -105,7 +105,7 @@ export class Mission {
     this.player = player;
     const p = player.pos;
     if (r.params.skipIfOwned != null && this.owns(r.params.skipIfOwned)) return this.#complete(true);
-    if (this.held && this.owns(r.params.requiresGun)) return this.#complete();
+    if (this.held && this.found(r.params.requiresGun)) return this.#complete();
     if (r.obj === 'survive') {
       if (this.elapsed >= r.time) this.#complete();
     } else if (r.obj === 'reach' && r.params.trigger == null) {
@@ -185,7 +185,7 @@ export class Mission {
     if (this.state === 'failed') return { key: 'failed', head: 'MISSION FAILED', detail: '', prog: '' };
     const r = this.current;
     const prog = [];
-    if (r.params.requiresGun != null && !this.owns(r.params.requiresGun)) prog.push(`${GUNS[r.params.requiresGun].name}: NOT FOUND`);
+    if (r.params.requiresGun != null && !this.found(r.params.requiresGun)) prog.push(`${GUNS[r.params.requiresGun].name}: NOT FOUND`);
     if (r.obj === 'destroy' || (r.obj === 'action' && this.target > 1)) prog.push(`${this.progress} / ${this.target}`);
     else if (r.obj === 'survive') prog.push(clock(r.time - this.elapsed));
     if (r.params.limit != null && r.obj !== 'survive') prog.push(clock(r.params.limit - this.elapsed));
@@ -222,7 +222,7 @@ export class Mission {
   // skipped: `skipOn` fired instead of the objective being done (no grantGun then).
   #complete(skipped = false) {
     const r = this.current;
-    if (!skipped && r.params.requiresGun != null && !this.owns(r.params.requiresGun)) return void (this.held = true); // done, but waits for the gun
+    if (!skipped && r.params.requiresGun != null && !this.found(r.params.requiresGun)) return void (this.held = true); // done, but waits for the gun
     this.events.emit('mission:objective:done', this.#info(r, skipped));
     if (!skipped && r.params.grantGun != null) this.events.emit('mission:grant', { gun: r.params.grantGun, ammo: r.params.grantAmmo ?? 0 }); // after :done, so its toast (OBJECTIVE COMPLETE) gives way to KR-7 WARDEN ACQUIRED
     if (this.index + 1 < this.objectives.length) return this.#begin(this.index + 1);

@@ -198,7 +198,7 @@ ALARM off  ON DONE
 GOAL  wait CUT breakout "BREAKOUT"       -- order 115
 
 ## CUT 11.5 Breakout   ON objective:breakout   PLACE (27, 0, -50) toward the exit gate   (12.2 s, skippable)
--- [breakout]: 4 troopers (NOT plated), dormant in the exit annex behind the shut [exit-gate]; nothing can reach them before the cut
+-- [breakout]: 4 troopers (NOT plated), dormant and POSTED (post: they hold their spawn spots on the exit axis, x 29.8..30.9, so the doorway keeps a clear line to every one; free troopers run to cover behind the jambs and STEM-00 would shoot through the wall); nothing can reach them before the cut
 CAM   behind STEM-00 over the arena toward the shut gate, 2.6 s, fov 48, inOut  STEM face (30, 1.4, -62.5)
 CAM   from the arena up the alcove toward the gate, 3.2 s, shake  CUE breakout-gate  WAKE breakout  STEM aim   -- the gate slides up, the squad bursts out
 CAM   over STEM-00's shoulder, 3.0 s (the squad has cleared the doorway by now: the first round is at once)  STEM path (27, 0, -50) -> (30, 0, -53), on the exit's axis  STEM aim  STEM fire breakout every 0.7   -- it shoots them one by one

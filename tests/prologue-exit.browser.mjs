@@ -131,6 +131,7 @@ async function open() {
     out.exit = { cur: T.cur(), hud: g.mission.hudText(), pos: g.mission.current.pos.toArray(), params: g.mission.current.params };
     // requiresGun on the exit itself: with the Warden gone from the inventory (a test hand) standing in the node does not end it
     g.weapon.owned.delete('rifle');
+    g.weapon.seen.delete('rifle'); // (found counts for requiresGun: a gun dropped by a swap still satisfies it)
     T.go(30, -75, 0.3);
     out.noGun = { state: g.mission.state, held: g.mission.held, hud: g.mission.hudText(), complete: T.complete };
     g.weapon.grant('rifle', { ammo: 10 });

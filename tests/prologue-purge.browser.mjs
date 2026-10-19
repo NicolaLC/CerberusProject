@@ -96,10 +96,12 @@ async function open() {
     T.step(0.2);
     out.cut = { cur: T.cur(), active: g.cinematic.active, id: g.cinematic.id };
     T.finish();
-    T.step(3); // the far gate finishes opening, then slides shut (1 s each)
+    T.step(0.1); // the skip lands the SX-6 on the next frame; measured here, it starts to walk at the player once awake
+    const landed = g.enemies.boss.pos.toArray().map((n) => +n.toFixed(1));
+    T.step(2.9); // the far gate finishes opening, then slides shut (1 s each)
     const boss = g.enemies.boss;
     const far = g.world.gates.find((x) => x.on === 'cue:recall');
-    out.boss = { cur: T.cur(), awake: T.awake(), alarmTarget: g.world.alarm.target, at: boss.pos.toArray().map((n) => +n.toFixed(1)), leaping: !!boss.jump, rush: T.group('arena-rush').length, farClosed: far.closed, player: g.player.pos.toArray().map((n) => +n.toFixed(1)) };
+    out.boss = { cur: T.cur(), awake: T.awake(), alarmTarget: g.world.alarm.target, at: landed, leaping: !!boss.jump, rush: T.group('arena-rush').length, farClosed: far.closed, player: g.player.pos.toArray().map((n) => +n.toFixed(1)) };
     T.kill(boss);
     T.step(0.5);
     out.end = { state: g.mission.state, cur: T.cur(), complete: T.complete, failed: T.failed, alarmTarget: g.world.alarm.target, siren: g.audio.sirenWanted };
@@ -136,7 +138,7 @@ async function open() {
       en.scriptKill = kill;
       out.breakRays = rays;
     }
-    T.finish(); // skip the breakout cut: the squad is dead, the gate is open
+    if (T.cur() === 'breakout') T.finish(); // (the ray loop above played the cut out: the squad is dead, the gate is open, the exit is current)
     out.afterBreakout = { cur: T.cur(), squad: T.group('breakout').filter((e) => e.alive).length };
     T.step(4);
     out.after = light();
