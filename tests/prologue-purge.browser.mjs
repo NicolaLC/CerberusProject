@@ -105,6 +105,37 @@ async function open() {
     out.end = { state: g.mission.state, cur: T.cur(), complete: T.complete, failed: T.failed, alarmTarget: g.world.alarm.target, siren: g.audio.sirenWanted };
     T.step(0.3);
     out.breakout = { cur: T.cur(), cut: g.cinematic.id, active: g.cinematic.active, squad: T.group('breakout').map((e) => e.alive) };
+    // every scripted round of the breakout cut has a clear line from STEM-00's gun to its target (no wall, arc or gate frame between)
+    {
+      const en = g.enemies;
+      const kill = en.scriptKill.bind(en);
+      const rays = [];
+      const clear = (a, b) => {
+        for (const c of g.world.colliders) {
+          let t0 = 0;
+          let t1 = 1;
+          for (const k of ['x', 'y', 'z']) {
+            const d = b[k] - a[k];
+            if (Math.abs(d) < 1e-9) { if (a[k] < c.box.min[k] || a[k] > c.box.max[k]) { t0 = 2; break; } continue; }
+            let u0 = (c.box.min[k] - a[k]) / d;
+            let u1 = (c.box.max[k] - a[k]) / d;
+            if (u0 > u1) [u0, u1] = [u1, u0];
+            t0 = Math.max(t0, u0);
+            t1 = Math.min(t1, u1);
+          }
+          if (t0 <= t1) return false;
+        }
+        return true;
+      };
+      en.scriptKill = (e, from) => {
+        const p = g.player.pos;
+        rays.push(clear({ x: p.x, y: p.y + 1.4, z: p.z }, { x: e.pos.x, y: e.pos.y + 1.1, z: e.pos.z }));
+        return kill(e, from);
+      };
+      for (let i = 0; i < 80 && g.cinematic.active; i++) T.step(0.25);
+      en.scriptKill = kill;
+      out.breakRays = rays;
+    }
     T.finish(); // skip the breakout cut: the squad is dead, the gate is open
     out.afterBreakout = { cur: T.cur(), squad: T.group('breakout').filter((e) => e.alive).length };
     T.step(4);
@@ -127,8 +158,9 @@ async function open() {
   for (const s of r.stages) expect(`stage ${s.id}: current, and only its group is awake (${s.want})`, s.cur === s.id && JSON.stringify(s.awake) === JSON.stringify(s.want), JSON.stringify(s));
   expect('  with the KR-7 owned the armoury (60) and the late armoury (95) pass silently', r.slot.includes(60) && r.slot.includes(95) && !r.armoury && r.beforeGate.cur === 'purge-gate' && !r.beforeGate.awake.length, JSON.stringify([r.slot, r.beforeGate]));
   expect('reaching the arena starts the boss cut', r.cut.cur === 'boss-cut' && r.cut.active && r.cut.id === 'boss-cut', JSON.stringify(r.cut));
-  expect('  skipped, the cut ends as played: the SX-6 down at its landing spot and awake (purge-6 alone), the rush gone, the far gate shut, STEM-00 at cp-gate', r.boss.cur === 'purge-boss' && r.boss.awake.join() === 'purge-6' && !r.boss.leaping && Math.hypot(r.boss.at[0] - 37.25, r.boss.at[2] + 45.5) < 2.5 && r.boss.rush === 0 && r.boss.farClosed && r.boss.alarmTarget === 1 && Math.abs(r.boss.player[0] - 26.5) < 0.2 && Math.abs(r.boss.player[2] + 50) < 0.2, JSON.stringify(r.boss));
+  expect('  skipped, the cut ends as played: the SX-6 down at its landing spot and awake (purge-6 alone), the rush gone, the far gate shut, STEM-00 at cp-gate', r.boss.cur === 'purge-boss' && r.boss.awake.join() === 'purge-6' && !r.boss.leaping && Math.hypot(r.boss.at[0] - 42.84, r.boss.at[2] + 43.91) < 2.5 && r.boss.rush === 0 && r.boss.farClosed && r.boss.alarmTarget === 1 && Math.abs(r.boss.player[0] - 26.5) < 0.2 && Math.abs(r.boss.player[2] + 50) < 0.2, JSON.stringify(r.boss));
   expect('killing the spider ends the alarm and siren but not the mission; the breakout cut plays (its squad alive and waiting), then the exit is next; reaching it completes the mission once, no failure', r.end.state === 'active' && r.end.cur === 'breakout' && r.breakout.cur === 'breakout' && r.breakout.cut === 'breakout' && r.breakout.active && r.breakout.squad.length === 4 && r.afterBreakout.cur === 'exit' && r.afterBreakout.squad === 0 && r.end.complete === 0 && r.done.state === 'complete' && r.done.complete === 1 && r.done.failed === 0 && r.end.failed === 0 && r.end.alarmTarget === 0 && !r.end.siren && r.after.level === 0 && r.after.fog === r.after.base && JSON.stringify(r.alarmEvents) === '[["on","purge-alarm",true],["off","purge-alarm"]]', JSON.stringify([r.end, r.breakout, r.afterBreakout, r.done, r.after, r.alarmEvents]));
+  expect('the breakout cut: STEM-00 fires at least three rounds and every one has a clear ray to its target (no firing through a wall)', r.breakRays.length >= 3 && r.breakRays.every(Boolean), JSON.stringify(r.breakRays));
   expect('every objective became current exactly once, in chain order', r.objectives.join() === r.chain.slice(1).join(), r.objectives.join());
   expect('  checkpoints between the stages were reached: yard, hall, hall-east, gate', ['cp-yard', 'cp-hall', 'cp-hall-east', 'cp-gate'].every((c) => r.checkpoints.includes(c)), r.checkpoints.join());
   expect('  the announcer and the STEM-00 lines after the hall A and the plated troopers played (the directive is known, its source is not); every STEM-00 line is at most 70 characters', r.lines.includes('CALIBRATION UNIT 00: NONCOMPLIANT. PURGE.') && r.lines.some((t) => t.startsWith('> TARGETS: ARMED. DIRECTIVE: UNCHANGED')) && r.lines.some((t) => t.startsWith('> HOSTILES DESTROYED')) && !r.lines.some((t) => /DIRECTIVE: (NONE|STILL NONE)|ORDERS RECEIVED/.test(t)) && r.lines.filter((t) => t.startsWith('> ')).every((t) => t.length <= 70), JSON.stringify(r.lines));
