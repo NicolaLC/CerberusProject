@@ -1,9 +1,9 @@
-// Builds src/levels/underworks.json: Act 1's first mission, UNDERWORKS: SEWER LINE (gdd.md 2.6 / 2.10 step 9, level-design.md "Underworks").
+// Builds src/levels/underworks.json: Act 1's first mission, UNDERWORKS: SEWER LINE (the scrap layer: coolant run-off lines, scrap chutes, sorting rails) (gdd.md 2.6 / 2.10 step 9, level-design.md "Underworks").
 //   node scripts/build-underworks.mjs        (writes the file through serializeLevel, then re-reads it with the real Registry)
 // The level is generated, not hand-edited: change this script (or open the file in the Workshop and save it, which re-serializes
 // it byte-identical) and run it again. The beat sheet is in instructions/level-design.md; the space in instructions/level.md.
 //
-// Space (one flooded sewer line, all interior, axis-aligned boxes; z grows south, the player walks north then east then north):
+// Space (one coolant run-off line (the lattice's drain), all interior, axis-aligned boxes; z grows south, the player walks north then east then north):
 //   c0 fall chamber -> t1 culvert -> j junction -> t2a culvert -> t2b wide hall (the drones) -> t3 culvert -> cistern -> exit shaft.
 // Every room is a floor of walkways (y 0) with a sunken water channel (bed y -0.4, one step of 0.4 <= 0.45) that follows the path;
 // walls are 0.5 thick outside the room's inner faces; sectors run to the wall centre lines (level.md "Sectors").
@@ -153,7 +153,7 @@ box(-2.5, 2.5, 13, 13.4, -6.5, -1.5, 'roof');
 // torn hole edge: beams and slabs hanging into the opening
 box(-2.6, -1.4, 6.2, 7, -5.4, -4.8, 'inLow', { collide: false });
 box(1.0, 2.4, 6.4, 7, -3.0, -2.5, 'inLow', { collide: false });
-// the scrap pile STEM-00 landed on (spawn platform top 0.4), scrap around it, a heap behind it
+// the scrap heap STEM-00 landed on (spawn platform top 0.4), scrap around it, a heap behind it
 box(-1.2, 1.2, 0, 0.4, -5.2, -2.8, 'inLow');
 box(-2.4, -1.2, 0, 0.3, -5.0, -3.6, 'inWall');
 box(1.2, 2.5, 0, 0.35, -4.6, -3.0, 'inWall');
@@ -172,7 +172,7 @@ add('prop.cables', [1.8, 6.9, -2.4], { to: [1.3, -6.3, -1.4], count: 2 });
 add('prop.cables', [-5.9, 4.0, -7.0], { to: [1.2, -3.9, 1.4], count: 2 });
 add('prop.pipes', [0, 4.6, -9.6], { length: 8, count: 2, mount: 'wall', valves: 1 }, { yaw: 0 });
 
-// t1: the first culvert, x -4..4, with side niches and rusted hatches
+// t1: the first run-off culvert, x -4..4, with side niches (scrap bays)
 const NICHE_H = 3.6;
 room({
   x0: -4, x1: 4, z0: -33.5, z1: -10.5, h: 5, sides: 'we',
@@ -217,7 +217,7 @@ room({
   chans: [[T3X[0], T3X[1], -72, -47]],
 });
 
-// the cistern: a pool in the middle, walkways round it
+// the reclamation cistern: a coolant pool in the middle, walkways round it
 room({
   x0: 24, x1: 48, z0: -96, z1: -72, h: 7.5,
   gaps: { s: [{ c: 36, w: 8, h: 5 }], n: [{ c: 36, w: 4, h: 4.5 }] },
@@ -238,12 +238,12 @@ room({
 box(35.65, 35.73, 0, 13, -107.95, -107.85, 'inLow', { collide: false, shadow: false });
 box(36.27, 36.35, 0, 13, -107.95, -107.85, 'inLow', { collide: false, shadow: false });
 for (let y = 0.5; y < 13; y += 0.6) box(35.65, 36.35, y, y + 0.05, -107.9, -107.8, 'inLow', { collide: false, shadow: false });
-box(34.4, 37.6, 13, 13.15, -108, -102, 'inLow', { collide: false, shadow: false }); // the rusted grate over the top
+box(34.4, 37.6, 13, 13.15, -108, -102, 'inLow', { collide: false, shadow: false }); // the maintenance grate over the top
 box(33, 39, 9.5, 9.9, -108, -104.6, 'inLow', { collide: false, shadow: false }); // a broken landing half way
-add('prop.panel', [36, 1.6, -107.9], { text: 'MAINT SHAFT 9\nSERVICE ONLY', width: 1.8 }, { yaw: 0 });
+add('prop.panel', [36, 1.6, -107.9], { text: 'MAINT SHAFT 9\nUNIT ACCESS', width: 1.8 }, { yaw: 0 });
 add('prop.pipes', [36, 6, -107.9], { length: 5.5, count: 2, mount: 'wall', valves: 1 }, { yaw: 0 });
 
-// ---- dressing: pipes, cables, grates, hatches, ribs ----
+// ---- dressing: coolant pipes, cables, drain grates, ribs ----
 // wall mounts: west wall (x face, room toward +X) yaw +PI/2 (run toward -Z); east wall yaw -PI/2 (run toward +Z);
 // north wall (z face, room toward +Z) yaw 0 (run +X); south wall (room toward -Z) yaw PI (run -X). Ceiling pipes run along the yaw's X.
 const W = Math.PI / 2;
@@ -263,7 +263,7 @@ for (const z of [-13.5, -22, -32]) add('arch.rib', [-4, 0, z], { height: 5, widt
 for (const z of [-13.5, -18, -27.5, -32]) add('arch.rib', [4, 0, z], { height: 5, width: 0.5, depth: 0.3 }, { yaw: E });
 // j
 add('prop.pipes', [0, 4.6, -45.9], { length: 9, count: 3, mount: 'wall', valves: 2 }, { yaw: 0 });
-add('prop.panel', [-3, 1.6, -45.9], { text: 'HATCH 7\nSEALED', width: 1.6 }, { yaw: 0 });
+add('prop.panel', [-3, 1.6, -45.9], { text: 'DRAIN 7\nSEALED', width: 1.6 }, { yaw: 0 });
 add('arch.floorChannel', [2.9, 0, -44.4], { size: [1.2, 1.2], light: 'none' });
 add('arch.floorChannel', [-4.2, 0, -37], { size: [2.4, 0.5], light: 'none' }, { yaw: W });
 add('prop.crate', [-5.2, 0, -44.8], { size: 'large' }, { yaw: 0 });
@@ -300,9 +300,9 @@ add('prop.cables', [39.6, 4.8, -64], { to: [-2.0, -4.7, -0.5], count: 2 });
 add('arch.floorChannel', [32.9, 0, -52], { size: [1.2, 1.2], light: 'none' });
 for (const z of [-50.5, -55.5, -60.5, -65, -69]) add('arch.rib', [32, 0, z], { height: 5, width: 0.5, depth: 0.3 }, { yaw: W });
 for (const z of [-53, -58, -63, -69]) add('arch.rib', [40, 0, z], { height: 5, width: 0.5, depth: 0.3 }, { yaw: E });
-// the repair station on t3's east wall, before the cistern
+// the unit repair station on t3's east wall, before the cistern
 add('supply.repair', [39.6, 0, -66], { prompt: 'REPAIR' }, { name: 'sewer-repair', yaw: E });
-add('env.label', [38.4, 0.045, -63.4], { text: 'SERVICE BAY', size: 0.3, flat: true, yaw: Math.PI / 2 });
+add('env.label', [38.4, 0.045, -63.4], { text: 'UNIT SERVICE', size: 0.3, flat: true, yaw: Math.PI / 2 });
 // cistern
 add('prop.pipes', [36, 6.0, -95.97], { length: 14, count: 3, mount: 'wall', valves: 2 }, { yaw: 0 });
 add('prop.pipes', [36, 5.4, -72.03], { length: 20, count: 3, mount: 'wall', valves: 1 }, { yaw: Math.PI });
@@ -326,42 +326,164 @@ for (const [x, z, l, yaw] of [[27.5, -80, 3, 0], [44.5, -80, 3, 0], [29, -90.5, 
 add('prop.crate', [47.2, 0, -73.2], { size: 'small' }, { yaw: 0 });
 add('prop.crate', [24.9, 0, -94.8], { size: 'large' }, { yaw: 0 });
 
-// ---- lights (very dark: few cold lamps, a failing one per room, the violet shaft, STEM-00's amber core) ----
+// ---- machine-first dressing (art-style.md "World: machine-first"): the scrap layer of the lattice ----
+// Nothing here collides or casts a shadow (visual only; boxes merge per material, so no new draw calls): scrap chutes dropping
+// from the ceiling, dumped broken units, sorting rails with hanging units, a recycler track, drain run-off, status lamps.
+const dress = (x0, x1, y0, y1, z0, z1, mat) => box(x0, x1, y0, y1, z0, z1, mat, { collide: false, shadow: false });
+// coolant run-off in every channel: a dull teal film (weathered inHigh) just above the bed, never brown
+for (const [a, b, c, d] of [[-CHAN / 2, CHAN / 2, -10, -7.5], MAIN(-34, -10), [-CHAN / 2, CHAN / 2, -41.6, -34], [CHAN / 2, 6, CHAN_J_Z[0], CHAN_J_Z[1]], ALONG_X(6, 18, -40), [18, T3X[1], CHAN_J_Z[0], CHAN_J_Z[1]], [T3X[0], T3X[1], -47, CHAN_J_Z[0]], [T3X[0], T3X[1], -72, -47], [T3X[0], T3X[1], -76, -72], [30, 42, -86, -76]]) dress(a, b, BED, BED + 0.07, c, d, 'inHigh');
+// a wall-mounted box: side w/e/n/s of the room, `line` the wall's inner face, n0..n1 into the room, a0..a1 along the wall
+const wb = (side, line, n0, n1, a0, a1, y0, y1, mat) => {
+  const rd = { w: 1, e: -1, n: 1, s: -1 }[side];
+  const [l0, l1] = [Math.min(line + rd * n0, line + rd * n1), Math.max(line + rd * n0, line + rd * n1)];
+  if (side === 'w' || side === 'e') dress(l0, l1, y0, y1, a0, a1, mat);
+  else dress(a0, a1, y0, y1, l0, l1, mat);
+};
+// scrap chute: a duct from the ceiling to a flared mouth, a teal run-off streak down the wall
+const chute = (side, line, c, w, top, mouth = 3.0) => {
+  wb(side, line, 0, 0.55, c - w / 2, c + w / 2, mouth + 0.3, top, 'inWall');
+  wb(side, line, 0, 0.85, c - w / 2 - 0.25, c + w / 2 + 0.25, mouth, mouth + 0.3, 'roof');
+  wb(side, line, 0, 0.04, c - 0.2, c + 0.2, 0, mouth, 'inHigh');
+};
+// a freestanding hopper under the ceiling (the cistern: it feeds the reclamation pool)
+const hopper = (x, z, top, mouth) => {
+  dress(x - 0.3, x + 0.3, mouth + 0.4, top, z - 0.3, z + 0.3, 'inWall');
+  dress(x - 0.55, x + 0.55, mouth, mouth + 0.4, z - 0.55, z + 0.55, 'roof');
+  dress(x - 0.4, x + 0.4, mouth - 0.1, mouth, z - 0.4, z + 0.4, 'inHigh');
+};
+// a dumped, broken unit (inert): slumped torso, one standing leg, one lying, a dead head, an arm on the floor
+const husk = (x, z, dir = 1, y = 0) => {
+  dress(x - 0.2, x + 0.2, y + 0.35, y + 0.95, z - 0.13, z + 0.13, 'inWall');
+  dress(x - 0.16, x + 0.16, y + 0.2, y + 0.35, z - 0.12, z + 0.12, 'roof');
+  dress(x - 0.1, x + 0.1, y + 0.98, y + 1.2, z - 0.1, z + 0.1, 'inWall');
+  dress(x + 0.06, x + 0.16, y, y + 0.22, z - 0.05, z + 0.05, 'roof');
+  dress(x - 0.6 * dir, x - 0.2 * dir, y, y + 0.1, z + 0.05, z + 0.15, 'roof');
+  dress(x + 0.2 * dir, x + 0.8 * dir, y, y + 0.08, z - 0.2, z - 0.12, 'inWall');
+};
+// a unit hung on a sorting rail by its cable (like the Prologue's puppets)
+const hung = (x, z, yRail, drop = 1.3) => {
+  const y = yRail - drop - 0.95;
+  dress(x - 0.015, x + 0.015, y + 0.95, yRail, z - 0.015, z + 0.015, 'roof');
+  dress(x - 0.2, x + 0.2, y + 0.35, y + 0.95, z - 0.12, z + 0.12, 'inWall');
+  dress(x - 0.1, x + 0.1, y + 0.97, y + 1.17, z - 0.1, z + 0.1, 'inWall');
+  dress(x - 0.1, x - 0.02, y - 0.25, y + 0.35, z - 0.05, z + 0.05, 'roof');
+  dress(x + 0.03, x + 0.11, y - 0.1, y + 0.35, z - 0.05, z + 0.05, 'roof');
+  dress(x + 0.2, x + 0.28, y + 0.45, y + 0.9, z - 0.04, z + 0.04, 'roof');
+};
+// a sorting rail high in a room along x (or z when `alongZ`) with trolleys, hung units every `step`
+const sortRail = (alongZ, at, y, a, b, step, from = a + 1.5) => {
+  const rail = (p0, p1, q) => (alongZ ? dress(at - 0.08, at + 0.08, y, y + 0.14, p0, p1, q) : dress(p0, p1, y, y + 0.14, at - 0.08, at + 0.08, q));
+  rail(a, b, 'roof');
+  for (let t = from; t < b - 0.5; t += step) {
+    rail(t - 0.25, t + 0.25, 'inWall');
+    if (alongZ) hung(at, t, y);
+    else hung(t, at, y);
+  }
+};
+// a row of status lamps on a wall, identical and steady (the one mind keeps one rhythm)
+const lamps = (side, line, c, y, n = 4) => {
+  for (let i = 0; i < n; i++) wb(side, line, 0, 0.05, c + i * 0.4, c + i * 0.4 + 0.16, y, y + 0.1, 'stripCyan');
+};
+// recycler track: two rails and ties along z on a walkway (x0 / x1 the rails)
+const track = (x0, x1, z0, z1) => {
+  for (const x of [x0, x1]) dress(x - 0.04, x + 0.04, 0, 0.05, z0, z1, 'roof');
+  for (let z = z0 + 0.4; z < z1 - 0.2; z += 1.2) dress(x0 - 0.2, x1 + 0.2, 0, 0.025, z - 0.07, z + 0.07, 'inWall');
+};
+// c0: the fall chamber is a dump point; more chutes, broken units half buried in the scrap
+chute('w', -6, -6.5, 1.8, 6.9, 3.4);
+chute('e', 6, -5, 1.4, 6.9, 3.4);
+husk(-2.9, -8.2, 1);
+husk(2.0, -1.0, -1);
+husk(4.6, -5.0, -1);
+dress(-3.2, -2.4, 0.5, 1.0, -2.2, -1.5, 'roof');
+lamps('w', -6, -9.3, 2.0, 3);
+// t1: two chutes a side, units tipped into the niches, a sorting rail down the west side, a recycler track on the west walkway
+chute('w', -4, -12, 1.4, 5);
+chute('e', 4, -15.8, 1.4, 5);
+chute('e', 4, -30, 1.4, 5);
+husk(-5.5, -17.8, -1);
+husk(-5.3, -16.4, 1);
+husk(-5.5, -28.6, 1);
+husk(5.6, -23.2, 1);
+husk(5.4, -21.8, -1);
+sortRail(true, -2.4, 4.7, -32, -12, 5, -30);
+track(-3.35, -2.35, -33.5, -10.5);
+lamps('e', 4, -26, 1.9, 5);
+// j: the junction is a sorting switch: a chute, a rail, units staged against the walls
+chute('w', -6, -43, 1.4, 5.5);
+chute('w', -6, -38.2, 1.0, 5.5);
+husk(-5.0, -41.6, 1);
+sortRail(false, -37.5, 4.9, -5, 5, 4, -3.5);
+lamps('n', -46, 3.0, 1.9, 4);
+// t2a: units tipped in the niches, a rail down the culvert
+chute('n', -44, 15, 1.6, 5);
+chute('s', -36, 9.15, 1.4, 5);
+husk(10.2, -45.3, 1);
+husk(9.1, -45.5, -1);
+husk(13.2, -34.6, 1);
+sortRail(false, 11, 4.55, 7, 17, 4.5, 8.5);
+// t2b: the collapsed end is where this chute dumps (the rubble is its spill); a rail over the hall
+chute('e', 42, -40, 2.4, 6.4, 3.2);
+husk(41.0, -44.7, -1);
+husk(40.9, -36.2, -1);
+sortRail(false, -33.9, 5.6, 21, 40, 5, 22.5);
+lamps('w', 18, -46.7, 2.0, 3);
+// t3: a chute and a recycler track along the west walkway
+chute('e', 40, -50.8, 1.4, 5);
+track(33.0, 33.9, -71.5, -47.5);
+lamps('w', 32, -68.5, 1.9, 4);
+// the cistern: the reclamation pool; four hoppers feed it, units hang on two sorting rails, dumped units on the far walkway
+hopper(32, -81, 7.5, 5.2);
+hopper(40, -81, 7.5, 5.2);
+hopper(32, -85, 7.5, 5.2);
+hopper(40, -85, 7.5, 5.2);
+sortRail(true, 28.4, 6.6, -95, -73, 4, -93);
+sortRail(true, 43.6, 6.6, -95, -73, 4, -91);
+husk(26.5, -95.2, 1);
+husk(46.0, -95.0, -1);
+husk(44.4, -93.5, 1);
+lamps('s', -72, 29.5, 2.1, 4);
+lamps('n', -96, 39.5, 2.1, 4);
+// exit shaft: a chute and a unit on the landing
+chute('w', 33, -105, 1.4, 13, 10.6);
+husk(35.4, -105.6, 1, 9.9);
+
+// ---- lights (very dark: few steady cold lamps (one mind, one rhythm), the violet shaft, STEM-00's amber core) ----
 const lamp = (name, x, y, z, size, mat = 'stripWhite', own = false) => add('env.strip', [x, y, z], { size, mat, ...(own ? { ownMaterial: true } : {}) }, { name });
 const light = (x, y, z, color, intensity, distance, flicker) => add('light.point', [x, y, z], { color, intensity, distance, ...(flicker ? { flicker: { strip: flicker } } : {}) });
 // c0: violet light from the grate far above, the amber core
 light(0, 11.5, -4, '#8f5cff', 70, 24);
 light(0, 6.6, -4, '#7a4cf0', 38, 14);
 light(0, 1.0, -3.2, '#ff9a2a', 7, 5);
-lamp('lamp-c0', 5.95 - 0.1, 3.2, -8.5, [0.12, 0.12, 1.0], 'stripWhite', true);
-light(5.2, 3.0, -8.5, '#9fc4d4', 9, 9, 'lamp-c0');
+lamp('lamp-c0', 5.95 - 0.1, 3.2, -8.5, [0.12, 0.12, 1.0], 'stripWhite');
+light(5.2, 3.0, -8.5, '#9fc4d4', 9, 9);
 // t1
-lamp('lamp-t1a', -3.93, 3.4, -18, [0.12, 0.12, 1.2], 'stripWhite', true);
-light(-3.2, 3.3, -18, '#a9d4e6', 14, 11, 'lamp-t1a');
+lamp('lamp-t1a', -3.93, 3.4, -18, [0.12, 0.12, 1.2], 'stripWhite');
+light(-3.2, 3.3, -18, '#a9d4e6', 14, 11);
 lamp('lamp-t1b', 3.93, 3.4, -29, [0.12, 0.12, 1.2], 'stripWhite');
 light(3.2, 3.3, -29, '#8fb4c6', 9, 9);
 // j
-lamp('lamp-j', 0, 5.3, -44, [1.4, 0.1, 0.16], 'stripCyan', true);
-light(0, 4.9, -44, '#6fd8f0', 14, 11, 'lamp-j');
+lamp('lamp-j', 0, 5.3, -44, [1.4, 0.1, 0.16], 'stripCyan');
+light(0, 4.9, -44, '#6fd8f0', 14, 11);
 light(-4.5, 3.0, -37, '#cfe8f0', 8, 8);
 // t2a
 lamp('lamp-t2a', 11, 4.85, -40, [1.2, 0.1, 0.16], 'stripWhite');
 light(11, 4.5, -40, '#a9d4e6', 11, 10);
-// t2b: dim, one failing cyan, one amber hazard lamp
-lamp('lamp-t2b', 28, 6.3, -46.9, [1.6, 0.12, 0.12], 'stripCyan', true);
-light(28, 5.8, -45, '#6fd8f0', 16, 13, 'lamp-t2b');
+// t2b: dim cyan work lamp, a dull ember heat seam at the spill
+lamp('lamp-t2b', 28, 6.3, -46.9, [1.6, 0.12, 0.12], 'stripCyan');
+light(28, 5.8, -45, '#6fd8f0', 16, 13);
 light(36, 5.6, -35, '#cfe8f0', 11, 11);
-light(40.5, 3.0, -40, '#ff9a2a', 5, 6);
+light(40.5, 3.0, -40, '#8a3a1c', 9, 6); // ember heat of the dumped scrap, never amber
 // t3
-lamp('lamp-t3', 34, 4.85, -56, [1.2, 0.1, 0.16], 'stripWhite', true);
-light(34, 4.5, -56, '#a9d4e6', 12, 10, 'lamp-t3');
+lamp('lamp-t3', 34, 4.85, -56, [1.2, 0.1, 0.16], 'stripWhite');
+light(34, 4.5, -56, '#a9d4e6', 12, 10);
 light(38.4, 3.2, -66, '#e6f4fa', 12, 8); // the repair station
-// cistern: cold lamps on the pillars, a violet drain grate in the roof
+// cistern: cold lamps on the pillars, the lattice's violet run-off grate in the roof
 light(36, 7.0, -79, '#7a4cf0', 40, 18);
 light(28, 4.8, -76, '#9fd8ee', 16, 13);
 light(44, 4.8, -76, '#9fd8ee', 16, 13);
-lamp('lamp-cis', 36, 6.8, -91, [2.0, 0.12, 0.2], 'stripCyan', true);
-light(36, 6.4, -91, '#6fd8f0', 20, 15, 'lamp-cis');
+lamp('lamp-cis', 36, 6.8, -91, [2.0, 0.12, 0.2], 'stripCyan');
+light(36, 6.4, -91, '#6fd8f0', 20, 15);
 light(26, 3.5, -92, '#cfe8f0', 9, 8);
 light(46, 3.5, -92, '#cfe8f0', 9, 8);
 // exit shaft
@@ -414,11 +536,11 @@ add('marker.spawn', [0, 0.4, -4], null, { yaw: Math.PI });
 add('marker.checkpoint', [14, 0, -40], null, { name: 'cp-hall', yaw: -Math.PI / 2 });
 add('marker.checkpoint', [36, 0, -69], null, { name: 'cp-cistern', yaw: Math.PI });
 add('trigger.volume', [20.5, 0, -40], { size: [3, 3.2, 14], event: 'trigger', once: true, wakeGroup: 'sewer-drones' }, { name: 'drones-wake' });
-add('objective.reach', [0, 0, -40], { text: 'FIRST JUNCTION', size: [6, 3, 6], order: 10, detail: 'Follow the sewer line north.' }, { name: 'junction' });
+add('objective.reach', [0, 0, -40], { text: 'FIRST JUNCTION', size: [6, 3, 6], order: 10, detail: 'Follow the coolant run-off line north.' }, { name: 'junction' });
 add('objective.destroy', [30, 0, -40], { text: 'SEEKER DRONES', group: 'sewer-drones', order: 20, detail: 'Something hunts in the dark. Destroy the drones.' }, { name: 'hunters' });
-add('objective.reach', [36, 0, -72.5], { text: 'THE CISTERN', size: [8, 3, 3], order: 30, detail: 'The line opens into a cistern. Repair first if you need it ({interact} at the station).' }, { name: 'cistern-gate' });
+add('objective.reach', [36, 0, -72.5], { text: 'THE CISTERN', size: [8, 3, 3], order: 30, detail: 'The run-off line opens into the reclamation cistern. Repair first if you need it ({interact} at the station).' }, { name: 'cistern-gate' });
 add('objective.destroy', [36, 0, -84], { text: 'CISTERN: HOSTILES', group: 'cistern-troop', wakeGroup: 'cistern-troop', order: 40, detail: 'Troopers hold the far side. Destroy them all.' }, { name: 'cistern' });
-add('objective.reach', [36, 0, -105], { text: 'FIND A WAY UP', size: [5, 3, 5], order: 50, detail: 'A rusted shaft at the end of the line.' }, { name: 'exit' });
+add('objective.reach', [36, 0, -105], { text: 'FIND A WAY UP', size: [5, 3, 5], order: 50, detail: 'A maintenance shaft at the end of the drain.' }, { name: 'exit' });
 
 // ---- STEM-00 (Act 1: first habits, narrative.md) ----
 const say = (text, on, extra = {}) => add('log.line', [0, 1.6, -4], { text, on, ...extra });
