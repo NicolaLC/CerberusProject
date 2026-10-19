@@ -23,7 +23,7 @@ const r = await p.evaluate(async () => {
   const out = {};
   let bolts = 0;
   engine.events.on('bolt:fired', () => bolts++);
-  const posted = (inB) => enemies.all.filter((e) => e.post && e.pos.x > 8 === inB);
+  const posted = (inB) => enemies.all.filter((e) => e.post && e.pos.x < 24 && e.pos.x > 8 === inB); // hall B: x 8..24 (the breakout squad, posted past x 24, is not a hall gunner)
   // hall A: the mezzanine gunners, 3.6 m up, fire on a player in the hall and never leave the deck
   const A = posted(false);
   const startA = A.map((e) => e.pos.clone());
