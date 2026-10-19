@@ -306,6 +306,8 @@
     {"id":"env.label","pos":[8,0,50.5],"params":{"text":"HIGH COVER\n2.8 x 2.4","size":0.45,"flat":true,"color":"#9fe8ff"}},
     {"id":"kit.pillar","name":"kit:pillar","pos":[14,0,48],"params":{}},
     {"id":"env.label","pos":[14,0,50.5],"params":{"text":"PILLAR\n1.2 x 1.2","size":0.45,"flat":true,"color":"#9fe8ff"}},
+    {"id":"kit.arcWall","name":"kit:arcWall","pos":[24,0,50],"params":{"radius":3,"from":180,"to":270,"height":4}},
+    {"id":"env.label","pos":[24,0,51.5],"params":{"text":"ARC WALL\nr 3, 90 deg","size":0.45,"flat":true,"color":"#9fe8ff"}},
     {"id":"kit.stairs","name":"kit:stairs","pos":[-28,0,70],"params":{"width":4,"height":1.6}},
     {"id":"env.label","pos":[-28,0,73.5],"params":{"text":"STAIRS\nrise 0.4 run 1.0 to 1.6","size":0.45,"flat":true,"color":"#9fe8ff"}},
     {"id":"kit.ramp","name":"kit:ramp","pos":[-16,0,70],"params":{"width":4,"height":1.6,"length":8}},

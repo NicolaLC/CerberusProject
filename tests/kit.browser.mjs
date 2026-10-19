@@ -26,8 +26,8 @@ const r = await p.evaluate(() => {
   const ok = (name, pass, extra = '') => res.push({ name, pass: !!pass, extra: pass ? '' : String(extra) });
   const near = (a, b, e = 1e-6) => Math.abs(a - b) < e;
   const ids = registry.ids().filter((i) => i.startsWith('kit.'));
-  const EXPECT = ['kit.floor', 'kit.wall', 'kit.doorway', 'kit.stairs', 'kit.ramp', 'kit.cover.low', 'kit.cover.high', 'kit.pillar', 'kit.platform'];
-  ok('all ten kit ids registered (nine in the Gym station, plus the gate)', EXPECT.every((i) => ids.includes(i)) && ids.includes('kit.gate') && ids.length === EXPECT.length + 1, ids.join());
+  const EXPECT = ['kit.floor', 'kit.wall', 'kit.doorway', 'kit.stairs', 'kit.ramp', 'kit.cover.low', 'kit.cover.high', 'kit.pillar', 'kit.platform', 'kit.arcWall'];
+  ok('all eleven kit ids registered (ten in the Gym station, plus the gate)', EXPECT.every((i) => ids.includes(i)) && ids.includes('kit.gate') && ids.length === EXPECT.length + 1, ids.join());
 
   // Builds a piece at a free spot of the KIT floor, returns its new colliders (boxes) and meshes.
   const OX = 50;
@@ -62,6 +62,7 @@ const r = await p.evaluate(() => {
     'kit.cover.low': [{ length: 1.6 }, { length: 12 }],
     'kit.cover.high': [{ length: 1.2 }, { length: 12 }],
     'kit.pillar': [{}],
+    'kit.arcWall': [{ radius: 0.5, from: 0, to: 360, height: 2 }, { radius: 20, from: 270, to: 90, thickness: 1, step: 1 }],
     'kit.gate': [{ on: 'start', width: 0.1, height: 0.1 }, { on: 'objective:x:done', width: 8, height: 6, slide: 'down', time: 0.1 }, { on: 'discovered:rifle', thickness: 1 }],
     'kit.platform': [{ size: [4, 4], height: 0.5 }, { size: [12, 6], height: 1.9, stairs: 'e', parapets: ['n', 'w'], stairsWidth: 2 }, { stairs: 'n', parapets: true }, { stairs: 'w' }],
   };

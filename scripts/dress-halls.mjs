@@ -69,23 +69,22 @@ add('prop.pipes', [23.7, 5.9, -40], { length: 14, count: 3, mount: 'wall', valve
 add('prop.cables', [23.2, 0, -48.6], { to: [-3, 0, 4], count: 3 });
 add('prop.panel', [23.7 - 0.06, 2.75, -47.6], { text: 'TEST ARENA 2\nLIVE FIRE', width: 1.4 }, ROOM.nx);
 
-// ---------------------------------------------------------------- the boss arena: open sky, 8 m walls, faces x 24.3 (24.6 north of z -30) / 50, z -62 / -13.7
+// ---------------------------------------------------------------- the boss arena: open sky, 8 m walls, faces x 24.3 (24.6 north of z -30) / 50, z -62 / -14.3
+// Its four inner corners are `kit.arcWall`s (prologue.json `arena-arc-*`: SW r 12 about (36.6, -26.3), NE r 12 about (38, -50), SE r 7 about
+// (43, -21.3), NW r 3.5 about (27.8, -58.5)): the panelling stops where each arc begins.
 const H = 6; // panelling up to 6 m (the wall lamps sit at 6.6)
-wallZ(24.3, -61.7, -54.5, 'px', H);
+wallZ(24.3, -58.2, -54.5, 'px', H); // NW arc ends at z -58.5
 wallZ(24.3, -49.5, -30.3, 'px', H);
-wallZ(24.6, -29.7, -14.0, 'px', H);
-wallX(-62, 32.8, 49.7, 'pz', H); // east of the exit door (x 28..32)
-wallZ(50, -61.7, -37.85, 'nx', H);
-wallZ(50, -37.85, -14.0, 'nx', H);
-wallX(-13.7, 24.9, 36.0, 'nz', H); // west of the far door (x 37..42.5)
-wallX(-13.7, 43.5, 49.7, 'nz', H);
-add('arch.cove', [24.6, 0, -13.7], { length: 6, size: 0.6, corner: 'wall', light: 'none' }, ROOM.px); // north-west corner chamfer (room toward +X / -Z)
-add('arch.cove', [50, 0, -62], { length: 6, size: 0.6, corner: 'wall', light: 'none' }, ROOM.nx); // south-east corner
+wallZ(24.6, -29.7, -26.5, 'px', H); // SW arc begins at z -26.3
+wallX(-62, 32.8, 37.8, 'pz', H); // east of the exit door (x 28..32) up to the NE arc (x 38)
+wallZ(50, -49.7, -37.85, 'nx', H);
+wallZ(50, -37.85, -21.5, 'nx', H); // SE arc begins at z -21.3
+// (the far door's jambs, x 34.5..37 and 42.5..45, are mostly behind the SW / SE arcs: no panelling)
 add('arch.catwalk', [50, 0, -38], { length: 14, width: 1.2, height: 5.2 }, ROOM.nx);
-add('prop.pipes', [50, 7.2, -50], { length: 20, count: 3, mount: 'wall', valves: 2 }, ROOM.nx);
-add('prop.pipes', [41, 7.2, -62], { length: 16, count: 2, mount: 'wall', valves: 1 }, ROOM.pz);
-add('prop.pipes', [30.5, 7.2, -13.7], { length: 10, count: 2, mount: 'wall', valves: 1 }, ROOM.nz);
+add('prop.pipes', [50, 7.2, -36], { length: 26, count: 3, mount: 'wall', valves: 2 }, ROOM.nx);
+add('prop.pipes', [35.4, 7.2, -62], { length: 5, count: 2, mount: 'wall', valves: 1 }, ROOM.pz);
 // the floor: lit channels framing the middle lane the SX-6 lands in, hatches, cable runs
+add('arch.floorRing', [37.25, 0, -38.15], { radius: 11, width: 0.3, light: 'cyan' }); // the arena ring, subtle on the floor
 add('arch.floorChannel', [37.25, 0, -45.5], { size: [16, 0.5], light: 'cyan' });
 add('arch.floorChannel', [31, 0, -32], { size: [0.5, 12], light: 'cyan' });
 add('arch.floorChannel', [44, 0, -32], { size: [0.5, 12], light: 'cyan' });

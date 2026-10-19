@@ -242,6 +242,42 @@ export const ARCH_PIECES = {
     },
   },
 
+  // Floor ring or arc, the curved cousin of arch.floorChannel (flush, top 0.02, no collision): pos = the centre on the floor, `radius`
+  // (to the strip's centre, 8), `width` (0.5), `from` / `to` (degrees, kit.arcWall's convention: 0 = +X, 90 = +Z, counter-clockwise on
+  // the plan; default the full circle 0..360), light (cyan). Chords of about 0.7 m along the circle. ~4 boxes per chord, merged.
+  'arch.floorRing': {
+    example: { params: { radius: 3, width: 0.5, light: 'cyan' } },
+    label: 'FLOOR RING lit arc, flush, no collision',
+    fields: [{ key: 'radius', type: 'number', min: 0.5 }, { key: 'width', type: 'number', min: 0.2 }, { key: 'from', type: 'number', min: -720, optional: true }, { key: 'to', type: 'number', min: -720, optional: true }, { key: 'light', type: 'enum', options: Object.keys(LIGHTS), optional: true }],
+    build(world, d) {
+      const id = 'arch.floorRing';
+      const p = d.params ?? {};
+      const q = quarters(id, d.yaw);
+      const r = num(id, p, 'radius', 8);
+      const W = num(id, p, 'width', 0.5);
+      const a0 = ((p.from ?? 0) * Math.PI) / 180;
+      const a1 = ((p.to ?? 360) * Math.PI) / 180;
+      if (!Number.isFinite(a0) || !Number.isFinite(a1) || Math.abs(a1 - a0) < 1e-4 || Math.abs(a1 - a0) > 2 * Math.PI + 1e-4) fail(id, 'from / to must span between 0 and 360 degrees');
+      const lit = light(id, p);
+      const n = Math.max(3, Math.ceil((Math.abs(a1 - a0) * r) / 0.7));
+      if (n > 800) fail(id, `${n} chords is too many (max 800)`);
+      const L = (Math.abs(a1 - a0) * r) / n * 1.04; // a hair of overlap: no cracks between the chords
+      const parts = [];
+      for (let i = 0; i < n; i++) {
+        const a = a0 + ((a1 - a0) * (i + 0.5)) / n;
+        const c = Math.cos(a);
+        const s = Math.sin(a);
+        const yaw = -a - Math.PI / 2; // box length runs along the tangent: local X turned to (-sin a, cos a)
+        const at = (off, y) => [r * c + off * c, y, r * s + off * s];
+        parts.push(['dark', L - 0.02, 0.006, W - 0.02, ...at(0, 0.003), 0, yaw, 0]);
+        parts.push(['metal', L, 0.02, 0.06, ...at(W / 2 - 0.03, 0.01), 0, yaw, 0]);
+        parts.push(['metal', L, 0.02, 0.06, ...at(-W / 2 + 0.03, 0.01), 0, yaw, 0]);
+        if (lit) parts.push([lit, L, 0.004, Math.min(0.08, W * 0.3), ...at(0, 0.008), 0, yaw, 0]);
+      }
+      return build(world, d, q, parts);
+    },
+  },
+
   // Ceiling coffers: a grid of I-beams under a flat roof. pos = centre x / z, pos.y = the ceiling underside; size [x, z] (8 × 8),
   // cells [nx, nz] (2 × 2: beams between the cells, none on the edges), depth (0.45). Nodes where beams cross. No collision.
   'arch.coffers': {

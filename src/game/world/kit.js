@@ -11,6 +11,7 @@
 
 import * as THREE from 'three';
 import { onProblem } from './encounter.js';
+import { TILE_METERS } from './textures.js';
 
 // Material key per role: the only place a kit piece names a material.
 export const KIT_MATS = { floor: 'floor', wall: 'wall', low: 'low', high: 'high', platform: 'platform' };
@@ -336,6 +337,100 @@ export const KIT_PIECES = {
       const id = 'kit.pillar';
       const p = d.params ?? {};
       return emit(world, id, d, [{ x: 0, y: 0, z: 0, w: M.pillar, h: M.highHeight, d: M.pillar, mat: matOf(p, 'high'), cover: 'high' }]);
+    },
+  },
+
+  // A curved wall: an arc of a circle, for rounded rooms (the Prologue's boss arena). pos = the arc's CENTRE at floor height.
+  // params: radius (the INNER, room-facing face; the wall grows outward by `thickness`), from / to (degrees, the arc runs from
+  // `from` to `to` counter-clockwise on the plan with +X east and +Z south: angle a is the point (x + r cos a, z + r sin a), so 0 = east,
+  // 90 = south, 180 = west, 270 = north; `to` may be below `from`, the arc then runs the other way), height (7, min 2.0), thickness (0.6),
+  // step (0.5 m: the length of each collision box), mat (role wall). Quarter-turn yaw adds -90 degrees per turn to both angles.
+  // The mesh is one smooth curve (world-space UVs: one grid tile per 2 m along the arc); collision is a chain of short axis-aligned
+  // boxes along it (the only collider the world has), each overlapping the next, so the wall is a fine staircase of 0.5 m
+  // steps and stands up to ~0.2 m proud of the curve into the room. Not cover (the cover system wants straight edges).
+  'kit.arcWall': {
+    example: { params: { radius: 6, from: 0, to: 90, height: 7 } },
+    label: 'ARC WALL r 6.0, 0..90 deg, 7.0 high',
+    fields: [{ key: 'radius', type: 'number', min: 0.5 }, { key: 'from', type: 'number', min: -720 }, { key: 'to', type: 'number', min: -720 }, { key: 'height', type: 'number', min: 0.1 }, { key: 'thickness', type: 'number', min: 0.1 }, { key: 'step', type: 'number', min: 0.2, optional: true }, MAT],
+    build(world, d) {
+      const id = 'kit.arcWall';
+      const p = d.params ?? {};
+      const r = num(id, p, 'radius', 6);
+      const q = quarters(id, d.yaw);
+      const a0 = (num(id, p, 'from', 0, -720, false) - 90 * q) * (Math.PI / 180);
+      const a1 = (num(id, p, 'to', 90, -720, false) - 90 * q) * (Math.PI / 180);
+      const h = num(id, p, 'height', M.wallHeight, M.wallMinHeight, false);
+      const t = num(id, p, 'thickness', 0.6);
+      const step = num(id, p, 'step', 0.5, 0.2, false);
+      const sweep = a1 - a0;
+      if (Math.abs(sweep) < 1e-4 || Math.abs(sweep) > 2 * Math.PI + 1e-4) fail(id, `from ${p.from} to ${p.to} must span between 0 and 360 degrees`);
+      const n = Math.max(1, Math.ceil((Math.abs(sweep) * (r + t / 2)) / step - 1e-9));
+      if (n > 600) fail(id, `${n} segments is too many (max 600): raise "step" or lower "radius"`);
+      const [cx, py, cz] = d.pos;
+      const ro = r + t;
+      const sink = 0.3; // mesh only, like World.box: no sun line at the foot
+      const mat = world.material({ mat: matOf(p, 'wall') });
+      const pos = [];
+      const nor = [];
+      const uv = [];
+      const idx = [];
+      const s = 1 / TILE_METERS;
+      const vert = (x, y, z, nx, ny, nz, u, v) => { pos.push(x, y, z); nor.push(nx, ny, nz); uv.push(u, v); return pos.length / 3 - 1; };
+      const at = (rad, a, y) => [cx + rad * Math.cos(a), y, cz + rad * Math.sin(a)];
+      for (let i = 0; i <= n; i++) {
+        const a = a0 + (sweep * i) / n;
+        const c = Math.cos(a);
+        const sn = Math.sin(a);
+        const k = i / n;
+        const y0 = py - sink;
+        const y1 = py + h;
+        const uo = Math.abs(sweep) * k * ro * s;
+        const ui = Math.abs(sweep) * k * r * s;
+        vert(...at(ro, a, y0), c, 0, sn, uo, y0 * s); // 6 per column: outer bottom / top, inner bottom / top, cap outer / inner
+        vert(...at(ro, a, y1), c, 0, sn, uo, y1 * s);
+        vert(...at(r, a, y0), -c, 0, -sn, ui, y0 * s);
+        vert(...at(r, a, y1), -c, 0, -sn, ui, y1 * s);
+        vert(...at(ro, a, y1), 0, 1, 0, cx * s + ro * c * s, cz * s + ro * sn * s);
+        vert(...at(r, a, y1), 0, 1, 0, cx * s + r * c * s, cz * s + r * sn * s);
+      }
+      // winding for an arc running with increasing angle; a reversed arc flips it
+      const f = (a, b, c2) => (sweep > 0 ? idx.push(a, b, c2) : idx.push(a, c2, b));
+      for (let i = 0; i < n; i++) {
+        const [b0, t0, ib0, it0, co0, ci0] = [0, 1, 2, 3, 4, 5].map((j) => i * 6 + j);
+        const [b1, t1, ib1, it1, co1, ci1] = [0, 1, 2, 3, 4, 5].map((j) => (i + 1) * 6 + j);
+        f(b0, t0, t1); f(b0, t1, b1); // outer face
+        f(ib0, ib1, it1); f(ib0, it1, it0); // inner face
+        f(co0, ci0, ci1); f(co0, ci1, co1); // top
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      geo.setIndex(idx);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.matrixAutoUpdate = false;
+      world.scene.add(mesh);
+      world.staticMeshes.push(mesh);
+      // collision: one box per chord (AABB of its four corners), invisible, still a raycast proxy; 2 cm longer than the chord at each end
+      const out = [mesh];
+      for (let i = 0; i < n; i++) {
+        const aa = a0 + (sweep * i) / n;
+        const bb = a0 + (sweep * (i + 1)) / n;
+        const pts = [at(r, aa, 0), at(ro, aa, 0), at(r, bb, 0), at(ro, bb, 0)];
+        const xs = pts.map((v) => v[0]);
+        const zs = pts.map((v) => v[2]);
+        const x0 = Math.min(...xs) - 0.02;
+        const x1 = Math.max(...xs) + 0.02;
+        const z0 = Math.min(...zs) - 0.02;
+        const z1 = Math.max(...zs) + 0.02;
+        const m = world.box((x0 + x1) / 2, py, (z0 + z1) / 2, x1 - x0, h, z1 - z0, mat, { shadow: false });
+        world.staticMeshes.splice(world.staticMeshes.indexOf(m), 1);
+        m.visible = false;
+        world.props.push(m);
+        out.push(m);
+      }
+      return out;
     },
   },
 

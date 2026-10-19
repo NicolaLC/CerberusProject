@@ -131,7 +131,7 @@ export const WORLD_PIECES = {
 
 // Render-only pieces a sectored level builds with their sector instead of at load (sectors.js "Build on approach"): no light records,
 // no cover, nothing another piece refers to by name. meta `defer(params)`. arch.corridor's side / step colliders come with it (not cover).
-for (const id of ['env.backdrop', 'arch.wall', 'arch.corridor', 'arch.ceiling', 'arch.cove', 'arch.panelling', 'arch.floorChannel', 'arch.coffers', 'arch.catwalk', 'arch.bulkhead', 'prop.pipes', 'prop.cables', 'prop.hazard', 'prop.panel']) {
+for (const id of ['env.backdrop', 'arch.wall', 'arch.corridor', 'arch.ceiling', 'arch.cove', 'arch.panelling', 'arch.floorChannel', 'arch.floorRing', 'arch.coffers', 'arch.catwalk', 'arch.bulkhead', 'prop.pipes', 'prop.cables', 'prop.hazard', 'prop.panel']) {
   WORLD_PIECES[id] = { ...WORLD_PIECES[id], defer: id === 'arch.corridor' ? (p) => !p.props : () => true };
 }
 const GATE_CLOSE = { player: 1.5, camera: 0.3 }; // m past a gate's plane, on the far side, before a `closeOn` gate shuts behind the player
