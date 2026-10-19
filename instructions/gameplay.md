@@ -75,7 +75,7 @@
   hunched run (`snap.run`, the cover-move animation with real velocity, hips 0.45 behind low cover) at `coverRunSpeed`
   6.8 m/s, event `player:coverRun` ({ to, type, collider }) once, then cover on the new face (type from its height,
   `player:coverSlam`). Like the entry snap, input is ignored until it lands: no aiming, shooting or jump. Rotated boxes are skipped.
-- No on-screen hints or button prompts: the HUD shows state (ammo, health, boss bar, warnings), never instructions. The one exception is the objective panel (top left, `#objective`): it states the current objective and how to do it (`detail`, with input tokens as key caps). The objective pin (`#pin`, workshop.md "Missions") marks where that objective is, with its distance. HUD text sizes in `em` off `#hud`'s `clamp()` font size (14 px at 1280x720, about 19 px at 1080p), so panels scale with the screen. Diegetic signs in the world (`env.label`) may show input tokens (`{jump}`...: SPACE / A, aim is E in trackpad mode); names live next to `BINDINGS` (`inputName`, `Controls.scheme`).
+- No on-screen hints or button prompts: the HUD shows state (ammo, health, boss bar, warnings), never instructions. The one exception is the objective panel (top right, `#objective`): it states the current objective and how to do it (`detail`, with input tokens as key caps). The objective pin (`#pin`, workshop.md "Missions") marks where that objective is, with its distance. HUD text sizes in `em` off `#hud`'s `clamp()` font size (14 px at 1280x720, about 19 px at 1080p), so panels scale with the screen. Diegetic signs in the world (`env.label`) may show input tokens (`{jump}`...: SPACE / A, aim is E in trackpad mode); names live next to `BINDINGS` (`inputName`, `Controls.scheme`).
   Jump (`Space`) during the run or a corner move cancels it: the snap and its pending cover are dropped, the velocity stays,
   and the normal jet burst fires (none while `jetTimer` runs: plain free movement); auto cover waits its cooldown. The cover
   entry snap and vaults can't be cancelled.
@@ -123,15 +123,21 @@
 ## Weapons (`game/combat/guns.js`, controller in `weapon.js`)
 - Reload (R) is an active reload: a bar with a marker sweeps across `activeReload` zones (fractions of reload time).
   R again inside `perfect` = instant + ×1.25 damage for that magazine (ammo counter glows); inside `good` = instant;
-  outside = jam, +1s, and the bar disappears (nothing left to read: the reload just runs on). One try per reload. The magazine auto-reloads when it hits 0 (also after switching to an empty gun).
+  outside = jam, +1s, and the bar disappears (nothing left to read: the reload just runs on). One try per reload. The magazine auto-reloads when it hits 0 (also after switching to an empty gun). Fully out (last round fired, magazine and reserve 0, not the infinite pistol): the next owned gun in next-gun order that has a round (magazine or reserve; the pistol always does) is raised through the normal switch; none has: it stays. Only the last-round case triggers it: switching to an empty gun by hand, or a pickup refilling one, never does.
 - 1–6 (AR, MG, SR, BR burst, RG railgun, PS pistol) or mouse wheel switches (0.45s lower/raise, model swaps at the bottom). Ammo is tracked per gun.
 - Owned guns (`weapon.owned`, a Set): keys, wheel, d-pad and next gun only reach owned guns (unowned keys do nothing, cycling
   skips them); the HUD shows a slot only for an owned gun. The level's `loadout` sets them at load (level.md; absent = all six,
   the pistol always unless `[]`).
   **Unarmed** (`loadout: []`, the Prologue start): `weapon.current` is null (`weapon.t` / `ammo` / `reserve` then read the pistol, so readers never crash); `weapon.update` does nothing (fire, reload, slots, wheel), `player.aiming` stays false (no zoom, no aim assist), the HUD hides the weapon block and the crosshair, there is no gun model or muzzle, and the animator runs unarmed (arms swing). Movement, sprint, cover and vault are unchanged. The first `weapon.grant` + `switchTo` (pickup.gun or an objective's `grantGun`) raises that gun at once, no lowering. `weapon.grant(id, { ammo })` adds a gun and rounds to its reserve (capped at max) and emits
   `weapon:discovered { gun }` the first time it is owned in the level; the HUD toasts `<NAME> ACQUIRED` for 3 s. `pickup.gun`
-  calls it and raises the new gun. Ammo crates refill only owned guns. Planned: STEM-00 log line on discovery (#40), 2-primary
-  limit and swapping (#34), hideout armoury (#39), owned guns in the save (#53), enemy gun drops (done, #93: enemy param `dropGun`, workshop.md).
+  calls it and raises the new gun. Ammo crates refill only owned guns. STEM-00's log line on discovery is level data (`log.line` on `discovered:<gun>`, #40); enemy gun drops: enemy param `dropGun` (#93, workshop.md).
+  **Loadout limit (#34, missions only)**: a level WITH a `loadout` is a mission (`weapon.limited`): the pistol + 2 primaries (`MAX_PRIMARIES`).
+  Taking a third primary (`pickup.gun`, rack or enemy drop, or an objective's `grantGun`) calls `weapon.makeRoom` first: the primary in hand
+  (else `weapon.lastPrimary` when the pistol is raised) leaves the set and `pickups.dropSwapped` lays it at STEM-00's feet with its magazine and
+  reserve (a range loaner stays a loaner). The drop ignores the player until he steps off it (`wait`), then is picked up like any gun, no second
+  discovery toast (`weapon.seen`). The pistol (`infinite`) is never dropped. Slots, keys, wheel and d-pad only reach the carried set. Levels
+  without `loadout` (Gym, Library, arena, Workshop, `?debug`) own all six with no limit. Out of scope until later: hideout armoury (#39),
+  owned guns in the save (#53).
 - The ammo counter turns red at 25% of the magazine or less (`LOW_AMMO` in hud.js, at least the last round): AR ≤ 8, MG ≤ 22, SR / RG ≤ 1, pistol ≤ 3.
 - KR-7 Warden (AR): 540 rpm, mag 32, reserve 192/384, reload 1.8s, 18 dmg, head ×2.5, weak ×3, limbs ×0.8.
   Spread hip 0.022 / aim 0.004 + bloom 0.007 per shot.
@@ -204,7 +210,7 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
   walls at flight height. `pos` is the ground point under the drone (pickups drop there).
 
 ## Spider mech miniboss (`game/actors/spider.js` TUNING, arena `ARENA`)
-- Six-legged walker in the north-east arena (x 25..49.5, z -61.5..-14.5). Dormant (crouched, eye dim) until the
+- Six-legged walker in the north-east arena (the arena scene: x 25..49.5, z -61.5..-14.5; the Prologue's round arena: x 25..72, z -61.5..-15, level data `arena`). Dormant (crouched, eye dim) until the
   player enters the arena or comes within 28 m with line of sight, or shoots it. Boss bar: core health, leg pips.
 - Armor: the hull, turret and closed shutters take no damage (`armor()` returns 0: sparks only and no decal, since decals
   stay in world space and would hang in the air once the mech moves; the crosshair
@@ -266,6 +272,12 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
   6-28 m from the player (34 m when retreating: never out of the fight), ideally ~15 m, reachable in a straight line or around the spot's own box (one corner
   waypoint; no general pathfinding, same floor level only). Spots are reserved, one trooper each.
 - Low cover: crouch, stand up to shoot over it. High cover: hide at an end, step 0.8 m out to shoot.
+- Transition (`TUNING.rise` 0.35 s, inside `peekTime` 0.4, so the 0.5 s aim telegraph always starts with the body out and nothing
+  fires before it): one weight `out` (smoothstep of a linear ramp) drives everything, up and down. Low cover: `crouch` = 1 - out
+  (knees straighten, torso rises) and the gun comes up (`coverLower` 0.6 = rifle lowered while hidden). High cover: the body offset
+  = full peek step x out (hips step with the gait driven by that velocity, peak ~3.4 m/s) and the torso leans toward the edge
+  (`peekLean` 0.5 rad); ducking back plays it in reverse. Hit boxes are the rig's bones, so they follow the visible body.
+  Test: `tests/gym-ai.browser.mjs` section 3b.
 - Cycle (`TUNING` in trooper.js): cover 1.8-3.4 s → peek → aim (visor flares 0.5 s) → 3-4 bolts, 1-3 bursts per peek
   (0.5-0.9 s re-aim between them, each needs the player still in sight) → cover. It only peeks when the firing position
   sees the player (`CoverMap.sees`): no line of fire = stay down and look again every 0.6-1.0 s; 3 looks in a row without

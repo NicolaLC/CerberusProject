@@ -21,7 +21,7 @@ export class PlayerView {
     this.dormant = 0; // 0..1 powered-down slump (Animator layer), set by the wake-up cinematic (view/cinematic.js)
     this.animState = { // pose input of the last substep (reused)
       speed: 0, run: false, crouch: 0, aimPitch: 0, combat: false, recoil: 0, kickBack: 0, kickClimb: 0, lean: 0, leftHanded: false,
-      lookYaw: 0, hunch: 0, air: 0, vault: null, vaultT: 0, lower: 0, slideAim: 0, aimTwist: 0, vel: player.vel, yaw: 0,
+      lookYaw: 0, hunch: 0, air: 0, vault: null, vaultT: 0, lower: 0, reload: null, slideAim: 0, aimTwist: 0, vel: player.vel, yaw: 0,
     };
 
     const rig = new Rig({ dummy: false });
@@ -32,7 +32,21 @@ export class PlayerView {
     const gunMats = gunMaterials({ plate: M.armor, glow: M.glow });
     this.gunModels = {};
     for (const [id, def] of Object.entries(GUNS)) {
-      const g = mergeGroup(def.build(gunMats)); // one draw per material per gun
+      const raw = def.build(gunMats);
+      const mags = []; // the detachable magazine stays out of the merge: the reload layer moves it (guns.js `M`)
+      raw.traverse((o) => o.userData.mag && mags.push(o));
+      for (const o of mags) o.removeFromParent();
+      const g = mergeGroup(raw); // one draw per material per gun
+      if (mags.length) {
+        const mg = new THREE.Group();
+        mg.add(...mags);
+        g.add(mg);
+        const box = new THREE.Box3().setFromObject(mg);
+        const hand = mg.clone(); // the fresh one carried by the left hand (shared geometry and materials)
+        hand.visible = false;
+        g.add(hand);
+        g.userData.mags = { gun: mg, hand, base: new THREE.Vector3((box.min.x + box.max.x) / 2, box.min.y, (box.min.z + box.max.z) / 2) };
+      }
       g.visible = false;
       g.userData.gun = true;
       rig.attach('Weapon', g);
@@ -64,6 +78,13 @@ export class PlayerView {
   setGun(id) {
     for (const [k, g] of Object.entries(this.gunModels)) g.visible = k === id;
     this.animator.armed = !!id;
+    this.animator.gun = id;
+    this.animator.rl.on = false; // a reload cut short by the switch: every mag back in its gun
+    for (const g of Object.values(this.gunModels)) {
+      const m = g.userData.mags;
+      if (m) m.gun.position.set(0, 0, 0), m.gun.rotation.set(0, 0, 0), (m.gun.visible = true), (m.hand.visible = false);
+    }
+    this.animator.mag = id ? this.gunModels[id].userData.mags ?? null : null;
     if (!id) {
       this.muzzle = null;
       return;
@@ -129,6 +150,7 @@ export class PlayerView {
     st.vault = p.snap?.vault ?? null;
     st.vaultT = p.snap?.t ?? 0;
     st.lower = weaponLower;
+    st.reload = p.weapon?.reloadAnim() ?? null;
     st.slideAim = slideAim ? 1 : 0;
     st.aimTwist = aimTwist;
     st.yaw = p.facing;

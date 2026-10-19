@@ -294,6 +294,52 @@ await ev(() => {
   expect('  interact (G, pad B) never fires, not even with a click in the same frame', r.interact === 0, JSON.stringify(r));
 }
 
+// ---- mission loadout limit (#34): pistol + 2 primaries, a third swaps and drops the old gun ----
+{
+  const r = await ev(() => {
+    const g = window.game;
+    const w = g.weapon;
+    const prim = () => [...w.owned].filter((id) => id !== 'pistol').sort().join();
+    const floor = () => g.pickups.items.filter((i) => i.gun && i.active && i.pos.x > 12.5 && i.pos.x < 13.5).map((i) => ({ gun: i.gun, ammo: i.ammo, mag: i.mag }));
+    T.play({ loadout: ['pistol'] }, [['pickup.gun', [3, 0, 0], { gun: 'rifle' }], ['pickup.gun', [8, 0, 0], { gun: 'mg' }], ['pickup.gun', [13, 0, 0], { gun: 'sniper' }], ['pickup.gun', [18, 0, 0], { gun: 'burst' }]]);
+    const out = {};
+    window.DISC.length = 0;
+    for (const x of [3, 8]) { g.player.pos.set(x, 0, 0); T.step(0.6); }
+    out.two = prim();
+    out.pistol0 = w.owned.has('pistol');
+    w.state.mg.ammo = 17;
+    w.state.mg.reserve = 100;
+    g.player.pos.set(13, 0, 0); // sniper while the MG is in hand: the MG is swapped out
+    T.step(0.6);
+    out.afterSniper = { prim: prim(), current: w.current, pistol: w.owned.has('pistol'), floor: floor(), slots: [...document.querySelectorAll('.slots span')].filter((x) => x.style.display !== 'none').map((x) => x.id).sort().join() };
+    T.step(0.6); // still standing on the dropped MG: not taken straight back
+    out.stillThere = prim() === 'rifle,sniper' && floor().length === 1;
+    g.player.pos.set(30, 0, 0);
+    T.step(0.3);
+    g.player.pos.set(13, 0, 0); // walk back onto it: re-picked, the sniper (in hand) goes down in turn
+    T.step(0.6);
+    out.back = { prim: prim(), mag: w.state.mg.ammo, reserve: w.state.mg.reserve, floor: floor(), disc: [...window.DISC] };
+    // pistol in hand: the last-used primary is swapped out, the pistol stays
+    T.key('Digit6');
+    const last = w.lastPrimary;
+    g.player.pos.set(18, 0, 0);
+    T.step(0.6);
+    out.pistolHand = { last, prim: prim(), pistol: w.owned.has('pistol'), burst: w.owned.has('burst'), droppedLast: g.pickups.items.some((i) => i.gun === last && i.active) };
+    // Gym (no loadout): all six, unlimited
+    g.tool.edit();
+    g.loadScene('gym');
+    T.step(0.3);
+    out.gym = [...w.owned].sort().join();
+    return out;
+  });
+  expect('mission: two primaries carried, the pistol with them', r.two === 'mg,rifle' && r.pistol0, JSON.stringify(r));
+  expect('  a third primary swaps: never more than pistol + 2, the in-hand MG is out and the sniper raised', r.afterSniper.prim === 'rifle,sniper' && r.afterSniper.current === 'sniper' && r.afterSniper.slots === 'slot-pistol,slot-rifle,slot-sniper', JSON.stringify(r.afterSniper));
+  expect('  the old gun lies at the feet with its magazine and reserve, and is not taken straight back', r.afterSniper.floor.length === 1 && r.afterSniper.floor[0].gun === 'mg' && r.afterSniper.floor[0].mag === 17 && r.afterSniper.floor[0].ammo === 100 && r.stillThere, JSON.stringify(r));
+  expect('  walking back onto it re-picks it with the same ammo (no new discovery) and swaps the sniper out', r.back.prim === 'mg,rifle' && r.back.mag === 17 && r.back.reserve === 100 && r.back.floor[0]?.gun === 'sniper' && r.back.disc.join() === 'rifle,mg,sniper', JSON.stringify(r.back));
+  expect('  pistol in hand: the last-used primary drops, the pistol is never dropped', r.pistolHand.burst && r.pistolHand.pistol && r.pistolHand.droppedLast && r.pistolHand.prim.split(',').length === 2, JSON.stringify(r.pistolHand));
+  expect('Gym (no loadout) keeps all six', r.gym === 'burst,mg,pistol,rail,rifle,sniper', r.gym);
+}
+
 expect('no page or console errors', errors.length === 0, errors.join(' | '));
 await b.close();
 console.log(fail.length ? `\n${fail.length} FAILED` : '\nall passed');

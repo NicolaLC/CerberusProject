@@ -168,6 +168,56 @@ if (cadence) {
   expect(`near trooper poses once per frame, not per substep (${cadence.nNear} poses / 30 frames)`, cadence.nNear === 30 && !cadence.nearLod);
   expect(`far trooper poses every few frames without terrain IK (${cadence.nFar} poses / 30 frames)`, cadence.nFar > 0 && cadence.nFar <= 12 && cadence.farLod);
 }
+// reload animation: the left hand leaves the foregrip and comes back, a perfect press ends sooner, a switch cancels, no NaN
+const rel = await p.evaluate(() => {
+  const { engine, player, weapon, enemies } = window.game;
+  engine.stop();
+  engine.headless = true;
+  for (const e of enemies.all) e.alive = false;
+  const keys = engine.input.keys;
+  const step = (n = 1) => { for (let i = 0; i < n; i++) engine.step(1 / 60); };
+  const press = (code) => { keys.add(code); engine.input.pressed.add(code); step(1); keys.delete(code); };
+  const an = player.view.animator;
+  const B = an.rig.bones;
+  const V = player.pos.constructor;
+  const dist = () => B.LeftHand.getWorldPosition(new V()).distanceTo(an.rig.sockets.gripL.getWorldPosition(new V()));
+  const finite = () => { let ok = true; for (const b of Object.values(B)) if (![...b.position.toArray(), ...b.quaternion.toArray()].every(Number.isFinite)) ok = false; return ok; };
+  player.pos.set(0, 0, 30);
+  step(30);
+  const run = (gun, key, at) => { // reload a gun; at = progress of the second press (null: none); returns frames, max hand distance, end distance
+    press(key);
+    step(40);
+    weapon.state[gun].ammo = 1;
+    press('KeyR');
+    let n = 1, max = 0, ok = true, pressed = false;
+    while (weapon.reloading > 0 && n < 600) {
+      if (at !== null && !pressed && weapon.reloadProgress() >= at) { press('KeyR'); pressed = true; n++; continue; }
+      step(1); n++;
+      max = Math.max(max, dist());
+      ok = ok && finite();
+    }
+    step(40);
+    return { n, max, end: dist(), ok, result: weapon.result?.kind, ph: an.rl.on };
+  };
+  const out = { guns: {} };
+  for (const [gun, key] of [['rifle', 'Digit1'], ['mg', 'Digit2'], ['sniper', 'Digit3'], ['burst', 'Digit4'], ['rail', 'Digit5'], ['pistol', 'Digit6']]) out.guns[gun] = run(gun, key, null);
+  out.full = run('rifle', 'Digit1', null);
+  out.perfect = run('rifle', 'Digit1', 0.43);
+  // jam: pressed far too early; the hand slaps the mag (stays near the magwell) and the reload still ends
+  out.jam = run('rifle', 'Digit1', 0.05);
+  // cancel: switch guns mid reload
+  press('Digit1'); step(40);
+  weapon.state.rifle.ammo = 1;
+  press('KeyR'); step(30);
+  const mid = dist();
+  press('Digit2'); step(60);
+  out.cancel = { mid, reloading: weapon.reloading, on: an.rl.on, magOk: an.mag === player.view.gunModels.mg.userData.mags, gunMagBack: player.view.gunModels.rifle.userData.mags.gun.visible };
+  return out;
+});
+for (const [gun, r] of Object.entries(rel.guns)) expect(`${gun} reload: hand leaves the foregrip (${r.max.toFixed(2)} m), returns (${r.end.toFixed(3)} m), no NaN, anim off after`, r.max > 0.15 && r.end < 0.02 && r.ok && !r.ph);
+expect(`perfect reload ends sooner (${rel.perfect.n} < ${rel.full.n} frames)`, rel.perfect.result === 'perfect' && rel.perfect.n < rel.full.n * 0.6 && rel.perfect.end < 0.02);
+expect(`jam reload still ends with the hand back (${rel.jam.n} frames)`, rel.jam.result === 'jam' && rel.jam.n > rel.full.n && rel.jam.end < 0.02 && rel.jam.ok);
+expect('switching guns mid reload cancels the animation', rel.cancel.mid > 0.1 && rel.cancel.reloading === 0 && !rel.cancel.on && rel.cancel.magOk && rel.cancel.gunMagBack);
 expect('no page errors', errors.length === 0);
 if (errors.length) console.log(errors);
 await b.close();

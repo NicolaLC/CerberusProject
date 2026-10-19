@@ -11,6 +11,8 @@ const C = (mat, r, len, x, y, z, seg = 12) => cyl(mat, r, r, len, x, y, z, RZ, 0
 const Cn = (mat, rFront, rBack, len, x, y, z, seg = 12) => cyl(mat, rFront, rBack, len, x, y, z, RZ, 0, 0, seg); // cone along Z
 const X = (mat, r, len, x, y, z, seg = 10) => cyl(mat, r, r, len, x, y, z, 0, 0, RZ, seg); // cylinder along X
 const V = (mat, r, len, x, y, z, seg = 10) => cyl(mat, r, r, len, x, y, z, 0, 0, 0, seg); // cylinder along Y
+// flags a part as the detachable magazine: PlayerView keeps it out of the merged model so the reload animation can move it
+const M = (o) => ((o.userData.mag = true), o);
 const S = (mat, r, x, y, z) => cyl(mat, r, r, r * 1.6, x, y, z, 0, 0, RZ, 10); // knob
 // n equal boxes spread along Z from z0 to z1 (vents, rail teeth, pips)
 const ribs = (mat, w, h, d, x, y, z0, z1, n) => Array.from({ length: n }, (_, i) => B(mat, w, h, d, x, y, z0 + ((z1 - z0) * i) / Math.max(1, n - 1)));
@@ -100,9 +102,9 @@ export const GUNS = {
         C(m.gun, 0.032, 0.03, 0, 0.125, 0.43, 14), // objective bell
         C(m.glow, 0.024, 0.006, 0, 0.125, 0.447, 14), // amber lens
         C(m.scorch, 0.029, 0.02, 0, 0.125, 0.29, 14), // eyepiece
-        B(m.gun, 0.045, 0.1, 0.075, 0, -0.11, 0.34, 0.12), // magazine, curved in two sections
+        M(B(m.gun, 0.045, 0.1, 0.075, 0, -0.11, 0.34, 0.12)), // magazine, curved in two sections
         B(m.gun, 0.045, 0.09, 0.07, 0, -0.195, 0.357, 0.28),
-        B(m.plate, 0.05, 0.016, 0.078, 0, -0.243, 0.372, 0.28), // magazine base plate
+        M(B(m.plate, 0.05, 0.016, 0.078, 0, -0.243, 0.372, 0.28)), // magazine base plate
         B(m.gun, 0.046, 0.125, 0.06, 0, -0.13, 0.21, -0.3), // pistol grip
         B(m.gun, 0.012, 0.012, 0.085, 0, -0.105, 0.26), // trigger guard
         B(m.plate, 0.085, 0.09, 0.28, 0, 0.015, 0.63), // heat shroud
@@ -174,7 +176,7 @@ export const GUNS = {
         B(m.gun, 0.02, 0.05, 0.02, 0, 0.12, 0.3), // carry handle posts
         B(m.gun, 0.02, 0.05, 0.02, 0, 0.12, 0.47),
         B(m.gun, 0.026, 0.024, 0.21, 0, 0.152, 0.385), // carry handle
-        B(m.plate, 0.16, 0.15, 0.18, -0.03, -0.17, 0.42), // ammo box
+        M(B(m.plate, 0.16, 0.15, 0.18, -0.03, -0.17, 0.42)), // ammo box
         B(m.gun, 0.165, 0.02, 0.185, -0.03, -0.09, 0.42), // box lid
         B(m.gun, 0.02, 0.05, 0.03, -0.115, -0.16, 0.42), // lid latch
         B(m.gun, 0.05, 0.06, 0.07, -0.05, -0.065, 0.42), // feed chute
@@ -253,8 +255,8 @@ export const GUNS = {
         C(m.gun, 0.034, 0.36, 0, 0.02, 0.4, 14), // action
         X(m.gun, 0.008, 0.07, 0.04, 0.025, 0.27), // bolt handle
         S(m.scorch, 0.016, 0.08, 0.025, 0.27), // bolt knob
-        B(m.gun, 0.045, 0.115, 0.08, 0, -0.1, 0.38), // magazine
-        B(m.plate, 0.05, 0.015, 0.085, 0, -0.16, 0.38), // magazine base
+        M(B(m.gun, 0.045, 0.115, 0.08, 0, -0.1, 0.38)), // magazine
+        M(B(m.plate, 0.05, 0.015, 0.085, 0, -0.16, 0.38)), // magazine base
         B(m.gun, 0.045, 0.125, 0.06, 0, -0.13, 0.22, -0.3), // pistol grip
         B(m.gun, 0.012, 0.012, 0.08, 0, -0.1, 0.28), // trigger guard
         B(m.plate, 0.066, 0.075, 0.36, 0, -0.012, 0.8), // heat shroud
@@ -342,8 +344,8 @@ export const GUNS = {
         B(m.gun, 0.008, 0.06, 0.01, -0.022, 0.14, 0.36),
         B(m.gun, 0.052, 0.01, 0.012, 0, 0.172, 0.36),
         B(m.glow, 0.034, 0.04, 0.003, 0, 0.14, 0.362), // reticle glass
-        B(m.gun, 0.05, 0.15, 0.07, 0, -0.13, 0.34), // magazine
-        B(m.plate, 0.054, 0.016, 0.074, 0, -0.205, 0.34), // magazine base
+        M(B(m.gun, 0.05, 0.15, 0.07, 0, -0.13, 0.34)), // magazine
+        M(B(m.plate, 0.054, 0.016, 0.074, 0, -0.205, 0.34)), // magazine base
         B(m.gun, 0.045, 0.12, 0.06, 0, -0.12, 0.2, -0.28), // pistol grip
         B(m.gun, 0.012, 0.012, 0.075, 0, -0.095, 0.26), // trigger guard
         B(m.plate, 0.075, 0.08, 0.3, 0, -0.005, 0.7), // handguard
@@ -425,8 +427,8 @@ export const GUNS = {
         B(m.scorch, 0.035, 0.13, 0.05, 0.045, 0, 1.19),
         B(m.gun, 0.05, 0.135, 0.065, 0, -0.14, 0.24, -0.3), // pistol grip
         B(m.gun, 0.012, 0.012, 0.08, 0, -0.1, 0.29), // trigger guard
-        B(m.plate, 0.08, 0.12, 0.12, 0, -0.14, 0.38), // capacitor cell
-        B(m.glow, 0.082, 0.01, 0.06, 0, -0.1, 0.38), // cell charge band
+        M(B(m.plate, 0.08, 0.12, 0.12, 0, -0.14, 0.38)), // capacitor cell
+        M(B(m.glow, 0.082, 0.01, 0.06, 0, -0.1, 0.38)), // cell charge band
         B(m.glow, 0.13, 0.02, 0.02, 0, 0.08, 0.3), // charge bars
         B(m.glow, 0.13, 0.02, 0.02, 0, 0.08, 0.5),
       );
@@ -495,7 +497,8 @@ export const GUNS = {
         B(m.gun, 0.04, 0.12, 0.06, 0, -0.12, 0.34, -0.2), // grip
         B(m.plate, 0.044, 0.08, 0.045, 0, -0.125, 0.34, -0.2), // grip panels
         B(m.gun, 0.01, 0.012, 0.05, 0, -0.1, 0.4), // trigger guard
-        B(m.plate, 0.046, 0.025, 0.066, 0, -0.19, 0.33), // magazine base
+        M(B(m.gun, 0.034, 0.1, 0.05, 0, -0.145, 0.335, -0.2)), // magazine (mostly inside the grip)
+        M(B(m.plate, 0.046, 0.025, 0.066, 0, -0.19, 0.33)), // magazine base
         B(m.scorch, 0.052, 0.068, 0.05, 0, -0.03, 0.575), // compensator
         B(m.glow, 0.006, 0.02, 0.18, 0.026, -0.03, 0.46), // power strip
       );

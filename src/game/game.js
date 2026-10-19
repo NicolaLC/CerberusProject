@@ -66,7 +66,7 @@ export class Game {
     const player = new Player({ scene, world, events, spawn: levelSpawn(registry.check(SCENES[first])) });
     const enemies = new Enemies({ scene, world, events, registry });
     const pickups = new Pickups({ scene, events, registry, world });
-    const mission = new Mission({ events, enemies, owns: (gun) => weapon.owned.has(gun) });
+    const mission = new Mission({ events, enemies, owns: (gun) => weapon.owned.has(gun) || weapon.seen.has(gun) }); // found counts: a gun dropped by a loadout swap still satisfies requiresGun
     const encounter = new Encounter({ scene, events, registry, enemies, world, mission });
     const weapon = new Weapon({ camera, rig: camRig, player, world, enemies, events });
     const fx = new FX(scene, camera, world).listen(events);
@@ -81,7 +81,9 @@ export class Game {
     const hudEl = document.getElementById('hud');
     const hideHud = (on) => hudEl.classList.toggle('cine', on);
     // a mid-level cut hides the HUD but the log, so its HiveMind broadcast reads over the shots (inline: the stylesheet's .cine hides all)
-    const hideHudCut = (on) => { for (const el of hudEl.children) if (el.id !== 'log') el.style.visibility = on ? 'hidden' : ''; };
+    const hideHudCut = (on) => {
+      for (const el of [...hudEl.children, document.getElementById('objective')]) if (el.id !== 'feed') el.style.visibility = on ? 'hidden' : '';
+    };
     events.on('cinematic:start', (e) => {
       enemies.holdFire = true; // nobody fires while the camera is scripted
       if (e.cut) hideHudCut(true);
@@ -121,6 +123,8 @@ export class Game {
     });
     events.on('encounter:loadout', (guns) => weapon.setLoadout(guns)); // trigger.volume `loadout`: loaners taken back
     events.on('mission:grant', ({ gun, ammo }) => {
+      const out = weapon.makeRoom(gun);
+      if (out) pickups.dropSwapped(player.pos, out);
       weapon.grant(gun, { ammo }); // emits weapon:discovered the first time (toast, discovered:<gun> log line)
       weapon.switchTo(gun);
     });

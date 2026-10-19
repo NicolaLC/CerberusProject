@@ -369,6 +369,31 @@ const result = await p.evaluate(() => {
   step(90);
   out.pistol.dryReload = { ammo: weapon.ammo, mag: weapon.t.mag, reserve: weapon.state.pistol.reserve };
   out.pistol.hud = document.getElementById('reserve').textContent;
+
+  // --- out of ammo: the last round fired with an empty reserve raises the next gun (next-gun order) that has ammo ---
+  const set = (id, ammo, reserve) => { weapon.state[id].ammo = ammo; weapon.state[id].reserve = reserve; };
+  for (const id of ['rifle', 'mg', 'sniper', 'burst', 'rail']) set(id, 0, 0);
+  set('rifle', 1, 0); set('sniper', 5, 0);
+  press('Digit1'); step(60);
+  keys.add('Mouse0'); step(20); keys.delete('Mouse0'); step(60);
+  out.auto = { skipsEmptyMg: weapon.current, rifleAmmo: weapon.state.rifle.ammo };
+  // another gun's reload that will succeed: no switch (mag empty, reserve left)
+  set('sniper', 1, 10);
+  keys.add('Mouse0'); step(20); keys.delete('Mouse0'); step(5);
+  out.auto.reloading = { gun: weapon.current, pending: weapon.pending };
+  step(200);
+  // pistol (infinite) never triggers it
+  press('Digit6'); step(60);
+  set('pistol', 1, 0);
+  keys.add('Mouse0'); step(5); keys.delete('Mouse0'); step(60);
+  out.auto.pistol = weapon.current;
+  // every other gun empty and the pistol gone: stays on the empty gun
+  set('rifle', 0, 0); set('mg', 0, 0); set('sniper', 0, 0); set('burst', 0, 0); set('rail', 0, 0);
+  weapon.owned.delete('pistol');
+  set('rifle', 1, 0);
+  press('Digit1'); step(60);
+  keys.add('Mouse0'); step(20); keys.delete('Mouse0'); step(60);
+  out.auto.stay = { gun: weapon.current, ammo: weapon.state.rifle.ammo };
   return out;
 });
 
@@ -412,6 +437,10 @@ expect('pistol is semi-auto', result.pistol.gun === 'pistol' && result.pistol.he
 expect('pistol: 200 shots with reloads leave the reserve unchanged', result.pistol.shots >= 200 && result.pistol.reserveAfter === 0);
 expect('pistol: reload with the reserve at 0 still fills the magazine', result.pistol.dryReload.ammo === result.pistol.dryReload.mag && result.pistol.dryReload.reserve === 0);
 expect('pistol: HUD reserve reads ∞', result.pistol.hud === '∞');
+expect('out of ammo: the last round with no reserve switches to the next gun that has ammo (empty MG skipped)', result.auto.skipsEmptyMg === 'sniper' && result.auto.rifleAmmo === 0);
+expect('out of ammo: a gun that can reload does not switch', result.auto.reloading.gun === 'sniper' && !result.auto.reloading.pending);
+expect('out of ammo: the infinite pistol never switches', result.auto.pistol === 'pistol');
+expect('out of ammo: nothing else has ammo, it stays', result.auto.stay.gun === 'rifle' && result.auto.stay.ammo === 0);
 expect('no page errors', errors.length === 0);
 if (errors.length) console.log(errors);
 await b.close();

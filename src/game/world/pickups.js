@@ -136,6 +136,14 @@ export class Pickups {
     return this.addGun([pos.x, pos.y, pos.z], { gun, ammo: ammo ?? GUNS[gun].pickup?.drop }, 0, false);
   }
 
+  // The gun a swap pushed out (weapon.makeRoom) lies at the player's feet with its magazine and reserve. It waits (`wait`) until
+  // the player has stepped off it, so it isn't taken straight back.
+  dropSwapped(pos, { gun, ammo, mag, trial }) {
+    const it = this.addGun([pos.x, pos.y, pos.z], { gun, ammo }, 0, false);
+    Object.assign(it, { mag, trial, wait: true });
+    return it;
+  }
+
   #spawn(pos, { crate, type }) {
     const model = this.makeModel(crate ? 1.3 : 0.9, type);
     const ring = new THREE.Mesh(this.ringGeo, this.ringMats[type]);
@@ -164,7 +172,9 @@ export class Pickups {
         continue;
       }
       if (it.gun) {
-        if (this.#reached(player, it)) this.#takeGun(i, it, weapon);
+        const near = this.#reached(player, it);
+        if (it.wait) it.wait = near;
+        else if (near) this.#takeGun(i, it, weapon, player.pos);
         continue;
       }
       it.model.position.y = it.pos.y + 0.45 + Math.sin(this.time * 2.5 + it.phase) * 0.08;
@@ -237,7 +247,7 @@ export class Pickups {
   }
 
   // A new gun is granted and raised; an owned one only takes the ammo (stays while that gun is full).
-  #takeGun(i, it, weapon) {
+  #takeGun(i, it, weapon, at) {
     if (weapon.owned.has(it.gun)) {
       const got = weapon.grant(it.gun, { ammo: it.ammo });
       if (!got) {
@@ -247,8 +257,12 @@ export class Pickups {
       }
       this.events.emit('pickup:collected', `${GUNS[it.gun].short} AMMO  +${got}`);
     } else {
-      weapon.grant(it.gun, { ammo: it.ammo, trial: it.trial });
+      const out = weapon.makeRoom(it.gun); // mission loadout limit: a third primary swaps one out
+      weapon.grant(it.gun, { ammo: it.ammo, trial: it.trial, mag: it.mag });
       weapon.switchTo(it.gun);
+      this.#remove(i);
+      if (out) this.dropSwapped(at, out);
+      return;
     }
     this.#remove(i);
   }

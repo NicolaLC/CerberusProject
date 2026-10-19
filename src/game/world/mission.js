@@ -23,7 +23,7 @@ const clock = (s) => {
 };
 
 export class Mission {
-  // owns(gun): does the player own that gun (game.js: weapon.owned); a mission without gun conditions never calls it.
+  // owns(gun): has the player found that gun (game.js: owned, or found and dropped by a loadout swap); a mission without gun conditions never calls it.
   constructor({ events, enemies, owns = () => true }) {
     Object.assign(this, { events, enemies, owns });
     this.promptAt = { x: 0, y: 0, z: 0 }; // reused by interactPrompt

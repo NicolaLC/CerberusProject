@@ -6,6 +6,7 @@ import { Rng } from '../../engine/random.js';
 // Hitscan weapons (stats in guns.js). Aim ray comes from the camera; the shot is then validated from the muzzle.
 // Gameplay only: everything audiovisual is announced through events (see instructions/architecture.md).
 const SWITCH_TIME = 0.45;
+const MAX_PRIMARIES = 2; // missions: the pistol + this many other guns (#34)
 // Active reload (Gears of War style): press reload again while the marker sweeps the bar.
 const ACTIVE = {
   jamPenalty: 1.0, // extra seconds when you miss
@@ -44,8 +45,15 @@ export class Weapon {
   // Owned guns start with their default reserve, the others with a full magazine and an empty reserve (grant() fills it).
   // The rifle is raised if owned, else the first owned gun in GUN_ORDER; none owned = unarmed: `current` is null, update()
   // does nothing and `t` / `ammo` / `reserve` read the pistol (safe values for readers; the HUD hides the block).
-  reset(loadout = GUN_ORDER) {
+  // A level WITH a `loadout` is a mission: it carries the pistol + MAX_PRIMARIES guns (`limited`, makeRoom). Without one (Gym, Library,
+  // arena, Workshop, ?debug) all six are owned with no limit.
+  reset(loadout) {
+    this.limited = loadout != null;
+    loadout ??= GUN_ORDER;
     this.owned = new Set(loadout.length ? ['pistol', ...loadout] : []);
+    this.seen = new Set(this.owned); // guns already discovered: a gun dropped by a swap and picked up again is no new discovery
+    this.trial = new Set(); // owned guns that are range loaners
+    this.lastPrimary = this.owned.has('rifle') ? 'rifle' : null; // last primary in hand: the one a swap drops while the pistol is raised
     this.state = {};
     for (const id of GUN_ORDER) this.state[id] = { ammo: GUNS[id].mag, reserve: this.owned.has(id) ? GUNS[id].reserve : 0, boost: false };
     this.active = null; // { total, attempted, result } while a reload runs
@@ -190,16 +198,39 @@ export class Weapon {
   // Gives the player a gun (pickup.gun) and `ammo` rounds into its reserve, capped at its max. The first time a gun is
   // owned in this level it emits 'weapon:discovered' { gun, trial }. `trial`: a range rack's gun, lent for the range only
   // (taken back at its exit): toast and sound still play, but it is no discovery for the level (no discovered:<gun>). Returns the rounds added.
-  grant(id, { ammo = 0, trial = false } = {}) {
+  // `mag`: the magazine a dropped gun comes back with (a newly owned gun only).
+  grant(id, { ammo = 0, trial = false, mag = null } = {}) {
     const g = GUNS[id];
     const s = this.state[id];
     const got = g.infinite ? 0 : Math.max(0, Math.min(ammo, g.maxReserve - s.reserve));
     s.reserve += got;
     if (!this.owned.has(id)) {
       this.owned.add(id);
-      this.events.emit('weapon:discovered', { gun: id, trial });
+      if (mag != null) s.ammo = Math.min(mag, g.mag);
+      if (trial) this.trial.add(id);
+      if (!this.seen.has(id)) {
+        this.seen.add(id);
+        this.events.emit('weapon:discovered', { gun: id, trial });
+      }
     }
     return got;
+  }
+
+  // Mission loadout limit (#34): call BEFORE granting `id`. If it is a new gun and the player already carries MAX_PRIMARIES, the primary in
+  // hand (else the last one used) is taken out of the set and returned as { gun, ammo (reserve), mag, trial } for the caller to drop as a
+  // pickup. The pistol is never taken. Null: nothing to swap (no limit, gun owned, room left).
+  makeRoom(id) {
+    if (!this.limited || this.owned.has(id) || GUNS[id].infinite) return null;
+    const prim = [...this.owned].filter((g) => !GUNS[g].infinite);
+    if (prim.length < MAX_PRIMARIES) return null;
+    const hand = this.pending ?? this.current;
+    const out = prim.includes(hand) ? hand : prim.includes(this.lastPrimary) ? this.lastPrimary : prim[0];
+    const s = this.state[out];
+    const rec = { gun: out, ammo: s.reserve, mag: s.ammo, trial: this.trial.has(out) };
+    this.owned.delete(out);
+    this.trial.delete(out);
+    this.state[out] = { ammo: GUNS[out].mag, reserve: 0, boost: false };
+    return rec;
   }
 
   // Takes back every gun not in `guns` (a trigger.volume `loadout`, e.g. the Prologue range's exit): those guns are unowned
@@ -211,6 +242,8 @@ export class Weapon {
     const taken = [...this.owned].filter((id) => !keep.has(id));
     for (const id of taken) {
       this.owned.delete(id);
+      this.seen.delete(id);
+      this.trial.delete(id);
       this.state[id] = { ammo: GUNS[id].mag, reserve: 0, boost: false };
     }
     if (this.current && !keep.has(this.current)) {
@@ -236,7 +269,18 @@ export class Weapon {
     return GUN_ORDER[i];
   }
 
+  // The last round of a gun that can't reload went off: raise the next owned gun (next-gun order) that still has a round; none: stay.
+  #autoSwitch() {
+    let id = this.current;
+    for (let i = 1; i < GUN_ORDER.length; i++) {
+      id = this.#nextOwned(id, 1);
+      const s = this.state[id];
+      if (s.ammo > 0 || s.reserve > 0 || GUNS[id].infinite) return this.switchTo(id);
+    }
+  }
+
   switchTo(id) {
+    if (!GUNS[id].infinite) this.lastPrimary = id;
     if (!this.current) {
       // unarmed: the gun is raised at once (no lowering), whatever the slot
       this.current = id;
@@ -264,6 +308,16 @@ export class Weapon {
   // 0..1 position of the active-reload marker
   reloadProgress() {
     return this.active ? 1 - this.reloading / this.active.total : 0;
+  }
+
+  // Reload pose input for the animator (reused object), null when no reload runs.
+  reloadAnim() {
+    if (!(this.reloading > 0) || !this.active) return null;
+    const r = (this._rl ??= { gun: null, p: 0, result: null });
+    r.gun = this.current;
+    r.p = this.reloadProgress();
+    r.result = this.active.result;
+    return r;
   }
 
   reload() {
@@ -549,6 +603,7 @@ export class Weapon {
     this.rig.kick(_kick[0] * k, -_kick[1] * k, t.trauma, r.recover, r.hold ?? (60 / t.rpm) * 1.3);
     this.player.kick(t.kick);
     this.bloom = Math.min(t.bloomMax, this.bloom + t.bloomPerShot);
+    if (this.ammo === 0 && this.reserve <= 0 && !t.infinite) this.#autoSwitch();
 
     if (!hit) return;
     this.#hit(hit, toAim, hit.object.userData.enemy);

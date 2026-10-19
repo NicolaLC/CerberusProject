@@ -276,6 +276,7 @@ export class Player {
 
   update(dt, controls, rig, weapon) {
     const t = this.t;
+    this.weapon = weapon; // the view reads the reload state for the animation
     this.sinceHit += dt;
     this.lastShot += dt;
     if (this.sinceHit > t.shieldDelay) this.shields = Math.min(t.maxShields, this.shields + t.shieldRate * dt);

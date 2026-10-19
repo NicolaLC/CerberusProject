@@ -414,13 +414,15 @@ shutters), so the shell protects the core. The trail is drawn to where it stops.
   all six (arena, Gym, Library, Workshop). Switching only reaches owned guns. A gun on a stand (`pickup.gun`) found in the
   world discovers its gun: a toast `<NAME> ACQUIRED` and the gun is raised; a gun already owned gives its ammo instead.
 
-Planned (#91), not in the code yet:
-- **STEM-00 starts unarmed in the Prologue** (`loadout: []`) and finds the KP-12 Ember at the calibration bay, right before the first shooting test (#93). Every other gun is **discovered** in play: taken from a defeated
+- **Loadout limit (implemented, #34).** In a mission (a level with a `loadout`) the player carries the pistol plus up to 2 primaries.
+  Picking up a third swaps it with the primary in hand (the last-used one if the pistol is raised): the old gun drops at STEM-00's feet
+  with its remaining magazine and reserve and can be picked up again. The pistol is never dropped. Gym, Library, arena and `?debug`
+  keep all six with no limit.
+
+- **STEM-00 starts unarmed in the Prologue** (`loadout: []`, implemented) and finds the KP-12 Ember at the calibration bay, right before the first shooting test (#93). Every other gun is **discovered** in play: taken from a defeated
   unit (enemy gun drops) or found in the world (armoury rack, crate: `pickup.gun`). Picking a gun up for the first time is a
-  small beat: a toast (implemented), a STEM-00 log line (#40), and the gun goes into the hideout armoury for good (#39, saved: #53).
-- **The pistol can never be dropped or swapped out.**
-- **Loadout:** pistol plus up to 2 primaries carried; swap a primary by picking another gun up (#34). Discovered
-  guns can be chosen at the hideout before a mission.
+  small beat: a toast and a STEM-00 log line (both implemented, `discovered:<gun>`); planned: the gun goes into the hideout armoury for good (#39, saved: #53).
+- **Hideout loadout:** discovered guns can be chosen at the hideout before a mission (#39).
 - **Discovery order** (proposal, tune per mission; each gun shows up first where its role is needed):
 
 | When | Gun | Where it comes from |
