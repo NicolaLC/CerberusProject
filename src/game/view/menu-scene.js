@@ -245,7 +245,7 @@ export class MenuScene {
     for (let i = 0; i < 6; i++) strips.push([-1400 + i * 520 + R() * 100, GROUND + 25 + R() * 40, -1100, 0.8, 0.5, 2200]);
 
     const geo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
-    const city = new THREE.InstancedMesh(geo, cityMaterial(), parts.length);
+    const city = new THREE.InstancedMesh(geo, (this.cityMat = cityMaterial()), parts.length);
     const lit = new Float32Array(parts.length);
     const col = new THREE.Color();
     parts.forEach(([x, y, z, w, h, d, rx, rz, ry, color, l], i) => {
@@ -595,6 +595,7 @@ export class MenuScene {
     for (const im of this.farMeshes) im.instanceMatrix.needsUpdate = true;
     this.lights.geometry.attributes.position.needsUpdate = true;
     this.lights.material.uniforms.time.value = t;
+    this.cityMat.userData.time.value = t;
 
     // searchlights sweep the streets
     const users = this.coneUsers;

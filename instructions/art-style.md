@@ -65,13 +65,40 @@ haze, no sun disc, and at most a weak cold key that stands for the HiveMind's gl
 shadows). Outdoor spaces are lit by their own sources: wall lamps and floodlights in cold white, the gates' status lamps,
 amber alarm beacons, emissive strips and the enemies' sensors. Combat stays readable: every fight space gets enough lamps
 that cover edges and enemy silhouettes separate from the floor, and the outdoor exposure is raised to match (level `sky`
-preset, level.md). Distant skylines are black silhouettes against the horizon haze with sparse lit windows, never a lit
-city. Interiors keep their look (cold white and cyan strips).
+preset, level.md). Distant skylines are black silhouettes against the horizon haze, lit only by what the machines are
+doing (section "World: machine-first"), never a lit city. Interiors keep their look (cold white and cyan strips).
+
+### World: machine-first (owner decision 2026-10-19)
+IO is not a city. Nobody lives anywhere: robots don't rest, look out, commute or go home. Every structure exists because
+one of the HiveMind's jobs needs it, at the size of the machines that do the job (gdd.md 2.1). If a shape only makes
+sense for someone who lives there, it is wrong.
+
+| Job | Structure | How it reads at a distance |
+|---|---|---|
+| Compute | Server spires: dense, ribbed, sealed, no openings | Heat shimmer, cyan data lines running up the ribs |
+| Energy | Collector masts and canopy arrays, atmospheric harvesters | The sky itself blocked out, faint updraft glows |
+| Production | Foundry blocks, flare stacks | Dull ember heat seams, sparks |
+| Logistics | Transit rails, pod lines, drone lanes, gantry cranes | Endless motion: lights in fixed lanes, never stopping |
+| Cooling | Cooling stacks, coolant reservoirs (the drained oceans) | Steam plumes, dull teal pools |
+| Stripping | Open pits, crawlers grinding IO deeper (the dying core) | Black gaps in the lattice, slow lights inside |
+
+- **No windows.** Light leaks from the work: vent slots, heat seams, service hatches, data bands, status lamps.
+- **Machine scale, not human scale.** No storeys every 3 m, no 2 m doors, stairs, balconies, streets, cars or signage
+  for people; hatches are 12 m wide, crane arms 400 m long. Facilities built *for* war units (the Proving Grounds, the
+  calibration bay) are the exception: their units are about human size, so their rooms, doors and floor stencils are too.
+- **A lattice, not a skyline.** Structures are joined by rails, pipes, cables and conduits; the mass is horizontal
+  layers stacked into the haze, and the few tall spires are nodes of it, not standalone towers.
+- **One mind.** Lights blink in sync, and pulses sweep across the whole lattice in waves. As CERBERUS loses heads the
+  sync frays (gdd.md 2.2: the world starts to change): out-of-step lights are a story tool, never noise.
+- **Constant, identical motion.** Pods, drones and cranes never stop and never vary: total peace, zero will.
+- **Light means a job.** Violet: the HiveMind (its eyes, its relays). Cyan / teal: data and coolant. Cold white: work
+  lamps. Heat is a dull, dim ember (`#8A3A1C` family), small and low, never amber (STEM-00's) or sodium orange (the
+  Rejects'). The 80% desaturated rule holds: the lattice is a black mass with points and seams of light.
 
 ## 4. Never (the "childish" checklist)
 Bright flat or rainbow colours · glossy toy plastic · big heads or chunky toy proportions · bubbly cartoon shapes ·
 outlines or cel shading · faces, smiles or expressive eyes on machines · clean new surfaces · chrome bling ·
-comedic poses. PATCH is the only comic element, and even PATCH is built from real broken parts.
+comedic poses · windows, human-scale storeys, streets or anything a resident would need (World: machine-first). PATCH is the only comic element, and even PATCH is built from real broken parts.
 
 ## 5. In game (art pass #87 done: no open differences)
 The procedural models, materials and lighting follow this rule. Open differences go in this section until fixed; it is

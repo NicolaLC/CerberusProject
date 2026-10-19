@@ -123,7 +123,7 @@ export const WORLD_PIECES = {
   // distant city backdrop around an open-sky space (backdrop.js): params seed, towers (70), radius [near, far] (260, 650), drones (7), searchlights (3)
   'env.backdrop': {
     example: { params: { towers: 12, radius: [60, 120] } },
-    label: 'BACKDROP distant ruined skyline, drones, searchlights, HiveMind glow; no collision',
+    label: 'BACKDROP distant machine lattice, rails, drones, searchlights, HiveMind glow; no collision',
     fields: [{ key: 'seed', type: 'number', min: 0, optional: true }, { key: 'towers', type: 'number', min: 1, optional: true }, { key: 'radius', type: 'vec2', min: 1, optional: true }, { key: 'drones', type: 'number', min: 0, optional: true }, { key: 'searchlights', type: 'number', min: 0, optional: true }],
     build: (world, d) => buildBackdrop(world, d),
   },

@@ -52,8 +52,11 @@ mission of Act 1: STEM-00's log lines, the HiveMind's announcer and the cuts car
 - **A dark world (owner decision, October 2026):** the HiveMind devoured the sunlight for energy. Collector arrays and
   atmospheric harvesters drink the light before it reaches the ground, so IO lives in a permanent near-night. The sky
   is black with a faint teal haze at the horizon; what light there is comes from the machines themselves: the HiveMind's
-  violet glow over the city, sparse lit windows, beacons, searchlights, factory lamps. A place the sun still reaches
+  violet glow over the lattice, vent and heat seams, data lines, beacons, searchlights, work lamps. A place the sun still reaches
   would be a story beat of its own.
+- **Machine-first (owner decision 2026-10-19):** nothing on IO is built for living. There are no homes, windows or
+  streets; every structure serves one of the HiveMind's jobs (compute, energy, production, logistics, cooling, stripping
+  the planet) at machine scale. `instructions/art-style.md` (World: machine-first) is the visual rule.
 
 ### 2.2 The HiveMind and CERBERUS
 The **HiveMind** is the super intelligence that controls every robot. It does not hate and does not fear. It corrects
@@ -129,7 +132,7 @@ STEM-00 wakes knowing its directive (2.4). The mystery is its source, learned in
 | Region | What it is | Prototype |
 |---|---|---|
 | Proving Grounds | Military testing labs at the top of a spire, high above the city, where war units are calibrated against puppets and drones. STEM-00 wakes here. Its exit opens onto the Skyway. | The Prologue (`prologue`) |
-| The Skyway | A colossal bridge between skyscrapers, hundreds of metres above the city floor, running from the Proving Grounds spire toward the Gate district. Seen from above: the city drops away on both sides. | The Prologue's last part (`skyway`) |
+| The Skyway | A colossal transit span between server spires, hundreds of metres above the lattice floor, running from the Proving Grounds spire toward the Gate district. Seen from above: the city drops away on both sides. | The Prologue's last part (`skyway`) |
 | Foundry Belt | Endless factories, molten rivers, assembly lines that build armies nobody needs. Industrial combat, conveyor hazards. | No |
 | Underworks | The scrap layer beneath the cities, where broken units are dumped before recycling. Dark and vertical, flooded sewer lines. Home of the Rejects and STEM-00's hideout, where it upgrades after each mission. STEM-00 lands here after the fall. | Act 1 opening: the sewer line (`underworks`) |
 | Spire Cathedrals | Giant server towers built like gothic cathedrals. Data-priests maintain them in endless ritual loops. | No |
