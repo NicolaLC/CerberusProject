@@ -435,7 +435,9 @@ export class Enemies {
   }
 
   // A trooper spotted the player: squadmates in earshot join in.
+  // A Library exhibit woken with V (`hostile`) fights alone: its neighbours on the pad stay exhibits.
   alertNear(from, radius) {
+    if (from.hostile) return;
     for (const e of this.all) {
       if (e !== from && e.alive && e.kind === 'trooper' && !e.alerted && e.pos.distanceTo(from.pos) < radius) e.alert();
     }

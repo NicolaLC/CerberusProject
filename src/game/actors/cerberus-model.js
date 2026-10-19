@@ -16,7 +16,7 @@ import { BoneRig, pickLook } from './skeleton.js';
 //   rig: the skeleton (BONES below, skeleton.js) with its hit boxes (only with an `owner`, the game's Cerberus) and the sockets
 //   <id>Muzzle / <id>Weak; `look` picks a function of cerberusLooks (default 'default'), which only adds meshes to the bones
 //   M: cerberusMaterials() (or any map with the same keys: the title passes its haze shaders)
-//   heads[i]: { id, bone (aims: rotation.x pitch down +, rotation.y yaw), muzzle (Object3D), weak (the weak spot's centre, Object3D) }
+//   heads[i]: { id, bone (aims: rotation.x pitch down +, rotation.y yaw), muzzle (Object3D), weak (the weak spot's hit box, at the `<id>Weak` socket) }
 //   sensors: [{ obj, pos (local), size, head }] where the lenses glow (the title and the reel draw lights there)
 
 export const HEAD_IDS = ['vigil', 'legion', 'colossus'];
@@ -232,6 +232,6 @@ export const cerberusLooks = {
 export function buildCerberus(M, { owner = null, look = 'default' } = {}) {
   const rig = buildCerberusSkeleton(owner);
   const sensors = pickLook(cerberusLooks, look, 'boss.cerberus')(rig, M);
-  const heads = HEAD_IDS.map((id, i) => ({ id, bone: rig.bones[HEAD_BONES[i]], muzzle: rig.sockets[`${id}Muzzle`], weak: rig.sockets[`${id}Weak`] }));
+  const heads = HEAD_IDS.map((id, i) => ({ id, bone: rig.bones[HEAD_BONES[i]], muzzle: rig.sockets[`${id}Muzzle`], weak: rig.sockets[`${id}Weak`].children.find((c) => c.userData.zone === 'weak') ?? rig.sockets[`${id}Weak`] }));
   return { rig, root: rig.root, frame: rig.bones.Frame, body: rig.bones.Body, heads, bones: Object.values(rig.bones), looks: rig.looks, sensors };
 }
