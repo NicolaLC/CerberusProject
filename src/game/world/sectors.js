@@ -345,8 +345,10 @@ export class Sectors {
     const meshes = w.staticMeshes.filter((m) => own.has(m));
     for (const m of meshes) m.updateMatrixWorld(true);
     s.group = new THREE.Group();
-    // interior dressing of one room is seen only from it or through its portals (which makes it visible): one group, the sector
-    s.batches = yield* mergeStaticSteps(meshes, s.group, () => s.bit);
+    // a deferred piece belongs to the sector holding its pos, but its geometry may run into a neighbour (the supply corridor's turn, a
+    // bulkhead on a room's edge): it is drawn whenever any sector it reaches is visible (the sector's own bit, never OUTSIDE: the
+    // dressing is seen from inside), else it vanishes with the owner's portal view while its skin (a raycast target, layer 0) stays
+    s.batches = yield* mergeStaticSteps(meshes, s.group, (m) => (this.maskOf(m) & ~BIT_OUT) | s.bit);
     this.layer(s.batches);
     // the merged sources are render-only (raycasts never see them): free them now, the level data rebuilds them
     const drop = new Set(meshes.filter((m) => !m.userData.collider));

@@ -79,6 +79,30 @@ for (const name of SCENES) {
   expect(`  player at the spawn ${JSON.stringify(r.spawn)}`, Math.hypot(r.pos[0] - r.spawn[0], r.pos[2] - r.spawn[2]) < 0.2 && Math.abs(r.pos[1] - r.spawn[1]) < 0.05, JSON.stringify(r.pos));
   expect('  enemy and pickup counts match the level file', r.enemies === r.enemyPieces && r.pickups === r.pickupPieces && r.colliders > 0, JSON.stringify(r));
   expect('  no page or console errors', errors.length === 0, errors.join(' | '));
+  // sectored levels: a built batch is drawn with every sector its geometry reaches (a deferred piece whose pos is in one room but whose
+  // parts run into the next vanished with the owner's portal view: props / dressing "disappearing at an angle", level.md Sectors)
+  const spill = await p.evaluate(() => {
+    const S = window.game.world.sectors;
+    if (!S.active) return null;
+    S.buildAll();
+    const bad = [];
+    for (const s of S.list) {
+      for (const m of s.batches ?? []) {
+        const pos = m.geometry.attributes.position;
+        const group = m.userData.group;
+        const seen = new Set();
+        for (let v = 0; v < pos.count; v++) {
+          const x = pos.getX(v), y = pos.getY(v), z = pos.getZ(v);
+          S.boxes.forEach((b, i) => {
+            if (x > b.min.x + 0.1 && x < b.max.x - 0.1 && y > b.min.y + 0.1 && y < b.max.y - 0.1 && z > b.min.z + 0.1 && z < b.max.z - 0.1 && !(group & (2 << i))) seen.add(S.list[i].name);
+          });
+        }
+        if (seen.size) bad.push(`${s.name}: ${[...seen].join('+')}`);
+      }
+    }
+    return { sectors: S.list.length, bad };
+  });
+  if (spill) expect(`  every sector batch is on the layers of all the sectors it reaches (${spill.sectors} sectors)`, spill.bad.length === 0, spill.bad.slice(0, 4).join(' | '));
   await p.close();
 }
 
