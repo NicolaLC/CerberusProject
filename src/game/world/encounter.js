@@ -16,7 +16,7 @@ import { GUNS } from '../combat/guns.js';
 //                     enters. params { size [w,h,d], event, once (true), wakeGroup?, spawnGroup?, loadout? (gun ids: `encounter:loadout`, the others are taken back) }.
 //  objective.*        mission objectives (reach / destroy / survive / interact / action, #12): records only, `Mission` (mission.js) runs them.
 //                     Common params { text, order?, limit?, wakeGroup?, spawnGroup?, grantGun?, grantAmmo?, skipOn?, requiresGun?, skipIfOwned? }; see workshop.md "Missions".
-//  log.line           a STEM-00 log line (#40, instructions/narrative.md): params { text, on, priority? ('normal'), once? (true), delay? (s, 0) }.
+//  log.line           a STEM-00 log line (#40, instructions/narrative.md): params { text, on, priority? ('normal'), once? (true), delay? (s, 0), voice? ('stem') }.
 //                     When `on` happens (LOG_ON below) it emits `log:say` { text, priority } after `delay`; the Log view (view/log.js) shows it.
 //                     Never in a fight: a fired line waits until STEM-00 has been out of combat for TUNING.calm s, `delay` counts from then.
 //  intro.boot         the boot intro (#13): params { lines: [diagnostic strings], duration? (s, 12, max 20), skippable? (true), after? (an `on` form, 'start'), pov? (false: true | { release, timeout, blend }, first-person hold, CameraRig.holdPov) }. When `after` happens (the first play frame by default)

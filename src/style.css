@@ -81,7 +81,8 @@ body.pad, body.pad * { cursor: none !important; }
 #top { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 28px; font: 0.85em var(--font-main); letter-spacing: 3px; color: #b4d4ec; text-shadow: 0 0 4px #000; }
 #top b { color: #fff; }
 /* active objective: framed facility panel top-left, ochre head over the top rule, cold white detail, numbers in the number face */
-#objective { position: absolute; top: max(16px, 2.4vh); left: max(16px, 1.8vw); display: none; box-sizing: border-box; width: max-content; max-width: min(26em, calc(100vw - 32px)); padding: 0.55em 0.9em 0.65em; font: 600 1.1em var(--font-main); letter-spacing: 0.14em; color: #ffd23a; text-shadow: 0 1px 2px #000; background: rgba(8, 12, 17, 0.8); border: 1px solid rgba(234, 246, 250, 0.14); border-top: 1px solid rgba(255, 210, 58, 0.7); }
+#feed { position: absolute; top: max(16px, 2.4vh); right: max(16px, 1.8vw); display: flex; flex-direction: column; align-items: flex-end; gap: 0.6em; max-width: min(30em, calc(100vw - 32px)); }
+#objective { display: none; box-sizing: border-box; width: max-content; max-width: min(26em, calc(100vw - 32px)); padding: 0.55em 0.9em 0.65em; font: 600 1.1em var(--font-main); letter-spacing: 0.14em; color: #ffd23a; text-shadow: 0 1px 2px #000; background: rgba(8, 12, 17, 0.8); border: 1px solid rgba(234, 246, 250, 0.14); border-top: 1px solid rgba(255, 210, 58, 0.7); }
 #objective.in { animation: obj-in 0.35s ease-out; }
 #obj-detail { margin-top: 0.35em; font-size: 0.95em; font-weight: 500; letter-spacing: 0.04em; line-height: 1.45; color: #eaf6fa; }
 #obj-detail:empty, #obj-prog:empty { display: none; }
@@ -215,7 +216,7 @@ html body.title #overlay { opacity: 1; } /* index.html keeps it transparent unti
 #boss .segs u { position: absolute; left: 0; right: 0; top: 11px; text-decoration: none; font-size: 9px; letter-spacing: 2px; color: #ffb48a; }
 #toast { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font: 700 1.15em var(--font-main); letter-spacing: 3px; color: #7fe8ff; text-shadow: 0 0 8px rgba(56, 216, 255, 0.7); opacity: 0; }
 /* STEM-00 log: terminal readout panel. Header strip (::before, time from data-t), scanlines + corner brackets (backgrounds), cursor (::after); the typed text stays the element's only text node */
-#log { position: absolute; left: 50%; bottom: max(112px, 13vh); transform: translateX(-50%); box-sizing: border-box; width: max-content; max-width: min(64em, calc(100vw - 32px)); padding: 0 1em 0.65em; font: 1.3em ui-monospace, Consolas, 'DejaVu Sans Mono', monospace; letter-spacing: 0.06em; line-height: 1.4; color: #ffbe5c; text-shadow: 0 0 5px rgba(255, 179, 71, 0.35), 0 1px 2px #000; white-space: pre-wrap; opacity: 0; border: 1px solid rgba(255, 179, 71, 0.22);
+#log { box-sizing: border-box; width: max-content; max-width: 100%; padding: 0 1em 0.65em; font: 1em ui-monospace, Consolas, 'DejaVu Sans Mono', monospace; letter-spacing: 0.06em; line-height: 1.4; color: #ffbe5c; text-shadow: 0 0 5px rgba(255, 179, 71, 0.35), 0 1px 2px #000; white-space: pre-wrap; opacity: 0; border: 1px solid rgba(255, 179, 71, 0.22);
   background:
     linear-gradient(#ffb347, #ffb347) 0 0 / 10px 1px no-repeat, linear-gradient(#ffb347, #ffb347) 0 0 / 1px 10px no-repeat,
     linear-gradient(#ffb347, #ffb347) 100% 0 / 10px 1px no-repeat, linear-gradient(#ffb347, #ffb347) 100% 0 / 1px 10px no-repeat,
@@ -227,10 +228,10 @@ html body.title #overlay { opacity: 1; } /* index.html keeps it transparent unti
 #log.glitch-a { animation: log-glitch-a 0.22s steps(1); }
 #log.glitch-b { animation: log-glitch-b 0.22s steps(1); }
 /* the HiveMind announcer (log.line voice): cold PA, centred, wide tracking, cyan rules above and below, no amber, no cursor */
-#log.announcer { bottom: auto; top: 18%; text-align: center; padding: 0.55em 1.4em; font-size: 1.45em; letter-spacing: 0.26em; color: #eaf6fa; text-shadow: 0 0 10px rgba(63, 224, 255, 0.8), 0 0 2px #000; border: 0; border-top: 1px solid #3fe0ff; border-bottom: 1px solid #3fe0ff; background: linear-gradient(to right, rgba(11, 17, 24, 0), rgba(11, 17, 24, 0.75) 15%, rgba(11, 17, 24, 0.75) 85%, rgba(11, 17, 24, 0)); }
+#log.announcer { position: fixed; left: 50%; top: 18%; transform: translateX(-50%); max-width: min(64em, calc(100vw - 32px)); text-align: center; padding: 0.55em 1.4em; font-size: 1.45em; letter-spacing: 0.26em; color: #eaf6fa; text-shadow: 0 0 10px rgba(63, 224, 255, 0.8), 0 0 2px #000; border: 0; border-top: 1px solid #3fe0ff; border-bottom: 1px solid #3fe0ff; background: linear-gradient(to right, rgba(11, 17, 24, 0), rgba(11, 17, 24, 0.75) 15%, rgba(11, 17, 24, 0.75) 85%, rgba(11, 17, 24, 0)); }
 #log.announcer::before { content: 'PRIORITY BROADCAST'; margin: 0 0 0.4em; padding: 0; font-size: 0.55em; letter-spacing: 0.5em; color: #3fe0ff; border: 0; background: none; }
 #log.announcer::after { content: none; }
-@media (max-width: 600px) { #log { font-size: 1em; letter-spacing: 0.5px; bottom: 96px; } #log.announcer { font-size: 1.1em; letter-spacing: 3px; } }
+@media (max-width: 600px) { #log { font-size: 0.9em; letter-spacing: 0.5px; } #log.announcer { font-size: 1.1em; letter-spacing: 3px; } }
 @keyframes log-glitch-a { 0% { translate: -3px 0; opacity: 0.5; } 25% { translate: 2px 0; opacity: 1; } 50% { translate: 0; opacity: 0.4; } 75% { translate: 1px 0; opacity: 1; } }
 @keyframes log-glitch-b { 0% { translate: -3px 0; opacity: 0.5; } 25% { translate: 2px 0; opacity: 1; } 50% { translate: 0; opacity: 0.4; } 75% { translate: 1px 0; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { #log.glitch-a, #log.glitch-b, #log::after { animation: none; } }
