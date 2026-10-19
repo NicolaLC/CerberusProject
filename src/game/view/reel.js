@@ -253,37 +253,185 @@ export class Reel {
     this.nodes = Array.from({ length: 900 }, () => ({ lon: r() * Math.PI * 2, lat: Math.asin(r() * 2 - 1), v: r() < 0.04, a: 0.3 + r() * 0.7 }));
     // city: three skyline layers (far to near), each wider than the screen for the pan
     this.layers = [
-      { depth: 0.25, top: 0.5, h: 0.22, fill: '#0f2329', win: 0.01 },
-      { depth: 0.55, top: 0.58, h: 0.3, fill: '#09141a', win: 0.02 },
-      { depth: 1, top: 0.7, h: 0.38, fill: '#040709', win: 0.035 },
-    ].map((L) => ({ ...L, img: this.#skyline(L, rng, W * 1.6, H) }));
+      { depth: 0.25, top: 0.5, h: 0.22, fill: '#0f2329' },
+      { depth: 0.55, top: 0.58, h: 0.3, fill: '#09141a' },
+      { depth: 1, top: 0.7, h: 0.38, fill: '#040709' },
+    ].map((L) => ((L.img = this.#skyline(L, rng, W * 1.6, H)), L));
     // collectors: pylons with dishes, motes of light rising into them
     this.pylons = [0.16, 0.38, 0.63, 0.87].map((x, k) => ({ x: x + (r() - 0.5) * 0.05, top: 0.16 + r() * 0.12, w: 0.05 + r() * 0.03, dish: 0.07 + r() * 0.05, k }));
     this.motes = Array.from({ length: 520 }, () => ({ x: r(), p: r(), s: 0.05 + r() * 0.08, pyl: (r() * 4) | 0, a: 0.2 + r() * 0.6 }));
     this.feedNoise = Array.from({ length: 40 }, () => ({ y: r(), h: 0.004 + r() * 0.03, dx: (r() - 0.5) * 0.08 }));
   }
 
-  // One skyline layer: towers (some broken), sparse lit windows; drawn once into its own canvas.
+  // One layer of the machine lattice (art-style.md "World: machine-first"): lattice blocks, sealed server spires with
+  // setback collars and a needle, collector masts under canopy arrays, cooling stacks with steam, gantry cranes, joined by
+  // rails and cables. No windows: light is vent slits, data lines, low ember seams and beacons. Drawn once into its own
+  // canvas; the beacons are returned in L.lamps and pulse in draw_city (one sync wave over every layer).
   #skyline(L, rng, w, H) {
     const c = new OffscreenCanvas(Math.ceil(w), H);
     const x = c.getContext('2d');
-    x.fillStyle = L.fill;
-    let px = 0;
+    const k = 0.6 + L.depth; // size of a machine at this depth
+    const u = H * 0.0135 * k;
     const base = H * (L.top + L.h);
+    const rnd = (a, b) => a + rng.next() * (b - a);
+    const rib = rgba(C.haze, 0.1 + 0.1 * L.depth); // faint lighter ribs: the lattice reads against the haze
+    const data = rgba(C.glow, 0.18 + 0.3 * L.depth);
+    const vent = rgba(C.glow, 0.25 + 0.35 * L.depth);
+    const ember = rgba('138, 58, 28', 0.35 + 0.4 * L.depth);
+    L.lamps = [];
+    const anchors = []; // [x, y] points the rails and cables hang between
+    const block = (px, bw, bh, ribs = true) => {
+      x.fillStyle = L.fill;
+      x.fillRect(px, base - bh, bw, H - base + bh);
+      if (ribs) {
+        x.fillStyle = rib;
+        for (let y = base - bh + u * 2; y < base; y += u * 2.2) x.fillRect(px, y, bw, 1);
+      }
+    };
+    let px = 0;
     while (px < w) {
-      const tw = H * (0.02 + rng.next() * 0.06) * (0.6 + L.depth);
-      const th = H * L.h * (0.25 + rng.next() * 0.75);
-      x.fillRect(px, base - th, tw, H - base + th);
-      if (rng.next() < 0.3) x.fillRect(px + tw * 0.4, base - th - H * 0.03, tw * 0.12, H * 0.03); // mast
-      for (let wy = base - th + 4; wy < base; wy += 5 + L.depth * 4)
-        for (let wx = px + 2; wx < px + tw - 2; wx += 4 + L.depth * 3)
-          if (rng.next() < L.win) {
-            x.fillStyle = rng.next() < 0.7 ? rgba(C.white, 0.5) : rgba(C.glow, 0.6);
-            x.fillRect(wx, wy, 1.5 + L.depth, 1.5 + L.depth);
-            x.fillStyle = L.fill;
-          }
-      px += tw + H * rng.next() * 0.01;
+      const kind = rng.next();
+      const maxH = H * L.h;
+      let bw;
+      if (kind < 0.3) {
+        // lattice block stack: wide layers, slightly different widths, vent slits
+        bw = rnd(5, 11) * u;
+        let y = base, cw = bw, cx = px;
+        const n = 2 + ((rng.next() * 3) | 0);
+        for (let i = 0; i < n; i++) {
+          const lh = rnd(0.12, 0.26) * maxH;
+          block(cx, cw, base - y + lh);
+          x.fillStyle = vent;
+          for (let v = 0; v < 3; v++) if (rng.next() < 0.5) x.fillRect(cx + rnd(0.1, 0.8) * cw, y - lh * rnd(0.2, 0.8), rnd(1.5, 3) * u, Math.max(1, u * 0.2));
+          y -= lh;
+          const nw = cw * rnd(0.6, 0.95);
+          cx += (cw - nw) * rng.next();
+          cw = nw;
+        }
+        anchors.push([px + bw * 0.5, base - (base - y) * 0.7], [px + bw, base - (base - y) * 0.4]);
+      } else if (kind < 0.52) {
+        // server spire: tiers with setback collars, a needle, cyan data lines climbing, a beacon
+        bw = rnd(3, 5) * u;
+        const th = rnd(0.55, 1) * maxH;
+        const mid = px + bw / 2;
+        const tiers = 3 + ((rng.next() * 2) | 0);
+        let y = base, tw = bw;
+        for (let i = 0; i < tiers; i++) {
+          const lh = th / tiers;
+          x.fillStyle = L.fill;
+          x.fillRect(mid - tw / 2, y - lh, tw, H - y + lh);
+          x.fillStyle = rib;
+          for (let v = y - lh + u; v < y; v += u * 1.3) x.fillRect(mid - tw / 2, v, tw, 1);
+          y -= lh;
+          x.fillStyle = L.fill; // collar
+          x.fillRect(mid - tw / 2 - u * 0.5, y - u * 0.5, tw + u, u * 0.9);
+          tw *= 0.78;
+        }
+        x.fillRect(mid - u * 0.15, y - u * 5, u * 0.3, u * 5); // needle
+        x.fillStyle = data;
+        for (const dx of [-0.3, 0.15]) x.fillRect(mid + dx * bw, base - th * rnd(0.5, 0.95), Math.max(1, u * 0.18), th * 0.7);
+        L.lamps.push({ x: mid, y: y - u * 5, c: C.violet, r: u * 0.7 });
+        anchors.push([mid, y + u]);
+      } else if (kind < 0.67) {
+        // collector mast: a thin lattice mast under a wide canopy array
+        bw = rnd(8, 14) * u;
+        const th = rnd(0.45, 0.9) * maxH;
+        const mid = px + bw / 2;
+        const top = base - th;
+        x.fillStyle = L.fill;
+        x.beginPath();
+        x.moveTo(mid - u * 0.9, base);
+        x.lineTo(mid - u * 0.2, top);
+        x.lineTo(mid + u * 0.2, top);
+        x.lineTo(mid + u * 0.9, base);
+        x.fill();
+        x.beginPath(); // canopy: a flat dish seen edge-on, sagging at the middle, struts below
+        x.moveTo(px, top - u * 0.4);
+        x.quadraticCurveTo(mid, top + u * 1.4, px + bw, top - u * 0.4);
+        x.lineTo(px + bw, top - u * 0.9);
+        x.quadraticCurveTo(mid, top + u * 0.6, px, top - u * 0.9);
+        x.fill();
+        x.strokeStyle = L.fill;
+        x.lineWidth = Math.max(1, u * 0.2);
+        x.beginPath();
+        x.moveTo(mid, top + u * 2);
+        x.lineTo(px + bw * 0.1, top - u * 0.5);
+        x.moveTo(mid, top + u * 2);
+        x.lineTo(px + bw * 0.9, top - u * 0.5);
+        x.stroke();
+        x.fillStyle = rgba(C.haze, 0.35); // faint updraft glow under the array
+        x.fillRect(px + bw * 0.1, top + u, bw * 0.8, Math.max(1, u * 0.2));
+        anchors.push([mid, top + u * 3]);
+      } else if (kind < 0.8) {
+        // cooling stack: tapered, with a steam plume
+        bw = rnd(5, 8) * u;
+        const th = rnd(0.3, 0.6) * maxH;
+        const mid = px + bw / 2;
+        x.fillStyle = L.fill;
+        x.beginPath();
+        x.moveTo(px, base);
+        x.lineTo(mid - bw * 0.3, base - th);
+        x.lineTo(mid + bw * 0.3, base - th);
+        x.lineTo(px + bw, base);
+        x.fill();
+        for (let i = 0; i < 4; i++) {
+          const g2 = x.createRadialGradient(mid + i * u, base - th - i * u * 3, 0, mid + i * u, base - th - i * u * 3, u * (3 + i * 1.5));
+          g2.addColorStop(0, rgba(C.haze, 0.22));
+          g2.addColorStop(1, rgba(C.haze, 0));
+          x.fillStyle = g2;
+          x.fillRect(mid - u * 8, base - th - u * 20, u * 20, u * 20);
+        }
+        anchors.push([mid, base - th * 0.6]);
+      } else if (kind < 0.9) {
+        // gantry crane: two legs, a long arm, a counterweight, a hanging cable
+        bw = rnd(10, 18) * u;
+        const th = rnd(0.35, 0.65) * maxH;
+        const top = base - th;
+        x.fillStyle = L.fill;
+        x.strokeStyle = L.fill;
+        x.lineWidth = Math.max(1, u * 0.4);
+        x.beginPath();
+        x.moveTo(px + bw * 0.2, base);
+        x.lineTo(px + bw * 0.3, top);
+        x.moveTo(px + bw * 0.45, base);
+        x.lineTo(px + bw * 0.35, top);
+        x.stroke();
+        x.fillRect(px, top - u * 0.5, bw, u * 0.9); // arm
+        x.fillRect(px - u * 0.3, top - u * 1.5, u * 1.6, u * 2.2); // counterweight
+        x.lineWidth = Math.max(1, u * 0.1);
+        x.beginPath();
+        x.moveTo(px + bw * 0.85, top);
+        x.lineTo(px + bw * 0.85, top + th * 0.45);
+        x.stroke();
+        x.fillRect(px + bw * 0.85 - u * 0.5, top + th * 0.45, u, u);
+        L.lamps.push({ x: px + bw, y: top - u * 0.3, c: C.white, r: u * 0.45 });
+        anchors.push([px + bw * 0.3, top + u]);
+      } else {
+        // foundry block: low, wide, dull ember seams near the foot, a flare stack
+        bw = rnd(8, 14) * u;
+        const bh = rnd(0.2, 0.4) * maxH;
+        block(px, bw, bh, false);
+        x.fillRect(px + bw * 0.75, base - bh - u * 6, u * 0.8, u * 6);
+        x.fillStyle = ember;
+        for (let v = 0; v < 3; v++) x.fillRect(px + rnd(0.05, 0.6) * bw, base - rnd(0.1, 0.3) * bh, rnd(2, 5) * u, Math.max(1, u * 0.25));
+        if (L.depth > 0.4) L.lamps.push({ x: px + bw * 0.75 + u * 0.4, y: base - bh - u * 6, c: '138, 58, 28', r: u * 0.6 });
+        anchors.push([px + bw, base - bh * 0.6]);
+      }
+      px += bw + u * rnd(0, 1.2);
     }
+    // rails and cables joining the neighbours
+    x.strokeStyle = L.fill;
+    x.lineWidth = Math.max(1, u * 0.3);
+    for (let i = 1; i < anchors.length; i++) {
+      const [x0, y0] = anchors[i - 1];
+      const [x1, y1] = anchors[i];
+      x.beginPath();
+      x.moveTo(x0, y0);
+      if (i % 3) x.lineTo(x1, y1);
+      else x.quadraticCurveTo((x0 + x1) / 2, Math.max(y0, y1) + u * 3, x1, y1);
+      x.stroke();
+    }
+    x.fillStyle = L.fill;
     x.fillRect(0, base, w, H - base);
     return c;
   }
@@ -368,6 +516,14 @@ export class Reel {
     const pan = smooth(u) * W * 0.5;
     this.layers.forEach((L, k) => {
       g.drawImage(L.img, -pan * L.depth, 0);
+      // beacons: one mind, one pulse sweeping across every layer
+      for (const m of L.lamps) {
+        const sx = m.x - pan * L.depth;
+        if (sx < -20 || sx > W + 20) continue;
+        const a = Math.pow(clamp01(0.5 + 0.7 * Math.sin(t * 1.6 - (sx / W) * 3)), 3);
+        g.fillStyle = rgba(m.c, 0.12 + 0.75 * a);
+        g.fillRect(sx - m.r, m.y - m.r, m.r * 2, m.r * 2);
+      }
       if (k === 1) {
         // haze between the mid and the near layer
         const hz = g.createLinearGradient(0, H * 0.45, 0, H);

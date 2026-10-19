@@ -12,13 +12,15 @@ import { Rng } from '../../engine/random.js';
 import { cityMaterial, makePoints as skylinePoints } from './skyline.js';
 
 // Main menu backdrop (instructions/architecture.md "Main menu and save"): a self-contained set, not a game level. STEM-00
-// sits on the edge of a skyscraper roof, legs over the drop, looking over IO's city (gdd 2.1, 2.9) toward the
-// HiveMind's guardian CERBERUS: a colossal three-headed quadruped war mech standing on the horizon, sunk in the haze, sensed more
-// than seen (violet sensor eyes breathing). The skyline is about half in ruin (broken tops, girders, leaning towers, rubble,
-// smoke, a few Rejects fires), with Spire Cathedrals, transit rails and cyan beacons; VIGIL drones patrol with searchlights.
+// sits on the edge of a service block's roof, legs over the drop, looking over IO's machine lattice (art-style "World: machine-first",
+// gdd 2.1, 2.9) toward the HiveMind's guardian CERBERUS: a colossal three-headed quadruped war mech standing on the horizon, sunk in the
+// haze, sensed more than seen (violet sensor eyes breathing). The lattice is what world/backdrop.js builds in game: stacked blocks
+// (foundries glow low), sealed server spires with setback collars, collector masts holding canopy arrays, cooling stacks breathing
+// steam, gantry cranes, joined by transit rails with identical pods that never stop; a few units are derelict (a slumped tier, a
+// snapped mast: broken machinery). Beacons blink in one wave; VIGIL drones patrol with searchlights.
 // Reuses: the player rig, soldier parts and SEATED pose, the rifle, the drone look, the prop builders and materials, the
 // weathered panel texture. Shell renders it with the game's renderer only while the title is up: no game system runs.
-// Budget: about 51 draws and 375k triangles, the skyline and the drones instanced, the roof merged, no shadows.
+// Budget: about 52 draws and 375k triangles, the lattice and the drones instanced, the roof merged, no shadows.
 const ROOF = -0.3; // top of the hero tower's body (the roof slab sits on it, its top at y = 0)
 const GROUND = -420; // city floor
 const FOG = new THREE.Color(0x2e6f78); // art-style haze
@@ -26,8 +28,9 @@ const FOG_DENSITY = 0.0012;
 const ZENITH = new THREE.Color(0x0b1118);
 const SUN = new THREE.Vector3(0.2, 0.16, -1).normalize(); // cold white smear behind the HiveMind
 const CYAN = new THREE.Color(0x3fe0ff);
+const WHITE = new THREE.Color(0xeaf6fa); // work lamps (pods)
 const VIOLET = new THREE.Color(0x8c3cff); // sensors (art-style 5: VISOR)
-const FIRE = new THREE.Color(0xff7a1a); // Rejects sodium orange
+const FIRE = new THREE.Color(0x8a3a1c); // foundry heat: a dull ember (art-style World: machine-first)
 const TOWER = { x: [-0.8, 27.2], z: [-2, 26] }; // the hero tower's footprint
 const STEM = new THREE.Vector3(TOWER.x[0] + 0.3, 0, TOWER.z[0] + 1.6); // STEM-00's root: seated on the roof's left edge, knees at the edge
 const HIVE = new THREE.Vector3(620, GROUND, -3400); // CERBERUS's feet, mid screen
@@ -168,86 +171,153 @@ export class MenuScene {
     scene.add(this.sky);
   }
 
-  // Skyline: one InstancedMesh of unit boxes (base at y 0). Lots in a wedge ahead of the camera; a noise field marks the ruined
-  // half: shorter towers with a slumped top chunk, bare girders, leaning towers, rubble, gaps. Spire Cathedrals on the horizon.
+  // The machine lattice (art-style "World: machine-first", same pieces as world/backdrop.js): one InstancedMesh of unit boxes (base
+  // at y 0) plus one of cooling stacks, in a wedge ahead of the camera. Lots on a regular grid each hold a job: stacked lattice
+  // blocks (foundries glow low), sealed server spires with setback collars and a needle, collector masts holding canopy arrays,
+  // cooling stacks breathing steam, gantry cranes; a few units are derelict (a tier slumped, a mast snapped: broken machinery).
+  // Rails join neighbours at a shared height and identical pods run along them without end; beacons blink in one sync wave.
+  // Server spires stand on the horizon (gdd 2.6). `aLit` = job + light (skyline.js cityMaterial).
   #city(scene, rng) {
-    const parts = []; // [x, y, z, w, h, d, rx, rz, ry, color, lit]
-    const strips = []; // network-cyan lines: [x, y, z, w, h, d]
+    const parts = []; // [x, y, z, w, h, d, rx, rz, ry, color, aLit]
+    const stacks = []; // cooling stacks: [x, y, z, r, h, color, aLit]
+    const strips = []; // network-cyan rail lines: [x, y, z, w, h, d, ry]
+    const vents = []; // steam sources: [x, y, z]
+    const rows = []; // rail anchors per grid row: [x, z, top]
+    const ANY = 0;
+    const COMPUTE = 1;
+    const FOUNDRY = 2;
+    const NONE = 3;
+    const col = new THREE.Color();
+    const tint = (t) => new THREE.Color(t * 0.85, t, t * 1.08);
     const add = (x, y, z, w, h, d, color, lit, rx = 0, rz = 0, ry = 0) => parts.push([x, y, z, w, h, d, rx, rz, ry, color, lit]);
     const R = () => rng.next();
     const [x0, x1] = TOWER.x;
     const [z0, z1] = TOWER.z;
-    add((x0 + x1) / 2, GROUND, (z0 + z1) / 2, x1 - x0, ROOF - GROUND, z1 - z0, 0x30383d, 0.5); // the hero tower
-    const ruinAt = (x, z) => Math.sin(x * 0.0042 + 1.3) * Math.cos(z * 0.0051 - 0.7) + 0.55 * Math.sin(x * 0.011 + z * 0.0083) + 0.2;
-    const STEP = 38;
+    add((x0 + x1) / 2, GROUND, (z0 + z1) / 2, x1 - x0, ROOF - GROUND, z1 - z0, 0x30383d, NONE + 0.5); // the hero tower: a sealed service block
+    const STEP = 56;
     for (let z = 20; z > -2300; z -= STEP) {
+      const row = [];
       for (let x = -2000; x < 2000; x += STEP) {
         if (Math.abs(x) > 80 + (20 - z) * 1.05) continue; // outside the view wedge
         if (x > -50 && x < 60 && z > -40) continue; // the hero tower's lot
-        if (R() < 0.12) continue; // plazas, rails
-        const w = 12 + R() * 16;
-        const d = 12 + R() * 16;
-        const px = x + (R() - 0.5) * (STEP - w) * 0.8;
-        const pz = z + (R() - 0.5) * (STEP - d) * 0.8;
-        let h = 40 + 320 * R() ** 2.4 + (R() < 0.04 ? 260 : 0);
-        if (Math.hypot(px, pz) < 160) h = Math.min(h, 330); // the hero tower stands above its block
-        // a sightline to CERBERUS: towers in its corridor stay below it, so the hound reads whole against the sky
+        if (R() < 0.1) continue; // a gap in the lattice (a pit, a lane)
+        const px = x + (R() - 0.5) * 8;
+        const pz = z + (R() - 0.5) * 8;
+        // heights stay under CERBERUS in its sightline, so the hound reads whole against the sky
+        let cap = Math.hypot(px, pz) < 160 ? 330 : 1e9;
         const along = (px * HIVE.x + pz * HIVE.z) / HIVE_DIST;
-        if (along > 0 && Math.abs(px * HIVE.z - pz * HIVE.x) / HIVE_DIST < 60 + along * 0.13) h = Math.min(h, Math.max(30, -GROUND - 0.1 * along));
-        const tone = 0.32 + R() * 0.14;
-        const ruined = ruinAt(px, pz) > 0;
-        if (!ruined) {
-          const c = new THREE.Color(tone * 0.85, tone, tone * 1.08);
-          add(px, GROUND, pz, w, h, d, c, R() < 0.25 ? 0.25 : 1);
-          if (R() < 0.5) add(px + (R() - 0.5) * w * 0.4, GROUND + h, pz + (R() - 0.5) * d * 0.4, w * (0.3 + R() * 0.3), 3 + R() * 10, d * (0.3 + R() * 0.3), c, 0.6); // roof plant
-          if (h > 200 && R() < 0.45) this.beacons.push([px, GROUND + h + 6, pz]);
-          if (h > 180 && R() < 0.3) strips.push([px, GROUND + h * 0.5, pz + d / 2 + 0.3, 0.6, h, 0.2]);
-          continue;
+        if (along > 0 && Math.abs(px * HIVE.z - pz * HIVE.x) / HIVE_DIST < 60 + along * 0.13) cap = Math.min(cap, Math.max(30, -GROUND - 0.1 * along));
+        const t = 0.32 + R() * 0.14;
+        const c = tint(t);
+        const k = R();
+        const derelict = R() < 0.1;
+        let top;
+        if (k < 0.44) {
+          // lattice block: stacked tiers, each narrower; foundries glow low and vent
+          const job = R() < 0.4 ? FOUNDRY : ANY;
+          let w = 56 + R() * 34;
+          let d = 50 + R() * 30;
+          let y = GROUND;
+          const tiers = 3 + Math.floor(R() * 3);
+          const budget = Math.min(cap, 60 + 150 * R() ** 1.6);
+          for (let i = 0; i < tiers; i++) {
+            const h = (budget / tiers) * (0.7 + R() * 0.6) * (i ? 1 : 1.3);
+            const slump = derelict && i === tiers - 1;
+            add(px, y, pz, w, slump ? h * 0.5 : h, d, c, (i ? ANY : job) + 0.5, slump ? 0.22 : 0, slump ? 0.18 : 0);
+            y += h;
+            w *= 0.62 + R() * 0.2;
+            d *= 0.62 + R() * 0.2;
+          }
+          if (derelict) for (let i = 0; i < 3; i++) add(px + (R() - 0.5) * w * 2, y - 8, pz + (R() - 0.5) * d * 2, 0.8, 10 + R() * 18, 0.8, 0x1c1f22, NONE, (R() - 0.5) * 0.6, (R() - 0.5) * 0.6); // bare struts
+          if (job === FOUNDRY) {
+            vents.push([px, y + 4, pz]);
+            if (R() < 0.5) this.fires.push([px, y * 0.5 + GROUND * 0.5, pz, 3 + R() * 3]); // ember seam
+          }
+          top = y;
+        } else if (k < 0.62) {
+          // server spire: a sealed core, setback collars, a needle; data lines climb it
+          const h = Math.min(cap, 140 + 260 * R() ** 1.6 + (R() < 0.04 ? 260 : 0));
+          const w = 14 + R() * 10;
+          add(px, GROUND, pz, w, h, w, c, COMPUTE + 0.9);
+          for (let i = 1; i <= 3; i++) add(px, GROUND + (h * i) / 4, pz, w * 1.7, 5 + R() * 5, w * 1.7, tint(t * 0.8), NONE);
+          add(px, GROUND + h, pz, 2.5, Math.min(cap, h * 1.18) - h + 4, 2.5, c, NONE);
+          top = GROUND + h;
+          if (h > 200 && R() < 0.5) this.beacons.push([px, top + h * 0.18 + 4, pz]);
+        } else if (k < 0.76) {
+          // collector mast: a thin pylon holding a canopy array up into the dark
+          const h = Math.min(cap, 160 + R() * 160);
+          const cw = 60 + R() * 50;
+          const snapped = derelict;
+          add(px, GROUND, pz, 5, snapped ? h * 0.6 : h, 5, c, NONE, 0, snapped ? 0.05 : 0);
+          if (!snapped) {
+            for (const s of [-1, 1]) add(px + s * cw * 0.2, GROUND + h * 0.62, pz, 1.8, h * 0.38, 1.8, c, NONE, 0, s * 0.3);
+            add(px, GROUND + h, pz, cw, 2.2, cw * (0.6 + R() * 0.3), tint(t * 0.7), ANY + 0.3, (R() - 0.5) * 0.1);
+            if (R() < 0.6) this.beacons.push([px, GROUND + h + 5, pz]);
+          }
+          top = GROUND + h * 0.62;
+        } else if (k < 0.9) {
+          // cooling stacks: two or three, steam rising
+          const h = Math.min(cap, 80 + R() * 90);
+          const n = 2 + Math.floor(R() * 2);
+          for (let i = 0; i < n; i++) {
+            const sx = px + (i - (n - 1) / 2) * 34;
+            const r = 11 + R() * 6;
+            stacks.push([sx, GROUND, pz, r, h, c, ANY + 0.4]);
+            if (!derelict) vents.push([sx, GROUND + h + 3, pz]);
+          }
+          top = GROUND + h * 0.6;
+        } else {
+          // gantry crane: two legs and a long arm over the lattice
+          const h = Math.min(cap, 70 + R() * 70);
+          const span = 100 + R() * 90;
+          for (const s of [-1, 1]) add(px + s * span * 0.3, GROUND, pz, 6, h, 6, c, NONE);
+          add(px, GROUND + h, pz, span, 6, 8, c, NONE, 0, derelict ? 0.12 : 0);
+          add(px + span * (R() - 0.5) * 0.6, GROUND + h - 18, pz, 12, 20, 12, tint(t * 0.8), ANY + 0.3); // trolley
+          top = GROUND + h;
+          if (R() < 0.5) this.beacons.push([px + span * 0.5, top + 7, pz]);
         }
-        const c = new THREE.Color(tone * 0.9, tone * 0.82, tone * 0.72).lerp(new THREE.Color(0x5a3422), R() * 0.35); // soot, rust
-        const roll = R();
-        if (roll < 0.22) {
-          // collapsed: a rubble mound
-          for (let i = 0; i < 4; i++) add(px + (R() - 0.5) * w, GROUND, pz + (R() - 0.5) * d, w * (0.4 + R() * 0.5), 4 + R() * 12, d * (0.4 + R() * 0.5), c, 0, (R() - 0.5) * 0.5, (R() - 0.5) * 0.5, R() * 3);
-          continue;
-        }
-        const lean = roll > 0.8 ? (R() - 0.5) * 0.3 : 0; // leaning towers
-        const leanX = R() < 0.5;
-        h *= 0.35 + R() * 0.45;
-        add(px, GROUND, pz, w, h, d, c, R() < 0.15 ? 0.15 : 0, leanX ? lean : 0, leanX ? 0 : lean);
-        if (lean) continue;
-        const top = GROUND + h;
-        // broken top: a slumped slab chunk and bare girders
-        add(px + (R() - 0.5) * w * 0.3, top - 2, pz + (R() - 0.5) * d * 0.3, w * (0.5 + R() * 0.3), 4 + R() * 10, d * (0.4 + R() * 0.3), c, 0, (R() - 0.5) * 0.7, (R() - 0.5) * 0.7);
-        const girders = 2 + Math.floor(R() * 4);
-        for (let i = 0; i < girders; i++) add(px + (R() - 0.5) * w * 0.9, top, pz + (R() - 0.5) * d * 0.9, 0.7, 6 + R() * 18, 0.7, 0x1c1f22, 0, (R() - 0.5) * 0.6, (R() - 0.5) * 0.6);
-        if (R() < 0.07) this.fires.push([px, top + 3, pz, 6 + R() * 8]);
+        row.push([px, pz, top]);
       }
+      rows.push(row);
     }
-    // Spire Cathedrals (gdd 2.6): server towers on the horizon, stacked tapering tiers, buttress fins, a needle, cyan strips
+    // server spires on the horizon (gdd 2.6): stacked tapering tiers with fins and a needle
     for (const [sx, sz, sh] of [[700, -1300, 1150], [-1000, -1600, 900], [1400, -1850, 820]]) {
-      const c = new THREE.Color(0x2a3338);
+      const c = tint(0.24);
       let y = GROUND;
       let w = 110;
       for (let i = 0; i < 6; i++) {
         const th = sh * (0.24 - i * 0.025);
-        add(sx, y, sz, w, th, w, c, 0.35);
-        for (const [fx, fz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) add(sx + (fx * w) / 2, y, sz + (fz * w) / 2, fx ? 6 : w * 0.18, th * 0.9, fz ? 6 : w * 0.18, c, 0, fz * 0.08, -fx * 0.08);
-        for (const o of [-0.3, 0, 0.3]) strips.push([sx + o * w, y + th / 2, sz + w / 2 + 0.6, 1.2, th * 0.85, 0.4]);
+        add(sx, y, sz, w, th, w, c, COMPUTE + 0.9);
+        add(sx, y + th, sz, w * 1.35, 9, w * 1.35, c, NONE); // setback collar
+        for (const [fx, fz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) add(sx + (fx * w) / 2, y, sz + (fz * w) / 2, fx ? 6 : w * 0.18, th * 0.9, fz ? 6 : w * 0.18, c, NONE, fz * 0.08, -fx * 0.08);
         y += th;
         w *= 0.74;
       }
-      add(sx, y, sz, 4, sh * 0.22, 4, c, 0);
+      add(sx, y, sz, 4, sh * 0.22, 4, c, NONE);
       this.beacons.push([sx, y + sh * 0.22, sz]);
     }
-    // transit rails: long elevated cyan lines across the city (the lattice of rails)
-    for (let i = 0; i < 9; i++) strips.push([(R() - 0.5) * 600, GROUND + 25 + R() * 50, -200 - i * 220, 4000, 0.5, 0.8]);
-    for (let i = 0; i < 6; i++) strips.push([-1400 + i * 520 + R() * 100, GROUND + 25 + R() * 40, -1100, 0.8, 0.5, 2200]);
+    // transit rails: neighbours in a row, and the row behind, joined at a shared height; identical pods run along them
+    this.pods = [];
+    const join = (s, t) => {
+      const y = Math.min(s[2], t[2], GROUND + 260) - 12 - R() * 25;
+      const len = Math.hypot(t[0] - s[0], t[1] - s[1]);
+      if (y < GROUND + 30 || len > 200) return;
+      const ry = Math.atan2(t[0] - s[0], t[1] - s[1]);
+      const mx = (s[0] + t[0]) / 2;
+      const mz = (s[1] + t[1]) / 2;
+      add(mx, y, mz, 5, 3.5, len, 0x14181a, NONE, 0, 0, ry);
+      strips.push([mx, y + 3.5, mz, 1, 0.5, len, ry]);
+      const rail = { from: new THREE.Vector3(s[0], y + 6, s[1]), to: new THREE.Vector3(t[0], y + 6, t[1]), len };
+      for (let j = 0; j < 4; j++) this.pods.push({ rail, off: j / 4 });
+    };
+    rows.forEach((row, i) => {
+      for (let j = 1; j < row.length; j++) if (R() < 0.8) join(row[j - 1], row[j]);
+      if (i) for (const s of row) if (R() < 0.45) { const t = rows[i - 1][Math.floor(R() * rows[i - 1].length)]; if (t) join(s, t); }
+    });
 
     const geo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
     const city = new THREE.InstancedMesh(geo, (this.cityMat = cityMaterial()), parts.length);
     const lit = new Float32Array(parts.length);
-    const col = new THREE.Color();
     parts.forEach(([x, y, z, w, h, d, rx, rz, ry, color, l], i) => {
       city.setMatrixAt(i, _m.compose(_p.set(x, y, z), _q.setFromEuler(_e.set(rx, ry, rz)), _s.set(w, h, d)));
       city.setColorAt(i, color instanceof THREE.Color ? color : col.set(color));
@@ -257,10 +327,25 @@ export class MenuScene {
     city.frustumCulled = false; // spans the whole view
     scene.add(city);
 
-    const strip = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: CYAN.clone().multiplyScalar(1.6) }), strips.length);
-    strips.forEach(([x, y, z, w, h, d], i) => strip.setMatrixAt(i, _m.compose(_p.set(x, y, z), _q.identity(), _s.set(w, h, d))));
+    const cyl = new THREE.CylinderGeometry(0.82, 1, 1, 20, 1, true).translate(0, 0.5, 0); // a cooling stack: slight taper, open top
+    const tubes = new THREE.InstancedMesh(cyl, this.cityMat, Math.max(1, stacks.length));
+    const tubeLit = new Float32Array(Math.max(1, stacks.length));
+    stacks.forEach(([x, y, z, r, h, color, l], i) => {
+      tubes.setMatrixAt(i, _m.compose(_p.set(x, y, z), _q.identity(), _s.set(r, h, r)));
+      tubes.setColorAt(i, color);
+      tubeLit[i] = l;
+    });
+    tubes.count = stacks.length;
+    cyl.setAttribute('aLit', new THREE.InstancedBufferAttribute(tubeLit, 1));
+    tubes.frustumCulled = false;
+    scene.add(tubes);
+
+    const strip = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: CYAN.clone().multiplyScalar(1.6) }), Math.max(1, strips.length));
+    strips.forEach(([x, y, z, w, h, d, ry], i) => strip.setMatrixAt(i, _m.compose(_p.set(x, y, z), _q.setFromEuler(_e.set(0, ry, 0)), _s.set(w, h, d))));
+    strip.count = strips.length;
     strip.frustumCulled = false;
     scene.add(strip);
+    this.vents = vents;
   }
 
   // CERBERUS, the HiveMind's guardian (gdd 2.2): a colossal quadruped war mech standing on the horizon past the spires, three
@@ -403,15 +488,16 @@ export class MenuScene {
       scene.add(m);
       this.veils.push(m);
     }
-    // static lights: beacons and fires; smoke columns from the nearest fires
-    const lights = (this.lights = makePoints(this.beacons.length + this.fires.length + DRONES + FORMATION + 4, true));
-    for (const [x, y, z] of this.beacons) lights.put(x, y, z, 7, CYAN, 3, 1);
-    for (const [x, y, z, s] of this.fires) lights.put(x, y, z, s * 2.2, FIRE, 1.4, 2);
+    // static lights: beacons, foundry embers, pods; steam columns from the nearest vents
+    const lights = (this.lights = makePoints(this.beacons.length + this.fires.length + this.pods.length + DRONES + FORMATION + 4, true));
+    for (const [x, y, z] of this.beacons) lights.put(x, y, z, 5, CYAN, 3, 1, (x * 0.6 + z * 0.8) / 1400); // one sync wave
+    for (const [x, y, z, s] of this.fires) lights.put(x, y, z, s * 2.2, FIRE, 0.9, 2);
+    for (const pd of this.pods) pd.k = lights.put(0, 0, 0, 5, WHITE, 2.2, 0);
     scene.add(lights);
-    const sources = this.fires.slice().sort((a, b) => Math.hypot(a[0], a[2]) - Math.hypot(b[0], b[2])).slice(0, 9);
+    const sources = this.vents.slice().sort((a, b) => Math.hypot(a[0], a[2]) - Math.hypot(b[0], b[2])).slice(0, 9);
     const smoke = (this.smoke = makePoints(sources.length * SMOKE_PER, false));
     this.smokeSrc = sources;
-    const tone = new THREE.Color(0x1a1c1d);
+    const tone = new THREE.Color(0x2a3a3e); // steam
     for (const [x, y, z] of sources) for (let i = 0; i < SMOKE_PER; i++) smoke.put(x, y, z, 10, tone, 0, 0);
     scene.add(smoke);
   }
@@ -596,6 +682,12 @@ export class MenuScene {
     this.lights.geometry.attributes.position.needsUpdate = true;
     this.lights.material.uniforms.time.value = t;
     this.cityMat.userData.time.value = t;
+    // pods: identical, evenly spaced, 14 m/s on every rail, never stopping
+    const lp = this.lights.geometry.attributes.position;
+    for (const pd of this.pods) {
+      _d.lerpVectors(pd.rail.from, pd.rail.to, (pd.off + (t * 14) / pd.rail.len) % 1);
+      set3(lp.array, pd.k, _d.x, _d.y, _d.z);
+    }
 
     // searchlights sweep the streets
     const users = this.coneUsers;

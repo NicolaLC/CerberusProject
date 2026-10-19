@@ -163,54 +163,71 @@ for (const [z0, reach] of [[-34, [10, 22, 34, 46]], [-166, [10, 22, 34]]]) {
   box([0, 52, z0], [32, 1.4, 1.4], 'inWall', { collide: false });
 }
 
-// ---------------------------------------------------------------- the skyscrapers
-// body from BASE to `top`, a deck-facing face at x = faceX; windows (lit strips) on the deck face and both alley faces
-function windows(axis, at, dir, u0, u1, yTop, yBottom, lit, deep = 0.35) {
-  const cell = 3.2;
-  for (let y = yTop; y > yBottom; y -= y > -60 ? 10 : 16) {
-    const f = y > -60 ? 1 : deep; // below the deck only the fall sees them: sparser
-    const active = rnd() < 0.12;
-    for (let u = u0 + 2; u < u1 - 2 - cell; u += cell) {
-      if (rnd() > (active ? lit * 0.7 : lit * 0.03) * f) continue;
-      const n = 1 + Math.floor(rnd() * 3); // a run of lit windows is one long strip
-      const len = n * cell - 1;
-      const mat = rnd() < 0.25 ? 'stripCyan' : 'stripWhite';
-      const c = u + (n * cell) / 2 - 0.5;
-      if (axis === 'x') strip([at + dir * 0.05, y, c], [0.3, 1.1, len], mat);
-      else strip([c, y, at + dir * 0.05], [len, 1.1, 0.3], mat);
-      u += (n - 1) * cell;
+// ---------------------------------------------------------------- the server spires (machine-first: sealed, ribbed, setback collars)
+// art-style "World: machine-first": nobody lives here, so no windows: data lines (cyan, a few cold white) climb the ribs, collars step out
+// of the shaft, a mast and a beacon cap it. The shafts stand apart (25+ m gaps) so the deck sees the lattice below between them.
+// vertical data lines on one face: broken runs of cyan between u0 and u1 (axis 'x': face normal along x, u runs along z)
+function dataLines(axis, at, dir, u0, u1, yTop, yBottom, pitch = 9, pad = 3) {
+  for (let u = u0 + pad; u < u1 - pad + 0.1; u += pitch) {
+    for (let k = 0, n = 2 + Math.floor(rnd() * 2); k < n; k++) {
+      const len = 16 + rnd() * 60;
+      const y = yBottom + len / 2 + rnd() * Math.max(1, yTop - yBottom - len);
+      const mat = rnd() < 0.2 ? 'stripWhite' : 'stripCyan';
+      if (axis === 'x') strip([at + dir * 0.05, y, u], [0.3, len, 0.35], mat);
+      else strip([u, y, at + dir * 0.05], [0.35, len, 0.3], mat);
     }
   }
 }
-function tower({ face, side, w, z0, z1, top, lit = 0.5, mat = 'roof' }) {
+function tower({ face, side, w, z0, z1, top, mat = 'roof' }) {
   const x0 = side < 0 ? face - w : face;
   const zmin = Math.min(z0, z1);
   const zmax = Math.max(z0, z1);
-  box([x0 + w / 2, BASE, (zmin + zmax) / 2], [w, top - BASE, zmax - zmin], mat, { collide: false });
-  windows('x', face, side < 0 ? 1 : -1, zmin, zmax, top - 6, BASE + 10, lit); // the deck-facing face looks toward -side
-  const xs = [x0 + 2, x0 + w - 2];
-  for (const [zf, dz] of [[zmax, 1], [zmin, -1]]) {
-    // alley faces: windows over the near 40 m of the width
-    const near0 = side < 0 ? face - 40 : face;
-    windows('z', zf, dz, Math.max(xs[0], near0), Math.min(xs[1], near0 + 40), Math.min(top - 6, 120), BASE + 10, lit * 0.8);
+  const d = side < 0 ? 1 : -1; // toward the deck
+  const cx = x0 + w / 2;
+  const cz = (zmin + zmax) / 2;
+  box([cx, BASE, cz], [w, top - BASE, zmax - zmin], mat, { collide: false });
+  // ribs down the deck face, a data line between each pair
+  for (let u = zmin + 4; u < zmax - 3; u += 9) {
+    box([face + d * 0.5, BASE, u], [1, top - BASE, 1.4], mat, { collide: false });
+    if (u + 9 < zmax - 3) dataLines('x', face, d, u + 4.5, u + 4.5, top - 6, BASE + 10, 9, 0);
   }
+  for (const [zf, dz] of [[zmax, 1], [zmin, -1]]) dataLines('z', zf, dz, x0, x0 + w, Math.min(top - 6, 140), BASE + 10, 11, 5);
+  // setback collars and the cap: a mast and a beacon
+  for (const f of [0.3, 0.55, 0.8]) box([cx, top * f, cz], [w + 4, 5, zmax - zmin + 4], mat, { collide: false });
+  box([cx, top, cz], [w * 0.5, 14, (zmax - zmin) * 0.5], mat, { collide: false });
+  box([cx, top + 14, cz], [1, 30, 1], mat, { collide: false });
+  strip([cx, top + 42, cz], [1.6, 1.6, 1.6], 'stripCyan');
 }
 const TOWERS = [
-  { face: -36, side: -1, w: 46, z0: 10, z1: -60, top: 190 },
-  { face: -38, side: -1, w: 50, z0: -70, z1: -110, top: 270 },
-  { face: -34, side: -1, w: 50, z0: -122, z1: -170, top: 150 },
-  { face: -40, side: -1, w: 50, z0: -180, z1: -235, top: 210 },
-  { face: 36, side: 1, w: 46, z0: 10, z1: -62, top: 220 },
-  { face: 40, side: 1, w: 40, z0: -72, z1: -90, top: 150 },
-  { face: 46.3, side: 1, w: 56, z0: -98, z1: -142, top: 330, lit: 0.25 }, // the machine's tower: CERBERUS crouches on a ledge out of this face
-  { face: 38, side: 1, w: 50, z0: -150, z1: -215, top: 200 },
+  { face: -38, side: -1, w: 46, z0: 8, z1: -30, top: 190 },
+  { face: -40, side: -1, w: 50, z0: -58, z1: -94, top: 270 },
+  { face: -38, side: -1, w: 50, z0: -124, z1: -160, top: 150 },
+  { face: -40, side: -1, w: 50, z0: -190, z1: -240, top: 210 },
+  { face: 38, side: 1, w: 46, z0: 8, z1: -30, top: 220 },
+  { face: 42, side: 1, w: 40, z0: -58, z1: -86, top: 150 },
+  { face: 46.3, side: 1, w: 56, z0: -98, z1: -142, top: 330 }, // the machine's tower: CERBERUS crouches on a ledge out of this face
+  { face: 40, side: 1, w: 50, z0: -158, z1: -215, top: 200 },
 ];
 for (const t of TOWERS) tower(t);
-// the lab spire's windows (front and flanks) and the Gate district's dim ones
-windows('z', SPIRE_FACE, -1, -40, 40, 250, 10, 0.3);
-windows('x', -40, -1, 24, 110, 250, BASE + 10, 0.3);
-windows('x', 40, 1, 24, 110, 250, BASE + 10, 0.3);
-windows('z', -179, 1, -75, 75, 290, BASE + 10, 0.25);
+// the lab spire's flanks and front and the Gate district's face: data lines only
+dataLines('z', SPIRE_FACE, -1, -40, 40, 250, 10, 10, 5);
+dataLines('x', -40, -1, 24, 110, 250, BASE + 10, 12, 5);
+dataLines('x', 40, 1, 24, 110, 250, BASE + 10, 12, 5);
+dataLines('z', -179, 1, -75, 75, 290, BASE + 10, 12, 5);
+
+// ---------------------------------------------------------------- machine context along the span
+// conduits run the whole span outside each parapet, and a parallel transit rail hangs off the piers 12 m below the deck (the east one
+// stops short of CERBERUS's brackets)
+for (const s of [-1, 1]) {
+  box([s * 13.7, -3.4, zc], [1.3, 1.3, L], 'inWall', { collide: false });
+  box([s * 14.7, -5.2, zc], [0.5, 0.5, L], 'inWall', { collide: false });
+  strip([s * 13.7 + s * 0.67, -3.4, zc], [0.06, 0.2, L - 10], 'stripCyan');
+  for (const z of [-56, -140]) box([s * 15.5, -12, z], [17, 1, 3], 'inWall', { collide: false });
+  for (const [a, b] of s < 0 ? [[DECK.z0, DECK.z1]] : [[DECK.z0, -98], [-142, DECK.z1]]) {
+    box([s * 24, -12.5, (a + b) / 2], [1.6, 0.9, Math.abs(a - b)], 'inWall', { collide: false });
+    strip([s * 24, -11.98, (a + b) / 2], [0.2, 0.05, Math.abs(a - b) - 6], 'stripCyan');
+  }
+}
 
 // ---------------------------------------------------------------- cover (metrics.md: low 1.1, high 2.8, pillar 1.2 x 1.2 x 2.8)
 const low = (x, z, length = 3.5, ns = false) => add('kit.cover.low', [x, 0, z], { length }, ns ? { yaw: PI / 2 } : {});
