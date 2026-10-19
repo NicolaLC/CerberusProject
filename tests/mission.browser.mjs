@@ -346,6 +346,51 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   expect('  valid edits still work (optional keys can be removed)', JSON.parse(r.ok).time === 5 && JSON.parse(r.ok).limit === 9, r.ok);
 }
 
+// ---- 7. objective.action: each move completes it, count shows n / N, a move outside size does not count ----
+{
+  const r = await ev(() => {
+    const g = window.game;
+    const EVS = { jet: ['player:jet', {}], cover: ['player:coverSlam'], vault: ['player:vault', 'hop'], slide: ['player:vault', 'slide'], coverRun: ['player:coverRun', {}] };
+    const out = {};
+    for (const [a, e] of Object.entries(EVS)) {
+      T.setup([['objective.action', [0, 0, 0], { action: a }]]).play(); T.step(0.2);
+      for (const [b, o] of Object.entries(EVS)) if (b !== a && (o[0] !== e[0] || o[1] !== e[1])) g.engine.events.emit(...o); // every other move does not count
+      const early = g.mission.state;
+      g.engine.events.emit(...e); T.step(0.1);
+      out[a] = [early, g.mission.state];
+    }
+    T.setup([['objective.action', [0, 0, 0], { action: 'jet', count: 2, size: [4, 3, 4] }]]).play(); T.step(0.2);
+    T.at(30, 0, 30); g.engine.events.emit('player:jet', {}); T.step(0.1);
+    const outside = g.mission.state + '|' + T.hud().text;
+    T.at(0, 0, 0); g.engine.events.emit('player:jet', {}); T.step(0.1);
+    const one = g.mission.state + '|' + T.hud().text;
+    g.engine.events.emit('player:jet', {}); T.step(0.1);
+    return { out, outside, one, end: g.mission.state };
+  });
+  expect('objective.action: each move completes it (and only that move)', Object.values(r.out).every(([a, b]) => a === 'active' && b === 'complete'), JSON.stringify(r.out));
+  expect('  outside size does not count; 1 / 2 on the HUD, then done', r.outside.startsWith('active|') && r.outside.endsWith('0 / 2') && r.one.endsWith('1 / 2') && r.end === 'complete', JSON.stringify(r));
+}
+
+// ---- 8. env.label input tokens: repainted only on a device change, unknown token throws ----
+{
+  const r = await ev(() => {
+    const w = window.game.world;
+    const mk = (text) => w.label([0, 0, 0], { text });
+    const tok = mk('JUMP {jump}'); const plain = mk('PLAIN');
+    const t0 = [tok.material.map, plain.material.map];
+    T.step(0.2);
+    const still = tok.material.map === t0[0] && plain.material.map === t0[1]; // no per-frame repaint
+    w.setScheme('pad');
+    const t1 = [tok.material.map, plain.material.map];
+    w.setScheme('pad');
+    const same = tok.material.map === t1[0];
+    let err = null; try { mk('{nope}'); } catch (e) { err = e.message; }
+    return { still, tokRepainted: t1[0] !== t0[0], plainKept: t1[1] === t0[1], same, err };
+  });
+  expect('env.label: device switch repaints only token labels, once, never per frame', r.still && r.tokRepainted && r.plainKept && r.same, JSON.stringify(r));
+  expect('  unknown token throws a readable error', /unknown input token \{nope\}/.test(r.err ?? ''), String(r.err));
+}
+
 expect('no page or console errors', errors.length === 0, errors.join(' | '));
 await b.close();
 console.log(fail.length ? `\n${fail.length} FAILED` : '\nall passed');

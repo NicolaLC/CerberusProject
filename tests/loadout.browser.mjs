@@ -71,11 +71,17 @@ await ev(() => {
     T.pad(3); seen.add(T.gun()); // Y: next gun
     T.pad(12); seen.add(T.gun()); // d-pad up: MG slot
     const slots = [...document.querySelectorAll('.slots span')].filter((s) => s.style.display !== 'none').map((s) => s.id);
-    return { owned: [...w.owned], seen: [...seen], reserve: document.getElementById('reserve').textContent, slots };
+    const rs = document.getElementById('reserve');
+    const rg = document.createRange();
+    rg.selectNodeContents(rs);
+    const font = getComputedStyle(rs).fontFamily;
+    return { owned: [...w.owned], seen: [...seen], reserve: rs.textContent, slots, glyphW: rg.getBoundingClientRect().width, font };
   });
   expect('pistol-only loadout owns only the pistol', r.owned.join() === 'pistol', JSON.stringify(r));
   expect('  keys 1-6, wheel and pad reach nothing else', r.seen.join() === 'pistol', JSON.stringify(r));
   expect('  HUD reserve shows ∞ and only the pistol slot', r.reserve === '∞' && r.slots.join() === 'slot-pistol', JSON.stringify(r));
+  // #105: Space Nova draws U+221E as an empty glyph; the infinite reserve must use the main font and take width
+  expect('  the ∞ is visible: non-zero width, not set in Space Nova', r.glyphW > 0 && !/^\W*Space Nova/.test(r.font), JSON.stringify(r));
 }
 
 // ---- 2. pickup.gun: discovery, then ammo ----

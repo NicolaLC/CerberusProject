@@ -324,6 +324,7 @@ export class Hud {
       css(e.slots[id], 'display', weapon.owned.has(id) ? '' : 'none'); // only owned guns have a slot
     }
     text(e.reserve, weapon.t.infinite ? '∞' : weapon.reserve);
+    e.reserve.classList.toggle('infinite', !!weapon.t.infinite); // Space Nova has no U+221E glyph: fall back to the main font
     e.ammo.classList.toggle('low', weapon.ammo <= Math.max(1, Math.floor(weapon.t.mag * LOW_AMMO)));
     css(e.reload, 'display', weapon.reloading > 0 ? 'block' : 'none');
     e.ammo.classList.toggle('boost', weapon.boosted);

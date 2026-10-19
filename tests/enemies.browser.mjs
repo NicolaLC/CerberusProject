@@ -279,6 +279,36 @@ expect('flank: a trooper is sent round when the player digs in', r.playerInCover
 expect('flank: it ends up beside or behind the player', r.flankAngleOk && r.flankerProtected);
 expect('flank: and fires from there', r.flankerFired > 0);
 expect('troopers never pick cover out of the fight (> 34 m)', r.allInRange);
+// 6. hunting (#110), on a fresh arena: earlier scenarios leave reserved spots and corpses behind
+await p.goto(URL);
+await p.waitForFunction(() => window.game?.engine);
+const hunt = await p.evaluate(() => {
+  const { engine, enemies, player } = window.game;
+  engine.stop();
+  engine.headless = true;
+  const step = (s) => { for (let i = 0; i < s * 60; i++) engine.step(1 / 60); };
+  // a trooper 40 m out, beyond the 34 m retreat limit, hunts until cover.find succeeds, then takes cover
+  for (const e of enemies.all) e.alive = false;
+  enemies.dirty = true;
+  player.respawn();
+  player.shields = player.health = 1e6;
+  player.pos.set(2, 0, -15.3 + 40);
+  const hunter = enemies.spawn({ id: 'enemy.trooper', pos: [2, 0, -15.3] });
+  step(0.5);
+  hunter.alert();
+  const start = hunter.pos.distanceTo(player.pos);
+  const h = { start, spotAtStart: !!enemies.cover.find(hunter, hunter.pos, player.pos, hunter.ctx.time, { retreat: true }), sawHunt: false, inCover: false, dist: start };
+  for (let i = 0; i < 45 * 2 && !h.inCover; i++) {
+    step(0.5);
+    h.sawHunt ||= hunter.state === 'hunt';
+    h.dist = hunter.pos.distanceTo(player.pos);
+    h.inCover = h.dist < 34 && !!hunter.spot && hunter.state === 'cover';
+  }
+  h.detail = `${hunter.state} at ${hunter.pos.x.toFixed(1)},${hunter.pos.z.toFixed(1)} spot ${hunter.spot ? 'yes' : 'none'}`;
+  return h;
+});
+console.log(hunt);
+expect(`trooper hunt: 40 m out with no cover in reach it closes in and takes cover within 34 m (${hunt.detail})`, hunt.start > 35 && !hunt.spotAtStart && hunt.sawHunt && hunt.inCover);
 expect('no page errors', errors.length === 0);
 await b.close();
 process.exit(fail.length ? 1 : 0);

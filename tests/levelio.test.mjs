@@ -166,6 +166,19 @@ check('no registry: JSON only', parseLevel('{"a":1}').a === 1);
   check('encounter pieces round-trip', true);
 }
 
+// objective.action (#106) round-trips; an unknown action is refused. env.label input tokens (#107) per device.
+{
+  const act = { name: 'a', spawn: { pos: [0, 0, 0] }, interiorZones: [], pieces: [{ id: 'objective.action', pos: [1, 0, 2], params: { action: 'vault', count: 2, size: [4, 3, 4] } }] };
+  check('objective.action round-trips with count and size', JSON.stringify(parseLevel(serializeLevel(act), registry).pieces) === JSON.stringify(act.pieces));
+  check('objective.action unknown action throws', throwsWith(() => parseLevel(serializeLevel(act).replace('"vault"', '"fly"'), registry), /action/) === '');
+  const { inputName } = await import('../src/game/controls.js');
+  const names = (t) => ['kbm', 'pad', 'trackpad'].map((s) => inputName(t, s)).join('/');
+  check('input tokens: jump SPACE/A/SPACE', names('jump') === 'SPACE/A/SPACE', names('jump'));
+  check('input tokens: aim RMB/LT, trackpad uses its toggle key', names('aim').startsWith('RMB/LT/') && inputName('aim', 'trackpad') !== 'RMB', names('aim'));
+  check('input tokens: every token resolves on every device', ['jump', 'aim', 'fire', 'sprint', 'interact', 'reload'].every((t) => names(t).split('/').every(Boolean)));
+  check('unknown input token throws a readable error', throwsWith(() => inputName('dance'), /unknown input token \{dance\}/) === '');
+}
+
 if (failed) {
   console.log(`${failed} failed`);
   process.exit(1);

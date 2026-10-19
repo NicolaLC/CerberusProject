@@ -75,6 +75,7 @@ body.pad, body.pad * { cursor: none !important; }
 #ammo.low { color: #ff5a4a; }
 #weapon .sep { margin: 0 6px; color: #6f8fa8; font-size: 1.7em; }
 #reserve { font-size: 1.6em; color: #9fc8e8; }
+#reserve.infinite { font-family: var(--font-main); }
 #reload { display: none; color: #ffd23a; letter-spacing: 3px; font-size: 0.9em; }
 
 #top { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 28px; font: 0.85em var(--font-main); letter-spacing: 3px; color: #b4d4ec; text-shadow: 0 0 4px #000; }
