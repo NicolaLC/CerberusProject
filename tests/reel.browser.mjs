@@ -49,18 +49,18 @@ expect('a press in the wait ends it and hands the press back', table.ended?.pad 
 
 // NEW GAME from the title
 await p.click('#overlay [data-act="new"]');
-await p.waitForTimeout(300);
+await p.waitForFunction(() => document.getElementById('reel').dataset.state === 'play'); // not a fixed wait: the page is slow under a parallel run
 let s = await state();
 expect('NEW GAME starts the reel over a hidden menu', !s.hidden && s.state === 'play' && s.shot === 'orbit' && s.overlay === 'none', JSON.stringify(s));
-await p.waitForTimeout(2200); // past cardAt: the first card types
+await p.waitForFunction(() => document.querySelector('#reel .text').textContent.length > 0); // past cardAt: the first card types
 s = await state();
 expect('the first card types in', s.card.length > 0 && 'IO. ONE MACHINE. ONE MIND.'.startsWith(s.card), JSON.stringify(s));
 await p.keyboard.press('Space');
-await p.waitForTimeout(100);
+await p.waitForFunction(() => !document.querySelector('#reel .hint').hidden);
 s = await state();
 expect('a first press only shows the skip hint', !s.hidden && s.hint === 'PRESS AGAIN TO SKIP', JSON.stringify(s));
 await p.keyboard.press('Space');
-await p.waitForTimeout(100);
+await p.waitForFunction(() => document.getElementById('reel').hidden);
 s = await state();
 expect('a second press ends the reel', s.hidden, JSON.stringify(s));
 await p.waitForFunction(() => document.getElementById('loading').hidden && !document.body.classList.contains('title'), null, { timeout: 120000 });

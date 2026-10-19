@@ -2,6 +2,7 @@
 // Usage: node tests/run-browser.mjs [--all] [-j N] [name ...]   (--all adds gym-stress and bench; names filter, e.g. `scenes render`)
 // Suites run in parallel, each in its own browser: -j N (or BROWSER_JOBS) sets how many at once, default cores - 1.
 // Output is buffered per suite and printed whole when it ends. The slow suites (gym-stress, bench) always run alone, after the rest.
+// Every suite runs with a 120 s Playwright default timeout (pw-timeouts.mjs): a page boots slowly while the others thrash.
 // One run per machine: a second run (another agent, another worktree) waits for the first. Each run already uses every
 // core, so two at once only thrash SwiftShader: both get several times slower and timing checks flake.
 import { createServer } from 'vite';
@@ -42,14 +43,14 @@ const unlock = () => { try { if (readFileSync(LOCK, 'utf8') === String(process.p
 process.on('exit', unlock);
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(130));
 
-const server = await createServer({ server: { port: 5173 }, logLevel: 'warn' }); // busy port: vite picks the next free one
+const server = await createServer({ server: { port: 5173, watch: null, hmr: false }, logLevel: 'warn' }); // busy port: vite picks the next free one. No watcher: a file edited meanwhile (another agent, a build script) would full-reload the pages mid-test ("execution context destroyed")
 await server.listen();
 const port = server.httpServer.address().port;
 const env = { ...process.env, URL: `http://localhost:${port}/?debug&scene=arena`, BASE: `http://localhost:${port}` };
 
 const run = (name) => new Promise((resolve) => {
   const t0 = Date.now();
-  const c = spawn(process.execPath, [new URL(`${name}.browser.mjs`, dir).pathname], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const c = spawn(process.execPath, ['--import', new URL('pw-timeouts.mjs', dir).href, new URL(`${name}.browser.mjs`, dir).pathname], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   c.stdout.on('data', (d) => { out += d; });
   c.stderr.on('data', (d) => { out += d; });

@@ -93,14 +93,21 @@ const r = await p.evaluate(() => {
   step(0.3);
   out.playerInCover = !!player.cover;
   const front = player.cover.normal.clone().negate(); // the side the player defends
-  for (const t of enemies.all) if (t.kind === 'trooper' && t.alive) t.alert();
+  // the squad stands in front of the player: where section 3 left it is random, and could be behind the player's cover (nothing to flank)
+  enemies.all.filter((t) => t.kind === 'trooper' && t.alive).forEach((t, k) => { t.pos.set(-8 + 8 * (k % 3), 0, -20 - 2 * Math.floor(k / 3)); t.vel.set(0, 0, 0); t.alert(); });
   let flanker = null;
   engine.events.on('trooper:flank', (t) => (flanker ??= t));
-  for (let i = 0; i < 20 && !flanker; i++) step(1);
+  // a flank can be called off on the way (its spot stops protecting, or it is blocked): then the director sends the next one
+  for (let n = 0; n < 4; n++) {
+    for (let i = 0; i < 20 && !flanker; i++) step(1);
+    if (!flanker) break;
+    for (let i = 0; i < 24 && flanker.flanking; i++) step(0.5); // arrive (up to 30 m at 5.4 m/s plus detours)
+    if (flanker.state !== 'move') break; // arrived
+    flanker = null;
+  }
   out.flanked = !!flanker;
   out.flankDiag = enemies.all.filter((t) => t.kind === 'trooper' && t.alive).map((t) => `${t.state} ${t.pos.x.toFixed(1)},${t.pos.z.toFixed(1)} d=${t.pos.distanceTo(player.pos).toFixed(1)} spot=${!!t.spot}`);
   if (flanker) {
-    for (let i = 0; i < 12 && flanker.flanking; i++) step(0.5); // arrive
     const d = flanker.pos.clone().sub(player.pos).setY(0).normalize();
     out.flankAngleOk = d.dot(front) < 0.4; // beside or behind the player's cover
     out.flankerProtected = !!flanker.spot && enemies.cover.protects(flanker.spot, player.pos);
