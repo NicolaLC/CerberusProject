@@ -5,6 +5,7 @@ import { damp } from '../../engine/math.js';
 import { rb, cyl, ring, look } from './parts.js';
 import { sightRay, rim, VISOR } from './enemy.js';
 import { wornMaterial } from '../world/textures.js';
+import { BoneRig, pickLook } from './skeleton.js';
 
 // Attack drone: a small quad-rotor that hovers 3.5-5 m up, circles the player at range and fires short bolt
 // bursts. Light (dies fast) but hard to hit while it strafes; the glowing core underneath is its weak spot.
@@ -32,10 +33,36 @@ const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const DEBRIS = { push: [0, 0], spread: 6, up: [2, 4], spin: 12, life: 4 }; // see DebrisBank.burst; no dir: it bursts where it lands
 const BLAST = { point: new THREE.Vector3(), radius: 1.5, kind: 'drone' };
-const HITBOX_MAT = new THREE.MeshBasicMaterial(); // never drawn
 
 // rotor positions [x, z] on the body
 export const ROTORS = [[0.6, 0.55], [-0.6, 0.55], [0.6, -0.55], [-0.6, -0.55]];
+
+// Skeleton (skeleton.js): the body tilts, the four rotors spin. Animation touches these bones by name; looks only add meshes to them.
+export const BONES = {
+  Body: { parent: null, pos: [0, 0, 0] },
+  ...Object.fromEntries(ROTORS.map(([x, z], i) => [`Rotor${i}`, { parent: 'Body', pos: [x, 0.12, z] }])),
+};
+const ZONE = (zone) => ({ zone });
+// invisible hit boxes: [bone, w, h, d, x, y, z, userData, opts]
+const HITS = [
+  ['Body', 0.7, 0.32, 0.8, 0, 0, 0, ZONE('torso')],
+  ['Body', 0.5, 0.1, 0.5, 0, 0.2, -0.05, ZONE('torso')],
+  ['Body', 0.42, 0.1, 0.05, 0, 0.02, 0.41, ZONE('head')], // sensor
+  ['Body', 0.3, 0.08, 0.3, 0, -0.2, 0, ZONE('weak')], // core underneath
+  ['Body', 0.08, 0.08, 0.35, 0, -0.1, 0.5, ZONE('torso')], // gun
+  ...ROTORS.flatMap(([x, z], i) => [
+    ['Body', Math.hypot(x, z), 0.06, 0.08, x / 2, 0.05, z / 2, ZONE('torso'), { rotY: Math.atan2(-z, x) }], // arm: from the center out to the rotor
+    [`Rotor${i}`, 0.62, 0.02, 0.07, 0, 0, 0, ZONE('torso')],
+  ]),
+];
+
+// The skeleton with its hit boxes and the muzzle socket, no look yet.
+export function buildDroneSkeleton(owner = null) {
+  const rig = new BoneRig(BONES, { owner });
+  rig.hits(HITS);
+  rig.socket('Body', 'muzzle', 0, -0.1, 0.72);
+  return rig;
+}
 
 export function droneMaterials() {
   const M = {
@@ -93,6 +120,15 @@ export function droneLook(M) {
   return { body, blades };
 }
 
+// Looks: variants of the same skeleton. A look only adds meshes to the bones (setPart / attach), nothing else.
+export const droneLooks = {
+  default(rig, M) {
+    const L = droneLook(M);
+    L.body.forEach((g, i) => (i ? rig.attach('Body', g) : rig.setPart('Body', g)));
+    ROTORS.forEach((_, i) => rig.setPart(`Rotor${i}`, L.blades()));
+  },
+};
+
 export class Drone {
   constructor(ctx, def) {
     this.ctx = ctx;
@@ -120,53 +156,21 @@ export class Drone {
     const M = droneMaterials();
     this.mats = M;
 
-    // bones: the body (tilts) and four rotors (spin). Invisible boxes are the hitboxes; the look is separate.
-    this.root = new THREE.Group();
-    const bones = [];
-    const bone = (parent, x = 0, y = 0, z = 0) => {
-      const b = new THREE.Bone();
-      b.position.set(x, y, z);
-      parent.add(b);
-      bones.push(b);
-      return b;
-    };
-    this.hitMeshes = [];
-    const hitbox = (b, w, h, d, x, y, z, zone) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), HITBOX_MAT);
-      m.position.set(x, y, z);
-      m.visible = false; // not drawn, still raycast
-      m.userData = { enemy: this, zone };
-      b.add(m);
-      this.hitMeshes.push(m);
-      return m;
-    };
-    this.body = bone(this.root);
-    hitbox(this.body, 0.7, 0.32, 0.8, 0, 0, 0, 'torso');
-    hitbox(this.body, 0.5, 0.1, 0.5, 0, 0.2, -0.05, 'torso');
-    hitbox(this.body, 0.42, 0.1, 0.05, 0, 0.02, 0.41, 'head'); // sensor
-    hitbox(this.body, 0.3, 0.08, 0.3, 0, -0.2, 0, 'weak'); // core underneath
-    hitbox(this.body, 0.08, 0.08, 0.35, 0, -0.1, 0.5, 'torso'); // gun
-    this.muzzle = new THREE.Object3D();
-    this.muzzle.position.set(0, -0.1, 0.72);
-    this.body.add(this.muzzle);
-    this.rotors = [];
-    for (const [x, z] of ROTORS) {
-      const arm = hitbox(this.body, Math.hypot(x, z), 0.06, 0.08, x / 2, 0.05, z / 2, 'torso');
-      arm.rotation.y = Math.atan2(-z, x); // from the center out to the rotor
-      const r = bone(this.body, x, 0.12, z);
-      hitbox(r, 0.62, 0.02, 0.07, 0, 0, 0, 'torso');
-      this.rotors.push(r);
-    }
-
-    const L = droneLook(M);
-    this.body.add(...L.body);
-    for (const r of this.rotors) r.add(L.blades());
-    this.skeleton = new THREE.Skeleton(bones);
+    // skeleton + look (see skeleton.js); hit boxes are invisible, the look is separate
+    this.rig = buildDroneSkeleton(this);
+    pickLook(droneLooks, def.look, 'enemy.drone')(this.rig, M);
+    this.debrisKind = !def.look || def.look === 'default' ? this.kind : `${this.kind}.${def.look}`; // debris chunks are baked per look
+    this.root = this.rig.root;
+    this.skeleton = this.rig.skeleton;
+    this.hitMeshes = this.rig.hitMeshes;
+    this.body = this.rig.bones.Body;
+    this.muzzle = this.rig.sockets.muzzle;
+    this.rotors = ROTORS.map((_, i) => this.rig.bones[`Rotor${i}`]);
     ctx.scene.add(this.root);
     this.#place();
     this.skin = new RigidSkin(this.root, this.skeleton, { cullMargin: 1.5, lod: true });
     rim([M.shell, M.plate, this.skin.lodMaterial]);
-    ctx.debris.prime(this.kind, this.skin);
+    ctx.debris.prime(this.debrisKind, this.skin);
     ctx.markDirty();
   }
 
@@ -369,7 +373,7 @@ export class Drone {
     // burst on impact
     BLAST.point.copy(this.root.position);
     this.ctx.events.emit('blast', BLAST);
-    this.ctx.debris.burst(this.kind, this.skin, this.ctx.scene, this.debris, DEBRIS);
+    this.ctx.debris.burst(this.debrisKind, this.skin, this.ctx.scene, this.debris, DEBRIS);
     this.root.visible = false;
     this.falling = null;
   }

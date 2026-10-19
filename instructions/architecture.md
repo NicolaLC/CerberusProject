@@ -26,7 +26,7 @@ src/
     controls.js           BINDINGS table + intents (move, look, aiming, running, firing, slots...)
     settings.js           player settings + start-panel bindings
     world/  world.js (builds env.* / light.* pieces, colliders, cover, sky, lights), arch.js (arch.* architectural dressing: coves, ribs, panelling, bulkheads, floor channels, coffers, catwalks; level.md), interior.js (`arch.corridor` interior kit: painted normal / roughness maps, corridor env map, the `World.interior` materials; level.md), sectors.js (`World.sectors`: rooms drawn / built / freed by portal visibility; level.md "Sectors"), textures.js, pickups.js (pickup.* pieces), encounter.js (marker.* / trigger.* / objective.* / log.line / intro.boot / intro.cinematic pieces: spawn, checkpoints, trigger volumes, reinforcements; workshop.md), mission.js (objective sequencing, `game.mission`; ticks inside encounter)
-    actors/ rig.js (skeleton, animator, IK), parts.js (model building blocks, debris), soldier.js (player model),
+    actors/ rig.js (skeleton, animator, IK), skeleton.js (BoneRig: bone table + look functions of the drone / SX-6 / CERBERUS, animation.md "Every enemy has a skeleton"), parts.js (model building blocks, debris), soldier.js (player model),
             looks.js (trooper / puppet models),
             player.js (motor: intent -> movement, cover, jetpack, vault, health; never touches a mesh), player-view.js (`player.view`: model, rig, skin, animation, root pose; reads the motor's state; the motor forwards `root` / `rigModel` / `skin` / `animator` / `muzzle`),
             enemy.js (shared enemy body: hit zones, weak spots, flash, debris death; `sightRay` line of sight for every type),

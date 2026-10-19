@@ -131,6 +131,7 @@ in the inspector (see Panels and helpers) or with `setParams`.
 - **Spawn groups**: an enemy piece takes `params.group` (any string; stored on the actor as `squad`). `Enemies` wakes the whole group once any
   member is awake (trooper alerted, drone / boss awake; `group:wake { group }` once per group), or on `wakeGroup(group)`. Only actors with
   `wake()` take part (trooper, drone, boss, dormant puppets); other puppets are always on and never count as awake.
+  `params.look` (every enemy, optional enum: the variant of its skeleton, level.md; inspector field `look`; levelio test round-trips it).
   `params.dropGun` (every enemy; gun id) / `dropAmmo?` (rounds in the pickup, default the gun's `pickup.drop`) / `dropOnce?` (true): when it is destroyed it leaves that gun on the floor as a bare `pickup.gun` (`Pickups.dropGun`, wired in `game.js` on `puppet:down`), **unless the player already owns the gun**. With `dropOnce` only the first death of the level drops it (the set of dropped guns is cleared with the level), so a squad all carrying `dropGun: 'rifle'` yields one Warden; `dropOnce: false` drops on every death while the gun is not owned. Validation (meta `check`, `dropProblem`): known gun, `dropAmmo` >= 0, `dropAmmo` / `dropOnce` need `dropGun`. Inspector fields: dropGun, dropAmmo, dropOnce. Test: `tests/loadout.browser.mjs` section 5.
   `params.dormant: true` (every enemy, needs a `group`, else `Registry.check` errors): never wakes itself (no sight, hearing, arena entry or damage wake; a shooter never pops up or fires), still takes hits and dies; only `wakeGroup` / `encounter:wake` wakes it, then it behaves normally. Restart and reload rebuild it from the level data. The editor's enemies are frozen, so nothing wakes in edit mode. In a sectored level (level.md "Sectors") a dormant enemy whose sector is out of sight skips its AI update and pose and is not drawn (`Enemies.cull`); it still takes hits and wakes with its group.
 - **Triggers**: fire on the frame the player's feet enter the box (starting inside counts); `once: true` fires one time per run. Fire =
@@ -199,7 +200,7 @@ Gizmo: an amber screen on a post; inert in edit mode and the Library (like objec
   none of that has happened for 3 s (`TUNING.calm`, `encounter.calm`; a run starts calm). `delay` counts from then.
 - **Firing**: `Encounter` queues the matching records (`once` = one time per run), and emits `log:say { text, priority }` from its update once calm and `delay` have passed (the first `start` line shows
   on the first play frame, after `resetRun`). Pending lines are dropped on unload.
-- **Log view** (`src/game/view/log.js`, `game.log`, `#log` in the HUD): one line at a time, bottom centre, amber monospace typed at 40 chars/s with a blinking cursor, held
+- **Log view** (`src/game/view/log.js`, `game.log`, `#log` in the HUD): one line at a time, top right under the objective panel (`#feed`; the announcer's broadcast is centred), amber monospace typed at 40 chars/s with a blinking cursor, held
   `max(2.5 s, 0.06 s per char)`, faded 0.5 s. `say(text, { priority })`: `high` replaces the current line, `normal` waits (more than 4 waiting: the oldest is dropped).
   Every shown line goes to `log.entries` `{ text, t }` (t = s since the run began) for the pause-menu Log (not built). `Game.resetRun` clears it all (`log.reset()`).
 - Suite `tests/log.browser.mjs`: start / restart / once, trigger, objective done, delay, waiting for calm (shot, awake enemy), `discovered:rifle`, priority queue and entries, validation, the announcer voice, `env.alarm` (below).
@@ -325,4 +326,4 @@ Gizmo: a camera on a post plus a line through every shot's from -> to (its own g
 ## Not yet
 Faces / flicker / label colours / boss arena in the inspector.
 
-HUD objective panel (`#objective`: `#obj-head` text, `#obj-detail` detail, `#obj-prog` progress; `Mission.hudPanel()`, `Hud` `#objective`): top left, hides `#kills-wrap` (the "TARGETS DOWN" counter, still shown without a mission). OBJECTIVE COMPLETE stays the existing toast.
+HUD objective panel (`#objective`: `#obj-head` text, `#obj-detail` detail, `#obj-prog` progress; `Mission.hudPanel()`, `Hud` `#objective`): top right (`#feed`, the log line under it), hides `#kills-wrap` (the "TARGETS DOWN" counter, still shown without a mission). OBJECTIVE COMPLETE stays the existing toast.

@@ -3,9 +3,10 @@ import { Pool } from '../../engine/pool.js';
 import { segSegDist } from '../../engine/math.js';
 import { Puppet, HEALTH, ENGAGE_RANGE } from './puppet.js';
 import { Trooper, TUNING as TROOPER } from './trooper.js';
-import { SpiderMech, TUNING as SPIDER } from './spider.js';
+import { SpiderMech, spiderLooks, TUNING as SPIDER } from './spider.js';
 import { Cerberus, TUNING as CERBERUS } from './cerberus.js';
-import { Drone, TUNING as DRONE } from './drone.js';
+import { cerberusLooks } from './cerberus-model.js';
+import { Drone, droneLooks, TUNING as DRONE } from './drone.js';
 import { CoverMap } from '../ai/cover.js';
 import { Grid } from '../world/grid.js';
 import { DebrisBank } from './parts.js';
@@ -20,7 +21,7 @@ import { GUNS } from '../combat/guns.js';
 
 // Enemy pieces (registry ids, a public contract: instructions/level.md). Data: { id, pos, yaw?, params? }.
 // The spawn list lives in the level file; builders run against this system and return the actor.
-// params (all enemies): group (spawn group name, see wakeGroup), dormant (bool, needs a group: only wakeGroup wakes it); mover { to: [x, y, z], speed }, drone: pos = the ground under it, boss.spider { arena: { minX, maxX, minZ, maxZ } }, boss.cerberus { arena, floor (0..1, the share of each head's health it never drops below), repair (of a head's health per second) }.
+// params (all enemies): group (spawn group name, see wakeGroup), dormant (bool, needs a group: only wakeGroup wakes it); mover { to: [x, y, z], speed }, drone: pos = the ground under it, boss.spider { arena: { minX, maxX, minZ, maxZ } }, every enemy `look` (variant, see `look` below); boss.cerberus { arena, floor (0..1, the share of each head's health it never drops below), repair (of a head's health per second) }.
 // `stand`: puppets on a pneumatic stand (one instanced base + post each).
 // Inspector fields (level.md, piece meta): every enemy takes a spawn group.
 const GROUP = { key: 'group', type: 'text', optional: true };
@@ -44,23 +45,27 @@ export function dropProblem(p, guns = null) {
   if (p.dropOnce != null && typeof p.dropOnce !== 'boolean') return 'dropOnce must be true or false';
   return null;
 }
+// `look` (every enemy, optional, default 'default'): the variant of the kind's skeleton (animation.md, Every enemy has a skeleton).
+// Humanoids: 'default' | 'plated' (plated = the `armored` param; `look` wins if both are given). The others: their looks table.
+const look = (looks) => ({ key: 'look', type: 'enum', options: Object.keys(looks), optional: true });
+const HUMANOID = look({ default: 0, plated: 0 });
 const enemyCheck = (p, registry) => dormantCheck(p) ?? dropProblem(p, registry.guns);
 const def = (kind, d) => ({ kind, pos: d.pos, yaw: d.yaw, ...d.params });
 // `example` ({ params, yaw? }) is what the Library spawns; `label` is its one-line stat sheet (level.md, meta convention).
 export const ENEMY_PIECES = {
   // `armored` (static / mover): plate steel, only heavy rounds hurt it (the range's heavy-weapon targets)
-  'enemy.static': { stand: true, example: { params: {} }, label: `HP ${HEALTH.default} | stands, takes hits`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, ARMORED, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('static', d)) },
-  'enemy.mover': { stand: true, example: { params: { speed: 0 } }, label: `HP ${HEALTH.default} | slides on a rail`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, ARMORED, { key: 'to', type: 'vec3', optional: true }, { key: 'speed', type: 'number', min: 0 }, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('mover', d)) },
-  'enemy.shooter': { stand: true, example: { params: {} }, label: `HP ${HEALTH.shooter} | pops up and fires within ${ENGAGE_RANGE} m`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('shooter', d)) },
+  'enemy.static': { stand: true, example: { params: {} }, label: `HP ${HEALTH.default} | stands, takes hits | look default / plated`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, ARMORED, HUMANOID, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('static', d)) },
+  'enemy.mover': { stand: true, example: { params: { speed: 0 } }, label: `HP ${HEALTH.default} | slides on a rail | look default / plated`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, ARMORED, { key: 'to', type: 'vec3', optional: true }, { key: 'speed', type: 'number', min: 0 }, HUMANOID, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('mover', d)) },
+  'enemy.shooter': { stand: true, example: { params: {} }, label: `HP ${HEALTH.shooter} | pops up and fires within ${ENGAGE_RANGE} m | look default / plated`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, HUMANOID, ...DROP], build: (sys, d) => new Puppet(sys.ctx, def('shooter', d)) },
   // moves between cover and shoots back
-  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, ARMORED, POST, ...DROP], build: (sys, d) => new Trooper(sys.ctx, def('trooper', d)) },
+  'enemy.trooper': { example: { params: {} }, label: `HP ${TROOPER.health} | notices ${TROOPER.sight} m, shoots ${TROOPER.engage} m | look default / plated`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, ARMORED, POST, HUMANOID, ...DROP], build: (sys, d) => new Trooper(sys.ctx, def('trooper', d)) },
   // hovers and strafes, short bursts
-  'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, ...DROP], build: (sys, d) => new Drone(sys.ctx, def('drone', d)) },
+  'enemy.drone': { example: { params: {} }, label: `HP ${DRONE.health} | wakes at ${DRONE.sight} m, hovers ${DRONE.hover[0]}-${DRONE.hover[1]} m | look ${Object.keys(droneLooks).join(" / ")}`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, look(droneLooks), ...DROP], build: (sys, d) => new Drone(sys.ctx, def('drone', d)) },
   // miniboss
   // CERBERUS (the Prologue's scripted loss): three heads, never destroyed, never counted (`unkillable`: kills / arena:clear / destroy objectives skip it).
   // `arena` (not in the inspector, like the spider's): where the player can be; wakes when they enter it, or by wakeGroup.
-  'boss.cerberus': { example: { params: {} }, label: `3 heads x ${CERBERUS.head} HP | never destroyed, repairs to full above ${Math.round(CERBERUS.floor * 100)}%, hull is armor`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, { key: 'floor', type: 'number', min: 0, max: 1, optional: true }, { key: 'repair', type: 'number', min: 0, optional: true }], build: (sys, d) => new Cerberus(sys.ctx, def('boss', d)) },
-  'boss.spider': { example: { params: {} }, label: `HP ${SPIDER.core} core | wakes at ${SPIDER.wakeRange} m or in its arena`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, ...DROP], build: (sys, d) => new SpiderMech(sys.ctx, def('boss', d)) },
+  'boss.cerberus': { example: { params: {} }, label: `3 heads x ${CERBERUS.head} HP | never destroyed, repairs to full above ${Math.round(CERBERUS.floor * 100)}%, hull is armor | look ${Object.keys(cerberusLooks).join(" / ")}`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, { key: 'floor', type: 'number', min: 0, max: 1, optional: true }, { key: 'repair', type: 'number', min: 0, optional: true }, look(cerberusLooks)], build: (sys, d) => new Cerberus(sys.ctx, def('boss', d)) },
+  'boss.spider': { example: { params: {} }, label: `HP ${SPIDER.core} core | wakes at ${SPIDER.wakeRange} m or in its arena | look ${Object.keys(spiderLooks).join(" / ")}`, check: enemyCheck, fields: [GROUP, DORMANT, HIDDEN, look(spiderLooks), ...DROP], build: (sys, d) => new SpiderMech(sys.ctx, def('boss', d)) },
 };
 
 // Flank director: with 2+ troopers engaged, every FLANK_EVERY s one of them is sent around the player.

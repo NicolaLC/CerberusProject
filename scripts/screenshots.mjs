@@ -24,7 +24,7 @@ const SHOTS = [
   { name: '07-trooper-and-drone', scene: 'library', player: [10, 0, 34], facing: Math.PI, cam: { pos: [10, 1.9, 33], look: [9.5, 1.4, 26] } },
   { name: '08-puppets', scene: 'library', player: [-12, 0, 36], facing: Math.PI, cam: { pos: [-13, 2.0, 35], look: [-13, 0.9, 26] } },
   // focus: frame the nearest enemy of that kind to `near` from `offset` (m from its model origin), looking at origin + look
-  { name: '09-trooper-closeup', scene: 'library', player: [6, 0, 36], facing: Math.PI, focus: { kind: 'trooper', near: [6, 0, 26], offset: [0.7, 1.45, 2.0], look: [0, 1.1, 0] } },
+  { name: '09-trooper-closeup', scene: 'library', player: [-27, 0, 56], facing: 0, focus: { kind: 'trooper', near: [-26.7, 0, 46], offset: [0.7, 1.45, 2.0], look: [0, 1.1, 0] } },
   { name: '10-drone-closeup', scene: 'library', player: [14, 0, 36], facing: Math.PI, focus: { kind: 'drone', near: [14, 0, 26], offset: [1.0, 0.5, 2.2], look: [0, 0, 0] } },
   { name: '11-spider-closeup', scene: 'library', player: [28, 0, 38], facing: Math.PI, focus: { kind: 'boss', near: [28, 0, 22], offset: [2.5, 1.3, 8.5], look: [0, 2.6, 0] } },
   { name: '11b-spider-front', scene: 'library', player: [28, 0, 38], facing: Math.PI, focus: { kind: 'boss', near: [28, 0, 22], offset: [0, 1.6, 11], look: [0, 3.0, 0] } },

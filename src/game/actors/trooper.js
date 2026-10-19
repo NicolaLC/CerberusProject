@@ -43,6 +43,9 @@ export const TUNING = {
   recheck: [0.6, 1.0], // s: down with no line of fire from the firing position, look again after this (no blind pop-up)
   blindChecks: 3, // that many looks in a row without a line of fire -> the spot is bad for 6 s, relocate
   peekTime: 0.4,
+  rise: 0.35, // s to come out of / duck into cover (eased); fits inside peekTime, so the aim telegraph never starts before the body is out
+  peekLean: 0.5, // rad: torso lean toward the edge when stepping out of high cover
+  coverLower: 0.6, // gun lowered (0..1) while hidden, comes up with the rise
   aimTime: 0.5,
   shotGap: 0.14,
   shots: [3, 4],
@@ -75,16 +78,18 @@ const randInt = ([a, b]) => a + Math.floor(Math.random() * (b - a + 1));
 
 export class Trooper extends EnemyBody {
   constructor(ctx, def) {
+    const plated = def.look != null ? def.look === 'plated' : !!def.armored; // `look` wins over `armored` when both are given
     super(ctx, {
       kind: 'trooper',
       pos: def.pos,
       yaw: def.yaw ?? 0,
       health: TUNING.health,
-      mats: trooperMaterials(!!def.armored),
+      mats: trooperMaterials(plated),
       armed: true,
-      weakSpots: def.armored ? 0 : 1, // plated: no weak spot, the plates are the way in
+      weakSpots: plated ? 0 : 1, // plated: no weak spot, the plates are the way in
+      weakBones: ['Spine2'], // the chest power cell
     });
-    this.armored = !!def.armored; // `armored` param: plated, see armor()
+    this.armored = plated; // look 'plated' (or the `armored` param): see armor()
     this.post = !!def.post;
     this.plates = buildTrooper(this.rig, this.mats, this.visor, this.armored) ?? {}; // group -> [look group]
     if (this.armored) this.debrisKind = 'trooper-plated';
@@ -92,6 +97,7 @@ export class Trooper extends EnemyBody {
     this.vel = new THREE.Vector3();
     this.offset = new THREE.Vector3(); // peek step, applied to the visual position
     this.offsetTarget = new THREE.Vector3();
+    this.offFull = new THREE.Vector3(); // the full peek step of the current high spot
     this.state = 'idle';
     this.timer = 0;
     this.spot = null;
@@ -102,6 +108,10 @@ export class Trooper extends EnemyBody {
     this.retreated = false;
     this.flanking = false;
     this.crouch = 0;
+    this.rise = 0; // linear 0..1 ramp toward exposed, `out` is its eased value (pose weight of the transition)
+    this.out = 0;
+    this.stepVel = new THREE.Vector3(); // velocity of the peek step, drives the gait so the feet step
+    this.lean = 0;
     this.recoil = 0;
     this.aimPitch = 0;
 
@@ -439,13 +449,22 @@ export class Trooper extends EnemyBody {
     // stance: crouched behind low cover except while popping up to shoot
     const exposed = this.state === 'peek' || this.state === 'aim' || this.state === 'fire';
     this.exposed = exposed ? (this.exposed ?? 0) + dt : 0;
-    const crouched = (this.post || this.spot?.type === 'low') && !moving && !exposed && this.state !== 'idle';
-    this.crouch += ((crouched ? 1 : 0) - this.crouch) * damp(10, dt);
-    // high cover: step sideways to the edge while exposed
-    if (this.spot && this.spot.type === 'high' && exposed && !moving) {
+    moving ||= this.state === 'move' || this.state === 'hunt' || this.state === 'recall'; // a state change this very step counts
+    const crouched = (this.post || this.spot?.type === 'low') && !moving && this.state !== 'idle';
+    // transition weight: linear ramp over `rise`, eased (smoothstep). 0 = hidden, 1 = out and aiming.
+    this.rise += Math.max(-dt / t.rise, Math.min(dt / t.rise, (exposed && !moving ? 1 : 0) - this.rise));
+    this.out = this.rise * this.rise * (3 - 2 * this.rise);
+    this.crouch += ((crouched ? 1 - this.out : 0) - this.crouch) * damp(14, dt);
+    // high cover: the hips step sideways to the edge with the weight, the torso leans out of it
+    _d.copy(this.offset);
+    if (this.spot && this.spot.type === 'high' && !moving) {
       this.ctx.cover.firingPos(this.spot, this.offsetTarget).sub(this.pos).setY(0);
-    } else this.offsetTarget.set(0, 0, 0);
-    this.offset.lerp(this.offsetTarget, damp(12, dt));
+      this.offFull.copy(this.offsetTarget);
+    } else if (this.out < 0.001) this.offFull.set(0, 0, 0);
+    this.offset.copy(this.offFull).multiplyScalar(this.out); // (running off to another spot: it still eases back with the weight)
+    this.stepVel.subVectors(this.offset, _d).divideScalar(Math.max(dt, 1e-4));
+    const side = this.offFull.x * Math.cos(this.yaw) - this.offFull.z * Math.sin(this.yaw); // toward the character's left
+    this.lean = -Math.sign(side) * t.peekLean * this.out;
 
     // facing: where we run, otherwise at the player
     let want = this.yaw;
@@ -461,13 +480,16 @@ export class Trooper extends EnemyBody {
 
     // posed once per frame by Enemies.animate (late phase), from the state of the last substep
     const as = this.animState;
-    as.speed = speed;
-    as.run = speed > 2.5;
+    const stepping = !moving && this.stepVel.lengthSq() > 1e-4;
+    as.speed = stepping ? this.stepVel.length() : speed;
+    as.run = moving && speed > 2.5;
+    as.lean = this.lean;
+    as.lower = this.spot || this.post ? t.coverLower * (1 - this.out) * (moving ? 0 : 1) : 0;
     as.crouch = this.crouch;
     as.aimPitch = this.aimPitch;
     as.combat = combat || (this.alerted && !moving);
     as.recoil = this.recoil;
-    as.vel = this.vel;
+    as.vel = stepping ? this.stepVel : this.vel;
     as.yaw = this.yaw;
     this.group.position.copy(this.pos).add(this.offset);
     this.rig.root.position.y = 0;

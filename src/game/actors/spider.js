@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { RigidSkin } from '../../engine/batch.js';
 import { disposeTree } from '../../engine/dispose.js';
 import { damp, wrapAngle, lerpAngle } from '../../engine/math.js';
-import { rbox, rb, cyl, look } from './parts.js';
+import { rb, cyl, look } from './parts.js';
+import { BoneRig, pickLook } from './skeleton.js';
 import { sightRay, rim, VISOR, PROJECTILE } from './enemy.js';
 import { navGrid, navStep } from '../ai/nav.js';
 import { wornMaterial } from '../world/textures.js';
@@ -62,87 +63,76 @@ const DEBRIS_DIR = new THREE.Vector3();
 const DEBRIS = { dir: DEBRIS_DIR, push: [3, 3], spread: 3, up: [3, 3], spin: 8, life: 6 }; // see DebrisBank.burst
 const BLAST = { point: new THREE.Vector3(), radius: 0, kind: '' };
 const STEP = { point: new THREE.Vector3(), big: false };
-const HITBOX_MAT = new THREE.MeshBasicMaterial(); // never drawn
 const CORE_Y = 0.86; // core height on the body, hatch closed
 
-export class SpiderMech {
-  constructor(ctx, def) {
-    this.ctx = ctx;
-    this.t = TUNING;
-    this.kind = 'boss';
-    this.name = TUNING.name;
-    this.pos = new THREE.Vector3(...def.pos);
-    this.yaw = def.yaw ?? 0;
-    this.arena = def.arena ?? { minX: def.pos[0] - 10, maxX: def.pos[0] + 10, minZ: def.pos[2] - 10, maxZ: def.pos[2] + 10 }; // { minX, maxX, minZ, maxZ } from the level file: the boss stays inside, and wakes when the player walks in
-    this.maxHealth = this.health = TUNING.core;
-    this.alive = true;
-    this.lift = 0;
-    this.awake = false;
-    this.down = 0; // > 0: collapsed, core exposed (seconds left)
-    this.bite = 0; // core damage this collapse can still take
-    this.height = 2.4; // dormant: crouched
-    this.vel = new THREE.Vector3();
-    this.strafe = 1;
-    this.strafeTimer = 4;
-    this.detour = 1; // side the steering tries first (+1 left / -1 right)
-    this.stuck = 0;
-    this.rushTimer = 6; // s to the next charge
-    this.rushing = 0; // s left in a charge
-    this.flash = 0;
-    this.time = 0;
-    this.gun = { state: 'idle', timer: 2, shots: 0 };
-    this.mortarTimer = 4;
-    this.stomp = { state: 'idle', timer: 0 };
-    this.debris = [];
-    this.orbs = [];
+// The skeleton (skeleton.js): the hull tilts on Body, the core rises on CoreLift, two hatch halves, the sensor band turns on Turret,
+// the gun pods pitch on Guns; Femur / Tibia per leg hang from the root and are posed by IK in root space (+Y along the segment).
+// Animation touches these bones by name; looks only add meshes to them.
+const DORMANT_HEIGHT = 2.4; // m: Body's rest height (crouched); the pose sets it every frame
+export const BONES = {
+  Body: { parent: null, pos: [0, DORMANT_HEIGHT, 0] },
+  CoreLift: { parent: 'Body', pos: [0, CORE_Y, 0] },
+  ShutterL: { parent: 'Body', pos: [0.62, 1.05, 0], data: { side: 1 } },
+  ShutterR: { parent: 'Body', pos: [-0.62, 1.05, 0], data: { side: -1 } },
+  Turret: { parent: 'Body', pos: [0, 0.17, 0] },
+  Guns: { parent: 'Turret', pos: [0, 0, 0] },
+  ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [[`Femur${i}`, { parent: null, pos: [0, 0, 0] }], [`Tibia${i}`, { parent: null, pos: [0, 0, 0] }]]).flat()),
+};
+const HULL = { zone: 'torso', part: 'hull' };
+// hit boxes: [bone, w, h, d, x, y, z, userData, opts]; the lenses (core, knees) are the weak spots a look lights with rig.lens(bone, M.weak)
+const HITS = [
+  ['Body', 4.6, 1.0, 4.6, 0, 0.2, 0, HULL], // saucer
+  ['Body', 1.6, 0.6, 1.6, 0, -0.5, 0, HULL], // hub under the hull
+  ...[1, -1].flatMap((s) => HIPS.map(([hx, hz]) => ['Body', 0.5, 0.5, 0.5, s * hx, -0.1, hz, HULL])), // hip mounts
+  ['CoreLift', 1.0, 0.35, 1.0, 0, 0, 0, { zone: 'weak', part: 'core' }, { lens: true }],
+  ['ShutterL', 0.64, 0.12, 1.15, -0.32, 0, 0, HULL],
+  ['ShutterR', 0.64, 0.12, 1.15, 0.32, 0, 0, HULL],
+  ['Turret', 1.8, 0.24, 0.12, 0, 0, 2.47, HULL], // sensor band front
+  ...[1, -1].map((s) => ['Guns', 0.6, 0.55, 1.9, s * GUN_SIDE, 0, 0.6, HULL]),
+  ...Array.from({ length: 6 }, (_, i) => {
+    const limb = { zone: 'limb', part: i };
+    const F = LEG.femur;
+    const T = LEG.tibia;
+    return [
+      [`Femur${i}`, 0.42, F, 0.44, 0, F / 2, 0, limb],
+      [`Femur${i}`, 0.48, F * 0.6, 0.12, 0, F * 0.5, 0.26, limb],
+      [`Tibia${i}`, 0.42, 0.42, 0.42, 0, 0, 0, { zone: 'weak', part: i }, { lens: true }], // knee
+      [`Tibia${i}`, 0.32, T, 0.34, 0, T / 2, 0, limb],
+      [`Tibia${i}`, 0.54, 0.25, 0.54, 0, T, 0, limb], // foot
+    ];
+  }).flat(),
+];
 
-    const M = {
-      hull: wornMaterial(0x34383c, { roughness: 0.6, metalness: 0.55, wear: 'metal' }), // dark grey hull
-      plate: wornMaterial(0xa9aca7, { roughness: 0.78, metalness: 0.2 }), // pale worn grey plates (the HiveMind livery), chipped
-      trim: wornMaterial(0x17181b, { roughness: 0.5, metalness: 0.65, wear: 'metal' }), // black frame, rams
-      eye: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: VISOR, emissiveIntensity: 1 }), // violet sensor cluster
-      weak: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2bd6, emissiveIntensity: 3 }),
-    };
-    M.weak.userData.lodGlow = 5; // far LOD: knees and core stay readable
-    M.eye.userData.lodGlow = 3;
-    this.mats = M;
+// The skeleton with its hit boxes and the muzzle socket (between the pods), no look yet.
+export function buildSpiderSkeleton(owner = null) {
+  const rig = new BoneRig(BONES, { owner });
+  rig.hits(HITS);
+  rig.socket('Guns', 'muzzle', 0, 0.06, 2.05); // shots alternate to each pod (GUN_SIDE)
+  return rig;
+}
 
-    // ----- bones + parts -----
-    this.root = new THREE.Group();
-    this.root.position.copy(this.pos);
-    this.root.rotation.y = this.yaw;
-    const bones = [];
-    const bone = (parent, x = 0, y = 0, z = 0) => {
-      const b = new THREE.Bone();
-      b.position.set(x, y, z);
-      parent.add(b);
-      bones.push(b);
-      return b;
-    };
-    this.hitMeshes = [];
-    // hitboxes: invisible boxes (not drawn, still raycast), except the glowing weak parts, drawn as they are
-    const part = (b, w, h, d, mat, x, y, z, zone, partId) => {
-      const weak = mat === M.weak;
-      const m = new THREE.Mesh(weak ? rbox(w, h, d, 0.08) : new THREE.BoxGeometry(w, h, d), weak ? mat : HITBOX_MAT);
-      m.position.set(x, y, z);
-      m.visible = weak;
-      m.userData = { enemy: this, zone, part: partId };
-      b.add(m);
-      this.hitMeshes.push(m);
-      return m;
-    };
+export function spiderMaterials() {
+  const M = {
+    hull: wornMaterial(0x34383c, { roughness: 0.6, metalness: 0.55, wear: 'metal' }), // dark grey hull
+    plate: wornMaterial(0xa9aca7, { roughness: 0.78, metalness: 0.2 }), // pale worn grey plates (the HiveMind livery), chipped
+    trim: wornMaterial(0x17181b, { roughness: 0.5, metalness: 0.65, wear: 'metal' }), // black frame, rams
+    eye: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: VISOR, emissiveIntensity: 1 }), // violet sensor cluster
+    weak: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2bd6, emissiveIntensity: 3 }),
+  };
+  M.weak.userData.lodGlow = 5; // far LOD: knees and core stay readable
+  M.eye.userData.lodGlow = 3;
+  return M;
+}
+
+// Look (art-style.md, the owner's walker concept): a saucer hull in worn ochre over dark metal, a dark sensor band
+// round the rim with small uneven violet lens clusters, twin-barrel gun pods on side pylons, jointed hydraulic legs
+// hung from a hub under the hull, the core under a split hatch on top. Only adds meshes to the bones above.
+export const spiderLooks = {
+  default(rig, M) {
     const R = Math.PI / 2;
-
-    // Look (art-style.md, the owner's walker concept): a saucer hull in worn ochre over dark metal, a dark sensor band
-    // round the rim with small uneven violet lens clusters, twin-barrel gun pods on side pylons, jointed hydraulic legs
-    // hung from a hub under the hull, the core under a split hatch on top. Hitboxes stay boxes (invisible).
-    this.body = bone(this.root, 0, this.height, 0);
-    part(this.body, 4.6, 1.0, 4.6, M.hull, 0, 0.2, 0, 'torso', 'hull'); // saucer
-    part(this.body, 1.6, 0.6, 1.6, M.hull, 0, -0.5, 0, 'torso', 'hull'); // hub under the hull
-    for (const s of [1, -1]) for (const [hx, hz] of HIPS) part(this.body, 0.5, 0.5, 0.5, M.hull, s * hx, -0.1, hz, 'torso', 'hull'); // hip mounts
     // hull, in pieces so it breaks apart: lower shell and hub, upper shell and deck, hip mounts per side
     const D = 22; // saucer segments
-    this.body.add(
+    rig.setPart('Body',
       look(
         cyl(M.plate, 2.5, 1.45, 0.5, 0, -0.17, 0, 0, 0, 0, D), // lower shell
         cyl(M.trim, 1.47, 1.47, 0.06, 0, -0.43, 0, 0, 0, 0, D), // keel ring
@@ -151,6 +141,8 @@ export class SpiderMech {
         rb(M.trim, 0.5, 0.3, 0.9, 0.06, 0, -0.75, 0.55), // under-hub sensor mast block
         ...[0, 1, 2, 3, 4, 5].map((k) => rb(M.trim, 0.06, 0.42, 0.8, 0.02, Math.sin((k * Math.PI) / 3) * 2.0, -0.2, Math.cos((k * Math.PI) / 3) * 2.0, 0, (k * Math.PI) / 3, 0)), // shell ribs
       ),
+    );
+    rig.attach('Body',
       look(
         cyl(M.plate, 1.6, 2.52, 0.36, 0, 0.47, 0, 0, 0, 0, D), // upper shell
         cyl(M.trim, 2.54, 2.54, 0.05, 0, 0.29, 0, 0, 0, 0, D), // rim lip
@@ -174,15 +166,13 @@ export class SpiderMech {
           cyl(M.trim, 0.03, 0.03, 0.9, s * (hx - 0.4), -0.35, hz * 0.7, 0.4, 0, s * 0.9, 5), // cable bundle to the hub
         );
       }
-      this.body.add(look(...hips));
+      rig.attach('Body', look(...hips));
     }
-    // core on top, under a split armored hatch; its bone lifts it out while the mech is down
-    this.coreLift = bone(this.body, 0, CORE_Y, 0);
-    this.core = part(this.coreLift, 1.0, 0.35, 1.0, M.weak, 0, 0, 0, 'weak', 'core');
-    this.shutters = [1, -1].map((s) => {
-      const b = bone(this.body, s * 0.62, 1.05, 0);
-      part(b, 0.64, 0.12, 1.15, M.plate, -s * 0.32, 0, 0, 'torso', 'hull');
-      b.add(
+    // core on top, under a split armored hatch (its bone lifts it out while the mech is down)
+    rig.lens('CoreLift', M.weak);
+    for (const [name, s] of [['ShutterL', 1], ['ShutterR', -1]]) {
+      rig.setPart(
+        name,
         look(
           rb(M.plate, 0.64, 0.12, 1.15, 0.05, -s * 0.32, 0, 0), // hatch half
           rb(M.trim, 0.58, 0.05, 0.08, 0.02, -s * 0.32, 0.07, -0.3), // ribs
@@ -191,12 +181,8 @@ export class SpiderMech {
           cyl(M.hull, 0.06, 0.06, 1.1, 0, -0.02, 0, R, 0, 0, 10), // hinge
         ),
       );
-      b.userData.side = s;
-      return b;
-    });
-    // turret: the sensor band turns on the rim toward the target; the gun pods pitch on their own bone
-    this.turret = bone(this.body, 0, 0.17, 0);
-    part(this.turret, 1.8, 0.24, 0.12, M.eye, 0, 0, 2.47, 'torso', 'hull'); // sensor band front
+    }
+    // turret: the sensor band turns on the rim toward the target
     const band = [
       cyl(M.trim, 2.51, 2.51, 0.24, 0, 0, 0, 0, 0, 0, D), // dark sensor band
     ];
@@ -212,9 +198,8 @@ export class SpiderMech {
         band.push(cyl(M.eye, r * 0.42, r * 0.42, 0.06, cx + Math.cos(a) * lx, y + ly, cz - Math.sin(a) * lx, R, 0, -a, 8));
       }
     }
-    this.turret.add(look(...band));
-    this.guns = bone(this.turret, 0, 0, 0);
-    for (const s of [1, -1]) part(this.guns, 0.6, 0.55, 1.9, M.hull, s * GUN_SIDE, 0, 0.6, 'torso', 'hull');
+    rig.setPart('Turret', look(...band));
+    // the gun pods pitch on their own bone
     const pods = [];
     for (const s of [1, -1]) {
       const x = s * GUN_SIDE;
@@ -233,25 +218,13 @@ export class SpiderMech {
         rb(M.trim, 0.24, 0.14, 0.36, 0.03, x, -0.32, 0.1), // ammo feed
       );
     }
-    this.guns.add(look(...pods));
-    this.muzzle = new THREE.Object3D();
-    this.muzzle.position.set(0, 0.06, 2.05); // between the pods; shots alternate to each pod (GUN_SIDE)
-    this.guns.add(this.muzzle);
-
-    // legs: femur and tibia bones are posed by IK every frame (root space), +Y along the segment, +Z facing out of the leg
-    // (placeBone)
-    this.legs = [];
+    rig.setPart('Guns', look(...pods));
+    // legs: femur beam with its armor and rams, tibia with the knee lens, shin, ankle and foot
     for (let i = 0; i < 6; i++) {
-      const side = i < 3 ? 1 : -1; // +X = the mech's left
-      const row = i % 3;
-      const femur = bone(this.root);
-      const tibia = bone(this.root);
-      const id = i;
       const F = LEG.femur;
       const T = LEG.tibia;
-      part(femur, 0.42, F, 0.44, M.hull, 0, F / 2, 0, 'limb', id);
-      part(femur, 0.48, F * 0.6, 0.12, M.plate, 0, F * 0.5, 0.26, 'limb', id);
-      femur.add(
+      rig.setPart(
+        `Femur${i}`,
         look(
           rb(M.hull, 0.4, F - 0.2, 0.42, 0.1, 0, F / 2, 0), // femur beam
           rb(M.plate, 0.48, F * 0.6, 0.1, 0.04, 0, F * 0.5, 0.26), // armor
@@ -265,10 +238,9 @@ export class SpiderMech {
           cyl(M.trim, 0.02, 0.02, F * 0.8, -0.14, F * 0.5, -0.24, 0, 0, 0, 5),
         ),
       );
-      const knee = part(tibia, 0.42, 0.42, 0.42, M.weak, 0, 0, 0, 'weak', id);
-      part(tibia, 0.32, T, 0.34, M.hull, 0, T / 2, 0, 'limb', id);
-      part(tibia, 0.54, 0.25, 0.54, M.plate, 0, T, 0, 'limb', id); // foot
-      tibia.add(
+      rig.lens(`Tibia${i}`, M.weak); // knee
+      rig.setPart(
+        `Tibia${i}`,
         look(
           cyl(M.trim, 0.29, 0.29, 0.14, 0, 0, 0, 0, 0, R, 14), // knee collar
           rb(M.hull, 0.32, T - 0.5, 0.34, 0.08, 0, T * 0.45, 0), // shin
@@ -281,6 +253,70 @@ export class SpiderMech {
           cyl(M.trim, 0.13, 0.03, 0.22, 0, T + 0.2, 0, 0, 0, 0, 8), // spike
         ),
       );
+    }
+  },
+};
+
+export class SpiderMech {
+  constructor(ctx, def) {
+    this.ctx = ctx;
+    this.t = TUNING;
+    this.kind = 'boss';
+    this.name = TUNING.name;
+    this.pos = new THREE.Vector3(...def.pos);
+    this.yaw = def.yaw ?? 0;
+    this.arena = def.arena ?? { minX: def.pos[0] - 10, maxX: def.pos[0] + 10, minZ: def.pos[2] - 10, maxZ: def.pos[2] + 10 }; // { minX, maxX, minZ, maxZ } from the level file: the boss stays inside, and wakes when the player walks in
+    this.maxHealth = this.health = TUNING.core;
+    this.alive = true;
+    this.lift = 0;
+    this.awake = false;
+    this.down = 0; // > 0: collapsed, core exposed (seconds left)
+    this.bite = 0; // core damage this collapse can still take
+    this.height = DORMANT_HEIGHT; // dormant: crouched
+    this.vel = new THREE.Vector3();
+    this.strafe = 1;
+    this.strafeTimer = 4;
+    this.detour = 1; // side the steering tries first (+1 left / -1 right)
+    this.stuck = 0;
+    this.rushTimer = 6; // s to the next charge
+    this.rushing = 0; // s left in a charge
+    this.flash = 0;
+    this.time = 0;
+    this.gun = { state: 'idle', timer: 2, shots: 0 };
+    this.mortarTimer = 4;
+    this.stomp = { state: 'idle', timer: 0 };
+    this.debris = [];
+    this.orbs = [];
+
+    const M = spiderMaterials();
+    this.mats = M;
+
+    // ----- skeleton + look (skeleton.js); hit boxes are invisible, the glowing lenses are drawn as they are -----
+    this.rig = buildSpiderSkeleton(this);
+    pickLook(spiderLooks, def.look, 'boss.spider')(this.rig, M);
+    this.debrisKind = !def.look || def.look === 'default' ? this.kind : `${this.kind}.${def.look}`; // debris chunks are baked per look
+    const B = this.rig.bones;
+    this.root = this.rig.root;
+    this.root.position.copy(this.pos);
+    this.root.rotation.y = this.yaw;
+    this.hitMeshes = this.rig.hitMeshes;
+    this.body = B.Body;
+    this.coreLift = B.CoreLift;
+    this.core = this.rig.lenses.CoreLift;
+    this.shutters = [B.ShutterL, B.ShutterR];
+    this.turret = B.Turret;
+    this.guns = B.Guns;
+    this.muzzle = this.rig.sockets.muzzle;
+
+    // legs: femur and tibia bones are posed by IK every frame (root space), +Y along the segment, +Z facing out of the leg
+    // (placeBone)
+    this.legs = [];
+    for (let i = 0; i < 6; i++) {
+      const side = i < 3 ? 1 : -1; // +X = the mech's left
+      const row = i % 3;
+      const femur = B[`Femur${i}`];
+      const tibia = B[`Tibia${i}`];
+      const knee = this.rig.lenses[`Tibia${i}`];
       const hip = new THREE.Vector3(side * HIPS[row][0], -0.1, HIPS[row][1]);
       const rest = new THREE.Vector3(side * REST[row][0], 0, REST[row][1]);
       const foot = this.root.localToWorld(rest.clone());
@@ -292,12 +328,12 @@ export class SpiderMech {
         health: TUNING.legHealth, alive: true,
       });
     }
-    this.skeleton = new THREE.Skeleton(bones);
+    this.skeleton = this.rig.skeleton;
     ctx.scene.add(this.root);
     this.#pose(0);
     this.skin = new RigidSkin(this.root, this.skeleton, { cullMargin: 1.6, lod: true });
     rim([M.hull, M.plate, M.trim, this.skin.lodMaterial]);
-    ctx.debris.prime(this.kind, this.skin);
+    ctx.debris.prime(this.debrisKind, this.skin);
     ctx.markDirty();
   }
 
@@ -437,7 +473,7 @@ export class SpiderMech {
   // The pieces on these bones (look, weak part) fly off as debris chunks.
   #debris(bones, dir) {
     DEBRIS_DIR.copy(dir);
-    this.ctx.debris.burst(this.kind, this.skin, this.ctx.scene, this.debris, DEBRIS, bones);
+    this.ctx.debris.burst(this.debrisKind, this.skin, this.ctx.scene, this.debris, DEBRIS, bones);
   }
 
   #die(dir) {

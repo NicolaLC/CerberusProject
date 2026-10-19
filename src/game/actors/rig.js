@@ -95,6 +95,16 @@ export class Rig {
     }
   }
 
+  // Refit a dummy box to a look's silhouette: { Bone: [w, h, d, x, y, z] } (zones stay those of the bone).
+  fit(boxes) {
+    for (const [bone, [w, h, d, x, y, z]] of Object.entries(boxes)) {
+      const m = this.parts[bone];
+      m.geometry = new THREE.BoxGeometry(w, h, d);
+      m.position.set(x, y, z);
+      m.userData.size = [w, h, d];
+    }
+  }
+
   // Swap the visual for a bone (e.g. a modeled GLTF piece authored around the bone origin).
   setPart(bone, object) {
     const old = this.parts[bone];
@@ -169,6 +179,7 @@ const _yAxis = new THREE.Vector3(0, 1, 0);
 const _pw = [0, 0, 0];
 const _pr = [0, 0, 0];
 const _pole = new THREE.Vector3();
+const _rn = new THREE.Vector3(); // reload layer: the hand before the reload moves it
 const _euler = new THREE.Euler();
 // IK scratch (the animator runs for every rig every frame: no allocations below)
 const _fp = new THREE.Vector3();
@@ -207,6 +218,20 @@ const RUN = {
   hipsLean: 0.14,
   twist: 0.22, // hips yaw, shoulders counter-rotate
   armPump: 1.15,
+};
+// Reload layer (player rig; the state's `reload` = { p: reload-bar progress 0..1, result } while weapon.reloading runs).
+// One table row per gun, phases in fractions of the reload bar: a = old mag out (it drops), b = left hand at the belt
+// (new mag in hand), c = mag under the magwell, d = seated (the active-reload windows sit around c..d), e = hand back on
+// the foregrip. roll / pitch: how far the right hand tilts the gun (rad, muzzle down), belt: hips-local point
+// (x mirrored to the support side), shove: how far below the magwell the mag starts its push.
+const RL_RIFLE = { a: 0.1, b: 0.26, c: 0.4, d: 0.48, e: 0.78, roll: 0.75, pitch: 0.3, belt: [0.24, 0.0, 0.08], shove: 0.09 };
+const RELOAD = {
+  rifle: RL_RIFLE,
+  burst: { ...RL_RIFLE, c: 0.4, d: 0.5 },
+  mg: { a: 0.12, b: 0.32, c: 0.48, d: 0.56, e: 0.85, roll: 0.85, pitch: 0.35, belt: [0.26, 0.06, 0.06], shove: 0.13 }, // heavy box: slower, bigger swing
+  sniper: { a: 0.1, b: 0.28, c: 0.42, d: 0.5, e: 0.8, roll: 0.6, pitch: 0.22, belt: [0.24, 0.0, 0.08], shove: 0.08 },
+  rail: { a: 0.12, b: 0.3, c: 0.44, d: 0.52, e: 0.82, roll: 0.75, pitch: 0.28, belt: [0.24, 0.02, 0.08], shove: 0.1 }, // capacitor cell
+  pistol: { a: 0.15, b: 0.3, c: 0.42, d: 0.5, e: 0.8, roll: 0.9, pitch: 0.18, belt: [0.18, 0.0, 0.1], shove: 0.07 }, // quick swap close to the hip
 };
 const HIP_YAW = 0.9; // rad: strafing turns the hips (and legs) toward the movement, the chest keeps facing
 const LOCK_RELEASE = 0.45; // m: a planted foot this far from its pose (spinning on the spot, a shove) lets go
@@ -462,6 +487,7 @@ export class Animator {
         blendTo(B.LeftForeArm, -1.5 - 0.4 * Math.max(0, -sw), 0, 0, pump);
         blendTo(B.LeftHand, 0, 0, 0, pump);
       }
+      if (s.reload || this.rl.on) this.#reload(dt, s, hs);
     } else {
       // unarmed: arms swing against the legs, more and with bent elbows when running
       const a = mix(0.35, 0.8, g) * amt;
@@ -474,6 +500,99 @@ export class Animator {
       this.#refresh();
     }
 
+  }
+
+  // Reload layer: after the gun hold and arm IK. The right hand rolls the gun (Weapon bone), the left hand leaves the
+  // foregrip, pulls the old mag (it falls), fetches a new one at the belt, seats it with a shove and returns.
+  // `ph` follows the bar's progress; an active-reload success ends the bar early so ph runs the rest fast (snappy seat);
+  // a jam holds ph while the hand slaps the mag; switching guns (s.lower) or a missing row fades it out at once.
+  rl = { on: false, ph: 0, w: 0, fall: 0, slap: 0, tt: 0 };
+  gun = null; // gun id (PlayerView.setGun)
+  mag = null; // { gun, hand, base }: the model's magazine group, the one in the left hand, magwell bottom (gun space)
+  rlGoal = new THREE.Object3D();
+  #reload(dt, s, hs) {
+    const rl = this.rl;
+    const R = s.reload;
+    const cfg = RELOAD[this.gun];
+    const B = this.rig.bones;
+    if (R && cfg && !(s.lower > 0.001)) {
+      if (!rl.on) Object.assign(rl, { on: true, ph: 0, w: 0, fall: 0, slap: 0 });
+      else if (rl.fin) Object.assign(rl, { ph: 0, fall: 0, fin: false }); // a new reload while the last one fades out
+      rl.ph = Math.max(rl.ph, R.p);
+      rl.w = Math.min(1, rl.w + dt * 8);
+      rl.jam = R.result === 'jam' && R.p < rl.ph - 0.001;
+    } else if (!cfg || s.lower > 0.001 || rl.ph >= cfg.e) {
+      rl.fin = true;
+      rl.w -= dt * (s.lower > 0.001 ? 12 : 8); // cancelled, or finished: hand is already back on the grip
+      rl.jam = false;
+    } else {
+      rl.fin = true;
+      rl.ph += dt * (rl.ph < cfg.c ? 5 : 1.6);
+      rl.jam = false;
+    }
+    if (rl.w <= 0) {
+      rl.on = false;
+      this.#magReset();
+      return;
+    }
+    const { a, b, c, d, e } = cfg;
+    const ph = rl.ph;
+    rl.tt += dt;
+    rl.slap += ((rl.jam ? 1 : 0) - rl.slap) * (1 - Math.exp(-dt * 20));
+    const rw = smoothstep(0, 1, rl.w);
+    const support = hs > 0 ? 'Left' : 'Right';
+    const hand = B[support + 'Hand'];
+    hand.updateWorldMatrix(false, false);
+    const now = _rn.setFromMatrixPosition(hand.matrixWorld);
+    // the gun rolls (magwell toward the support side) and dips; back to level between d and e
+    const tw = smoothstep(0, a, ph) * (1 - smoothstep(d, e, ph)) * rw;
+    B.Weapon.rotation.z += cfg.roll * tw * hs;
+    B.Weapon.rotation.x += cfg.pitch * tw;
+    this.#refresh();
+    // hand path in gun space: grip -> mag bottom -> belt -> under the magwell -> seat -> grip
+    const grip = this.rig.sockets.gripL;
+    const base = this.mag?.base ?? _d.set(0, -0.15, 0.35);
+    const low = _e.copy(base);
+    low.y -= cfg.shove;
+    const belt = B.Hips.localToWorld(_a.set(cfg.belt[0] * hs, cfg.belt[1], cfg.belt[2]));
+    B.Weapon.worldToLocal(belt);
+    const goal = _b;
+    if (ph < a) goal.copy(grip.position).lerp(base, smoothstep(0, a, ph));
+    else if (ph < b) goal.copy(base).lerp(belt, smoothstep(a, b, ph));
+    else if (ph < c) goal.copy(belt).lerp(low, smoothstep(b, c, ph));
+    else if (ph < d) goal.copy(low).lerp(base, smoothstep(c, d, ph));
+    else goal.copy(base).lerp(grip.position, smoothstep(d, e, ph));
+    if (rl.slap > 0.01) goal.lerp(_a.copy(low).lerp(base, Math.abs(Math.sin(rl.tt * 10))), rl.slap); // jam: the hand slaps the mag
+    const m = this.mag;
+    if (m) {
+      const slapping = rl.slap > 0.5;
+      rl.fall = ph >= a ? rl.fall + dt : 0;
+      const fell = ph >= a && ph < d;
+      m.hand.visible = slapping || (ph >= b && ph < d);
+      m.hand.position.copy(goal).sub(base);
+      m.gun.visible = !slapping && (!fell || rl.fall < 0.45);
+      if (fell) {
+        m.gun.position.set(0, -4.9 * rl.fall * rl.fall - 0.05 * rl.fall, 0);
+        m.gun.rotation.z = rl.fall * 3 * hs;
+      } else {
+        m.gun.position.set(0, 0, 0);
+        m.gun.rotation.z = 0;
+      }
+    }
+    B.Weapon.localToWorld(goal);
+    goal.lerp(now, 1 - rw);
+    this.rlGoal.position.copy(goal);
+    this.#armIK(hs > 0 ? 'Right' : 'Left', this.rig.sockets.gripR, hs > 0 ? -1 : 1);
+    this.#armIK(support, this.rlGoal, hs > 0 ? 1 : -1);
+  }
+
+  #magReset() {
+    const m = this.mag;
+    if (!m) return;
+    m.gun.visible = true;
+    m.gun.position.set(0, 0, 0);
+    m.gun.rotation.z = 0;
+    m.hand.visible = false;
   }
 
   // Dormant layer (DORMANT): after the arms (it overrides the gun hold / swing), before the legs and feet IK.

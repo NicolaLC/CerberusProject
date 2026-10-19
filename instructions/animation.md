@@ -63,6 +63,17 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
 - Hit zones come from bone names (`HIT_ZONE`): Head/Neck → head, Hips/Spine* → torso, rest → limb.
   Puppet weak spots are extra meshes with zone `weak`.
 
+## Every enemy has a skeleton (`actors/skeleton.js`)
+Owner rule: swap parts and make variants without touching animation. Humanoids (trooper, puppets) do it with `rig.js` (Mixamo bones, `EnemyBody`); the drone, the SX-6 and CERBERUS do it with `BoneRig`:
+- **Skeleton** = a bone table in the kind's file (`BONES`, like rig.js's): `{ Name: { parent, pos, order?, data? } }` in creation order (= bone index in the RigidSkin and the debris bake: never reorder), plus a hit table (invisible boxes, `userData` zone / part) and sockets. `buildDroneSkeleton(owner)` / `buildSpiderSkeleton(owner)` / `buildCerberusSkeleton(owner)` return a `BoneRig`: `rig.root`, `rig.bones[name]`, `rig.skeleton`, `rig.sockets[name]`, `rig.hitMeshes`, `rig.setPart(bone, obj)` (the bone's main piece, replaces), `rig.attach(bone, obj)` (an extra piece: debris breaks each off as its own chunk), `rig.socket(bone, name, x, y, z)`, `rig.partsOf(bone)`, `rig.lens(bone, material)` (lights a weak-spot lens), `rig.helper()` (H). No castShadow forcing (unlike rig.js setPart): RigidSkin batches, draw counts and LOD stay as they were.
+- **Look** = `kindLooks[name](rig, M)`: only adds meshes to named bones (no bones, no animation state, no gameplay variables). Weak spots: the hit table holds the lens as a hidden hit box and the look shows it with `rig.lens(bone, M.weak)`; muzzles and weak centres are sockets. A variant is another function in the table (`droneLooks`, `spiderLooks`, `cerberusLooks`; each already has `default`).
+- **Animation / AI** touch `rig.bones[...]` and `rig.sockets[...]` only, never look meshes. Test: `tests/library.browser.mjs` section 1b (every part swapped, same pose after 120 steps).
+- **`look` param** (every enemy piece, optional, default `default`): validated against the kind's table (unknown: `unknown look "x", expected one of ...`), an enum in the Workshop inspector, listed in the Library label. A look with other pieces needs its own debris key (done: `debrisKind` is `<kind>.<look>` for non-default).
+- Humanoids: looks `default` / `plated` (`plated` = the `armored` param; `look` wins when both are given); trooper.js / puppet.js wrap the existing builders, looks.js is untouched.
+- Bones: **drone** `Body` (tilts), `Rotor0..3` (spin); socket `muzzle`. **SX-6** `Body`, `CoreLift`, `ShutterL/R`, `Turret`, `Guns`, `Femur0..5`, `Tibia0..5` (root-space IK); socket `muzzle`; lenses `CoreLift`, `Tibia0..5`. **CERBERUS** `Frame` (legs), `Body`, `Vigil`, `Legion`, `Colossus` (YXZ aim); sockets `<head>Muzzle`, `<head>Weak`.
+
+`rig.fit({ Bone: [w, h, d, x, y, z] })` refits dummy hit boxes to a look's silhouette (trooper: `buildTrooper` calls it; zones unchanged). Weak spots (enemy.js `#placeWeakSpots`) are raycast onto the look's surface and follow its normal; radius 0.04-0.055.
+
 ## Guns on the rig
 - Gun models are authored from the stock (z = 0) forward along +Z and hang on `Weapon`; only the equipped one is visible.
 - Grips must stay within arm reach: gripR ~0.36m from the right shoulder, gripL ~0.57m from the left one

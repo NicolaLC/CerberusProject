@@ -23,14 +23,15 @@ const _step = new THREE.Vector3();
 
 export class Puppet extends EnemyBody {
   constructor(ctx, def) {
+    const plated = def.look != null ? def.look === 'plated' : !!def.armored; // `look` wins over `armored` when both are given
     super(ctx, {
       kind: def.kind,
       pos: def.pos,
       yaw: def.yaw ?? 0,
       health: def.kind === 'shooter' ? HEALTH.shooter : HEALTH.default,
-      mats: def.armored ? puppetMaterials(ARMORED, true) : puppetMaterials(def.kind === 'shooter' ? 0x8a6a24 : 0xc9a640), // shooters: a darker ochre
+      mats: plated ? puppetMaterials(ARMORED, true) : puppetMaterials(def.kind === 'shooter' ? 0x8a6a24 : 0xc9a640), // shooters: a darker ochre
     });
-    this.armored = !!def.armored; // `armored` param: plate steel, only heavy rounds (GUNS ammo 'heavy') hurt it
+    this.armored = plated; // look 'plated' / `armored` param: plate steel, only heavy rounds (GUNS ammo 'heavy') hurt it
     buildPuppet(this.rig, this.mats, this.visor);
     this.home = this.pos.clone();
     this.to = def.to ? new THREE.Vector3(...def.to) : null;

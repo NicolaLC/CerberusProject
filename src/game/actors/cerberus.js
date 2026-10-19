@@ -58,7 +58,6 @@ const _k = new THREE.Vector3();
 const _f = new THREE.Vector3();
 const _yAxis = new THREE.Vector3(0, 1, 0);
 const BLAST = { point: new THREE.Vector3(), radius: 0, kind: '' };
-const HITBOX_MAT = new THREE.MeshBasicMaterial(); // never drawn
 const ORB_GEO = new THREE.SphereGeometry(0.28, 12, 8);
 const ORB_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(PROJECTILE.core).multiplyScalar(5) });
 const ORB_GLOW_GEO = new THREE.SphereGeometry(0.6, 12, 8);
@@ -111,17 +110,9 @@ export class Cerberus {
     M.eye.userData.lodGlow = 3;
     this.mats = M;
     this.matList = [M.shell, M.frame, M.trim, M.eye, ...M.heads, ...M.weak];
-    this.hitMeshes = [];
-    // `head` set: that head takes damage (`weak`: its weak spot); else it is hull (armor 0)
-    const hit = (b, w, h, d, x, y, z, head = null, weak = false) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), HITBOX_MAT);
-      m.position.set(x, y, z);
-      m.visible = false;
-      m.userData = { enemy: this, zone: weak ? 'weak' : 'torso', part: head == null ? 'hull' : 'head', head };
-      b.add(m);
-      this.hitMeshes.push(m);
-    };
-    const model = buildCerberus(M, { hit });
+    const model = buildCerberus(M, { owner: this, look: def.look }); // invisible hit boxes: `head` set takes damage (`weak`: its weak spot), else hull (armor 0)
+    this.rig = model.rig;
+    this.hitMeshes = model.rig.hitMeshes;
     this.root = model.root;
     this.root.position.copy(this.pos);
     this.root.rotation.y = this.yaw;
@@ -132,9 +123,9 @@ export class Cerberus {
       const h = this.heads[i];
       h.bone = m.bone;
       h.muzzle = m.muzzle;
-      h.weak = m.weak.children[0];
+      h.weak = m.weak;
     });
-    this.skeleton = new THREE.Skeleton(model.bones);
+    this.skeleton = model.rig.skeleton;
     ctx.scene.add(this.root);
     this.#pose(0, null);
     this.skin = new RigidSkin(this.root, this.skeleton, { cullMargin: 1.4, lod: true });

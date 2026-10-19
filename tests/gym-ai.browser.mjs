@@ -214,6 +214,39 @@ expect('troopers: they shoot back', tr.bolts > 0);
 expect('troopers: never stand inside geometry', !tr.inside);
 
 // =====================================================================================================
+// 3b. peek transition: ducking / rising / stepping out is a weight between 0 and 1, the body never moves faster than
+//     the troopers' run, and nothing fires before the trooper is out
+// =====================================================================================================
+const pk = await p.evaluate(() => {
+  const { enemies, player } = window.game;
+  const squad = T.kind('trooper');
+  const out = { ramp: { low: 0, high: 0 }, peeks: 0, maxSpeed: 0, fireMinOut: 1, fireFrames: 0 };
+  const last = new Map();
+  const v = new (player.pos.constructor)();
+  const at = player.pos.clone();
+  for (let i = 0; i < 60 * 40; i++) {
+    player.pos.copy(at);
+    T.god();
+    window.game.engine.step(1 / 60);
+    for (const t of squad) {
+      if (!t.alive || !t.spot) continue;
+      if (t.state === 'peek') out.peeks++;
+      if (t.out > 0.02 && t.out < 0.98 && (t.state === 'cover' || t.state === 'peek' || t.state === 'aim' || t.state === 'fire')) out.ramp[t.spot.type === 'low' ? 'low' : 'high']++;
+      if (t.state === 'fire') { out.fireFrames++; out.fireMinOut = Math.min(out.fireMinOut, t.out); }
+      t.rig.bones.Hips.getWorldPosition(v);
+      const q = last.get(t);
+      if (q && t.state !== 'move' && q.state !== 'move') out.maxSpeed = Math.max(out.maxSpeed, Math.hypot(v.x - q.x, v.z - q.z) * 60);
+      last.set(t, { x: v.x, z: v.z, state: t.state });
+    }
+  }
+  return out;
+});
+console.log(`  peek frames ${pk.peeks}, transition frames low ${pk.ramp.low} high ${pk.ramp.high}, fire frames ${pk.fireFrames}, min weight while firing ${pk.fireMinOut.toFixed(3)}, max hips speed outside moves ${pk.maxSpeed.toFixed(2)} m/s`);
+expect('peek: the pose weight passes through 0..1 for several frames (not a teleport)', pk.peeks > 0 && pk.ramp.low + pk.ramp.high >= 10, JSON.stringify(pk));
+expect('peek: the hips stay at or below run speed (4.6 m/s) while ducking, rising and stepping out', pk.maxSpeed <= 4.6, String(pk.maxSpeed));
+expect('peek: no bolt before the trooper is out (weight 1 whenever it fires)', pk.fireFrames > 0 && pk.fireMinOut >= 0.99, String(pk.fireMinOut));
+
+// =====================================================================================================
 // 4. K freezes the AI, 5. L stands them down, 6. J respawns
 // =====================================================================================================
 const fz = await p.evaluate(() => {

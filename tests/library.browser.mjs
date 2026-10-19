@@ -93,6 +93,45 @@ const bad = spawn.filter((s) => s.ok === false);
 expect(`${spawn.filter((s) => s.ok).length} spawns (every id, example and bare) without errors`, bad.length === 0, JSON.stringify(bad));
 expect('  every id that needs params carries an example (skipped: ' + spawn.filter((s) => s.skipped).map((s) => s.id).join(' ') + ')', true);
 
+// ---- 1b. every enemy has a skeleton (animation.md): a bone table, a look that only adds meshes, an animation that never reads them ----
+const skel = await p.evaluate(async () => {
+  const THREE = await import('/node_modules/three/build/three.module.js');
+  const g = window.game;
+  const out = {};
+  const seed = () => { let s = 4242; Math.random = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); };
+  const real = Math.random;
+  const run = (id, swap, look) => {
+    seed();
+    const e = g.enemies.spawn({ id, pos: [0, 0, 60], params: look ? { look } : {} });
+    const names = Object.keys(e.rig.bones);
+    if (swap) { // another mesh on every bone that has a part: the pose must not care
+      for (const n of names) if (e.rig.parts[n]) e.rig.setPart(n, new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()));
+    }
+    e.wake?.();
+    seed();
+    for (let i = 0; i < 120; i++) e.update(1 / 60, g.player);
+    e.root.updateMatrixWorld(true);
+    const pose = names.map((n) => { const b = e.rig.bones[n]; return [...b.position.toArray(), ...b.quaternion.toArray()].map((v) => +v.toFixed(5)).join(','); });
+    const sockets = Object.keys(e.rig.sockets);
+    g.enemies.despawn(e);
+    return { names, pose, sockets };
+  };
+  for (const id of ['enemy.drone', 'boss.spider', 'boss.cerberus']) {
+    const a = run(id, false);
+    const b = run(id, true);
+    out[id] = { bones: a.names.length, sockets: a.sockets.length, same: JSON.stringify(a.pose) === JSON.stringify(b.pose) };
+  }
+  Math.random = real;
+  let err = '';
+  try { g.enemies.spawn({ id: 'enemy.drone', pos: [0, 0, 60], params: { look: 'nope' } }); } catch (e) { err = e.message; }
+  out.err = err;
+  return out;
+});
+for (const id of ['enemy.drone', 'boss.spider', 'boss.cerberus']) {
+  expect(`${id}: bone table exposed (${skel[id].bones} bones), pose after 120 steps identical with every part swapped`, skel[id].bones > 1 && skel[id].same, JSON.stringify(skel[id]));
+}
+expect('an unknown look is a readable error', /unknown look "nope", expected one of default/.test(skel.err), skel.err);
+
 // ---- 2. every id is in the Library; captions carry id and label ----
 const GUN_NAMES = await p.evaluate(async () => Object.fromEntries(Object.entries((await import('/src/game/combat/guns.js')).GUNS).map(([k, v]) => [k, v.name])));
 const lib = await p.evaluate((GUN_NAMES) => {

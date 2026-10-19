@@ -166,6 +166,14 @@ check('no registry: JSON only', parseLevel('{"a":1}').a === 1);
   check('encounter pieces round-trip', true);
 }
 
+// enemy `look` (variant of the kind's skeleton) round-trips with its params; an unknown look is refused naming the options
+{
+  const pieces = [['enemy.trooper', 'plated'], ['enemy.static', 'plated'], ['enemy.drone', 'default'], ['boss.spider', 'default'], ['boss.cerberus', 'default']].map(([id, look], i) => ({ id, pos: [i, 0, 0], params: { look } }));
+  const lv = { name: 'look', spawn: { pos: [0, 0, 0] }, interiorZones: [], pieces };
+  check('enemy look round-trips on every enemy kind', JSON.stringify(parseLevel(serializeLevel(lv), registry).pieces) === JSON.stringify(pieces));
+  check('unknown enemy look throws, listing the options', throwsWith(() => parseLevel(serializeLevel(lv).replace('"plated"', '"shiny"'), registry), /look "shiny", expected one of default, plated/) === '');
+}
+
 // objective.action (#106) round-trips; an unknown action is refused. env.label input tokens (#107) per device.
 {
   const act = { name: 'a', spawn: { pos: [0, 0, 0] }, interiorZones: [], pieces: [{ id: 'objective.action', pos: [1, 0, 2], params: { action: 'vault', count: 2, size: [4, 3, 4] } }] };

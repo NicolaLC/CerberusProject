@@ -113,6 +113,7 @@ export function setAnisotropy(n) {
 // permanent textures shared by every model, never disposed.
 const WEAR = {
   paint: { base: 215, mottle: 22, chips: 90, edge: 0.13, chip: [70, 68, 66], scratches: 40, scratch: 255, streaks: 14, streak: 'rgba(30,26,20,0.16)' },
+  shell: { base: 215, mottle: 10, chips: 55, edge: 0.07, chip: [78, 76, 74], scratches: 30, scratch: 255, streaks: 7, streak: 'rgba(18,14,8,0.2)' }, // big curved shells (trooper dome): chips and oil streaks at the edges
   metal: { base: 205, mottle: 22, chips: 30, edge: 0.06, chip: [250, 250, 250], scratches: 40, scratch: 255, streaks: 10, streak: 'rgba(10,10,10,0.22)' },
   fabric: { base: 225, mottle: 30, chips: 0, edge: 0, chip: [0, 0, 0], scratches: 0, scratch: 255, streaks: 18, streak: 'rgba(40,34,26,0.14)' },
 };
@@ -172,7 +173,7 @@ export function wearTexture(kind = 'paint') {
 
 // A matte, weathered model material: `color` under one of the wear maps. The far LOD (one baked colour per part,
 // engine/batch.js) drops the map, so lodColor carries its average darkening.
-const WEAR_AVERAGE = { paint: 0.8, metal: 0.8, fabric: 0.85 };
+const WEAR_AVERAGE = { shell: 0.9, paint: 0.8, metal: 0.8, fabric: 0.85 };
 export function wornMaterial(color, { roughness = 0.8, metalness = 0.2, wear = 'paint', ...extra } = {}) {
   const m = new THREE.MeshStandardMaterial({ color, roughness, metalness, map: wearTexture(wear), ...extra });
   m.userData.lodColor = new THREE.Color(color).multiplyScalar(WEAR_AVERAGE[wear]);

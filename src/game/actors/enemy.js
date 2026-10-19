@@ -41,7 +41,9 @@ export function sightRay(from, to, meshes, slack = 0.5) {
 }
 
 const _inv = new THREE.Matrix4();
-const _box = new THREE.Box3();
+const _ray = new THREE.Raycaster();
+const _o = new THREE.Vector3();
+const _d = new THREE.Vector3();
 
 // Enemy outline: a faint violet rim (fresnel) in the emissive, so a dark robot reads against a dark room (art-style.md: violet =
 // HiveMind). Chained after a material's own onBeforeCompile (the far LOD's), one program per material kind (shared cache key).
@@ -65,7 +67,7 @@ export function rim(materials) {
 export class EnemyBody {
   // mats: the look's materials (all flash on a hit); visor: color of the glowing sensors (telegraphs shots). Sensors are
   // violet and the magenta weak spots stay the brightest thing on the body (art-style.md: if it glows violet, shoot it).
-  constructor(ctx, { kind, pos, yaw = 0, health, mats, visor = VISOR, armed = false, weakSpots = 2 }) {
+  constructor(ctx, { kind, pos, yaw = 0, health, mats, visor = VISOR, armed = false, weakSpots = 2, weakBones = WEAK_BONES }) {
     this.ctx = ctx;
     this.kind = kind;
     this.debrisKind = kind; // the debris bank's key (parts.js): a variant with other pieces on its bones needs its own
@@ -78,6 +80,7 @@ export class EnemyBody {
     this.debris = [];
     this.shed = []; // chunks knocked off while alive (a trooper's plates), tumbling with the debris
     this.weakCount = weakSpots;
+    this.weakBones = weakBones; // bones a weak spot may sit on (troopers: the chest)
 
     this.mats = mats;
     this.visor = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: visor, emissiveIntensity: VISOR_REST });
@@ -122,13 +125,13 @@ export class EnemyBody {
   // Glowing weak spots on random body parts (front face): an exposed power cell, a glowing core in a ring housing of the frame
   // material (no extra draw), with a round halo. Only the core is a hit mesh: hits there deal weakMult damage.
   #placeWeakSpots() {
-    const pool = [...WEAK_BONES];
+    const pool = [...this.weakBones];
     const housing = this.mats.frame ?? Object.values(this.mats)[0];
     for (let i = 0; i < this.weakCount; i++) {
       const bone = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
       const part = this.rig.parts[bone];
       const [w, h, d] = part.userData.size;
-      const r = THREE.MathUtils.clamp(Math.min(w, h) * 0.45, 0.06, 0.09);
+      const r = THREE.MathUtils.clamp(Math.min(w, h) * 0.3, 0.04, 0.055);
       const spot = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.9, 0.04, 16).rotateX(Math.PI / 2), this.weakMat);
       const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 1.12, r * 0.26, 6, 18), housing);
       ring.position.z = 0.012;
@@ -148,16 +151,18 @@ export class EnemyBody {
       spot.add(halo);
       spot.position.copy(part.position);
       spot.position.z += d / 2 + 0.02;
-      // mounted on the look's front (its armor would bury it), not the hitbox's
+      if (bone === 'Spine2' && this.weakBones === WEAK_BONES) spot.position.x += Math.random() < 0.5 ? 0.17 : -0.17; // beside the chest plate
+      // flush on the look's surface (not the hitbox's or the bone's max z): ray from in front into the look pieces, the
+      // spot sits on the hit point and follows its normal
       const host = this.rig.bones[bone];
-      host.updateWorldMatrix(true, false);
-      _inv.copy(host.matrixWorld).invert();
-      for (const c of host.children) {
-        if (!c.userData.noHit) continue;
-        _box.setFromObject(c).applyMatrix4(_inv);
-        spot.position.z = Math.max(spot.position.z, _box.max.z - 0.01);
+      host.updateWorldMatrix(true, true);
+      _ray.set(host.localToWorld(_o.set(spot.position.x, spot.position.y, 0.8)), _d.set(0, 0, -1).transformDirection(host.matrixWorld));
+      const hit = _ray.intersectObjects(host.children.filter((c) => c.userData.noHit), true)[0];
+      if (hit) {
+        spot.position.copy(host.worldToLocal(hit.point.clone()));
+        spot.position.z -= 0.005; // front face just proud of the surface
+        if (hit.face) spot.quaternion.setFromUnitVectors(_o.set(0, 0, 1), _d.copy(hit.face.normal).transformDirection(hit.object.matrixWorld).transformDirection(_inv.copy(host.matrixWorld).invert()));
       }
-      if (bone === 'Spine2') spot.position.x += Math.random() < 0.5 ? 0.17 : -0.17; // beside the chest plate
       spot.userData = { enemy: this, zone: 'weak', bone };
       this.rig.bones[bone].add(spot);
       this.weakSpots.push(spot);
