@@ -327,3 +327,5 @@ Gizmo: a camera on a post plus a line through every shot's from -> to (its own g
 Faces / flicker / label colours / boss arena in the inspector.
 
 HUD objective panel (`#objective`: `#obj-head` text, `#obj-detail` detail, `#obj-prog` progress; `Mission.hudPanel()`, `Hud` `#objective`): top right (`#feed`, the log line under it), hides `#kills-wrap` (the "TARGETS DOWN" counter, still shown without a mission). OBJECTIVE COMPLETE stays the existing toast.
+
+- Scripted `stem.fire` (view/cinematic.js) only targets members with a clear ray (gun y+1.4 to chest y+1.1 vs `world.colliders`); none clear: keeps aiming at the nearest and holds fire. The breakout cut walks STEM-00 into the doorway (last shot, 5 s) so squad members behind the jambs come into line; leftovers still die at the cut's end.

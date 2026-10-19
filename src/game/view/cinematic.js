@@ -236,13 +236,13 @@ export class Cinematic {
         p.sprinting = !seg.fall && p.vel.length() > TUNING.run;
       } else p.airborne = false;
     }
-    // fire: the nearest live member of the group, one round every interval
+    // fire: the nearest live member with a clear line, one round every interval; none clear: keep aiming at the nearest and hold fire
     let target = null;
+    let hold = false;
     const f = this.fire;
     if (f) {
-      const live = this.enemies.liveOf(f.group);
-      if (live.length) target = live.reduce((best, e) => (e.pos.distanceToSquared(p.pos) < best.pos.distanceToSquared(p.pos) ? e : best));
-      else this.fire = null;
+      [target, hold] = this.#pick(f.group);
+      if (!target) this.fire = null;
     }
     const at = target ? _aimAt.copy(target.pos).setY(target.pos.y + 1.1) : this.faceTo;
     p.aiming = this.aim || !!target;
@@ -252,15 +252,50 @@ export class Cinematic {
     p.aimPitch = p.aiming && at ? THREE.MathUtils.clamp(Math.atan2(at.y - (p.pos.y + 1.4), Math.hypot(at.x - p.pos.x, at.z - p.pos.z)), -1, 1) : 0;
     if (target) {
       f.acc += dt;
-      while (f.acc >= f.interval && target?.alive) {
+      while (f.acc >= f.interval && target && !hold) {
         f.acc -= f.interval;
         this.weapon?.shotAt(at);
         this.enemies.scriptKill(target, p.pos);
-        const live = this.enemies.liveOf(f.group);
-        target = live.length ? live.reduce((best, e) => (e.pos.distanceToSquared(p.pos) < best.pos.distanceToSquared(p.pos) ? e : best)) : null;
+        [target, hold] = this.#pick(f.group);
         if (target) at.copy(target.pos).setY(target.pos.y + 1.1);
       }
+      if (hold) f.acc = Math.min(f.acc, f.interval); // held: the next round goes the moment a line opens
     }
+  }
+
+  // [target, hold]: the nearest live member of the group with a clear ray from the gun to its centre; none clear: the nearest one, hold true.
+  #pick(group) {
+    const p = this.player;
+    let near = null;
+    let clr = null;
+    for (const e of this.enemies.liveOf(group)) {
+      const d = e.pos.distanceToSquared(p.pos);
+      if (!near || d < near.d) near = { e, d };
+      if ((!clr || d < clr.d) && this.#clear(p.pos, e.pos)) clr = { e, d };
+    }
+    return clr ? [clr.e, false] : [near?.e ?? null, !!near];
+  }
+
+  // Slab test of the gun (y + 1.4) to the chest (y + 1.1) segment against the world's colliders.
+  #clear(a, b) {
+    const ay = a.y + 1.4;
+    const by = b.y + 1.1;
+    for (const c of this.enemies.world.colliders) {
+      let t0 = 0;
+      let t1 = 1;
+      for (const k of [0, 1, 2]) {
+        const [ak, bk, mn, mx] = k === 0 ? [a.x, b.x, c.box.min.x, c.box.max.x] : k === 1 ? [ay, by, c.box.min.y, c.box.max.y] : [a.z, b.z, c.box.min.z, c.box.max.z];
+        const d = bk - ak;
+        if (Math.abs(d) < 1e-9) { if (ak < mn || ak > mx) { t0 = 2; break; } continue; }
+        let u0 = (mn - ak) / d;
+        let u1 = (mx - ak) / d;
+        if (u0 > u1) [u0, u1] = [u1, u0];
+        t0 = Math.max(t0, u0);
+        t1 = Math.min(t1, u1);
+      }
+      if (t0 <= t1) return false;
+    }
+    return true;
   }
 
   // The end of the cut (played or skipped): every shot not run yet runs its end state, what the fire groups have left dies,
