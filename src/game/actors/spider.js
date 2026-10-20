@@ -757,7 +757,7 @@ export class SpiderMech {
     this.mortarTimer -= dt * (player.cover ? m.coverBoost : 1);
     if (this.mortarTimer > 0) return;
     this.mortarTimer = m.every[0] + Math.random() * (m.every[1] - m.every[0]);
-    if (player.pos.distanceTo(this.pos) < m.minRange) return;
+    if (player.pos.distanceTo(this.pos) < m.minRange || this.ctx.world.isInterior(player.pos)) return; // no lob through a roof into another room
     const o = this.#orb();
     this.root.updateMatrixWorld(true);
     o.obj.position.set(this.pos.x, this.pos.y + this.height + 1.2, this.pos.z);

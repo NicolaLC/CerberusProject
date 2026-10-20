@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 // Over-the-shoulder third-person camera: collision, aim zoom and "juice"
-// (smoothed follow, trauma shake, FOV punch, strafe roll, recoil recovery, landing dip, sprint bob).
+// (smoothed follow, trauma shake, FOV punch, strafe roll, recoil recovery, landing dip, footfall bob).
 const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
 const _v = new THREE.Vector3();
 const _dir = new THREE.Vector3();
@@ -25,7 +25,9 @@ const TUNING = {
   recoilRecoverDelay: 0.08, // s after the last shot before the aim settles back
   dist: { normal: 3.4, aim: 1.9, sprint: 3.9 },
   fov: { normal: 70, aim: 50, sprint: 78, slide: 8 }, // slide: extra degrees during the vault slide (not while aiming)
-  bob: { walk: 0.015, sprint: 0.05 },
+  // footfall bob (step(), on each 'player:step'): a kick into the dip spring (m/s; peak dip ~0.042 x kick: walk ~1.3 cm,
+  // sprint ~3.8 cm) and a roll alternating with the foot (rad); none while aiming
+  bob: { walk: 0.3, sprint: 0.9, roll: 0.006 },
   // boss lock-on: the camera turns to keep `focus` framed whenever the player isn't steering it
   // first-person hold after the boot intro (`intro.boot` pov): defaults of { release (m), timeout (s, none: an idle pull-back in the cradle would end inside the head), blend (s) }, eye offset ahead of the head pivot
   pov: { release: 1.2, timeout: Infinity, blend: 1.2, eye: 0.12, hide: 0.6 },
@@ -67,7 +69,8 @@ export class CameraRig {
     this.kickYaw = 0;
     this.dipY = 0;
     this.dipV = 0;
-    this.bob = 0;
+    this.stepSide = 1; // the foot that lands next: the bob roll alternates with it
+    this.aiming = false; // last update's aim state (step() skips the bob while aiming)
   }
 
   // Back behind the player at a level start: looking the way the spawn faces (player.facing - PI), no leftover
@@ -87,7 +90,7 @@ export class CameraRig {
     this.smoothPivot = null;
     this.trauma = this.fovKick = this.roll = 0;
     this.recoilDebt = this.recoilYawDebt = this.kickPitch = this.kickYaw = 0;
-    this.dipY = this.dipV = this.bob = 0;
+    this.dipY = this.dipV = 0;
   }
 
   // First-person POV hold (view/boot.js, `intro.boot` pov): the camera sits at STEM-00's eye until `armed` (the boot ended), then
@@ -123,6 +126,15 @@ export class CameraRig {
 
   dip(v) {
     this.dipV -= v;
+  }
+
+  // A footfall (Juice, 'player:step'): the camera sinks a little and rolls toward the landing foot.
+  step(run) {
+    if (this.aiming) return;
+    const b = this.t.bob;
+    this.dipV -= run ? b.sprint : b.walk;
+    this.stepSide = -this.stepSide;
+    this.roll += this.stepSide * b.roll * (run ? 1 : 0.5);
   }
 
   // FOV when fully aimed with the current gun
@@ -189,7 +201,7 @@ export class CameraRig {
 
   update(dt, player, realDt = dt) {
     const t = this.t;
-    const aiming = player.aiming;
+    const aiming = (this.aiming = player.aiming);
     this.time += realDt;
     if (this.script) return this.#scripted(dt);
     const k = 1 - Math.exp(-dt * 12);
@@ -247,15 +259,12 @@ export class CameraRig {
     const slideFov = aiming ? 0 : t.fov.slide * player.sliding;
     this.fov += ((zoomed ? this.zoom.fov : t.fov[mode] + framing * t.focus.fov + slideFov) - this.fov) * (1 - Math.exp(-dt * (zoomed ? 11 : 8)));
 
-    // strafe roll + sprint bob
+    // strafe roll (the footfall roll from step() eases out through it)
     const v = player.vel;
     const strafe = v.x * Math.cos(this.yaw) - v.z * Math.sin(this.yaw);
     this.roll += (-strafe * 0.004 - this.roll) * (1 - Math.exp(-dt * 6));
-    const speed = Math.hypot(v.x, v.z);
-    this.bob += dt * speed * 2.2;
-    const bobAmt = player.sprinting ? t.bob.sprint : speed > 0.5 && !aiming ? t.bob.walk : 0;
 
-    // landing dip spring
+    // landing / footfall dip spring
     this.dipV += (-this.dipY * 140 - this.dipV * 14) * dt;
     this.dipY += this.dipV * dt;
 
@@ -274,7 +283,7 @@ export class CameraRig {
     this.smoothPivot.z += (target.z - this.smoothPivot.z) * kx;
     this.smoothPivot.y += (target.y - this.smoothPivot.y) * ky;
     this.pivot.copy(this.smoothPivot);
-    this.pivot.y += this.dipY + Math.abs(Math.sin(this.bob)) * bobAmt;
+    this.pivot.y += this.dipY;
 
     const desired = _v.copy(this.pivot).addScaledVector(this.right, this.side);
     desired.y += 0.15;

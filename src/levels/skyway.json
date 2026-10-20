@@ -1144,7 +1144,7 @@
     {"id":"objective.destroy","name":"deck-patrol","pos":[0,0,-80],"params":{"text":"CLEAR THE DECK","group":"deck","wakeGroup":"deck","order":20,"detail":"Hostiles ahead on the bridge. Use the wrecks for cover."}},
     {"id":"objective.reach","name":"far-span","pos":[0,0,-97],"params":{"text":"REACH THE FAR SPAN","size":[7,3,4],"order":30,"detail":"Pass the barricade and cross to the far end of the bridge."}},
     {"id":"objective.reach","name":"cerberus-cut","pos":[0,0,-99.5],"params":{"text":"CERBERUS","size":[1,1,1],"trigger":"cerberus-cut","order":35,"detail":"Hold on."}},
-    {"id":"objective.survive","name":"hivemind","pos":[0,0,-120],"params":{"text":"DESTROY THE HIVEMIND","time":45,"wakeGroup":"cerberus","order":40,"detail":"Shoot the glowing weak spots on its three heads. Stay in cover."}},
+    {"id":"objective.survive","name":"hivemind","pos":[0,0,-120],"params":{"text":"DESTROY THE HIVEMIND","endOnDeath":true,"wakeGroup":"cerberus","order":40,"detail":"Shoot the glowing weak spots on its three heads. Stay in cover."}},
     {"id":"objective.reach","name":"the-fall","pos":[0,0,-108],"params":{"text":"THE FALL","size":[1,1,1],"trigger":"the-fall","order":50,"detail":"Hold on."}},
     {"id":"log.line","pos":[0,1.6,20],"params":{"text":"> ALTITUDE: 1,140 M. EXIT: FOUND. TARGET: AHEAD.","on":"trigger:step-out"}},
     {"id":"log.line","pos":[1,1.6,20],"params":{"text":"> HOSTILES DESTROYED: 5. SIGNAL: STRONGER. DIRECTIVE: UNCHANGED.","on":"objective:deck-patrol:done"}},

@@ -185,8 +185,8 @@ Measures what content costs, so encounters can be budgeted (numbers: `engine.md`
 - **Room**: 80 x 80 m floor, a ring of 16 cover boxes at r = 26 (alternating low 1.1 and high 2.8, so cover and shadows are drawn too),
   a few labels. Spawn (0, 0, 36) facing the centre. Axis-aligned boxes and the existing materials only.
 - **Tool** (`gym/stress.js`, `StressTool`): a DOM panel (top-left) with a slider per kind: puppets (`enemy.static`), troopers
-  (`enemy.trooper`), drones (`enemy.drone`), point lights (`light.point`), effect bursts per second (a `blast` event: 16 sparks,
-  smoke, shockwave ring; sparks are capped at 256 by `fx.js`). Units are built through the registry (same builders as a level file)
+  (`enemy.trooper`), drones (`enemy.drone`), point lights (`light.point`), effect bursts per second (a drone `blast` event: 16 sparks,
+  smoke; sparks are capped at 256 by `fx.js`). Units are built through the registry (same builders as a level file)
   on concentric rings around the centre (`ringSlot`), so a count always costs the same. Buttons: Destroy (kills every spawned enemy:
   debris cost), Clear, Sweep.
 - **Keys**: click a row to select it, `[` / `]` step its count down / up (Shift: 4 at a time), `P` runs the sweep: for every kind

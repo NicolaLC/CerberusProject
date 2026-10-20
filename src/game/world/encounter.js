@@ -68,7 +68,7 @@ const entry = (sys, d) => sys.add('entry', d);
 const sizeCheck = (p) => (Array.isArray(p.size) && p.size.length === 3 && p.size.every((n) => typeof n === 'number' && n > 0) ? null : 'size must be [w, h, d], all above 0');
 const common = [{ key: 'text', type: 'text' }, { key: 'detail', type: 'text', optional: true }, { key: 'order', type: 'number', optional: true }, { key: 'limit', type: 'number', optional: true, min: 0.1 }, { key: 'wakeGroup', type: 'text', optional: true }, { key: 'spawnGroup', type: 'text', optional: true },
   { key: 'grantGun', type: 'enum', options: Object.keys(GUNS), optional: true }, { key: 'grantAmmo', type: 'number', optional: true, min: 0 }, { key: 'skipOn', type: 'text', optional: true },
-  { key: 'requiresGun', type: 'enum', options: Object.keys(GUNS), optional: true }, { key: 'skipIfOwned', type: 'enum', options: Object.keys(GUNS), optional: true }];
+  { key: 'requiresGun', type: 'enum', options: Object.keys(GUNS), optional: true }, { key: 'skipIfOwned', type: 'enum', options: Object.keys(GUNS), optional: true }, { key: 'endOnDeath', type: 'bool', def: false }];
 const objective = (obj, label, params, own) => ({ example: { params: { text: TEXT[obj], ...params } }, label, fields: [...common, ...own], check: (p, registry) => objectiveGrantProblem(p, registry.guns), build: (sys, d) => sys.add('objective', d, obj) });
 
 // Problem with an objective's `grantGun` / `grantAmmo` / `skipOn` / `requiresGun` / `skipIfOwned` (Mission: a gun granted when it completes, a trigger / checkpoint id that skips it,
@@ -475,6 +475,7 @@ export class Encounter {
     const grant = objectiveGrantProblem(p, this.registry.guns);
     if (grant) bad(id, grant);
     if (p.limit !== undefined && !(typeof p.limit === 'number' && p.limit > 0)) bad(id, 'limit must be a number above 0 (seconds)');
+    if (p.endOnDeath !== undefined && typeof p.endOnDeath !== 'boolean') bad(id, 'endOnDeath must be true or false');
     if (p.promptAt !== undefined && !(Array.isArray(p.promptAt) && p.promptAt.length === 3 && p.promptAt.every(Number.isFinite))) bad(id, 'promptAt must be [x, y, z]');
     rec.obj = obj;
     rec.text = p.text ?? TEXT[obj];

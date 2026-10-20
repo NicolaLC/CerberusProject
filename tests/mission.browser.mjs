@@ -213,6 +213,23 @@ const ev = (fn, arg) => p.evaluate(fn, arg);
   expect('reach with trigger: the box is not tested, trigger:fired completes it, checkpoint:reached completes the next', r.inBox === 0 && r.afterTrigger === 1 && r.state === 'complete' && r.hud === 'MISSION COMPLETE', JSON.stringify(r));
 }
 
+// ---- 3c2. endOnDeath (the Skyway's scripted loss): a survive with no clock, done deathBeat s after the player dies, no restart ----
+{
+  const r = await ev(() => {
+    const g = window.game;
+    const m = g.mission;
+    const t = T.setup([['objective.survive', [0, 0, -20], { time: 1, endOnDeath: true }], ['objective.reach', [30, 0, 30]]]);
+    t.play(); T.step(2);
+    const alive = { index: m.index, hud: T.hud().text };
+    g.player.damage(1e4);
+    T.step(0.5);
+    const early = { index: m.index, overlay: getComputedStyle(document.getElementById('death')).display };
+    T.step(2.5); // the shield break's slow motion stretches the beat
+    return { alive, early, index: m.index, lost: m.lost, dead: g.player.dead };
+  });
+  expect('endOnDeath: no survive clock and no end while alive; the death completes it after the beat, without the restart overlay', r.alive.index === 0 && r.alive.hud === 'SURVIVE' && r.early.index === 0 && r.early.overlay === 'none' && r.index === 1 && r.lost, JSON.stringify(r));
+}
+
 // ---- 3d. gun conditions: requiresGun holds an objective until the gun is owned, skipIfOwned drops a "find it" step ----
 {
   const r = await ev(() => {

@@ -7,6 +7,7 @@
 // Gun conditions (#93, #15): `skipIfOwned: <gun>` completes the objective as skipped, now or any time later, as soon as the player owns the gun (a "find it if you
 // have not" step); `requiresGun: <gun>` lets it finish only once the gun is owned (the condition is met, the objective waits: `held`). skipIfOwned asks `owns(gun)` (owned), requiresGun asks `found(gun)` (owned, or found and dropped by a loadout swap).
 // On done: `grantGun` / `grantAmmo` emit `mission:grant` { gun, ammo } right after `mission:objective:done` (game.js hands it to the Weapon), never when skipped.
+// Scripted loss: `endOnDeath` completes the objective `deathBeat` s after the player dies (no respawn, `scriptedDeath`); a survive with it has no clock.
 
 import { GUNS } from '../combat/guns.js';
 
@@ -15,6 +16,7 @@ export const TUNING = {
   pinLift: 1.5, // m, the HUD objective pin floats this high over the objective's position / the target enemy's
   pinNear: 3, // m, the pin is gone within this distance of a place (reach / interact / action)...
   pinNearEnemy: 8, // m ...and of a destroy target: up close the enemy is the marker
+  deathBeat: 1.5, // s an `endOnDeath` objective waits after the player dies before it completes (under game.js RESPAWN_AFTER)
 };
 
 const clock = (s) => {
@@ -29,6 +31,7 @@ export class Mission {
     this.promptAt = { x: 0, y: 0, z: 0 }; // reused by interactPrompt
     this.pinAt = { x: 0, y: 0, z: 0, near: 0 }; // reused by pinTarget
     this.held = false; // the current objective's condition is met but its `requiresGun` is not owned yet
+    this.lost = false; // an `endOnDeath` objective ended with the player's death
     this.objectives = []; // records of the objective pieces, in mission order
     this.index = 0; // of `current` (= objectives.length when complete)
     this.current = null; // record being worked on, null when none / complete / failed
@@ -93,7 +96,7 @@ export class Mission {
     this.index = 0;
     this.current = null;
     this.state = 'none';
-    this.held = false;
+    this.held = this.lost = false;
     this.elapsed = this.progress = this.target = 0;
   }
 
@@ -104,9 +107,16 @@ export class Mission {
     this.elapsed += dt;
     this.player = player;
     const p = player.pos;
+    if (r.params.endOnDeath && player.dead) {
+      if (player.deadTime >= TUNING.deathBeat) {
+        this.lost = true;
+        this.#complete();
+      }
+      return;
+    }
     if (r.params.skipIfOwned != null && this.owns(r.params.skipIfOwned)) return this.#complete(true);
     if (this.held && this.found(r.params.requiresGun)) return this.#complete();
-    if (r.obj === 'survive') {
+    if (r.obj === 'survive' && !r.params.endOnDeath) {
       if (this.elapsed >= r.time) this.#complete();
     } else if (r.obj === 'reach' && r.params.trigger == null) {
       const [w, h, d] = r.size;
@@ -119,6 +129,26 @@ export class Mission {
       this.current = null;
       this.events.emit('mission:failed', { index: this.index, id: r.oid, reason: 'time' });
     }
+  }
+
+  // The player's death is the script (an `endOnDeath` objective is current, or one ended that way): no restart, no death overlay.
+  get scriptedDeath() {
+    return this.lost || !!this.current?.params.endOnDeath;
+  }
+
+  // After a checkpoint restart (game.js): the current objective starts over against the enemies alive now (destroy recounts, clocks reset).
+  restart() {
+    const r = this.current;
+    if (this.state !== 'active' || !r) return;
+    this.elapsed = 0;
+    if (r.obj === 'destroy') {
+      this.progress = 0;
+      this.target = this.#targetOf(r);
+    }
+  }
+
+  #targetOf(r) {
+    return r.obj === 'action' ? r.params.count ?? 1 : r.obj === 'destroy' ? r.params.count ?? this.enemies.all.filter((a) => a.alive && !a.unkillable && (r.params.group == null || a.squad === r.params.group)).length : 0;
   }
 
   #inReach(r, player) {
@@ -187,7 +217,7 @@ export class Mission {
     const prog = [];
     if (r.params.requiresGun != null && !this.found(r.params.requiresGun)) prog.push(`${GUNS[r.params.requiresGun].name}: NOT FOUND`);
     if (r.obj === 'destroy' || (r.obj === 'action' && this.target > 1)) prog.push(`${this.progress} / ${this.target}`);
-    else if (r.obj === 'survive') prog.push(clock(r.time - this.elapsed));
+    else if (r.obj === 'survive' && !r.params.endOnDeath) prog.push(clock(r.time - this.elapsed));
     if (r.params.limit != null && r.obj !== 'survive') prog.push(clock(r.params.limit - this.elapsed));
     return { key: r.oid, head: r.text.toUpperCase(), detail: r.detail ?? '', prog: prog.join('  ') };
   }
@@ -211,7 +241,7 @@ export class Mission {
     const r = (this.current = this.objectives[(this.index = i)]);
     this.elapsed = this.progress = 0;
     this.held = false;
-    this.target = r.obj === 'action' ? r.params.count ?? 1 : r.obj === 'destroy' ? r.params.count ?? this.enemies.all.filter((a) => a.alive && !a.unkillable && (r.params.group == null || a.squad === r.params.group)).length : 0;
+    this.target = this.#targetOf(r);
     if (r.params.wakeGroup != null) this.events.emit('encounter:wake', r.params.wakeGroup);
     if (r.params.spawnGroup != null) this.events.emit('encounter:spawn', r.params.spawnGroup);
     this.events.emit('mission:objective', this.#info(r));

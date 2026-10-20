@@ -80,7 +80,11 @@ const SOCKETS = [
 // invisible hit boxes: `head` set: that head takes damage (`weak`: its weak spot); null: hull (armor 0)
 const hitData = (head, weak = false) => ({ zone: weak ? 'weak' : 'torso', part: head == null ? 'hull' : 'head', head });
 const HITS = [
-  ['Body', 9.2, 6.8, 9.8, 0, 9.6 - BY, 2.2, hitData(null)], // chest
+  // the chest follows its rounded shell: a full-height core between the shoulder pods and low, short flanks under them (one full-width
+  // box swallowed every shot at LEGION and COLOSSUS, whose weak spots sink toward the chest as the heads pitch down at the deck)
+  ['Body', 6.0, 6.8, 9.8, 0, 9.6 - BY, 2.2, hitData(null)], // chest core
+  ['Body', 1.6, 4.4, 6.0, 3.8, 8.4 - BY, 2.0, hitData(null)], // flanks
+  ['Body', 1.6, 4.4, 6.0, -3.8, 8.4 - BY, 2.0, hitData(null)],
   ['Body', 8.0, 5.6, 8.6, 0, 8.8 - BY, -4.0, hitData(null)], // back
   ['Body', 6.4, 2.6, 13.5, 0, 7.4 - BY, -0.6, hitData(null)], // frame
   ['Vigil', 4.6, 4.0, 3.8, 0, 0, 1.6, hitData(0)],

@@ -76,6 +76,15 @@ export class Weapon {
     this.rig.zoom = null;
   }
 
+  // Checkpoint restart (game.js): the rounds of every gun now; restoreAmmo puts them back for the guns still owned.
+  ammoSnapshot() {
+    return Object.fromEntries(Object.entries(this.state).map(([id, s]) => [id, { ammo: s.ammo, reserve: s.reserve }]));
+  }
+
+  restoreAmmo(snap) {
+    for (const id of this.owned) if (snap[id]) Object.assign(this.state[id], snap[id]);
+  }
+
   get t() {
     return GUNS[this.current ?? 'pistol'];
   }

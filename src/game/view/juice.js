@@ -1,13 +1,16 @@
 import * as THREE from 'three';
+import { settings } from '../settings.js';
 
 // Game-feel hub: turns gameplay events into hitstop, camera trauma, FOV punch and post flashes.
 // Owns the game time scale (engine.timeScale) through update().
 const _n = new THREE.Vector3();
 const TUNING = {
-  hitstopKill: 0.07, // seconds of near-freeze on a kill
+  hitstopKill: 0.09, // seconds of near-freeze on a kill
   hitstopHead: 0.025,
+  hitstopHeavy: 0.035, // a single round of at least `heavyHit` damage (sniper, railgun) lands with weight
+  heavyHit: 50,
   hitstopScale: 0.08,
-  killTrauma: 0.22,
+  killTrauma: 0.28,
   hurtTrauma: 0.38,
   coverTrauma: 0.16,
   landTrauma: 0.2,
@@ -37,7 +40,7 @@ export class Juice {
   }
 
   listen(events) {
-    events.on('weapon:hit', (h) => (h.killed ? this.kill(h.point, h.dir) : this.hit(h.crit)));
+    events.on('weapon:hit', (h) => (h.killed ? this.kill(h.point, h.dir) : this.hit(h.crit, h.amount)));
     events.on('weapon:reload', (kind) => {
       if (kind === 'perfect') this.perfectReload();
       else if (kind === 'jam') this.camRig.addTrauma(0.15);
@@ -47,6 +50,7 @@ export class Juice {
     events.on('player:coverSlam', () => this.coverSlam());
     events.on('player:jet', () => this.jet());
     events.on('player:land', (kind) => this.land(kind));
+    events.on('player:step', (s) => settings.cameraBob && this.camRig.step(s.run)); // footfall bob (SETTINGS: Camera bob)
     // boss: the ground shakes with distance
     const near = (p, r) => Math.max(0, 1 - this.camRig.pivot.distanceTo(p) / r);
     events.on('blast', (b) => this.camRig.addTrauma(0.5 * near(b.point, b.radius * 4)));
@@ -72,8 +76,9 @@ export class Juice {
     this.stop = Math.max(this.stop, s);
   }
 
-  hit(crit) {
-    if (crit) this.hitstop(this.t.hitstopHead);
+  hit(crit, amount = 0) {
+    if (amount >= this.t.heavyHit) this.hitstop(this.t.hitstopHeavy);
+    else if (crit) this.hitstop(this.t.hitstopHead);
   }
 
   kill(point, dir) {
@@ -81,7 +86,6 @@ export class Juice {
     this.camRig.addTrauma(this.t.killTrauma);
     this.camRig.punch(3);
     this.post.kill();
-    this.fx.shockwave(point);
     this.fx.impact(point, _n.copy(dir).negate(), 0x6fe3ff, 24, false);
   }
 

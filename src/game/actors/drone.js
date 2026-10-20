@@ -23,6 +23,8 @@ export const TUNING = {
   sight: 36, // wakes at this range with line of sight
   burst: { aim: 0.45, shots: 2, gap: 0.16, cooldown: [1.6, 2.8], spread: 0.03, damage: 6 },
   radius: 0.6,
+  knock: 0.4, // rad the body tilts away from a rifle-size hit (sqrt of damage / 20, up to x2.2), eased back with the banking
+  knockMax: 0.6, // rad: a burst never tips it further
   floorMin: 2, // m: boxes narrower than this (walls, parapets) don't lift the flight height, wide ones (platforms) do
   bounds: { minX: -48, maxX: 48, minZ: -60, maxZ: 48 },
 };
@@ -212,8 +214,13 @@ export class Drone {
     if (!this.dormant) this.awake = true;
     // knocked by the hit
     this.vel.addScaledVector(dir, 2.5);
-    this.tilt.x += dir.z * 0.4;
-    this.tilt.y -= dir.x * 0.4;
+    // tilt away from the shot, in the body's frame (yawed)
+    const k = TUNING.knock * Math.min(2.2, Math.sqrt(amount / 20));
+    const c = Math.cos(this.yaw);
+    const sn = Math.sin(this.yaw);
+    const m = TUNING.knockMax;
+    this.tilt.x = THREE.MathUtils.clamp(this.tilt.x + (dir.x * sn + dir.z * c) * k, -m, m);
+    this.tilt.y = THREE.MathUtils.clamp(this.tilt.y - (dir.x * c - dir.z * sn) * k, -m, m);
     if (this.health > 0) return false;
     // shot down: counts now, tumbles, bursts when it lands
     this.alive = false;

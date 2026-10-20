@@ -114,7 +114,7 @@ empty now. Decisions taken in the pass (keep them unless the rule changes):
   same rifle keeps the HiveMind's dark grey furniture and has no glows (sensors are the only saturated light on an enemy).
   Gun glows stay amber/orange (STEM-00's power), never violet. Every gun shows a receiver, a magazine and a heat shroud.
 - **Enemies:** pale worn grey plates `#A9ACA7` over a black frame `#1D1F23`, dark grey trim `#34383C` (troopers:
-  `looks.js`, a slim mass-produced line droid (owner 2026-10-19, "too chunky"): thin dark rod limbs on round joint discs, a narrow pale chest shell with a small back unit, a hip block, a short neck to a sensor housing lying sideways (pale cylinder, dark lens band, 3 small uneven violet lenses, one thin antenna), flat feet, violet rings at shoulders and hips; plated troopers bolt a few flat bare steel `#6A7076` plates (chest, shoulders, vambraces, thigh and shin guards); drones: `drone.js`, a rounded pod, one ringed lens, ducted rotors, few parts; CERBERUS: cerberus-model.js).
+  `looks.js`, a slim mass-produced line droid (owner 2026-10-19, "too chunky"): thin dark rod limbs on round joint discs, a narrow pale chest shell with a small back unit, a hip block, a short neck to a sensor housing lying sideways (pale cylinder, dark lens band, 3 small uneven violet lenses, one thin antenna), flat feet, violet rings at shoulders and hips; plated troopers bolt oversized (x1.3) heavy dark gunmetal `#23272B` plates (chest, shoulders, vambraces, thigh and shin guards): a dark, heavier mass over the pale shells, readable apart from the line droid (owner 2026-10-20); drones: `drone.js`, a rounded pod, one ringed lens, ducted rotors, few parts; CERBERUS: cerberus-model.js).
   Sensors violet (`VISOR` `#8C3CFF`, bluer than the spec's `#C04BFF` end so it never reads as the magenta weak spots):
   small uneven clusters (trooper face plate, spider turret, puppet visors) or one ringed lens; no eye slits, never two
   big eyes. The SX-6 wears the same pale grey plates over its dark grey hull. At rest a sensor is dimmer than the weak
@@ -122,7 +122,7 @@ empty now. Decisions taken in the pass (keep them unless the rule changes):
 - **Spider miniboss (SX-6):** rebuilt after the owner's walker concept: saucer hull, sensor band with lens clusters
   (clusters of 2-3 small lenses at uneven spacing, not a row of round eyes), twin-barrel side pods, tall splayed legs.
   It keeps six legs (the leg-break and tripod-gait gameplay); a four-legged variant is a separate gameplay change.
-- **Puppets:** calibration-frame ochre, matte and scuffed (shooters a darker ochre); the bullseye is bone white on
+- **Puppets:** the trooper's line droid body (looks.js `buildTrooper`, owner 2026-10-20) in calibration-frame ochre, matte and scuffed (shooters a darker ochre); the bullseye is bone white on
   black instead of red.
 - **HiveMind projectiles** (bolts, drone bursts, mortar orbs and rings, their impacts) are violet-white: a near-white
   core in a violet haze, so they never read as STEM-00's amber. Explosion fire (a drone or the mech dying) stays orange.

@@ -257,7 +257,7 @@ high(7.5, -77, 4);
 // the transit barricade across the deck at z -93: two wrecks end to end, a 4.8 m gap in the middle (the checkpoint)
 car(-7.2, -93, false);
 car(7.2, -93, false);
-// the fight (z -97 .. -166): cover for 45 s under the three heads
+// the fight (z -97 .. -166): cover under the three heads until CERBERUS wins (endOnDeath)
 low(-9, -100, 3.5);
 low(9, -100, 3.5);
 high(-9, -108, 5, true);
@@ -320,7 +320,7 @@ add('objective.reach', [0, 0, -46], { text: 'CROSS THE SKYWAY', size: [22, 3, 4]
 add('objective.destroy', [0, 0, -80], { text: 'CLEAR THE DECK', group: 'deck', wakeGroup: 'deck', order: 20, detail: 'Hostiles ahead on the bridge. Use the wrecks for cover.' }, { name: 'deck-patrol' });
 add('objective.reach', [0, 0, -97], { text: 'REACH THE FAR SPAN', size: [7, 3, 4], order: 30, detail: 'Pass the barricade and cross to the far end of the bridge.' }, { name: 'far-span' });
 add('objective.reach', [0, 0, -99.5], { text: 'CERBERUS', size: [1, 1, 1], trigger: 'cerberus-cut', order: 35, detail: 'Hold on.' }, { name: 'cerberus-cut' });
-add('objective.survive', [0, 0, -120], { text: 'DESTROY THE HIVEMIND', time: 45, wakeGroup: 'cerberus', order: 40, detail: 'Shoot the glowing weak spots on its three heads. Stay in cover.' }, { name: 'hivemind' });
+add('objective.survive', [0, 0, -120], { text: 'DESTROY THE HIVEMIND', endOnDeath: true, wakeGroup: 'cerberus', order: 40, detail: 'Shoot the glowing weak spots on its three heads. Stay in cover.' }, { name: 'hivemind' });
 add('objective.reach', [0, 0, -108], { text: 'THE FALL', size: [1, 1, 1], trigger: 'the-fall', order: 50, detail: 'Hold on.' }, { name: 'the-fall' });
 
 // ---------------------------------------------------------------- log lines

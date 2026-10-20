@@ -207,7 +207,7 @@ too strong to beat. Each act then takes one of its heads.
 | Body | radius 0.4 m, height 1.8 m standing, 1.05 m crouched, step height 0.45 m |
 | Shields | 100, regen 45/s after 3.5 s without damage |
 | Health | 100, regen 12/s after 6 s without damage |
-| Death | "SHIELDS DOWN, RESPAWNING" overlay, respawn at the spawn point (0, 0, 38) after 3 s |
+| Death | "SHIELDS DOWN, RESTARTING FROM CHECKPOINT" overlay; after 3 s the player is back at the last checkpoint (else the spawn) and the enemies and rounds are as they were at the last save (instructions/gameplay.md) |
 
 Sprint rules: hold Shift while moving forward (controller: L3 click sprints until the stick is released or pulled
 back). Not allowed while aiming, in cover, airborne, within 0.4 s of a shot, or while the trigger is held; pulling
@@ -478,7 +478,7 @@ down. Destroyed enemies stay destroyed until the page is reloaded.
 | Spider mech (SX-6 Tarantula) | 1 | core 900, legs 160 each | Miniboss |
 
 ### 8.1 Puppets
-- Look: crash-test mannequin robots on a pneumatic post, matte scuffed calibration ochre (static, mover) or darker ochre
+- Look: the trooper's line droid body on a pneumatic post, matte scuffed calibration ochre (static, mover) or darker ochre
   (shooter), small violet sensors, bone-and-black bullseye
   on the chest.
 - Static and mover puppets never attack. Each puppet gets 2 random body parts marked as weak spots (x3).
@@ -580,10 +580,11 @@ calls troops and drones) and **COLOSSUS** (a heavy jaw-cannon). It speaks for th
 - **Attacks:** VIGIL's sweeping sensor bolts (needs line of sight), COLOSSUS mortar rings at the player's position (like
   the SX-6's, faster against a player in cover), LEGION calling drones.
 - **Numbers (code wins, `actors/cerberus.js`):** 1000 HP per head; floor 65% (650 HP), repair 8% of a head's health per second after 1.5 s
-  untouched. VIGIL: 0.9 s flare, 8 bolts x 8 damage swept across +-3.2 m, every 3 to 4.5 s. COLOSSUS: mortar every 5 to 7.5 s (x1.8 faster
-  against a player in cover), 1.5 s flight, 3.8 m blast, 30 damage. LEGION: up to 2 drones every 7 to 10 s while fewer than 3 live. About 18 m
+  untouched. VIGIL: 0.9 s flare, 8 bolts x 12 damage swept across +-3.2 m, every 2.2 to 3.4 s. COLOSSUS: mortar every 4 to 6 s (x1.8 faster
+  against a player in cover), 1.5 s flight, 4.2 m blast, 40 damage. Rage: rate and damage x(1 + seconds fighting / 25). LEGION: up to 2 drones every 7 to 10 s while fewer than 3 live. About 18 m
   across its shoulder pods, 21 m tall, on a ledge level with the deck 8 m off its east edge. It is excluded from destroy objectives, ARENA CLEAR and the kill counter.
-- **Script:** the fight is a `survive` objective (about 45 s). At its end the loss cut plays: the three heads fire
+- **Script:** the fight cannot be won or outlasted: CERBERUS grows stronger the longer it fights (rage) and the objective ends when it
+  kills the player (`endOnDeath`). Then the loss cut plays: the three heads fire
   together, the deck breaks, STEM-00 falls (2.10, step 8).
 
 ## 9. Level: the training arena
@@ -662,7 +663,7 @@ Shots 0.12 (MG 0.3, sniper and railgun 0.7), hits taken 0.6, jet 0.2, nearby bla
 | Objective | Panel top left under the top bar (hidden without objectives): header = objective text, below it the instruction in plain words (`detail`, input tokens drawn as key caps of the active device), then `n / N` kills or time left; MISSION COMPLETE / MISSION FAILED. Slides in on each new objective. While it shows, "TARGETS DOWN" is hidden |
 | Boss bar | Name, core health fill, six leg pips (grey out when destroyed), state text "CORE EXPOSED" / "DESTROYED"; shown only while the boss is awake |
 | Toasts | ammo pickups, AMMO FULL, ARENA CLEAR (6 s), boss name on wake, CORE EXPOSED, MECH DESTROYED, OBJECTIVE COMPLETE, MISSION COMPLETE / FAILED (4 s), SYSTEM FAULT (engine fault isolation) |
-| Death | "SHIELDS DOWN, RESPAWNING" |
+| Death | "SHIELDS DOWN, RESTARTING FROM CHECKPOINT" (not on the Skyway's scripted loss) |
 | Lock-on | Diamond marker on the awake boss |
 
 Principle: state only, never instructions (pillar 4); the one exception is the objective panel, which says the current objective and how to do it. The HUD gives no cover prompts and no flank warning. Start panel

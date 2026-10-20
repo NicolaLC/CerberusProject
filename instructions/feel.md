@@ -13,7 +13,10 @@ All of it reacts to gameplay events (see the events table in architecture.md); g
 - FOV punch per shot (+0.9°) and on kills (+3°). FOV / distance: 70° 3.4m, aim 50° 1.9m, sprint 78° 3.9m.
 - Recoil: per-gun pattern applied through a fast spring; most of it is recovered after the burst unless you
   pulled against it yourself (details in gameplay.md, Gunplay). The gun model kicks back and climbs (`kick`).
-- Strafe roll, head bob (walk 0.015, sprint 0.05), landing/cover dip spring (`dip()`).
+- Strafe roll, landing/cover dip spring (`dip()`).
+- Footfall bob (`step()`, from each `player:step` of the walk cycle, so it keeps the stride's cadence): a kick into the dip spring
+  (`bob` walk 0.3, sprint 0.9 m/s: peak dip ~1.3 cm / ~3.8 cm) and a roll toward the landing foot (0.006 rad sprinting, half walking)
+  that eases out through the strafe roll. None while aiming or airborne. SETTINGS "Camera bob while running" (`settings.cameraBob`) turns it off.
 - Cinematic override (`camRig.script` { pos, look, fov }, set by view/cinematic.js): the camera sits at `pos` looking at `look`; only the trauma shake applies; the gameplay state is untouched, the follow snaps back when it clears.
 - POV hold (`camRig.holdPov(p)`, `hold`, `povW`; the boot intro's `pov`, workshop.md "Boot intro"): weight 1 = camera at the eye (head pivot + `TUNING.pov.eye` forward), 0 = the normal rig; the camera is lerped between the eye and the collision-capped rig position, so the pull-back never crosses a wall. Released by distance / timeout, smoothstep over `blend`; the model is hidden while the weight is above `TUNING.pov.hide` (0.6). No hold: one null check per frame.
 - Boss lock-on (`camRig.focus`, set in game.js while the boss is awake, alive and within 40 m): when the player
@@ -25,10 +28,10 @@ All of it reacts to gameplay events (see the events table in architecture.md); g
 | Event | Feedback |
 | --- | --- |
 | shot | trauma 0.06, FOV punch, muzzle flash + light (×`flash` per gun), smoke, tracer, brass casing; layered sound (crack, body, room tail; MG action clack); rising click in the last 20% of the mag |
-| hit | hitmarker pops by damage; tick (body), double ping (head), sparkle (weak spot) |
+| hit | hitmarker pops by damage; tick (body), double ping (head), sparkle (weak spot); a round of 50+ damage (sniper, railgun, heavy headshots) 35ms hitstop |
 | MG spin-up | barrel whine follows `weapon.spin` |
 | headshot | 25ms hitstop |
-| kill | 70ms hitstop at 0.08× time, trauma 0.22, white flash, cyan shockwave ring, spark burst, kill chime, big red hitmarker |
+| kill | 90ms hitstop at 0.08× time, trauma 0.28, FOV punch +3°, white flash (post, off while `EFFECTS` is off), cyan spark burst, kill chime, big red hitmarker; no ring (owner: no circle on a kill; drone and CERBERUS death blasts have none either, mortar / stomp / leg blasts keep theirs) |
 | hurt | trauma 0.38, red chromatic aberration pulse |
 | shields break (`player:shieldBreak`) | slow motion (x0.3 game time for 0.7 s real, easing back over the last half; `Juice` TUNING `shieldBreak`), trauma 0.5, FOV pull-in, red pulse, toast `⚠ SHIELDS DOWN`, the empty shield bar's frame pulses red (`.shield.down`) until it recharges, a sound (`shieldBreak` sample, synth `zap` until recorded) |
 | enemy outline | every enemy material (troopers, puppets, drones, the SX-6, their far LOD) adds a faint violet rim (fresnel, `rim()` in enemy.js, 0.1 strength, power 8: only the silhouette edges): no extra draws, the weak spots and sensors stay brighter |

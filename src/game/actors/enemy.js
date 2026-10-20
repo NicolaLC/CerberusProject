@@ -22,8 +22,6 @@ const WEAK_BONES = ['Spine2', 'Spine1', 'Hips', 'LeftArm', 'RightArm', 'LeftFore
 const DEBRIS_DIR = new THREE.Vector3();
 const DEBRIS_OPT = { dir: DEBRIS_DIR, push: [5, 5], spread: 3, up: [2, 3], spin: 12, life: 5 }; // see DebrisBank.burst
 const HITBOX_MAT = new THREE.MeshBasicMaterial(); // never drawn
-const _v = new THREE.Vector3();
-const _up = new THREE.Vector3(0, 1, 0);
 const _sRay = new THREE.Raycaster();
 const _sHits = [];
 const _sDir = new THREE.Vector3();
@@ -172,17 +170,16 @@ export class EnemyBody {
   }
 
   // Returns true if this hit destroyed it.
-  damage(amount, point, dir, zone) {
+  // `object`: the hit mesh (its `userData.bone` is the bone that reacts; none: the chest).
+  damage(amount, point, dir, zone, object) {
     if (!this.alive) return false;
     this.health -= amount;
     this.flash = 0.08;
-    // hit reaction: push away from the shot
-    const local = _v.copy(dir).applyAxisAngle(_up, -this.yaw);
-    this.animator.impulse(local.z * (zone === 'head' ? 9 : 6), -local.x * 6);
     if (this.health <= 0) {
       this.#die(dir);
       return true;
     }
+    this.animator.react(object?.userData.bone ?? 'Spine2', point, dir, amount); // kicked away from the shot (rig.js HIT_REACT)
     this.onHit?.(amount, dir, zone);
     return false;
   }

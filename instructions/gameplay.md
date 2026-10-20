@@ -3,7 +3,7 @@
 ## Player (`game/actors/player.js` TUNING)
 - Walk 4.6, sprint 7.4 (hold Shift, moving forward; plays the anime run), aim walk 2.6 m/s.
   No sprint while aiming, in cover or within 0.4s of a shot; pulling the trigger ends a sprint.
-- Shields 100 (regen 45/s after 3.5s), health 100 (regen 12/s after 6s). Death → respawn at spawn after 3s.
+- Shields 100 (regen 45/s after 3.5s), health 100 (regen 12/s after 6s). Death → restart from the last checkpoint after 3s (Spawn groups below).
 
 ## Input (bindings: `BINDINGS` in `game/controls.js`)
 - Aim (zoom): hold RMB. Sprint: Shift. Jump / vault: Space. Fire: LMB or F. Interact (objective terminals): G / B. Arrow keys look. F3: performance stats.
@@ -193,19 +193,27 @@
 - Weak spots: 2 random body parts per puppet get an exposed power cell (a pulsing magenta core in a bolted ring housing of the
   frame material, round halo; zone `weak`, ×3 damage; troopers get one). Only the core is a hit mesh.
 - Bolts: laser streaks (a thin violet-white core in a 1.9 m violet sheath, tip at the bolt), 44 m/s, 7 dmg, collide with world and the player capsule.
+- Hits flash the body (0.08 s) and kick the hit bone away from the shot (puppets and troopers: `HIT_REACT` in rig.js, animation.md
+  Hit reactions); bigger rounds kick harder. Purely visual: hit boxes, damage and AI are unchanged.
 - Death breaks the rig parts into debris that fades after 5s. Destroyed puppets stay destroyed until the page
   is reloaded; the HUD counts `down / total` and shows ARENA CLEAR when all are down. Spawn list: `SPAWNS`.
 - Shooters only engage a player within `ENGAGE_RANGE` (30 m) with line of sight.
 
 ## Spawn groups (#73)
 Enemies with the same `params.group` wake together: when any troopers / drone / boss member is awake the rest wake too (once). `dormant: true` enemies (troopers, drones, boss, shooters) ignore sight, sound, arena entry and damage and wait for `wakeGroup`; with `hidden: true` too they are not drawn and not a target until then (a later stage's squad that must not stand asleep in sight of an earlier fight: the Prologue's plated `purge-4`); plain puppets are always on. Triggers and reinforcements: workshop.md, Encounters.
-On death the player respawns after 3 s at the last checkpoint reached, else at the spawn.
+On death ("SHIELDS DOWN — RESTARTING FROM CHECKPOINT") the player respawns after 3 s at the last checkpoint reached, else at the spawn, and the
+world goes back to the last save (game.js `#save` / `#restart`; levels with objectives only, a sandbox just carries on): a save is taken at level load, every checkpoint, every cut's end and every finished
+objective. Back: every enemy alive at the save, rebuilt fresh where it stood (puppets on stands at their piece), awake if its group was woken so
+far; anything spawned since is gone; the rounds of the guns still owned; the current objective counts from zero (`Mission.restart`). Never undone:
+what a cut or an objective did (kills, gates, grants, cuts, log lines), pickups taken, guns gained. An `endOnDeath` objective (the Skyway) is the
+exception: the death is the script, no restart (workshop.md, Missions).
 
 ## Drones (`game/actors/drone.js` TUNING)
 - Quad-rotor drones hovering 3.5-5 m up (six: around the yard, the range, two escorting the boss arena).
   Wake on sight within 36 m (or when hit); then circle the player at 9-18 m, flipping direction every 2.5-5.5 s.
 - Fire 2-bolt bursts (6 dmg) after a 0.45 s eye flare, cooldown 1.6-2.8 s, line of sight needed.
-- 55 HP: eye = head (×2.5), the glowing core underneath = weak (×3). Hits knock them about. Shot down they tumble
+- 55 HP: eye = head (×2.5), the glowing core underneath = weak (×3). Hits knock them about: pushed along the shot and tilted away from it
+  (`knock` 0.4 rad per rifle-size hit, sqrt of damage / 20, capped at `knockMax` 0.6), eased back with the banking. Shot down they tumble
   and burst on landing (`blast` kind 'drone', no damage). Never enter the building, stay in the yard, collide with
   walls at flight height. `pos` is the ground point under the drone (pickups drop there).
 
@@ -223,7 +231,7 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
   One collapse takes at most 34% of the core (`coreBite`, 306 HP): once spent the core turns armored and the mech stands up
   0.6 s later, so a kill needs three collapses (5 legs); with no legs left there is no cap.
 - Attacks: cannon bursts (0.7 s eye charge, 6 bolts × 9 dmg, cooldown 2.2-3.4 s, needs line of sight);
-  plasma mortar every 6-8.5 s (×1.8 faster while the player is in cover) lobbed at the player's position with a ground
+  plasma mortar every 6-8.5 s (×1.8 faster while the player is in cover; none while the player is indoors: no lob through a roof) lobbed at the player's position with a ground
   ring telegraph, 3.6 m blast, 34 dmg; stomp when the player is within 6.5 m (0.75 s rear-up, 7 m blast, 24 dmg).
 - Movement: pursues. In sight and 8-15 m away it circles the player, drifting in; out of sight (behind cover), farther than 15 m
   or charging it walks at them on a path round the cover (`nav`: a 0.5 m grid over the arena, free where the collision circle
@@ -242,7 +250,7 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
 - `boss.cerberus`: a colossal machine (about 22 m across, hull 7 m up) clamped to the tower beside the Skyway, out of reach (no walkable
   collision). Three heads on booms: VIGIL (one great sensor eye), LEGION (voice / emitter array), COLOSSUS (heavy jaw cannon). It cannot be destroyed.
 - Health: 1000 per head, one bar segment each (boss bar `segments`, a tick marks the floor). The hull, booms and shoulders are armor (sparks,
-  no damage, they block bullets and the railgun line); only the heads take damage, and a hit on the glowing eye / node / bore is `weak` (the gun's x3).
+  no damage, they block bullets and the railgun line); only the heads take damage, and a hit on the glowing eye / node / bore is `weak` (the gun's x3). The chest hitbox follows the rounded shell (a core between the shoulder pods, low short flanks under them), so LEGION and COLOSSUS take shots from the deck.
   A hit flashes its head. A head never drops below `floor` (0.65, so 650 HP) and starts repairing `repair` (0.08, 80 HP/s) once it has been left alone for 1.5 s.
   `damage()` always returns false: no kill, no `puppet:down`, no `boss:dead`.
 - Counting: `unkillable = true`. Not a destroy target (mission.js skips it in the target count and the pin), not part of `arena:clear` or the
@@ -250,10 +258,11 @@ On death the player respawns after 3 s at the last checkpoint reached, else at t
 - Wakes (`boss:wake` { name: 'CERBERUS' }: toast, boss music) when the player enters `arena`, on damage, or through `wakeGroup`; `dormant` + `group` waits for the cut.
   Dormant: heads folded down, sensors dim. Awake: the heads track the player, the hull sways.
 - Attacks (all wait while `enemies.holdFire` is set, i.e. during cinematics; nothing new fires or hurts):
-  - VIGIL: 0.9 s eye flare (`boss:charge`), then 8 bolts x 8 dmg, 0.14 s apart, swept across +-3.2 m of the player; cooldown 3-4.5 s; needs line of sight from the eye.
-  - COLOSSUS: the SX-6's plasma mortar from the cannon muzzle, first after 4 s, then every 5-7.5 s (x1.8 faster while the player is in cover), 1.5 s flight, 3.8 m blast, 30 dmg (falls off to half at the rim).
+  - Rage: every attack timer runs `rage` times faster and every hit does `rage` times the damage; rage = 1 + seconds fighting / 25 (`TUNING.rage`), so it cannot be outlasted.
+  - VIGIL: 0.9 s eye flare (`boss:charge`), then 8 bolts x 12 dmg, 0.14 s apart, swept across +-3.2 m of the player; cooldown 2.2-3.4 s; needs line of sight from the eye.
+  - COLOSSUS: the SX-6's plasma mortar from the cannon muzzle, first after 4 s, then every 4-6 s (x1.8 faster while the player is in cover), 1.5 s flight, 4.2 m blast, 40 dmg (falls off to half at the rim).
   - LEGION: first after 3 s, then every 7-10 s, calls up to 2 awake drones (of its group, flying over `arena`) when fewer than 3 of its drones live.
-  - Intended pressure (not measured with a player): a player standing in the open dies in well under a minute, one using cover and moving survives the ~45 s of the scripted fight.
+  - Intended pressure (not measured with a player): the player always dies. In the open within seconds; in cover and moving, the rage gets them within about a minute. The death ends the fight (`hivemind` is `endOnDeath`) and the loss cut plays.
 - Camera lock-on and the diamond marker are the generic boss behaviour (`focusPoint`: the hull, forward and up). The boss bar follows the engaged boss when a level has several (`Enemies.#followBoss`).
 - Look: final-boss dressing (`#detailHull` / `#detailHead`, visual only): a dorsal crest of swept fins, armor ridges, spiked pauldrons and ribbed
   skirts on the shoulder pods, violet power seams, glowing reactor rings under the hull, cable runs sagging to the clamps, collars along the booms;

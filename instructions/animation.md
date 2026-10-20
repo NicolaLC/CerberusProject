@@ -38,9 +38,9 @@ remain as invisible hitboxes. Attach parts before the bake, or call `skin.rebuil
   `enemy.js`) dimmer at rest than the magenta weak spots, which stay the brightest thing on every enemy. Sensors are
   small uneven clusters, never two big eyes or a slit that reads as a face. HiveMind shots are violet-white (`PROJECTILE`).
 - `looks.js`: troopers (`buildTrooper`: gunmetal frame, dark metal armor, ochre livery, sensor cluster, power pack;
-  the visor material also lights the LEDs, so they flare with the aim telegraph) and puppets (`buildPuppet`:
-  crash-test mannequin in matte calibration ochre (shooters darker), black hinge drums; chest front stays behind the bullseye at
-  z 0.155). Keep limb fronts near the dummy boxes' front faces: weak spots are placed there.
+  the visor material also lights the LEDs, so they flare with the aim telegraph) and puppets (the same `buildTrooper`
+  body with the puppet's paint as its shells: matte calibration ochre, shooters darker, plated ones bare steel; the bullseye sits at
+  z 0.18, clear of the chest wedge). Keep limb fronts near the dummy boxes' front faces: weak spots are placed there.
 - `drone.js`: armored pod, ochre spine plate, small asymmetric sensor cluster (eye material), slung cannon, core in a housing
   underneath, ducted rotors (blades on the spinning rotor bones). `spider.js` (the owner's walker concept): a saucer hull in
   pieces (ochre shells, dark keel and rim, hub underneath with the hip drums), the core on top under a split hatch, a dark
@@ -91,7 +91,7 @@ Owner rule: swap parts and make variants without touching animation. Humanoids (
 - Matrix updates: one full bone-only refresh (`#refresh`, `updateBones`: bones, not meshes / proxies / sockets) after the
   poses are set, then only the sub-chain an IK step changed (`aimBone` / `#orientFeet` update their own bone subtree);
   positions are read from `matrixWorld`, not `getWorldPosition`. Sockets: `updateWorldMatrix(false, false)` first.
-- Layers: reset to rest → hit spring → gait key poses (FK legs, hips) → torso → arms → foot locks (IK) + kneel → feet IK (terrain) → foot pitch.
+- Layers: reset to rest → gait key poses (FK legs, hips) → torso → hit reaction → arms → foot locks (IK) + kneel → feet IK (terrain) → foot pitch.
   `Animator.update` is a thin sequence of private layer methods (`#hitSpring`, `#locomotion`, `#torso`, `#arms`, `#legs`, `#layers` = vault / slide aim / air / terrain IK); the weights they share live in the module scratch `F` (filled by `#locomotion`).
 - Gait = key poses (`locomotion.js`, after David Rosen's GDC 2014 "An Indie Approach to Procedural Animation"):
   per gait (walk, run) 8-9 authored LEFT-leg poses over one cycle (thigh, knee, foot pitch; heel strike at t=0)
@@ -137,7 +137,21 @@ Owner rule: swap parts and make variants without touching animation. Humanoids (
 - Dormant (`dormant` 0..1 in the state; the player's `view.dormant`, set by the intro cinematic, view/cinematic.js): a powered-down slump layered after the arms and
   before the legs (`#dormant`, `DORMANT` in rig.js): hips drop 9 cm (the feet IK bends the knees, feet stay planted), spine and head fold forward,
   arms hang (overrides the gun hold). 1 = slumped, 0 = off; the cinematic eases it out over `wake.rise`. The core is darkened by the cinematic, not the animator.
-- `animator.impulse(pitch, roll)` kicks the hit-reaction spring.
+- Hit reactions (`HIT_REACT` in rig.js): `animator.react(bone, point, dir, damage)`, called by `EnemyBody.damage` with the hit
+  mesh's `userData.bone` (weak spots too; no mesh: Spine2). The hit bone and its parents (×`falloff` 0.5 per step up) get a kick
+  about (pivot→hit point) × shot direction, so the hit point moves with the round: a chest hit from the front bends the chest back,
+  a head hit snaps the head back (×`head` 1.6). Strength = `kick` 8 rad/s × sqrt(damage / `ref` 20) within 0.5-2.4 (rifle 1,
+  Farsight / railgun ~2.3). Per-bone angle: a damped spring (`stiff` 320, `damp` 30: peak ~0.14 rad after 0.05 s, rest in ~0.35 s),
+  capped per bone (`cap`: Hips 0.06 .. Head 0.45; at the cap the outward spin is dropped) so bursts saturate instead of folding the body.
+  Leg / foot hits also drop the hips (`dip` 1.5 m/s ≈ 2.5 cm, max 0.08 m): a stagger.
+  - Additive, in the parent's space (quaternion premultiply) over the regular pose, in two places so the IK still holds: spine,
+    neck, head, legs and the hips dip right after `#torso` (the arm IK, foot locks and feet IK then work from the kicked pose: planted
+    feet stay planted, hands stay on the grips); the gun (`Weapon`) and unarmed arms after the arm pose, before the arm IK. Armed
+    rigs send arm hits to `Weapon` (the gun jolts, the hands follow it), since the IK would overwrite an arm kick.
+  - Springs only run while `animator.reacting` (false at rest: no work per frame), state per bone preallocated, no allocations.
+  - Uses the last pose's matrices (a slow LOD rig's are up to 3 frames old: fine). The spring step is capped at 0.05 s.
+  - Test: `tests/enemies.browser.mjs` "hit reaction" (chest and head kick along the shot, grip held, back to rest after 0.5 s).
+  - Drones (no rig.js): `drone.js` tilts its `Body` away from the shot (`TUNING.knock`, yaw-local, capped), eased back by the banking.
 - Check pose changes from the side and front (see project.md testing), not only from behind.
 
 ## Spider mech (`src/game/actors/spider.js`)

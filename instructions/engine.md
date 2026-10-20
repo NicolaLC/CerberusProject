@@ -100,7 +100,7 @@ Costs are WORST CASE per unit: in view, near LOD, sun shadow pass included (draw
 | trooper (`enemy.trooper`) | 9 | 47.4k | 10 | 1 / 23.7k | + 23 draws for 5 s (was 119) |
 | drone (`enemy.drone`) | 4 | 9.2k | 5 | 1 / 9.2k (shadow stays) | + 2 (falls in one piece) |
 | point light (`light.point`) | 0 | 0 | 0 | | cost is per lit fragment, not per draw; a record, shown by a pool light while among the nearest N (below) |
-| effect burst (`blast`: sparks, smoke, ring) | 3 | 0.4k | 0 | | sparks capped at 256 (16 bursts); lives 0.3-0.6 s |
+| effect burst (`blast`: sparks, smoke, ring) | 3 | 0.4k | 0 | | sparks capped at 256 (16 bursts); lives 0.3-0.6 s; measured with the ring, which drone blasts no longer spawn (mortar / stomp still do) |
 
 Triangles are doubled by the shadow pass (a trooper is ~23.7k triangles drawn twice). The empty room (floor, 16 cover boxes, the
 player, post) is 45 draws / 66k tris. Debris was the surprise (#75): every chunk was one shadow-casting mesh per material, so a destroyed trooper cost

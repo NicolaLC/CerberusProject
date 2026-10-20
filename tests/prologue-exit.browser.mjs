@@ -343,7 +343,38 @@ async function open() {
   });
   expect('before any checkpoint a death respawns at the level spawn', r.dead && !r.spawn.dead && r.spawn.pos.join() === '0,2,45' && r.spawn.hp === 100, JSON.stringify(r.spawn));
   expect('checkpoints record in order (C2, hall, hall-east); the last reached is the one that counts', r.cpC2 === 'cp-c2' && r.cpHall === 'cp-hall' && r.cpEast === 'cp-hall-east', JSON.stringify([r.cpC2, r.cpHall, r.cpEast]));
-  expect('  dead for the 3 s respawn delay, then back at cp-hall-east facing its yaw with full health; enemies and the mission untouched', r.stillDead && !r.respawn.dead && r.respawn.pos[0] === 16 && r.respawn.pos[2] === -33 && Math.abs(r.respawn.yaw - 3.14) < 0.02 && r.respawn.hp === 100 && r.respawn.cur && r.respawn.kills && r.state === 'active', JSON.stringify(r.respawn));
+  expect('  dead for the 3 s respawn delay, then back at cp-hall-east facing its yaw with full health; the mission carries on', r.stillDead && !r.respawn.dead && r.respawn.pos[0] === 16 && r.respawn.pos[2] === -33 && Math.abs(r.respawn.yaw - 3.14) < 0.02 && r.respawn.hp === 100 && r.respawn.cur && r.respawn.kills && r.state === 'active', JSON.stringify(r.respawn));
+  expect('no page errors', errors.length === 0, errors.join(' | '));
+  await p.close();
+}
+
+// ---- 5: a death restarts from the last save (checkpoint / cut end / finished objective): the fight and the rounds as they were ----
+{
+  const { p, errors } = await open();
+  const r = await p.evaluate(() => {
+    const g = window.game;
+    const { player, enemies, weapon } = g;
+    const live = (s) => { T.mortal = true; T.step(s); T.mortal = false; };
+    T.advanceTo('purge-yard');
+    T.go(-46.5, 17.4, 0.3); // cp-yard: saved
+    const yard = () => enemies.all.filter((e) => e.squad === 'purge-1' && e.alive);
+    const before = yard().length;
+    const gun = weapon.current;
+    const rounds = weapon.state[gun].ammo;
+    const kills0 = enemies.kills;
+    T.kill(yard()[0]);
+    T.step(0.2);
+    const progress = g.mission.progress;
+    weapon.state[gun].ammo = 0;
+    player.damage(1000);
+    live(3.5);
+    return {
+      before, progress, after: yard().length, awake: yard().every((e) => e.awake), cp: g.encounter.checkpoint?.id, cur: T.cur(),
+      mission: [g.mission.progress, g.mission.target], rounds: [rounds, weapon.state[gun].ammo], kills: enemies.kills === kills0, dead: player.dead,
+    };
+  });
+  expect('the yard fight restarts: the trooper killed after cp-yard is back, the group awake, the objective counts from zero', !r.dead && r.cp === 'cp-yard' && r.cur === 'purge-yard' && r.progress === 1 && r.after === r.before && r.awake && r.mission[0] === 0 && r.mission[1] === r.before && r.kills, JSON.stringify(r));
+  expect('  the rounds are as they were at the save', r.rounds[0] === r.rounds[1], JSON.stringify(r.rounds));
   expect('no page errors', errors.length === 0, errors.join(' | '));
   await p.close();
 }

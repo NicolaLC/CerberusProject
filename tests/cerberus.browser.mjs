@@ -95,6 +95,8 @@ const A = await ev(async () => {
   const eye = boss.heads[0].weak.getWorldPosition(new Vector3());
   const eyeHit = shoot(eye);
   out.eyeHit = eyeHit && { zone: eyeHit.object.userData.zone, head: eyeHit.object.userData.head, armor: boss.armor(eyeHit.object.userData.zone, eyeHit.object) };
+  // LEGION's node and COLOSSUS's bore are reachable too (the chest box once swallowed them)
+  out.podHits = [1, 2].map((i) => { const h = shoot(boss.heads[i].weak.getWorldPosition(new Vector3())); return h && `${h.object.userData.head}:${h.object.userData.zone}`; });
   // damage: a hit chips its head only, a flash follows, the hull takes none
   const h0 = boss.heads[0];
   const hp = boss.health;
@@ -130,6 +132,7 @@ expect('  dormant until the player is in its arena, no boss bar before', A.aslee
 expect('  wakes in its arena and emits boss:wake { name } once', A.awake && A.wakes.length === 1 && A.wakes[0] === 'CERBERUS', JSON.stringify(A.wakes));
 expect('  boss bar: CERBERUS with three head segments instead of the core bar', A.bar.on && A.bar.seg && A.bar.name === 'CERBERUS' && A.bar.segs.join() === 'VIGIL,LEGION,COLOSSUS' && A.bar.coreHidden, JSON.stringify(A.bar));
 expect('  the hull is armor and blocks the shot; the eye is a weak spot of head 0', A.hullHit?.part === 'hull' && A.hullHit.armor === 0 && A.eyeHit?.zone === 'weak' && A.eyeHit.head === 0 && A.eyeHit.armor === 1, JSON.stringify([A.hullHit, A.eyeHit]));
+expect('  the LEGION node and COLOSSUS bore take the shot (weak spots of heads 1 and 2), not the hull', A.podHits.join() === '1:weak,2:weak', JSON.stringify(A.podHits));
 expect('  a hit chips only its head (flash), the hull takes none', A.chip.vigil === 950 && A.chip.others.every((x) => x === 1000) && A.chip.segs.join() === '0.95,1,1' && A.chip.flash && A.hullNoDamage, JSON.stringify(A.chip));
 expect('  huge damage stops at the floor (65%) per head and never kills it', !A.floor.killed && !A.floor.killed2 && A.floor.alive && A.floor.vigil === 650 && A.floor.colossus === 650 && A.floor.legion === 1000 && A.floor.kills === 0, JSON.stringify(A.floor));
 expect('  the bar shows the floor', A.floorBar.join() === '65,100,65', A.floorBar.join());
@@ -176,8 +179,10 @@ const B = await ev(() => {
   T.hold(0, 45, 20);
   out.held = { bolts: bolts - b0, mortars: mortars - m0, hurt: hurt - h0 };
   enemies.holdFire = false;
+  out.rage = boss.rage; // the attack rate and damage grew while it fought
   // in cover the mortar comes faster (the spider's rule): the timer runs 1.8x
   const hider = Object.create(g.player, { cover: { value: {} } });
+  boss.rage = 1;
   boss.mortarTimer = 100;
   boss.update(1, hider);
   out.coverBoost = +(100 - boss.mortarTimer).toFixed(2);
@@ -189,6 +194,7 @@ expect('  the player is hurt by them (so it pressures)', B.hurt >= 3, String(B.h
 expect('  LEGION calls drones (awake, in its group, over the arena), capped at 3', B.maxDrones === 3 && B.droneGroups.join() === 'cb' && B.droneAwake && B.droneInArena, JSON.stringify([B.maxDrones, B.droneGroups, B.droneAwake, B.droneInArena]));
 expect('  shot-down drones are replaced, never above the cap', B.refilled >= 1 && B.refilled <= 3, String(B.refilled));
 expect('  holdFire (cinematic): no bolts, no mortars, no damage', B.held.bolts === 0 && B.held.mortars === 0 && B.held.hurt === 0, JSON.stringify(B.held));
+expect('  it grows stronger while it fights (rage: rate and damage)', B.rage > 2.5, String(B.rage));
 expect('  mortars come 1.8x faster against a player in cover', B.coverBoost >= 1.7 && B.coverBoost <= 1.9, String(B.coverBoost));
 
 // ---- 3. counting: not a destroy target, not an arena:clear blocker ----

@@ -9,6 +9,7 @@ import { wornMaterial } from '../world/textures.js';
 // front faces, so keep limb fronts roughly within them (see EnemyBody).
 
 const R = Math.PI / 2;
+const PLATE_SCALE = 1.3; // plated trooper: its plates, scaled around their bones
 const SIDES = [['Left', 1], ['Right', -1]];
 
 // ---------------- trooper: HiveMind line droid (pale worn grey shells over a dark frame, violet joint rings) ----------------
@@ -19,13 +20,13 @@ const SIDES = [['Left', 1], ['Right', -1]];
 // Every shell is a convex hull of a few chamfered cross-sections (`hull`, cached): flat facets, no rounded boxes.
 // Hits use the rig's invisible dummy boxes, not these shapes.
 
-// armored: the plated trooper (trooper.js `armored`): its bolted-on plates are bare plate steel.
+// armored: the plated trooper (trooper.js `armored`): its bolted-on plates are heavy dark gunmetal, so it reads apart from the pale line droid.
 export function trooperMaterials(armored = false) {
   return {
     frame: wornMaterial(0x1d1f23, { roughness: 0.55, metalness: 0.55, wear: 'metal' }), // black frame, rods, joints
     armor: wornMaterial(0xa9aca7, { roughness: 0.78, metalness: 0.2, wear: 'shell' }), // pale worn grey shells
     plate: armored
-      ? wornMaterial(0x6a7076, { roughness: 0.6, metalness: 0.2, wear: 'metal' }) // bare plate steel (also the rifle's furniture)
+      ? wornMaterial(0x23272b, { roughness: 0.42, metalness: 0.75, wear: 'metal' }) // heavy dark gunmetal plates: a dark mass over the pale shells (also the rifle's furniture)
       : wornMaterial(0x34383c, { roughness: 0.6, metalness: 0.55, wear: 'metal' }), // dark grey trim (also the rifle's furniture)
   };
 }
@@ -205,7 +206,11 @@ export function buildTrooper(rig, M, visor, armored = false) {
   // bolted bare-steel plates over the same droid, angular and thin: chest, shoulders, vambraces, shin guards; each on its own
   // bone so it follows the limb
   const plates = {};
-  const P = (group, bone, ...children) => (plates[group] ??= []).push(L(bone, ...children));
+  const P = (group, bone, ...children) => {
+    const g = L(bone, ...children);
+    g.scale.setScalar(PLATE_SCALE); // oversized around the bone: a heavier silhouette than the line droid, readable at range
+    (plates[group] ??= []).push(g);
+  };
   const bolt = (x, y, z, rx = 0) => cyl(M.frame, 0.009, 0.009, 0.01, x, y, z, R + rx, 0, 0, 6);
   P('head', 'Head', hl(M.plate, [...Z(-0.07, 0.056, 0.048, 0.056, 0.012), ...Z(0.12, 0.016, 0.0, 0.008, 0.005)], 0, HY, HZ, 0.1), ...[-1, 1].map((k) => bx(M.plate, 0.01, 0.045, 0.1, 0.07 * k, HY - 0.01, HZ - 0.02, 0.1))); // cowl cap and side guards
   P('torso', 'Spine2', hl(M.plate, [...S(0.19, 0.125, 0.128, 0.152, 0.07), ...S(0.04, 0.062, 0.114, 0.134, 0.02)], 0, 0, 0), bolt(0.085, 0.16, 0.152, 0.2), bolt(-0.085, 0.16, 0.152, 0.2)); // chest plate
@@ -221,7 +226,7 @@ export function buildTrooper(rig, M, visor, armored = false) {
   return plates;
 }
 
-// ---------------- training puppet: crash-test mannequin robot on a pneumatic post ----------------
+// ---------------- training puppet: the trooper's body (buildTrooper) on a pneumatic post, in calibration paint ----------------
 
 // color: the kind's shell color (calibration-frame ochre targets, darker ochre shooters): matte, scuffed paint.
 export function puppetMaterials(color, armored = false) {
@@ -229,67 +234,4 @@ export function puppetMaterials(color, armored = false) {
     shell: armored ? wornMaterial(color, { roughness: 0.5, metalness: 0.6, wear: 'metal' }) : wornMaterial(color, { roughness: 0.88, metalness: 0.08 }), // painted shell (armored: bare plate steel)
     frame: wornMaterial(0x2a2c31, { roughness: 0.55, metalness: 0.5, wear: 'metal' }), // black joints and frame
   };
-}
-
-// The bullseye hangs on the chest at z ~0.155 (puppet.js): the chest front stays behind it.
-export function buildPuppet(rig, M, visor) {
-  const L = (bone, ...children) => rig.attach(bone, look(...children));
-  const joint = (r, x, y, z) => cyl(M.frame, r, r, r * 2.2, x, y, z, 0, 0, R, 10); // hinge drum, axis X
-
-  L(
-    'Hips',
-    rb(M.shell, 0.32, 0.17, 0.21, 0.07, 0, -0.02, 0),
-    rb(M.frame, 0.34, 0.03, 0.23, 0.01, 0, 0.05, 0), // waistband
-    joint(0.06, 0.1, -0.1, 0), // hip drums
-    joint(0.06, -0.1, -0.1, 0),
-  );
-  L('Spine', cyl(M.frame, 0.09, 0.1, 0.13, 0, 0.06, 0), cyl(M.shell, 0.102, 0.102, 0.02, 0, 0.06, 0));
-  L('Spine1', rb(M.shell, 0.34, 0.14, 0.22, 0.06, 0, 0.07, 0), rb(M.frame, 0.35, 0.02, 0.23, 0.008, 0, 0.13, 0));
-  L(
-    'Spine2',
-    rb(M.shell, 0.44, 0.3, 0.27, 0.08, 0, 0.12, 0), // chest shell
-    rb(M.frame, 0.3, 0.26, 0.02, 0.02, 0, 0.12, 0.13), // target mount
-    rb(M.frame, 0.03, 0.2, 0.02, 0.01, 0.2, 0.12, 0.13), // calibration ticks
-    rb(M.frame, 0.03, 0.2, 0.02, 0.01, -0.2, 0.12, 0.13),
-    rb(M.frame, 0.12, 0.06, 0.12, 0.02, 0, 0.28, 0), // neck mount
-    rb(visor, 0.04, 0.012, 0.006, 0.003, 0.15, 0.03, 0.136), // status LED
-  );
-  L('Neck', cyl(M.frame, 0.035, 0.04, 0.12, 0, 0.03, 0, 0, 0, 0, 10));
-  // head: a smooth helmet with a dark visor band, a few small sensors and hinge discs at the sides
-  L(
-    'Head',
-    rb(M.shell, 0.21, 0.25, 0.23, 0.09, 0, 0.13, 0),
-    rb(M.frame, 0.2, 0.075, 0.1, 0.03, 0, 0.14, 0.07), // visor band
-    rb(visor, 0.03, 0.02, 0.01, 0.005, 0.04, 0.142, 0.12), // calibration sensors (small, uneven: no face)
-    rb(visor, 0.018, 0.018, 0.01, 0.004, -0.005, 0.135, 0.12),
-    rb(visor, 0.014, 0.014, 0.01, 0.004, -0.045, 0.145, 0.12),
-    cyl(M.frame, 0.05, 0.05, 0.02, 0.105, 0.13, 0, 0, 0, R, 14), // hinge discs
-    cyl(M.frame, 0.05, 0.05, 0.02, -0.105, 0.13, 0, 0, 0, R, 14),
-    cyl(M.shell, 0.025, 0.025, 0.022, 0.106, 0.13, 0, 0, 0, R, 10),
-    cyl(M.shell, 0.025, 0.025, 0.022, -0.106, 0.13, 0, 0, 0, R, 10),
-  );
-
-  for (const [side, s] of SIDES) {
-    L(
-      side + 'Arm',
-      joint(0.065, 0.01 * s, -0.01, 0), // shoulder drum
-      cyl(M.shell, 0.05, 0.045, 0.22, 0, -0.15, 0, 0, 0, 0, 12),
-      joint(0.045, 0, -0.29, 0), // elbow
-    );
-    L(side + 'ForeArm', cyl(M.shell, 0.045, 0.04, 0.24, 0, -0.13, 0, 0, 0, 0, 12), cyl(M.frame, 0.047, 0.047, 0.02, 0, -0.04, 0, 0, 0, 0, 12));
-    L(side + 'Hand', rb(M.frame, 0.07, 0.1, 0.075, 0.025, 0, -0.045, 0));
-    L(
-      side + 'UpLeg',
-      cyl(M.shell, 0.075, 0.065, 0.34, 0, -0.2, 0, 0, 0, 0, 12),
-      cyl(M.frame, 0.077, 0.077, 0.02, 0, -0.1, 0, 0, 0, 0, 12),
-    );
-    L(
-      side + 'Leg',
-      joint(0.055, 0, 0, 0), // knee
-      rb(M.shell, 0.08, 0.08, 0.04, 0.02, 0, -0.01, 0.06), // kneecap
-      cyl(M.shell, 0.06, 0.05, 0.32, 0, -0.2, 0, 0, 0, 0, 12),
-    );
-    L(side + 'Foot', rb(M.frame, 0.12, 0.08, 0.19, 0.03, 0, -0.04, 0.02));
-    L(side + 'ToeBase', rb(M.frame, 0.12, 0.05, 0.09, 0.02, 0, 0, 0.04));
-  }
 }

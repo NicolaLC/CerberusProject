@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { EnemyBody, box, sightRay, VISOR_REST } from './enemy.js';
-import { buildPuppet, puppetMaterials } from './looks.js';
+import { buildTrooper, puppetMaterials } from './looks.js';
 import { damp, wrapAngle } from '../../engine/math.js';
 
-// Training puppets: the shared humanoid rig hung on a pneumatic post, dressed as a crash-test robot (looks.js).
+// Training puppets: the shared humanoid rig hung on a pneumatic post: the trooper's line droid body (looks.js buildTrooper) in calibration paint.
 // kinds: 'static' (takes hits), 'mover' (slides on a rail), 'shooter' (pops up from fixed cover and fires).
 
 const HIDE = -0.95; // rig lift when retracted behind low cover
@@ -32,7 +32,7 @@ export class Puppet extends EnemyBody {
       mats: plated ? puppetMaterials(ARMORED, true) : puppetMaterials(def.kind === 'shooter' ? 0x8a6a24 : 0xc9a640), // shooters: a darker ochre
     });
     this.armored = plated; // look 'plated' / `armored` param: plate steel, only heavy rounds (GUNS ammo 'heavy') hurt it
-    buildPuppet(this.rig, this.mats, this.visor);
+    buildTrooper(this.rig, { frame: this.mats.frame, armor: this.mats.shell, plate: this.mats.frame }, this.visor); // the shells in the puppet's paint
     this.home = this.pos.clone();
     this.to = def.to ? new THREE.Vector3(...def.to) : null;
     this.speed = def.speed ?? 0;
@@ -43,7 +43,7 @@ export class Puppet extends EnemyBody {
     this.shotsLeft = 0;
     this.vel = new THREE.Vector3();
 
-    this.rig.attach('Spine2', box(0.22, 0.22, 0.02, targetMat(), 0, 0.12, 0.155)); // bullseye
+    this.rig.attach('Spine2', box(0.2, 0.2, 0.02, targetMat(), 0, 0.12, 0.18)); // bullseye, clear of the chest wedge's leading edge
     this.emitter = this.rig.socket('Spine2', 'emitter', 0, 0.15, 0.3);
     // post + base: instanced across all puppets (Enemies.stands), slot = this.index
     this.index = ctx.takeStand();

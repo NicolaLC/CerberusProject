@@ -373,6 +373,6 @@ export class Hud {
     this.toastTime -= dt;
     css(e.toast, 'opacity', this.toastTime > 0 ? Math.min(1, this.toastTime * 3) : 0);
 
-    css(e.death, 'display', player.dead ? 'flex' : 'none');
+    css(e.death, 'display', player.dead && !mission.scriptedDeath ? 'flex' : 'none'); // a scripted loss (endOnDeath) has no restart
   }
 }

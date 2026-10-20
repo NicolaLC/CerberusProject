@@ -150,7 +150,7 @@ export class FX {
     const up = new THREE.Vector3(0, 1, 0);
     events.on('blast', (b) => {
       this.impact(b.point, up, b.kind === 'drone' || b.kind === 'death' ? 0xff6a2a : 0x9a5cff, b.kind === 'drone' ? 16 : b.kind === 'stomp' ? 26 : 34, b.kind !== 'stomp');
-      this.shockwave(b.point);
+      if (b.kind !== 'drone') this.shockwave(b.point); // a drone going down bursts without a ring (owner: no circle on a kill)
     });
     // a plated trooper's plate knocked off: a shower of hot sparks
     events.on('enemy:plate', (p) => this.impact(p.point, up, 0xffc070, 22, false));
@@ -160,7 +160,6 @@ export class FX {
     });
     events.on('boss:dead', (b) => {
       for (let i = 0; i < 3; i++) this.impact(b.point, up, i ? 0xff6a2a : 0xff2bd6, 40, false);
-      this.shockwave(b.point);
     });
     // jetpack take-off: remember the nozzle, exhaust runs from update() while it lasts
     events.on('player:jet', (j) => {

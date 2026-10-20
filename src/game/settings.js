@@ -7,6 +7,7 @@ const DEFAULTS = {
   trackpad: false, // E toggles aim, two-finger swipe looks, stronger aim assist
   aimAssist: true,
   padInvertY: false, // controller right stick
+  cameraBob: true, // the camera dips on each footfall (view/camera.js step())
   quality: 'high', // graphics preset (view/quality.js)
 };
 
@@ -22,6 +23,7 @@ export function bindSettingsUI({ onQuality } = {}) {
   const pad = $('trackpad');
   const assist = $('assist');
   const invert = $('invert');
+  const bob = $('bob');
   const quality = $('quality');
   const sync = () => {
     sens.value = settings.sensitivity;
@@ -29,6 +31,7 @@ export function bindSettingsUI({ onQuality } = {}) {
     pad.checked = settings.trackpad;
     assist.checked = settings.aimAssist;
     invert.checked = settings.padInvertY;
+    bob.checked = settings.cameraBob;
     quality.value = settings.quality;
   };
   sens.addEventListener('input', () => {
@@ -48,6 +51,10 @@ export function bindSettingsUI({ onQuality } = {}) {
   });
   invert.addEventListener('change', () => {
     settings.padInvertY = invert.checked;
+    saveSettings();
+  });
+  bob.addEventListener('change', () => {
+    settings.cameraBob = bob.checked;
     saveSettings();
   });
   quality.addEventListener('change', () => {

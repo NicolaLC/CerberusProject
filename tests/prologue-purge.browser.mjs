@@ -15,7 +15,7 @@ const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftsha
 const fail = [];
 const expect = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` ${extra}`}`); if (!ok) fail.push(name); };
 
-const CHAIN = 'c1-move,c2-arm,c2-aim,c3-jet,c4-cover,c4-fire,c5-hop,c5-slide,c6-transfer,range-light,range-heavy,leave-bay,purge-start,purge-yard,purge-hall,armoury,purge-troopers-hall,armoury-late,purge-gate,boss-cut,purge-boss,breakout,exit';
+const CHAIN = 'c1-move,c2-arm,c2-aim,c3-jet,c4-cover,c4-fire,c5-hop,c5-slide,c6-transfer,range-light,range-heavy,leave-bay,purge-start,purge-yard,enter-hall,purge-hall,armoury,purge-troopers-hall,armoury-late,purge-gate,boss-cut,purge-boss,breakout,exit';
 
 // A fresh page on the prologue (intro seen), stepped by hand, past the intro.
 async function open() {

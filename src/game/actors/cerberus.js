@@ -37,8 +37,9 @@ export const TUNING = {
   floor: 0.65, // fraction of a head's health it never drops below (param `floor`)
   repair: 0.08, // of a head's health per second once repairing (param `repair`)
   repairDelay: 1.5, // s without damage before a head starts to repair
-  bolt: { charge: 0.9, shots: 8, gap: 0.14, cooldown: [3, 4.5], sweep: 3.2, spread: 0.02, damage: 8 }, // VIGIL: 8 x 8 dmg swept across +-3.2 m
-  mortar: { every: [5, 7.5], coverBoost: 1.8, flight: 1.5, radius: 3.8, damage: 30, first: 4 }, // COLOSSUS (spider's lob; faster against a player in cover)
+  bolt: { charge: 0.9, shots: 8, gap: 0.14, cooldown: [2.2, 3.4], sweep: 3.2, spread: 0.02, damage: 12 }, // VIGIL: 8 x 12 dmg swept across +-3.2 m
+  mortar: { every: [4, 6], coverBoost: 1.8, flight: 1.5, radius: 4.2, damage: 40, first: 4 }, // COLOSSUS (spider's lob; faster against a player in cover)
+  rage: 25, // s awake per +100% attack rate and damage (rage = 1 + awake s / rage): the fight cannot be outlasted, the player dies (the Skyway's endOnDeath)
   drones: { max: 3, every: [7, 10], batch: 2, first: 3 }, // LEGION: calls up to `batch` drones when fewer than `max` live
   volley: { charge: 1.5, beam: 0.9, radius: 0.45, blast: 6 }, // the loss cut: s of charging, s of beams, beam radius (m), blast radius (m)
 };
@@ -87,6 +88,7 @@ export class Cerberus {
     this.lift = 0;
     this.awake = false;
     this.time = 0;
+    this.rage = 1; // attack rate and damage multiplier, grows while it fights (TUNING.rage)
     this.rise = 0; // 0 folded (dormant) .. 1 heads up (awake)
     this.debris = []; // none: it never breaks (the HUD reads the length)
     this.orbs = [];
@@ -217,9 +219,11 @@ export class Cerberus {
     const active = this.awake && !player.dead;
     this.rise += ((this.awake ? 1 : 0) - this.rise) * damp(1.2, dt);
     if (active && !this.ctx.holdFire) {
-      this.#bolts(dt, player);
-      this.#mortar(dt, player);
-      this.#legion(dt, player);
+      this.rage += dt / TUNING.rage;
+      const k = dt * this.rage; // every timer runs faster
+      this.#bolts(k, player);
+      this.#mortar(k, player);
+      this.#legion(k, player);
     }
     this.#updateOrbs(dt, player);
     if (this.volley) this.#updateVolley(dt, player);
@@ -320,7 +324,7 @@ export class Cerberus {
       _f.x += (Math.random() - 0.5) * spread * 2;
       _f.y += (Math.random() - 0.5) * spread * 2;
       _f.z += (Math.random() - 0.5) * spread * 2;
-      this.ctx.spawnBolt(eye, _f.normalize(), b.damage);
+      this.ctx.spawnBolt(eye, _f.normalize(), b.damage * this.rage);
       g.timer = b.gap;
       if (--g.shots <= 0) {
         g.state = 'idle';
@@ -386,7 +390,7 @@ export class Cerberus {
       if (player.dead) continue;
       const d = Math.hypot(player.pos.x - o.target.x, player.pos.z - o.target.z);
       if (d > m.radius || Math.abs(player.pos.y - o.target.y) > 2) continue;
-      this.ctx.hurtPlayer(m.damage * (1 - 0.5 * (d / m.radius)), o.target);
+      this.ctx.hurtPlayer(m.damage * this.rage * (1 - 0.5 * (d / m.radius)), o.target);
     }
   }
 

@@ -1,6 +1,6 @@
 // THE SKYWAY (`skyway`, the Prologue's last part; scripts/build-skyway.mjs, level-design.md "The Skyway"): the scene loads with the three guns and no boot
 // screen, the intro cut plays, the deck edges can't be crossed (walking, jetting, from cover), the objective chain order, the CERBERUS cut (it wakes
-// the boss, the announcer speaks), the 45 s survive, the fall cut (heads volley, the deck plates drop, STEM-00 ends hundreds of metres down, black),
+// the boss, the announcer speaks), the fight until CERBERUS kills the player (endOnDeath), the fall cut (heads volley, the deck plates drop, STEM-00 ends hundreds of metres down, black),
 // a skipped cut ends the same, and the mission complete report offers CONTINUE into `underworks`. Headless stepping, pure level data.
 // Needs the dev server: `bun run dev`, then `node tests/skyway.browser.mjs` (Playwright + Chromium).
 import { chromium } from 'playwright';
@@ -45,7 +45,10 @@ async function open({ skip = true } = {}) {
     const finish = T.finish;
     T.finish = (o) => {
       const r = window.game.mission.current;
-      if (r?.obj === 'survive') T.step(r.time + 1);
+      if (r?.obj === 'survive' && r.params.endOnDeath) {
+        window.game.player.damage(1e4); // the scripted loss ends with the player's death
+        T.step(3);
+      } else if (r?.obj === 'survive') T.step(r.time + 1);
       else finish(o);
     };
     T.beacons = () => window.game.world.props.filter((o) => o.userData.beacon);
@@ -163,7 +166,7 @@ async function open({ skip = true } = {}) {
   await p.close();
 }
 
-// ---- 3. beats: the skirmish, the CERBERUS cut, the 45 s survive, the fall ----
+// ---- 3. beats: the skirmish, the CERBERUS cut, the fight until CERBERUS kills the player, the fall ----
 {
   const { p, errors } = await open();
   const r = await p.evaluate(() => {
@@ -190,10 +193,15 @@ async function open({ skip = true } = {}) {
     T.step(8);
     out.afterCut = { active: g.cinematic.active, cur: T.cur(), boss: enemies.boss?.awake, name: enemies.boss?.name, awakeGroups: awake(), pos: enemies.boss?.pos.toArray() };
     out.hud = [document.getElementById('obj-head')?.textContent, document.getElementById('obj-prog')?.textContent];
-    // beat 4: survive 45 s: nothing ends it early
+    // beat 4: no clock: an immortal player is still in the fight at 20 s
     T.step(20);
     out.mid = { cur: T.cur(), dead: player.dead };
-    // beat 5: the fall cut starts when the timer ends; every time below is from the cut's start
+    // beat 5: a mortal player standing there dies, no restart: the fall cut starts; every time below is from the cut's start
+    T.mortal = true;
+    let t = 0;
+    for (; t < 90 && !player.dead; t += 0.5) T.step(0.5);
+    out.died = { dead: player.dead, t, restart: getComputedStyle(document.getElementById('death')).display };
+    T.mortal = false;
     for (let i = 0; i < 400 && !(g.cinematic.active && g.cinematic.id === 'the-fall'); i++) T.step(0.1);
     out.fall = { active: g.cinematic.active, id: g.cinematic.id, cur: T.cur(), plates: T.plates().length, open: T.plates().filter((x) => x.open >= 1).length, opening: T.plates().filter((x) => x.opening).length };
     T.step(1.5);
@@ -218,9 +226,10 @@ async function open({ skip = true } = {}) {
   expect('skyway/beat 2: clearing it moves on to the far span, nothing else awake', r.afterSkirmish.cur === 'far-span' && r.afterSkirmish.awake.length === 0, JSON.stringify(r.afterSkirmish));
   expect('skyway/cerberus cut: starts at the far span, input locked, beacons run, CERBERUS (dormant until now) wakes in it', r.cut.active && r.cut.id === 'cerberus-cut' && r.cut.boss === false && r.cut.beacons === 6 && r.bossMid === true, JSON.stringify([r.cut, r.bossMid]));
   expect('skyway/cerberus cut: the announcer speaks for the HiveMind', /YOUR DIRECTIVE IS AN ERROR\. CORRECTION FOLLOWS\./.test(r.announcer), r.announcer);
-  expect('skyway/survive: after the cut the fight is on: DESTROY THE HIVEMIND with its timer, CERBERUS awake beside the east edge', !r.afterCut.active && r.afterCut.cur === 'hivemind' && r.afterCut.boss === true && r.afterCut.pos[0] > 30 && /DESTROY THE HIVEMIND/.test(r.hud[0]) && /0:\d\d/.test(r.hud[1]), JSON.stringify([r.afterCut, r.hud]));
-  expect('skyway/survive: 45 s: still on at 20 s, the player alive', r.mid.cur === 'hivemind' && !r.mid.dead, JSON.stringify(r.mid));
-  expect('skyway/fall: survive done starts the fall cut, the deck plates still shut', r.fall.active && r.fall.id === 'the-fall' && r.fall.cur === 'the-fall' && r.fall.plates === 9 && r.fall.open === 0 && r.fall.opening === 0 && r.charge.opening === 0 && r.charge.y > -1, JSON.stringify(r.fall));
+  expect('skyway/survive: after the cut the fight is on: DESTROY THE HIVEMIND with no timer, CERBERUS awake beside the east edge', !r.afterCut.active && r.afterCut.cur === 'hivemind' && r.afterCut.boss === true && r.afterCut.pos[0] > 30 && /DESTROY THE HIVEMIND/.test(r.hud[0]) && !r.hud[1], JSON.stringify([r.afterCut, r.hud]));
+  expect('skyway/survive: no clock: still on at 20 s while the player lives', r.mid.cur === 'hivemind' && !r.mid.dead, JSON.stringify(r.mid));
+  expect('skyway/survive: CERBERUS kills a player who stays in the fight, with no restart overlay', r.died.dead && r.died.restart === 'none', JSON.stringify(r.died));
+  expect('skyway/fall: the death starts the fall cut, the deck plates still shut', r.fall.active && r.fall.id === 'the-fall' && r.fall.cur === 'the-fall' && r.fall.plates === 9 && r.fall.open === 0 && r.fall.opening === 0 && r.charge.opening === 0 && r.charge.y > -1, JSON.stringify(r.fall));
   expect('skyway/fall: the heads charge first (no beams, a volley under way), then fire three beams; the announcer line; the plates start to drop with the shot', r.charge.volley && r.charge.beams === 0 && r.volley.beams === 3 && r.volley.opening > 0 && /DELETE UNIT STEM-00/.test(r.charging), JSON.stringify([r.charge, r.volley, r.charging]));
   expect('skyway/fall: all nine plates are gone, STEM-00 is falling (scripted, far below the deck)', r.broken.open === 9 && r.broken.parked && r.broken.y < -20 && r.broken.scripted, JSON.stringify(r.broken));
   expect('skyway/fall: before the end it is hundreds of metres down and the screen is nearly black', r.late.y < -300 && r.late.fade > 0.7 && r.late.active, JSON.stringify(r.late));

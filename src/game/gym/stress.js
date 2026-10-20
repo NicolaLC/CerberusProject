@@ -125,7 +125,7 @@ export class StressTool {
     return n;
   }
 
-  // Effects in the "fx" kind: N blasts per burst (sparks, smoke, shockwave ring), spread on a ring.
+  // Effects in the "fx" kind: N drone blasts per burst (sparks, smoke), spread on a ring.
   #burst() {
     const { events } = this.game.engine;
     const n = this.counts.fx;

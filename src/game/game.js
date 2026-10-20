@@ -128,6 +128,8 @@ export class Game {
       weapon.grant(gun, { ammo }); // emits weapon:discovered the first time (toast, discovered:<gun> log line)
       weapon.switchTo(gun);
     });
+    // checkpoint restart (#restart): the world is saved at every checkpoint, cut end and finished objective
+    for (const name of ['checkpoint:reached', 'mission:objective:done', 'cinematic:done']) events.on(name, () => this.#save());
     events.on('checkpoint:reached', (c) => {
       hud.toast('CHECKPOINT');
       saveProgress(this.sceneName, c.id); // campaign scenes only
@@ -207,7 +209,7 @@ export class Game {
       group: 'play',
       update: (dt) => {
         player.update(dt, controls, camRig, weapon);
-        if (player.dead && player.deadTime > RESPAWN_AFTER) player.respawn(encounter.checkpoint); // the last checkpoint reached, else the spawn
+        if (player.dead && player.deadTime > RESPAWN_AFTER && !mission.scriptedDeath) this.#restart();
       },
     });
     engine.add({ name: 'weapon', group: 'play', update: (dt) => weapon.update(dt, controls) });
@@ -330,6 +332,7 @@ export class Game {
     for (const it of pickups.items) for (const o of [it.model, it.ring]) world.sectors.tag(o); // drawn with their sector
     encounter.load(level);
     this.resetRun(level);
+    this.#save();
     this.tool = level.tool ? new TOOLS[level.tool](this, level) : null;
     this.keyHints.set({ debug: this.debug, tool: this.tool });
     this.rebuildHelpers();
@@ -392,6 +395,23 @@ export class Game {
     juice.reset();
     stats.reset();
     summary.reset();
+    this.save = null; // until the level's enemies are in (loadScene), a death only respawns
+  }
+
+  #save() {
+    this.save = { enemies: this.enemies.snapshot(), ammo: this.weapon.ammoSnapshot() };
+  }
+
+  // After a death: the player at the last checkpoint reached (else the spawn), the enemies and the rounds as they were at the last save
+  // (a checkpoint, a cut's end or a finished objective: what a cut or an objective did is never undone), the current objective started over.
+  #restart() {
+    this.player.respawn(this.encounter.checkpoint);
+    if (!this.save || this.mission.state === 'none') return; // sandboxes (arena, Gym, Library): the world just carries on
+    this.enemies.restore(this.save.enemies);
+    this.weapon.restoreAmmo(this.save.ammo);
+    this.mission.restart();
+    this.rebuildHelpers();
+    this.#save(); // the rebuilt enemies are the snapshot now
   }
 
   // The level in play: the Workshop's play copy while it plays in place, else the scene's own (`next` / `debrief` / `title` read it).

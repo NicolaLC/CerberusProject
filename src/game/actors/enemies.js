@@ -265,6 +265,7 @@ export class Enemies {
   // it wait for wakeGroup (actors read `dormant` before every self-wake). Always rebuilt from the level data.
   #make(data) {
     const actor = this.registry.build('enemies', this, data);
+    actor.data = data; // what snapshot() rebuilds it from
     actor.squad = data.params?.group ?? null;
     actor.dormant = !!data.params?.dormant;
     actor.hiddenAsleep = !!data.params?.hidden; // see HIDDEN: with dormant, not drawn nor a target until woken
@@ -359,6 +360,25 @@ export class Enemies {
     if (!actor.alive && actor.kind !== 'boss') this.kills = Math.max(0, this.kills - 1);
     actor.dispose();
     this.dirty = true;
+  }
+
+  // Checkpoint restart (game.js): snapshot() records every enemy alive now (its piece data, where it stands now unless a puppet on a
+  // stand: those stay put, a rail mover keeps its home); restore() removes those and everything spawned since, and rebuilds them fresh; a member of a group woken so
+  // far comes back awake. Enemies dead before the snapshot stay down. Bolts in flight vanish. Returns the rebuilt actors.
+  snapshot() {
+    return this.all.filter((e) => e.alive).map((e) => ({ actor: e, data: this.registry.meta(e.data.id).stand ? e.data : { ...e.data, pos: e.pos.toArray(), yaw: e.yaw } }));
+  }
+
+  restore(snap) {
+    const back = new Set(snap.map((s) => s.actor));
+    for (const e of [...this.all]) if (e.alive || back.has(e)) this.despawn(e);
+    for (const b of this.bolts) this.boltPool.release(b);
+    this.bolts.length = 0;
+    return snap.map(({ data }) => {
+      const e = this.spawn(data);
+      if (e.squad != null && this.woken.has(e.squad)) e.wake?.();
+      return e;
+    });
   }
 
   #growStands(capacity) {

@@ -162,7 +162,7 @@ export class Rig {
 // ---------------------------------------------------------------------------
 // Procedural animation. Character state in, bone transforms out.
 // state: { speed, run, air (jetpack burst), crouch 0..1, aimPitch, combat, recoil, lean, lookYaw, lower 0..1 }
-// Layers: rest → hit spring → gait key poses (locomotion.js) → torso → arms (IK or run pump) → foot locks + kneel → feet IK.
+// Layers: rest → gait key poses (locomotion.js) → torso → hit reaction → arms (IK or run pump) → foot locks + kneel → feet IK.
 // ---------------------------------------------------------------------------
 
 const _a = new THREE.Vector3();
@@ -233,6 +233,21 @@ const RELOAD = {
   rail: { a: 0.12, b: 0.3, c: 0.44, d: 0.52, e: 0.82, roll: 0.75, pitch: 0.28, belt: [0.24, 0.02, 0.08], shove: 0.1 }, // capacitor cell
   pistol: { a: 0.15, b: 0.3, c: 0.42, d: 0.5, e: 0.8, roll: 0.9, pitch: 0.18, belt: [0.18, 0.0, 0.1], shove: 0.07 }, // quick swap close to the hip
 };
+// Hit reactions (Animator.react, fed by EnemyBody.damage): the hit bone and, weaker, its parents get an additive kick about
+// (lever × shot direction), so the hit point moves with the round; a damped spring brings each back. Scale = sqrt(damage / ref)
+// within `scale` (rifle 1, Farsight / railgun ~2.3). Per-bone caps (rad; limbs by side-less name) keep a burst from folding the body.
+const HIT_REACT = {
+  stiff: 320, // 1/s²: with damp, peak after ~0.05 s, back to rest (1%) in ~0.35 s
+  damp: 30, // 1/s
+  kick: 8, // rad/s at the hit bone for a scale-1 hit (~0.14 rad peak)
+  ref: 20, // damage of a scale-1 hit
+  scale: [0.5, 2.4],
+  head: 1.6, // head / neck hits snap back harder
+  falloff: 0.5, // per bone up the chain
+  dip: 1.5, // m/s the hips drop per scale-1 leg hit (stagger, ~2.5 cm peak)
+  dipMax: 0.08, // m
+  cap: { Hips: 0.06, Spine: 0.1, Spine1: 0.12, Spine2: 0.16, Neck: 0.22, Head: 0.45, Weapon: 0.18, Shoulder: 0.15, Arm: 0.35, ForeArm: 0.35, Hand: 0.3, UpLeg: 0.22, Leg: 0.28 },
+};
 const HIP_YAW = 0.9; // rad: strafing turns the hips (and legs) toward the movement, the chest keeps facing
 const LOCK_RELEASE = 0.45; // m: a planted foot this far from its pose (spinning on the spot, a shove) lets go
 // Dormant (powered down: the wake-up cinematic, `s.dormant` 1 slumped .. 0 normal): hips drop (the feet IK bends the knees),
@@ -270,8 +285,20 @@ export class Animator {
     this.hunch = 0;
     this.air = 0; // jetpack burst pose weight 0..1
     this.hand = 1; // 1 = gun on the right shoulder, -1 = mirrored to the left (peeking a left corner)
-    this.hit = new THREE.Vector2(); // spring-driven hit reaction (x: pitch, y: roll)
-    this.hitVel = new THREE.Vector2();
+    // hit reaction springs (react()): angle `a` (axis × rad, parent space) and spin `v` per reacting bone; `late` ones (arms, gun)
+    // go on after the arm pose, the rest after the torso. `reacting` is false at rest: nothing to do.
+    this.reacts = [];
+    this.reactOf = new Map();
+    for (const [name, bone] of Object.entries(rig.bones)) {
+      const cap = HIT_REACT.cap[name] ?? HIT_REACT.cap[name.replace(/^(Left|Right)/, '')];
+      if (!cap) continue;
+      const r = { bone, cap, late: /Shoulder|Arm|Hand|Weapon/.test(name), a: new THREE.Vector3(), v: new THREE.Vector3() };
+      this.reacts.push(r);
+      this.reactOf.set(bone, r);
+    }
+    this.reacting = false;
+    this.dip = 0; // m the hips are knocked down (leg hits) and its speed
+    this.dipV = 0;
     this.lod = false; // far or off screen: the owner sets it, the terrain IK for the feet is skipped
     this.onStep = null; // (side, gait 0 walk..1 run): called at each heel strike while walking or running
     // thighs: yaw first, then swing (the swing plane turns with the step direction)
@@ -280,9 +307,24 @@ export class Animator {
     this.legs = { Left: leg(), Right: leg() };
   }
 
-  impulse(pitch, roll) {
-    this.hitVel.x += pitch;
-    this.hitVel.y += roll;
+  // A round hit bone `name` at world `point`, flying along world `dir`, for `damage`: kicks it and its parents (falloff) away
+  // from the shot. Uses the last pose's matrices. Armed rigs pass arm hits to the gun (the hands follow it by IK).
+  react(name, point, dir, damage) {
+    const T = HIT_REACT;
+    const scale = THREE.MathUtils.clamp(Math.sqrt(damage / T.ref), T.scale[0], T.scale[1]);
+    if (/Leg|Foot|Toe/.test(name)) this.dipV += T.dip * scale;
+    if (this.armed && /Shoulder|Arm|Hand/.test(name)) name = 'Weapon';
+    let k = scale * T.kick * (name === 'Head' || name === 'Neck' ? T.head : 1);
+    for (let b = this.rig.bones[name]; b?.isBone; b = b.parent, k *= T.falloff) {
+      const r = this.reactOf.get(b);
+      if (!r) continue;
+      const ax = _a.setFromMatrixPosition(b.matrixWorld).subVectors(point, _a).cross(dir); // lever × direction
+      if (ax.lengthSq() < 1e-8) ax.crossVectors(_yAxis, dir); // hit at the pivot: tip the top away
+      if (ax.lengthSq() < 1e-8) continue;
+      r.v.addScaledVector(ax.normalize().applyQuaternion(worldQuat(b.parent, _q).invert()), k);
+      this.reacting = true;
+    }
+    this.reacting ||= this.dipV !== 0;
   }
 
   // s: { speed, run, crouch, aimPitch, combat, recoil, lean, lookYaw, lower, kickBack, kickClimb,
@@ -292,6 +334,7 @@ export class Animator {
     this.#hitSpring(dt);
     this.#locomotion(dt, s);
     this.#torso(dt, s);
+    this.#react(false);
     this.#arms(dt, s);
     if (s.dormant > 0.001) this.#dormant(s.dormant);
     this.#legs(dt);
@@ -299,11 +342,47 @@ export class Animator {
     if (s.seated > 0.001) this.#seated(s.seated);
   }
 
+  // Hit reaction springs (semi-implicit, exponential damping: stable for the slow rigs' longer steps), capped per bone.
   #hitSpring(dt) {
-    this.hitVel.x += (-120 * this.hit.x - 9 * this.hitVel.x) * dt;
-    this.hitVel.y += (-120 * this.hit.y - 9 * this.hitVel.y) * dt;
-    this.hit.x += this.hitVel.x * dt;
-    this.hit.y += this.hitVel.y * dt;
+    if (!this.reacting) return;
+    const T = HIT_REACT;
+    const h = Math.min(dt, 0.05);
+    const fade = Math.exp(-T.damp * h);
+    let live = false;
+    for (let i = 0; i < this.reacts.length; i++) {
+      const r = this.reacts[i];
+      r.v.multiplyScalar(fade).addScaledVector(r.a, -T.stiff * h);
+      r.a.addScaledVector(r.v, h);
+      const a2 = r.a.lengthSq();
+      if (a2 > r.cap * r.cap) {
+        r.a.multiplyScalar(r.cap / Math.sqrt(a2));
+        const out = r.v.dot(r.a) / (r.cap * r.cap);
+        if (out > 0) r.v.addScaledVector(r.a, -out); // pinned at the cap: drop the outward spin
+      }
+      if (a2 > 1e-6 || r.v.lengthSq() > 1e-4) live = true; // under 1 mrad: snapped to rest (invisible)
+      else {
+        r.a.setScalar(0);
+        r.v.setScalar(0);
+      }
+    }
+    this.dipV = this.dipV * fade - T.stiff * this.dip * h;
+    this.dip = Math.min(T.dipMax, this.dip + this.dipV * h);
+    if (Math.abs(this.dip) < 1e-4 && Math.abs(this.dipV) < 1e-3) this.dip = this.dipV = 0;
+    else live = true;
+    this.reacting = live;
+  }
+
+  // Hit reaction over the pose: rotations in the parent's space. late = false after the torso (spine, head, legs, hips dip: the
+  // arm IK and the foot locks then work from the kicked pose), true after the arm pose and before the arm IK (gun, unarmed arms).
+  #react(late) {
+    if (!this.reacting) return;
+    for (let i = 0; i < this.reacts.length; i++) {
+      const r = this.reacts[i];
+      if (r.late !== late) continue;
+      const a = r.a.length();
+      if (a > 1e-5) r.bone.quaternion.premultiply(_q.setFromAxisAngle(_c.copy(r.a).divideScalar(a), a));
+    }
+    if (!late) this.rig.bones.Hips.position.y -= this.dip;
   }
 
   // Gait: key poses (locomotion.js) -> legs' swing, hips height / twist. Leaves the weights in F for the other layers.
@@ -438,11 +517,11 @@ export class Animator {
     this.spinePitch = mix(this.spinePitch, -aim * 0.3 * (1 - running) + RUN.lean * running + 0.08 * g * amt * (1 - r) + c * 0.15 * (1 - hu) + HUNCH * hu, kk);
     this.weaponPitch = mix(this.weaponPitch, -aim * 0.7 - c * 0.15, 1 - Math.exp(-dt * 22));
     const lean = (s.lean ?? 0) * 0.33;
-    const sp = this.spinePitch / 3 + this.hit.x / 3;
+    const sp = this.spinePitch / 3;
     // the chest keeps facing where the character aims (hips yaw undone); it leans with the hips unless aiming
-    B.Spine.rotation.set(sp - (s.combat ? hipsPitch : 0), -twist * 0.5 - this.hipYaw, this.hit.y / 3 + lean);
-    B.Spine1.rotation.set(sp, -twist * 0.9, this.hit.y / 3 + lean); // shoulders counter-rotate
-    B.Spine2.rotation.set(sp - RUN.hipsLean * running + 0.15 * hu, -twist * 0.4, this.hit.y / 3 + lean); // shoulders roll down
+    B.Spine.rotation.set(sp - (s.combat ? hipsPitch : 0), -twist * 0.5 - this.hipYaw, lean);
+    B.Spine1.rotation.set(sp, -twist * 0.9, lean); // shoulders counter-rotate
+    B.Spine2.rotation.set(sp - RUN.hipsLean * running + 0.15 * hu, -twist * 0.4, lean); // shoulders roll down
     // head stays level and looks where it should (at the camera while in cover)
     this.look = mix(this.look, s.lookYaw ?? 0, kk * 0.6);
     B.Neck.rotation.set(-this.spinePitch * 0.55 - RUN.hipsLean * running, this.look * 0.4 + twist * 0.3, 0);
@@ -474,6 +553,7 @@ export class Animator {
       // support shoulder rolls forward so the support hand reaches the handguard
       B.LeftShoulder.rotation.y = hs > 0 ? -0.6 : -0.15;
       B.RightShoulder.rotation.y = hs > 0 ? 0.15 : 0.6;
+      this.#react(true); // the gun jolts, the hands follow it
       this.#refresh();
       const trigger = hs > 0 ? 'Right' : 'Left';
       const support = hs > 0 ? 'Left' : 'Right';
@@ -491,12 +571,13 @@ export class Animator {
     } else {
       // unarmed: arms swing against the legs, more and with bent elbows when running
       const a = mix(0.35, 0.8, g) * amt;
-      setX(B.LeftArm, sw * a + this.hit.x * 0.8);
-      setX(B.RightArm, -sw * a + this.hit.x * 0.8);
-      B.LeftArm.rotation.z = 0.12 + Math.abs(this.hit.y) * 0.6;
-      B.RightArm.rotation.z = -0.12 - Math.abs(this.hit.y) * 0.6;
+      setX(B.LeftArm, sw * a);
+      setX(B.RightArm, -sw * a);
+      B.LeftArm.rotation.z = 0.12;
+      B.RightArm.rotation.z = -0.12;
       setX(B.LeftForeArm, -0.2 - 1.1 * g * amt);
       setX(B.RightForeArm, -0.2 - 1.1 * g * amt);
+      this.#react(true);
       this.#refresh();
     }
 

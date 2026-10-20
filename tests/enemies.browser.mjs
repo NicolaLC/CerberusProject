@@ -286,6 +286,43 @@ expect('flank: a trooper is sent round when the player digs in', r.playerInCover
 expect('flank: it ends up beside or behind the player', r.flankAngleOk && r.flankerProtected);
 expect('flank: and fires from there', r.flankerFired > 0);
 expect('troopers never pick cover out of the fight (> 34 m)', r.allInRange);
+// hit reactions (rig.js HIT_REACT): a chest hit from the front kicks the chest back along the shot, a head hit snaps the head back,
+// the hands stay on the gun (arm IK after the kick), and both settle back to the rest pose within ~0.5 s. Posed by hand (no engine step).
+const hr = await p.evaluate(() => {
+  const { enemies } = window.game;
+  for (const e of enemies.all) e.alive = false;
+  enemies.dirty = true;
+  const tr = enemies.spawn({ id: 'enemy.trooper', pos: [0, 0, 30], params: { dormant: true } });
+  tr.health = 1e6;
+  const V = tr.pos.constructor;
+  const B = tr.rig.bones;
+  const pose = (s) => { for (let i = 0; i < Math.round(s * 60); i++) tr.animator.update(1 / 60, tr.animState); tr.rig.root.updateWorldMatrix(true, true); };
+  const at = (o) => o.getWorldPosition(new V());
+  const grip = () => at(B.RightHand).distanceTo(at(tr.rig.sockets.gripR));
+  tr.group.updateWorldMatrix(true, true);
+  pose(2); // settled idle
+  const fwd = new V(0, 0, 1).applyQuaternion(tr.rig.root.getWorldQuaternion(tr.rig.root.quaternion.clone()));
+  const dir = fwd.clone().negate(); // shot from the front
+  const kick = (bone, top) => {
+    const before = top();
+    const restGrip = grip();
+    const point = at(B[bone]).add(new V(0, 0.1, 0)).addScaledVector(fwd, 0.15);
+    tr.damage(18, point, dir, bone === 'Head' ? 'head' : 'torso', tr.hitMeshes.find((m) => m.userData.bone === bone));
+    pose(4 / 60);
+    const along = top().sub(before).dot(dir);
+    const gripOff = grip() - restGrip;
+    pose(0.5);
+    return { along, gripOff, back: top().distanceTo(before), reacting: tr.animator.reacting };
+  };
+  const out = { chest: kick('Spine2', () => at(B.Neck)), head: kick('Head', () => B.Head.localToWorld(new V(0, 0.2, 0))) };
+  tr.alive = false;
+  enemies.dirty = true;
+  return out;
+});
+console.log(hr);
+expect('hit reaction: a chest hit kicks the chest back along the shot, the hands stay on the gun', hr.chest.along > 0.01 && hr.chest.gripOff < 0.02);
+expect('hit reaction: a head hit snaps the head back', hr.head.along > 0.01);
+expect('hit reaction: back to the rest pose after ~0.5 s', hr.chest.back < 0.003 && hr.head.back < 0.003 && !hr.head.reacting);
 // 6. hunting (#110), on a fresh arena: earlier scenarios leave reserved spots and corpses behind
 await p.goto(URL);
 await p.waitForFunction(() => window.game?.engine);
